@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 14 — Debugging &amp; runtime-analyse | Eductus</title>
+<meta name="description" content="Verdiepingsmodule: debugger, SQL-trace, dumps en logs als analysewapen voor de gevorderde Business Analyst — code lezen, niet schrijven.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 120px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+pre{font-family:"IBM Plex Mono",monospace;font-size:13.5px;line-height:1.6;background:var(--teal-deep);color:#dce9e4;padding:20px 22px;border-radius:14px;overflow:auto;box-shadow:var(--shadow);margin:18px 0;border:1px solid #0a3933}
+pre .a{color:#e7b35a}pre .b{color:#8fd3c6}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--paper-2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:var(--oxblood)}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.exam{margin-top:38px;background:var(--paper-2);border:1px solid var(--line);border-radius:18px;padding:8px 26px 26px;box-shadow:var(--shadow-lg)}
+.exam__intro{padding:22px 0 6px;border-bottom:1px solid var(--line)}
+.exam__intro h3{font-family:"Fraunces",serif;font-weight:600;font-size:26px;margin:0 0 6px}
+.exam__intro p{margin:6px 0;color:var(--ink-soft);font-size:16px}
+.mcq{padding:20px 0;border-bottom:1px solid var(--line)}.mcq:last-of-type{border-bottom:none}
+.mcq__q{display:flex;gap:12px;font-weight:600;font-size:18px;margin-bottom:12px}
+.mcq__q .n{font-family:"IBM Plex Mono",monospace;font-size:14px;color:var(--teal);flex:none;padding-top:2px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:11px 14px;border:1px solid var(--line);border-radius:11px;margin:7px 0 7px 34px;cursor:pointer;background:var(--paper);transition:.15s;font-size:16px}
+.opt:hover{border-color:var(--teal)}
+.opt input{margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex:none}
+.opt.correct{border-color:var(--teal);background:var(--teal-tint)}
+.opt.wrong{border-color:var(--oxblood);background:#f4e2dd}
+.opt .mark{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;opacity:0;flex:none}
+.opt.correct .mark{opacity:1;color:var(--teal-deep)}.opt.correct .mark::after{content:"✓ juist"}
+.opt.wrong .mark{opacity:1;color:var(--oxblood)}.opt.wrong .mark::after{content:"✗"}
+.exam.graded .opt{cursor:default;pointer-events:none}
+.exam__actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding-top:22px}
+.btn{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;border:none;border-radius:999px;padding:13px 24px;cursor:pointer;transition:.2s}
+.btn-primary{background:var(--teal);color:#fff;box-shadow:var(--shadow)}.btn-primary:hover{background:var(--teal-deep)}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink-soft)}.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
+.scorebox{display:none;align-items:center;gap:18px;font-family:"IBM Plex Mono",monospace;font-size:14px}.scorebox.show{display:flex}
+.scorebox .ring{--v:0;width:64px;height:64px;border-radius:50%;flex:none;display:grid;place-items:center;background:conic-gradient(var(--teal) calc(var(--v)*1%),var(--line) 0);position:relative}
+.scorebox .ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--paper-2)}
+.scorebox .ring b{position:relative;font-family:"Fraunces",serif;font-size:19px;color:var(--teal-deep)}
+.scorebox .verdict{font-size:15px}.scorebox .verdict b{font-family:"Fraunces",serif;font-size:19px}
+.scorebox .verdict.pass b{color:var(--teal)}.scorebox .verdict.fail b{color:var(--oxblood)}
+.cert-gate{margin-top:26px}
+.cert-locked{text-align:center;padding:34px;border:2px dashed var(--line);border-radius:18px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:14px;letter-spacing:.5px}
+.cert-locked .lock{font-size:30px;display:block;margin-bottom:8px}
+.cert-form{display:none;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:26px;padding:22px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px}
+.cert-form.show{display:flex}
+.cert-form label{display:flex;flex-direction:column;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);flex:1;min-width:220px}
+.cert-form input{font-family:"Spectral",serif;font-size:17px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
+.cert-form input:focus{outline:none;border-color:var(--teal)}
+.certificate{display:none;margin-top:28px}.certificate.show{display:block;animation:fade .5s ease}
+.cert-paper{position:relative;background:linear-gradient(160deg,#fbf6ec,#f0e6d2);border:1px solid #e0d2b6;border-radius:16px;padding:52px 48px;box-shadow:var(--shadow-lg);overflow:hidden;text-align:center}
+.cert-paper::before{content:"";position:absolute;inset:14px;border:2px solid var(--teal);border-radius:8px;opacity:.55;pointer-events:none}
+.cert-paper::after{content:"";position:absolute;inset:20px;border:1px solid var(--ochre);border-radius:5px;opacity:.5;pointer-events:none}
+.cert-inner{position:relative;z-index:2}
+.cert-seal{width:78px;height:78px;margin:0 auto 18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--teal),var(--teal-deep));display:grid;place-items:center;color:#f0c987;font-family:"Fraunces",serif;font-size:30px;box-shadow:0 6px 18px -6px rgba(10,66,59,.6)}
+.cert-kicker{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0}
+.cert-title{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,4vw,40px);margin:8px 0 4px;color:var(--teal-deep);letter-spacing:-.5px}
+.cert-sub{color:var(--ink-soft);font-size:16px;margin:0 0 24px}
+.cert-name{font-family:"Fraunces",serif;font-style:italic;font-weight:500;font-size:clamp(30px,5vw,46px);color:var(--ink);margin:6px 0;border-bottom:2px solid var(--ochre);display:inline-block;padding:0 24px 8px}
+.cert-body{max-width:52ch;margin:22px auto 0;color:var(--ink-soft);font-size:17px}.cert-body b{color:var(--teal-deep)}
+.cert-meta{display:flex;justify-content:center;gap:44px;flex-wrap:wrap;margin-top:32px;font-family:"IBM Plex Mono",monospace;font-size:12px}
+.cert-meta div{border-top:1px solid #cbb98f;padding-top:8px;min-width:150px}
+.cert-meta span{display:block;color:var(--ink-faint);letter-spacing:1px;text-transform:uppercase;font-size:10px;margin-top:3px}
+.cert-meta b{font-family:"Fraunces",serif;font-size:17px;color:var(--ink)}
+.cert-download{text-align:center;margin-top:20px}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish .path{display:grid;gap:10px;max-width:560px;margin:22px auto 0;text-align:left;position:relative}
+.finish .path div{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:12px 16px;font-size:15px}
+.finish .path b{color:#f0c987}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+@media print{
+  .topbar,.toc,.toTop,.progress-rail,.done-toggle,.btn-reset,.exam,.cert-gate,.cert-download,.finish{display:none!important}
+  .certificate{display:block!important}.cert-paper{box-shadow:none}
+  .shell{grid-template-columns:1fr;display:block}
+  details.q .ans{padding-left:36px}body{background:#fff;font-size:12pt}body::before{display:none}
+  pre{background:#f0f0f0;color:#000;border:1px solid #ccc}
+}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Leermodule · SAP 14</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">SAP-verdieping · Module 14 · Consultant</p>
+  <h1>Debugging &amp;<br><em>runtime-analyse</em></h1>
+  <p class="hero__lead">De consultant die zélf kan traceren wat het systeem doet, wacht niet op de developer. Debugger, SQL-trace, dumps en logs — als analyse-instrumenten, niet als developertools. Je leest code, je schrijft niets. En je komt terug met bewijs in plaats van vermoedens.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>6</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>studietijd</span></div>
+    <div class="stat"><b>19</b><span>controlevragen</span></div>
+    <div class="stat"><b>Verdieping</b><span>alleen lezen</span></div>
+  </div>
+  <div class="trail">Verdieping: ➑ Documenten &amp; flow → ➒ Organisatie &amp; determinatie → ➓ Status &amp; output → ⓫ Financiële schaduw → ⓬ Case O2C → ⓭ Case implementeren → <b>⓮ Debugging &amp; runtime (hier)</b></div>
+  <div class="disclaimer"><strong>Lees dit eerst.</strong> Concepten en verhoudingen kloppen en zijn algemeen geldig. <strong>Exacte transactiecodes, tabelnamen en menupaden</strong> verschillen per release (ECC vs. S/4HANA) en per implementatie — behandel ze als <em>"verifieer in jóuw systeem"</em>, niet als absolute waarheid.</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waarom runtime-analyse jouw wapen is</a></li>
+      <li><a href="#s2" data-target="s2">De debugger voorbij de basis</a></li>
+      <li><a href="#s3" data-target="s3">SQL-trace: wat het systeem écht raakt</a></li>
+      <li><a href="#s4" data-target="s4">Dumps &amp; logs lezen</a></li>
+      <li><a href="#s5" data-target="s5">Van symptoom naar oorzaak</a></li>
+      <li><a href="#s6" data-target="s6">Grenzen &amp; samenwerking</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom runtime-analyse jouw wapen is</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>"Ik denk dat…" versus "ik heb gezien dat…"</h3>
+        <p>In fundamenten-module 3 leerde je ABAP <em>lezen</em>: statische code begrijpen op het scherm. Maar code op het scherm vertelt maar de halve waarheid. Welke tak van die <code>IF</code> wordt daadwerkelijk genomen bij déze polis? Welke van de vijftien BAdI-implementaties vuurt er echt? Wat staat er in dat veld op het moment dat het misgaat? Dat zie je alleen in een <strong>draaiend systeem</strong>.</p>
+        <p>Het verschil klinkt subtiel maar bepaalt je positie in elk gesprek:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vermoeden</th><th>Waarneming</th></tr></thead>
+          <tbody>
+            <tr><td>"Volgens de documentatie zou het systeem hier de kortingsregel toepassen."</td><td>"Ik heb in de debugger gezien dat de kortingsroutine wordt overgeslagen omdat veld X leeg is."</td></tr>
+            <tr><td>"Ik denk dat deze transactie tabel A bijwerkt."</td><td>"De SQL-trace laat zien dat de transactie tabellen A, B en C raakt — en C had niemand op de radar."</td></tr>
+            <tr><td>"Het zal wel een autorisatieprobleem zijn."</td><td>"De dump zegt expliciet: conversiefout op veld Y, regel 210, met déze waarde erin."</td></tr>
+          </tbody>
+        </table></div>
+        <p>Een vermoeden is een discussiepunt; een waarneming is een feit. De BA die met waarnemingen komt, verschuift van "vragensteller" naar "onderzoeker die al het halve antwoord meebrengt". Developers nemen je serieuzer, doorlooptijden krimpen, en jij bent niet meer geblokkeerd zodra de developer op vakantie is.</p>
+        <h3>Vier instrumenten, één kast</h3>
+        <p>Deze module behandelt vier instrumenten. Elk beantwoordt een ander soort vraag:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Instrument</th><th>Beantwoordt de vraag</th><th>Typisch moment</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Debugger</strong></td><td>"Wat gebeurt er stap voor stap, en wat staat er op dát moment in de velden?"</td><td>Je kunt het gedrag reproduceren en wilt de logica live volgen</td></tr>
+            <tr><td><strong>SQL-trace</strong> (ST05-klasse)</td><td>"Welke tabellen leest/schrijft het systeem écht bij deze handeling?"</td><td>Datavragen, datamodel-verificatie, performance-vermoedens</td></tr>
+            <tr><td><strong>Dump-analyse</strong> (ST22-concept)</td><td>"Waarom knalde dit proces, en met welke waarden?"</td><td>Er ís al een runtime-fout — het bewijs ligt klaar</td></tr>
+            <tr><td><strong>Application-/joblog</strong> (SLG1-concept)</td><td>"Wat heeft dit (batch)proces gemeld terwijl het liep?"</td><td>Batchprocessen, interfaces, massaverwerking</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Het beslisboompje: van functionele vraag naar instrument</h3>
+        <pre>Functionele vraag
+   │
+   ├─ Is het proces al GECRASHT (dump/foutmelding)?
+   │     └─► ja → <span class="b">dump-analyse</span> (ST22-concept): categorie, regel, variabelen
+   │
+   ├─ Gaat het om een BATCH/achtergrondproces?
+   │     └─► ja → <span class="b">joblog + application log</span> eerst; daarna evt. trace
+   │
+   ├─ Is de vraag "WELKE DATA raakt dit / waar komt dit vandaan?"
+   │     └─► ja → <span class="b">SQL-trace</span>: aanzetten, handeling doen, trace lezen
+   │
+   └─ Is de vraag "WAAROM beslist het systeem zo / wie zet deze waarde?"
+         └─► ja → <span class="b">debugger</span>: breakpoint of watchpoint, live meekijken
+<span class="a">vuistregel: pak eerst het instrument dat het bewijs al HEEFT (dump, log),
+pas daarna het instrument waarvoor je moet reproduceren (trace, debugger)</span></pre>
+        <div class="callout tip"><span class="lbl">Goedkoop bewijs eerst</span><p>Logs en dumps bestaan al — die kosten je vijf minuten kijken. Een debugsessie kost reproductie, een testcase en tijd. Begin dus altijd bij wat er al ligt, en escaleer pas naar de debugger als het bestaande bewijs niet genoeg is.</p></div>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Verifieer welke van deze instrumenten jij in de <strong>ontwikkel- of testomgeving</strong> überhaupt mag openen. Probeer (namen verifiëren in jouw systeem): de dump-lijst (ST22-concept), de application log (SLG1-concept) en de SQL-trace (ST05-concept). Noteer per instrument: kom ik erin, of krijg ik een autorisatiefout? Dat lijstje bepaalt wat je in de rest van deze module hands-on kunt doen — en is meteen een concreet autorisatieverzoek voor je basis-team.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom is "ik heb gezien dat" zoveel sterker dan "ik denk dat"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een waarneming uit het draaiende systeem is een <strong>feit</strong>, geen discussiepunt. Statische code en documentatie vertellen wat er zou <em>kunnen</em> gebeuren; runtime-analyse toont wat er bij déze data daadwerkelijk gebeurt (welke tak, welke waarde, welke tabel). Daarmee lever je developers een half opgelost dossier in plaats van een open vraag.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Een gebruiker meldt dat een nachtelijke batchrun "niets gedaan heeft". Welk instrument pak je als eerste, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het <strong>joblog en de application log</strong>: het is een batchproces én het bewijs bestaat al — de run heeft gelogd wat hij deed (of waarom niet). Pas als de logs geen antwoord geven, escaleer je naar trace of debugger met een gereproduceerd geval.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Welke vraagsoort hoort bij de SQL-trace en welke bij de debugger?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>SQL-trace:</strong> datavragen — "welke tabellen raakt dit écht, met welke keys?" <strong>Debugger:</strong> logicavragen — "waarom beslist het systeem zo, wie zet deze waarde, welke tak wordt genomen?" Trace kijkt naar het verkeer met de database; de debugger kijkt in de programmalogica zelf.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De debugger voorbij de basis</h2><span class="chip time">⏱ 30 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Je hoeft geen regel ABAP te schrijven om de debugger te gebruiken. De debugger is een <strong>kijkinstrument</strong>: het systeem pauzeert en jij kijkt rond. Vier vaardigheden tillen je boven de basis uit.</p>
+        <h3>1 · Breakpoints: sessie versus extern</h3>
+        <ul>
+          <li><strong>Sessie-breakpoint</strong> — geldt alleen in jouw huidige aanmeldsessie. Handig als je zelf in de GUI werkt en de transactie zelf start: zet het punt, voer de handeling uit, de debugger opent.</li>
+          <li><strong>Extern breakpoint</strong> — geldt (tijdelijk, meestal enkele uren) voor jouw gebruiker <em>ongeacht hoe het proces binnenkomt</em>: ook bij een webservice-call, een Fiori-app of een RFC vanuit een ander systeem. Onmisbaar zodra de trigger níet je eigen GUI-scherm is.</li>
+        </ul>
+        <p>De vuistregel: <strong>start ik het zelf in de GUI → sessie-breakpoint; komt het van buiten → extern breakpoint</strong> (op de gebruiker waaronder de call binnenkomt — dat kan een technische user zijn; dan heb je de developer nodig).</p>
+        <h3>2 · De call stack lezen: "hoe kwam ik hier?"</h3>
+        <p>Zodra de debugger stopt, zie je niet alleen de huidige regel maar ook de <strong>call stack</strong>: de keten van aanroepen die tot hier leidde — onderaan het hoofdprogramma, bovenaan de routine waar je nu staat. Voor jou als analist is dit vaak waardevoller dan de code zelf:</p>
+        <ul>
+          <li>Je ziet <strong>of je in standaard of in maatwerk</strong> zit (Z-namen in de stack = maatwerk in de keten).</li>
+          <li>Je ziet <strong>via welke omweg</strong> een waarde tot stand komt — bv. dat een user-exit of BAdI-implementatie tussen de standaardstappen hangt.</li>
+          <li>Je kunt op elke regel van de stack klikken en daar de variabelen bekijken zoals ze <em>op dat niveau</em> zijn.</li>
+        </ul>
+        <h3>3 · Watchpoints: "stop als dit veld verandert"</h3>
+        <p>De gouden greep bij de klassieke vraag <em>"wie overschrijft mijn waarde?"</em>. Een breakpoint stopt op een <strong>plek</strong>; een <strong>watchpoint</strong> stopt op een <strong>gebeurtenis</strong>: het moment dat een specifiek veld van waarde verandert (of een voorwaarde waar wordt). Je hoeft dus niet te wéten waar in duizenden regels code het veld wordt gezet — het systeem stopt vanzelf precies daar, en de call stack vertelt je wie de dader is.</p>
+        <pre>Stappenplan watchpoint (conceptueel — knoppen verifiëren in jouw systeem)
+1. Reproduceer het scenario tot vlak vóór het verdachte moment
+2. Kom in de debugger (breakpoint vroeg in het proces, of /h-concept)
+3. Maak een watchpoint op het veld dat "spontaan" verandert
+4. Laat het programma doorlopen (F8-concept)
+5. Debugger stopt exact op de regel die het veld wijzigt
+6. Lees de call stack: welk programma, standaard of Z, welke exit?
+<span class="a">→ noteer programma + regel + oude/nieuwe waarde: dat is je dossier</span></pre>
+        <h3>4 · Variabelen en interne tabellen inspecteren</h3>
+        <p>In de debugger kun je elk veld en elke <strong>interne tabel</strong> (de werklijsten in het geheugen, ken je uit fundamenten-module 3) openklikken. Praktische kijktips:</p>
+        <ul>
+          <li>Dubbelklik een veldnaam in de code om de <strong>actuele waarde</strong> te zien — vergelijk die met wat jij verwachtte.</li>
+          <li>Open een interne tabel als tabelweergave: <strong>hoeveel regels</strong> zitten erin, en staan de verwachte records erbij? "Mijn polis zit niet in de selectie" zie je hier zwart-op-wit.</li>
+          <li>Let op het verschil tussen een <strong>lege</strong> waarde en een <strong>onverwachte</strong> waarde — leeg wijst vaak naar een eerdere stap die niets vulde; onverwacht wijst naar een overschrijving (→ watchpoint).</li>
+        </ul>
+        <div class="callout warn"><span class="lbl">Kijken, nooit draaien aan knoppen</span><p>De debugger kán waarden wijzigen en statements overslaan. Dat is voor jou <strong>verboden terrein</strong>, zeker buiten de ontwikkelomgeving: je verandert dan de werkelijkheid die je juist wilde observeren — en in QAS/PRD is het een integriteits- en auditrisico. Sectie 6 komt hierop terug.</p></div>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Zet in de <strong>ontwikkel- of sandboxomgeving</strong> een sessie-breakpoint in een onschuldige weergavetransactie (vraag een developer of key-user om een geschikt startpunt, of gebruik het debug-startcommando dat in jouw systeem geldt). Als de debugger stopt: (1) zoek de call stack en tel hoeveel niveaus er zijn, (2) dubbelklik drie variabelen en bekijk hun waarden, (3) open één interne tabel en tel de regels. Sluit af zónder iets te wijzigen. Doel: het scherm went, zodat je het onder druk ook durft.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Wanneer heb je een extern breakpoint nodig in plaats van een sessie-breakpoint?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Zodra de code <strong>niet vanuit jouw eigen GUI-sessie</strong> wordt gestart: een Fiori-app, webservice, RFC-call vanuit een ander systeem of een interface. Een sessie-breakpoint geldt alleen binnen je eigen aanmeldsessie; het externe breakpoint hangt (tijdelijk) aan de gebruiker, hoe de call ook binnenkomt.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Een veld krijgt ergens in een lang proces "spontaan" een andere waarde. Waarom is een watchpoint hier beter dan een breakpoint?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat je niet <strong>wéét waar</strong> de overschrijving gebeurt — een breakpoint vereist een plek, een watchpoint stopt op de <strong>gebeurtenis</strong> (veld verandert), waar die ook plaatsvindt. De debugger stopt precies op de schuldige regel en de call stack vertelt of het standaard, exit of Z-maatwerk is.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat lees je als BA vooral uit de call stack?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <strong>herkomst van het gedrag</strong>: via welke keten van aanroepen je hier kwam, of er <strong>maatwerk (Z-namen), user-exits of BAdI's</strong> in de keten hangen, en op welk niveau een waarde ontstond. Vaak is "er zit een Z-programma tussen" al de kern van je bevinding — zonder één regel code diep te begrijpen.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">SQL-trace: wat het systeem écht raakt</h2><span class="chip time">⏱ 25 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Het idee: afluisteren tussen programma en database</h3>
+        <p>De <strong>SQL-trace</strong> — klassiek bekend als <strong>ST05</strong>, verifieer de naam en modernere varianten in jouw systeem — legt vast welke database-opdrachten een programma uitvoert terwijl jij een handeling doet. Aanzetten, handeling uitvoeren, uitzetten, lijst lezen. Geen debugger nodig, geen code op het scherm: alleen het <em>dataverkeer</em>.</p>
+        <pre>Werkwijze (concept)
+1. Trace <span class="b">aanzetten</span> — meestal gefilterd op jouw gebruiker
+2. De handeling uitvoeren (transactie openen, document opslaan…)
+3. Trace <span class="b">uitzetten</span> — direct! anders vervuilt alles wat je daarna doet de lijst
+4. Trace-lijst tonen en lezen
+<span class="a">kort houden is de kunst: één handeling per trace</span></pre>
+        <h3>De trace lezen als functioneel persoon</h3>
+        <p>De lijst toont per regel o.a. de <strong>tabelnaam</strong>, het soort statement (SELECT, INSERT, UPDATE…), de <strong>WHERE-condities/keys</strong> en de duur. Jouw leesvragen:</p>
+        <ul>
+          <li><strong>Welke tabellen komen langs?</strong> Dit is het feitelijke antwoord op "waar staat deze data" — geen documentatie, maar waarneming.</li>
+          <li><strong>Met welke keys wordt gezocht?</strong> De WHERE-condities laten zien via welke sleutelvelden het systeem navigeert — precies de relaties uit je datamodelkennis.</li>
+          <li><strong>Wordt er alleen gelezen of ook geschreven?</strong> SELECT's bij openen; INSERT/UPDATE bij opslaan vertellen welke tabellen dit proces <em>bijwerkt</em>.</li>
+        </ul>
+        <h3>Je datamodel-kennis verifiëren</h3>
+        <p>In fundamenten-module 2 leerde je het datamodel op papier: kop- en regeltabellen, sleutels, relaties. De trace is jouw <strong>verificatie-instrument</strong>: open een document in weergavemodus met de trace aan, en je ziet zwart-op-wit welke tabellen erachter zitten — inclusief de klanteigen Z-tabellen die in geen enkel standaardschema staan. Zo bouw je per klant een <em>bewezen</em> datamodel-kaart op in plaats van een overgenomen plaatje.</p>
+        <h3>Performance-signalen herkennen</h3>
+        <p>Je hoeft geen performance-expert te zijn om twee rode vlaggen te herkennen:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Signaal in de trace</th><th>Wat het meestal betekent</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Dezelfde SELECT tientallen/honderden keren</strong>, telkens met een andere key</td><td>Een select <em>in een loop</em> — per regel/record een aparte databaseroep in plaats van één set-gebaseerde selectie. Klassieke oorzaak van "het scherm hangt bij grote orders".</td></tr>
+            <tr><td><strong>Identieke SELECT's met identieke keys</strong>, meerdere keren</td><td>Hetzelfde wordt herhaald opgehaald zonder buffering — verspilling die bij volume gaat schuren.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Jij hoeft dit niet op te lossen. Maar "de trace toont 4.000 identieke selects op tabel X binnen één opslag-actie" is een bevinding waar een developer direct mee verder kan — en die het verschil maakt tussen "het is traag" en een gericht ticket.</p>
+        <div class="callout tip"><span class="lbl">Trace + debugger = tandem</span><p>De trace vertelt <strong>wát</strong> er met de database gebeurt; de debugger vertelt <strong>waaróm</strong>. Zie je in de trace een verrassende tabel? Vanuit de trace-regel kun je (in de meeste systemen) doorspringen naar de codeplek die het statement uitvoerde — en daar begint je leeswerk uit fundamenten-module 3.</p></div>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Kies in de <strong>testomgeving</strong> een document dat je goed kent (order, polis, factuur). Zet de SQL-trace aan (ST05-concept, gefilterd op jouw gebruiker), open het document in <strong>weergavemodus</strong>, zet de trace direct uit en toon de lijst. Noteer: (1) de vijf meest voorkomende tabellen, (2) minstens één tabel die je níet verwachtte, (3) de keyvelden in één WHERE-conditie. Vergelijk met wat je uit fundamenten-module 2 dacht te weten — het verschil is je leerwinst.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom moet een SQL-trace zo kort mogelijk zijn (aan → handeling → direct uit)?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat de trace <strong>alles</strong> vastlegt wat er in de tussentijd voor de gefilterde gebruiker gebeurt — ook achtergrondactiviteit en je eigen extra klikken. Eén handeling per trace houdt de lijst leesbaar en maakt de koppeling handeling → statements eenduidig.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Hoe gebruik je de trace om je datamodel-kennis te verifiëren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Trace aan, document in weergave openen, trace uit: de lijst toont <strong>welke tabellen het systeem feitelijk leest</strong> en via welke <strong>keys</strong> — inclusief klanteigen Z-tabellen die in geen schema staan. Zo vervang je een aangenomen datamodel door een <strong>waargenomen</strong> datamodel voor déze implementatie.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Je ziet in een trace 3.000 keer dezelfde SELECT op één tabel, steeds met een andere key. Wat is je hypothese en wat doe je ermee?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Hypothese: een <strong>select in een loop</strong> — per record een aparte databaseroep in plaats van één set-selectie; klassieke performance-oorzaak bij volume. Je lost het niet zelf op, maar meldt het gericht: tabel, aantal herhalingen, de handeling waarbij het optrad. Daarmee kan een developer direct naar de juiste codeplek.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Dumps &amp; logs lezen</h2><span class="chip time">⏱ 25 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>De runtime-fout (dump): een cadeau, geen ramp</h3>
+        <p>Als een programma hard vastloopt, schrijft het systeem een <strong>runtime-foutrapport</strong> weg — de "dump", klassiek te vinden via het <strong>ST22</strong>-concept. Gebruikers ervaren een dump als ramp; voor jou is het een cadeau: het systeem heeft op het moment van de crash <em>alles</em> vastgelegd. Je hoeft niets te reproduceren — het bewijs ligt er al.</p>
+        <p>Een dump is lang, maar als functioneel persoon lees je selectief:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Onderdeel van de dump</th><th>Wat jij eruit haalt</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Foutcategorie / korte tekst</strong></td><td>Het soort fout: conversiefout, delen door nul, tabel-regel niet gevonden, geheugen op, autorisatie… Vaak al de halve diagnose.</td></tr>
+            <tr><td><strong>"Wat gebeurde er" / "Wat kun je doen"</strong></td><td>De leesbare uitleg in gewone taal — begin hier, niet bij de code.</td></tr>
+            <tr><td><strong>Programma + regel waar het knalt</strong></td><td>Standaard of Z-naam? Dat bepaalt meteen de routering (SAP-standaard: mogelijk note/bug; maatwerk: eigen developer).</td></tr>
+            <tr><td><strong>Broncode-uittreksel rond de regel</strong></td><td>Met je leeskennis uit fundamenten-module 3 zie je vaak al wélk veld het probleem is.</td></tr>
+            <tr><td><strong>Variabelen op crash-moment</strong></td><td>De feitelijke waarden in de betrokken velden. Dé plek waar "welke polis/waarde triggert dit?" beantwoord wordt.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Voorbeeldredenering.</strong> Categorie: conversiefout ("kan niet als getal geïnterpreteerd worden"). Regel: een Z-programma. Variabele: het bronveld bevat <code>12,5%</code>. Jouw functionele conclusie: ergens is een tekstveld met procenttekens gevuld waar het maatwerk een kaal getal verwacht — waarschijnlijk een invoer- of interfacekwestie. Dat is een dossier, geen "het crasht".</p>
+        <h3>Application log &amp; joblog: het verhaal van batchprocessen</h3>
+        <p>Batchprocessen en interfaces hebben geen scherm om op te klagen — zij schrijven hun verhaal in logs:</p>
+        <ul>
+          <li><strong>Application log</strong> (SLG1-concept) — functionele meldingen die programma's bewust wegschrijven, gegroepeerd per object/subobject: "polis 4711 overgeslagen: status X", "1.204 records verwerkt, 12 fouten". Filterbaar op datum, object en gebruiker.</li>
+          <li><strong>Joblog</strong> (bij de jobbeheer-transactie, SM37-concept) — het technische verloop van een achtergrondjob: gestart, stappen, spool, gecrasht of voltooid, met tijdstempels. Eerste vraag bij "de nachtrun deed niets": <em>heeft de job überhaupt gedraaid, en hoe eindigde hij?</em></li>
+        </ul>
+        <p>Leesvolgorde bij batchproblemen: <strong>joblog eerst</strong> (liep de job, viel hij om → dan is er vaak ook een dump), <strong>daarna de application log</strong> (wat meldde het proces functioneel over de records).</p>
+        <h3>Wat je uit een dump haalt vóór je hem doorstuurt</h3>
+        <p>Stuur nooit alleen "er is een dump, zie bijlage". Lever bij het doorsturen minimaal:</p>
+        <ol>
+          <li><strong>Categorie + korte tekst</strong> van de fout (letterlijk overgenomen).</li>
+          <li><strong>Programma en regel</strong>, en of dat standaard of maatwerk (Z) is.</li>
+          <li><strong>De relevante variabele-waarden</strong>: welk record, welke sleutel, welke afwijkende waarde.</li>
+          <li><strong>De functionele context</strong>: welke handeling/gebruiker/run triggerde het, en is het reproduceerbaar?</li>
+        </ol>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Open in de <strong>test- of QAS-omgeving</strong> de dump-lijst (ST22-concept) van de afgelopen week — er staat er vrijwel altijd wel één. Kies een willekeurige dump en beantwoord op papier: (1) wat is de foutcategorie, (2) knalt het in standaard of in een Z-programma, (3) welke variabele-waarde springt eruit, (4) wat zou jouw éérste functionele hypothese zijn? Je hoeft het niet op te lossen — het doel is dat een dump geen muur van tekst meer is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom is een dump voor jou eerder een cadeau dan een ramp?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat het systeem op crash-moment <strong>alles al heeft vastgelegd</strong>: foutcategorie, programma en regel, én de variabele-waarden. Je hoeft niets te reproduceren — het bewijs ligt klaar, je moet het alleen selectief lezen (korte tekst → programma/regel → variabelen).</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het verschil tussen het joblog en de application log, en in welke volgorde lees je ze?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Joblog</strong> (SM37-concept) = het technische verloop van de achtergrondjob: gestart, voltooid of omgevallen, tijdstempels. <strong>Application log</strong> (SLG1-concept) = de functionele meldingen die het programma bewust wegschreef over records. Volgorde: eerst joblog (liep de job?), dan application log (wat vond hij van de data?).</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Noem drie dingen die je uit een dump haalt vóór je hem doorstuurt naar een developer.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(1) De <strong>foutcategorie/korte tekst</strong>, (2) <strong>programma + regel</strong> en of dat standaard of Z-maatwerk is, (3) de <strong>variabele-waarden</strong> op crash-moment (welk record/waarde triggert het) — plus de functionele context en reproduceerbaarheid. Daarmee stuur je een dossier door, geen raadsel.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Van symptoom naar oorzaak</h2><span class="chip time">⏱ 30 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>De vier stappen die altijd werken</h3>
+        <p>Instrumenten zonder systematiek leveren drukte, geen antwoorden. De volgorde is altijd dezelfde:</p>
+        <pre>1. <span class="b">REPRODUCEREN</span>  — kan ik het gedrag oproepen? met welke exacte stappen/data?
+2. <span class="b">VERKLEINEN</span>    — wat is het kleinste geval waarin het nog misgaat?
+                    (één record, één veld, één stap — geen run van 80.000)
+3. <span class="b">INSTRUMENT</span>    — kies via het beslisboompje uit sectie 1
+4. <span class="b">HYPOTHESE</span>     — formuleer wat je dénkt, en gebruik het instrument
+                    om die te BEVESTIGEN of te VERWERPEN — niet om rond te dwalen
+<span class="a">een debugsessie zonder hypothese is toerisme</span></pre>
+        <p>Vooral stap 2 wordt overgeslagen — en is de grootste versneller. "Het gaat mis bij polissen met een tussentijdse wijziging in de dekking" is honderd keer beter debugbaar dan "het gaat soms mis".</p>
+        <h3>Mini-case A · "Het veld wordt overschreven — door wie?"</h3>
+        <p><strong>Symptoom.</strong> Een key-user vult op het scherm een afwijkende incassotermijn, maar na opslaan staat er weer de standaardwaarde. "Het systeem zet het terug."</p>
+        <ol>
+          <li><strong>Reproduceren.</strong> Zelf proberen in QAS met dezelfde klant/polis: klopt, na opslaan is de waarde terug op standaard. Reproduceerbaar met één geval.</li>
+          <li><strong>Verkleinen.</strong> Gebeurt het bij élke polis of alleen bij dit product? Test met tweede product: daar blijft de waarde wél staan. → Het is productafhankelijk. Grote hint: er is logica die per product beslist.</li>
+          <li><strong>Instrument kiezen.</strong> De vraag is "wie zet deze waarde terug?" → debugger, en specifiek een <strong>watchpoint</strong> op het incassotermijn-veld tijdens het opslaan.</li>
+          <li><strong>Hypothese toetsen.</strong> Hypothese: een exit of determinatieroutine overschrijft het veld bij opslaan. Watchpoint gezet, opslaan, debugger stopt: een Z-implementatie in de opslagketen zet het veld hard terug voor deze productgroep. Call stack + programmnaam genoteerd.</li>
+        </ol>
+        <p><strong>Uitkomst.</strong> Geen ticket "systeem doet raar", maar: "Z-routine [naam] overschrijft de incassotermijn bij productgroep X tijdens opslaan (gezien via watchpoint, call stack bijgevoegd). Functionele vraag aan de business: is die regel nog gewenst?" — Merk op: het eindstation is een <em>functionele</em> vraag. Zo hoort het.</p>
+        <h3>Mini-case B · "De batchjob slaat polissen over — waarom?"</h3>
+        <p><strong>Symptoom.</strong> De maandelijkse prolongatierun verwerkt 14.860 polissen; 212 blijven onverwerkt achter, zonder foutmelding richting de gebruikers.</p>
+        <ol>
+          <li><strong>Reproduceren?</strong> Niet nodig — het is een batchrun: het bewijs ligt in de logs. Eerst <strong>joblog</strong> (SM37-concept): job voltooid zonder crash, dus geen dump. Dan <strong>application log</strong> (SLG1-concept): per overgeslagen polis staat er een melding "overgeslagen: blokkade actief".</li>
+          <li><strong>Verkleinen.</strong> Van de 212 meldingen 10 polissen bekijken: allemaal dezelfde blokkadecode. Eén representatieve polis kiezen als testgeval.</li>
+          <li><strong>Instrument.</strong> De log zegt wát (blokkade), maar niet waaróm die blokkade erop zit. Datavraag → <strong>SQL-trace / tabelinspectie</strong> op die ene polis: welk veld, sinds wanneer, door welk proces gezet? Wijzigingshistorie erbij: de blokkade blijkt door een eerdere conversierun gezet en nooit opgeruimd.</li>
+          <li><strong>Hypothese toetsen.</strong> Hypothese: alle 212 komen uit dezelfde conversiebatch. Check op de lijst: klopt voor 209 van de 212; 3 hebben een legitieme handmatige blokkade. Bevinding compleet, inclusief de uitzonderingen.</li>
+        </ol>
+        <p><strong>Uitkomst.</strong> "209 polissen dragen nog een technische blokkade uit conversierun [datum]; voorstel: opschoonactie + herstart prolongatie voor die selectie. 3 polissen terecht geblokkeerd." Niemand heeft hoeven debuggen — logs en gerichte datacontrole waren genoeg.</p>
+        <div class="callout tip"><span class="lbl">Het patroon achter beide cases</span><p>Case A eindigde in de debugger, case B kwam er niet eens aan toe. Het instrument is nooit het doel — de <strong>hypothese</strong> is de motor, het instrument alleen de toets. En beide cases eindigen hetzelfde: met een overdraagbaar dossier en een functionele vervolgvraag.</p></div>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Pak een écht openstaand incident of een recente "rare" melding uit jouw project. Doorloop alleen stap 1 en 2 op papier: schrijf de exacte reproductiestappen op en verklein het tot het kleinste geval (één record, één veld). Kies daarna via het beslisboompje het instrument dat je zou pakken — en check of jouw keuze matcht met wat de logs/dumps al beschikbaar hebben. Voer uit wat binnen je autorisaties valt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom is "verkleinen" vaak de belangrijkste stap?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat een klein geval (één record, één veld, één stap) elk instrument bruikbaar maakt: een trace blijft leesbaar, een debugsessie behapbaar, en het verschil tussen goede en foute gevallen wordt zichtbaar. "Alleen bij productgroep X" of "alleen polissen uit conversierun Y" ís vaak al de halve oorzaak.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>In case B werd de debugger nooit gebruikt. Wat zegt dat over de juiste volgorde van instrumenten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat je begint bij het bewijs dat er al <strong>ligt</strong>: joblog (liep de job?) en application log (wat meldde hij per record?). De log gaf het "wát" (blokkade), gerichte datacontrole het "waaróm". De debugger is het duurste instrument en pas nodig als bestaand bewijs plus data-inspectie het antwoord niet geven.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is er mis met een debugsessie zonder hypothese?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Zonder hypothese weet je niet <strong>waar je moet stoppen of op moet letten</strong> — je dwaalt door duizenden regels ("toerisme"). Met een hypothese ("een exit overschrijft dit veld bij opslaan") kies je gericht het middel (watchpoint), en elk resultaat is winst: bevestigd of verworpen, beide brengen je verder.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Grenzen &amp; samenwerking</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Wat je zelf doet — en wanneer je de developer erbij haalt</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Zelf doen (BA)</th><th>Developer erbij</th></tr></thead>
+          <tbody>
+            <tr><td>Logs en dumps lezen, de kernfeiten eruit halen</td><td>De fout daadwerkelijk oplossen (code of note)</td></tr>
+            <tr><td>SQL-trace draaien en tabellen/keys benoemen</td><td>Het statement herschrijven of bufferen</td></tr>
+            <tr><td>Meekijken in de debugger, call stack en variabelen aflezen, watchpoint op een veld</td><td>Complexe debug-scenario's (technische users, update-taken, parallelle processen), waarden aanpassen in debug (alleen zij, alleen waar dat mág)</td></tr>
+            <tr><td>Het dossier bouwen: reproductie, kleinste geval, waarnemingen, hypothese</td><td>De technische diagnose valideren en de fix ontwerpen</td></tr>
+          </tbody>
+        </table></div>
+        <p>De grens is niet je titel maar het werkwoord: <strong>observeren doe jij, ingrijpen doet de developer</strong>. En je haalt de developer er niet later bij dan nodig, maar wél met een beter dossier dan "het doet het niet":</p>
+        <pre>Het dossier dat je overdraagt
+■ Symptoom       wat ging er functioneel mis, voor wie, sinds wanneer
+■ Reproductie    exacte stappen + kleinste geval (record/veld)
+■ Waarnemingen   dump-categorie/regel · trace-tabellen · logmeldingen ·
+                 watchpoint-resultaat (programma + oude/nieuwe waarde)
+■ Hypothese      wat jij denkt dat er gebeurt — expliciet als hypothese
+■ Vraag          wat je van de developer nodig hebt (valideren? fixen? note?)
+<span class="a">een developer met dit dossier begint bij 80% in plaats van bij 0%</span></pre>
+        <h3>Debug-etiquette in QAS en PRD</h3>
+        <ul>
+          <li><strong>Nooit data wijzigen in debug.</strong> Geen variabelen aanpassen, geen statements overslaan, nergens — het corrumpeert je waarneming, en in QAS/PRD ook de data en de audit trail. In veel organisaties is "debug &amp; replace" in productie terecht een gelogde, aan vier ogen gebonden of simpelweg verboden handeling.</li>
+          <li><strong>Autorisaties zijn geen pesterij.</strong> Weergave-debuggen en wijzig-debuggen zijn gescheiden rechten; dat jij in PRD hooguit mag méékijken (of niets mag) is een bewuste keuze. Vraag rechten aan voor DEV/QAS, respecteer de grens in PRD.</li>
+          <li><strong>Een debugger zet een proces stil.</strong> Blijf je in PRD op een breakpoint hangen, dan houd je mogelijk een lock, een workproces of een gebruiker vast. Debuggen in productie — als het al mag — doe je kort, buiten piekuren en in afstemming met beheer.</li>
+          <li><strong>Traces ruim je op.</strong> Een vergeten actieve trace vult logs en kost performance. Aanzetten = verantwoordelijkheid om uit te zetten.</li>
+        </ul>
+        <h3>Bevindingen overdraagbaar vastleggen</h3>
+        <p>Een waarneming die alleen in jouw hoofd zit, is over twee weken weg. Leg per onderzoek minimaal vast: <strong>datum + systeem/client</strong>, de <strong>stappen</strong>, de <strong>ruwe waarneming</strong> (letterlijke dump-tekst, trace-regel, logmelding — kopieer, parafraseer niet), en je <strong>conclusie gescheiden van je waarneming</strong>. Screenshots van de call stack en de variabelen zijn goud. Plak het in het ticket, niet in een privé-notitieblok: het volgende incident in dezelfde hoek begint dan niet bij nul.</p>
+        <div class="callout warn"><span class="lbl">De valkuil van de handige BA</span><p>Wie eenmaal kan debuggen, wordt verleid om "even zelf" een waarde recht te zetten of een gebruiker in productie uit de brand te helpen. Doe het niet. Jouw waarde is dat je <strong>ziet en bewijst</strong> — het moment dat je zelf ingrijpt, ben je geen betrouwbare getuige meer en omzeil je elk wijzigingsproces.</p></div>
+        <div class="callout note"><span class="lbl">Doe dit in jouw systeem</span><p>Maak een <strong>dossier-sjabloon</strong> in jouw ticketsysteem of wiki met de vijf blokken hierboven (symptoom · reproductie · waarnemingen · hypothese · vraag). Vul het één keer volledig in voor een recent incident — inclusief letterlijk geplakte dump-/logtekst — en vraag een developer om feedback: wat ontbrak er nog om direct te kunnen starten? Scherp het sjabloon daarop aan en gebruik het voortaan standaard.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <details class="q"><summary><span class="qn">1</span><span>Waar ligt de grens tussen wat jij doet en wat de developer doet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij het werkwoord: <strong>observeren versus ingrijpen</strong>. Jij leest logs, dumps, traces en debug-schermen en bouwt het dossier; de developer wijzigt code, past waarden aan (waar dat mag) en ontwerpt de fix. Je haalt hem erbij zodra ingrijpen nodig is — mét dossier, zodat hij bij 80% begint.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Waarom is data wijzigen in debug voor jou taboe, zelfs als je de rechten zou hebben?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Drie redenen: je <strong>corrumpeert je eigen waarneming</strong> (je observeert niet langer het echte gedrag), je omzeilt het <strong>wijzigings- en auditproces</strong> (zeker in QAS/PRD), en je bent daarna geen betrouwbare getuige meer. Jouw kracht is bewijzen wat er gebeurt, niet stiekem repareren.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat maakt een bevinding "overdraagbaar"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat een ander hem kan navolgen zonder jou: datum + systeem/client, exacte stappen, de <strong>letterlijke ruwe waarneming</strong> (gekopieerde dump-/log-/trace-tekst, screenshots van call stack en variabelen) en een conclusie die <strong>gescheiden</strong> is van de waarneming — vastgelegd in het ticket, niet in je eigen aantekeningen.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Waarom is lang blijven hangen op een breakpoint in productie een probleem?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een gestopt proces kan <strong>locks, een workproces of een gebruiker vasthouden</strong> — andere gebruikers en processen wachten daarop. Debuggen in PRD (als het al is toegestaan) doe je daarom kort, buiten piekuren en in afstemming met beheer.</div></details>
+      </div>
+
+      <!-- EINDTOETS -->
+      <div class="exam" id="exam">
+        <div class="exam__intro"><h3>Eindtoets</h3>
+          <p>8 scenario-vragen over de hele module. Je hebt <strong>≥ 70% (6 van 8)</strong> nodig voor je certificaat. Herkansen mag onbeperkt.</p></div>
+
+        <div class="mcq" data-answer="2">
+          <div class="mcq__q"><span class="n">1</span><span>Een veld krijgt tijdens het opslaan "spontaan" een andere waarde en niemand weet waar dat gebeurt. Welk instrument pak je?</span></div>
+          <label class="opt"><input type="radio" name="q1"><span>SQL-trace — die toont welke tabellen worden geraakt</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q1"><span>De dump-lijst (ST22-concept) — daar staat de fout al in</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q1"><span>Een watchpoint in de debugger — die stopt exact op de regel die het veld wijzigt</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q1"><span>De application log — daar logt het programma de wijziging</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="1">
+          <div class="mcq__q"><span class="n">2</span><span>Een nachtelijke batchrun heeft "niets gedaan". Wat is je éérste stap?</span></div>
+          <label class="opt"><input type="radio" name="q2"><span>Een extern breakpoint zetten en de run opnieuw starten in debug</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q2"><span>Het joblog bekijken: heeft de job gedraaid en hoe eindigde hij?</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q2"><span>Een SQL-trace aanzetten voor de komende nacht</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q2"><span>De developer vragen de code te reviewen</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="0">
+          <div class="mcq__q"><span class="n">3</span><span>Je wilt weten welke tabellen een transactie écht leest bij het openen van een polis. Wat doe je?</span></div>
+          <label class="opt"><input type="radio" name="q3"><span>SQL-trace aan, polis in weergave openen, trace direct uit, lijst lezen</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q3"><span>Het standaard-datamodelschema uit de documentatie erbij pakken</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q3"><span>Een watchpoint zetten op de polissleutel</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q3"><span>De dump-lijst controleren op eerdere fouten van die transactie</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="2">
+          <div class="mcq__q"><span class="n">4</span><span>In een SQL-trace zie je dezelfde SELECT 5.000 keer, telkens met een andere key, binnen één opslag-actie. Wat is de meest waarschijnlijke verklaring?</span></div>
+          <label class="opt"><input type="radio" name="q4"><span>De database is corrupt en herhaalt statements</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q4"><span>De trace stond te lang aan en heeft andere gebruikers meegenomen</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q4"><span>Een select in een loop: per record een aparte databaseroep — een performance-signaal voor de developer</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q4"><span>Normaal gedrag: elke SELECT hoort één keer per key voor te komen</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="1">
+          <div class="mcq__q"><span class="n">5</span><span>Een proces crasht met een runtime-fout. Wat lees je in de dump als éérste?</span></div>
+          <label class="opt"><input type="radio" name="q5"><span>De volledige broncode van het programma, van boven naar beneden</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q5"><span>De foutcategorie/korte tekst en de uitleg "wat gebeurde er" — daarna programma/regel en variabelen</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q5"><span>Niets — een dump is alleen voor developers leesbaar</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q5"><span>De systeemconfiguratie en kernelversie</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="2">
+          <div class="mcq__q"><span class="n">6</span><span>Een Fiori-app (dus geen GUI-sessie van jou) vertoont het afwijkende gedrag. Welk soort breakpoint heb je nodig om mee te kunnen kijken?</span></div>
+          <label class="opt"><input type="radio" name="q6"><span>Een sessie-breakpoint — die werkt overal</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q6"><span>Geen enkel — Fiori-apps zijn niet te debuggen</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q6"><span>Een extern breakpoint — dat hangt aan de gebruiker, ongeacht hoe de call binnenkomt</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q6"><span>Een watchpoint op het schermveld</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="1">
+          <div class="mcq__q"><span class="n">7</span><span>Je staat in de debugger in PRD (meekijk-rechten) en ziet dat één verkeerde veldwaarde het probleem is. De gebruiker smeekt: "zet hem even goed". Wat doe je?</span></div>
+          <label class="opt"><input type="radio" name="q7"><span>De waarde in debug aanpassen — dat scheelt een ticket</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q7"><span>Niets wijzigen: waarneming vastleggen (veld, waarde, plek, call stack) en via het reguliere proces laten corrigeren</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q7"><span>De debugger openlaten tot de developer online is</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q7"><span>De transactie afbreken en de gebruiker vragen het te negeren</span><span class="mark"></span></label>
+        </div>
+        <div class="mcq" data-answer="3">
+          <div class="mcq__q"><span class="n">8</span><span>Wat hoort er minimaal in het dossier waarmee je een probleem aan een developer overdraagt?</span></div>
+          <label class="opt"><input type="radio" name="q8"><span>Een korte beschrijving: "het doet het niet bij sommige polissen"</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q8"><span>Alleen de dump als bijlage — daar staat alles al in</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q8"><span>Je conclusie, zonder de ruwe waarnemingen — die verwarren alleen maar</span><span class="mark"></span></label>
+          <label class="opt"><input type="radio" name="q8"><span>Symptoom, reproductiestappen + kleinste geval, ruwe waarnemingen, expliciete hypothese en je concrete vraag</span><span class="mark"></span></label>
+        </div>
+
+        <div class="exam__actions">
+          <button class="btn btn-primary" id="gradeBtn">Nakijken</button>
+          <button class="btn btn-ghost" id="retryBtn" style="display:none">Opnieuw</button>
+          <div class="scorebox" id="scorebox"><div class="ring" id="ring"><b id="ringPct">0%</b></div><div class="verdict" id="verdict"></div></div>
+        </div>
+      </div>
+
+      <!-- CERTIFICAAT -->
+      <div class="cert-gate" id="certGate">
+        <div class="cert-locked" id="certLocked"><span class="lock">🔒</span>Je certificaat komt vrij zodra je de eindtoets met minimaal 70% haalt.</div>
+        <div class="cert-form" id="certForm">
+          <label>Jouw naam (op het certificaat)<input type="text" id="certName" placeholder="Voornaam Achternaam" autocomplete="name"></label>
+          <button class="btn btn-primary" id="issueBtn">Certificaat aanmaken</button>
+        </div>
+        <div class="certificate" id="certificate">
+          <div class="cert-paper"><div class="cert-inner">
+            <div class="cert-seal">E</div>
+            <p class="cert-kicker">Eductus · Certificaat van voltooiing</p>
+            <h2 class="cert-title">Debugging &amp; runtime-analyse</h2>
+            <p class="cert-sub">SAP-verdieping · Module 14</p>
+            <p style="margin:18px 0 2px;color:var(--ink-faint);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase">Uitgereikt aan</p>
+            <div class="cert-name" id="certNameOut">—</div>
+            <p class="cert-body">heeft de verdiepingsmodule <b>Debugging &amp; runtime-analyse</b> succesvol afgerond en kan zelfstandig debugger, SQL-trace, dumps en logs inzetten om van symptoom naar bewezen oorzaak te komen.</p>
+            <div class="cert-meta">
+              <div><span>Datum</span><b id="certDate">—</b></div>
+              <div><span>Score</span><b id="certScore">—</b></div>
+              <div><span>Referentie</span><b id="certRef">—</b></div>
+            </div>
+          </div></div>
+          <div class="cert-download">
+            <button class="btn btn-primary" id="printCert">Opslaan / printen als PDF</button>
+            <button class="btn btn-ghost" id="editName">Naam wijzigen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="finish">
+        <h3>Het curriculum is compleet — gefeliciteerd</h3>
+        <p>Dit was de laatste module van de verdiepingstrack. Je hebt nu het hele traject staan: de fundamenten, de complete verdieping én de capstone-cases — van "wat is SAP" tot zelfstandig traceren wat een draaiend systeem doet. Je wacht niet meer op antwoorden; je haalt ze zelf op, met bewijs.</p>
+        <div class="path">
+          <div><b>Specialisatie · FS-PM-configuratie</b> — dieper de inrichtingskant in: productmodellering, business-configuratie en de determinaties die je nu kunt tracen</div>
+          <div><b>S/4HANA-certificering</b> — formaliseer je kennis met een officieel SAP-certificeringstraject in jouw domein</div>
+          <div><b>BRFplus-verdieping</b> — regellogica lezen én modelleren: de natuurlijke volgende stap na runtime-analyse van beslissingen</div>
+        </div>
+      </div>
+    </article>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · SAP-verdieping Module 14 — Debugging &amp; runtime-analyse · v1.0 · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_sap14_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+
+  // eindtoets
+  var exam=document.getElementById("exam");
+  var mcqs=Array.prototype.slice.call(exam.querySelectorAll(".mcq"));
+  var gradeBtn=document.getElementById("gradeBtn"),retryBtn=document.getElementById("retryBtn"),scorebox=document.getElementById("scorebox");
+  var TOTAL=mcqs.length,PASS=Math.ceil(TOTAL*0.7),lastScore=0;
+  function grade(){
+    var correct=0,unanswered=0;
+    mcqs.forEach(function(mcq){
+      var ans=parseInt(mcq.getAttribute("data-answer"),10),opts=mcq.querySelectorAll(".opt"),chosen=-1;
+      opts.forEach(function(o,i){if(o.querySelector("input").checked)chosen=i});
+      if(chosen<0)unanswered++;
+      opts.forEach(function(o,i){o.classList.remove("correct","wrong");if(i===ans)o.classList.add("correct");else if(i===chosen)o.classList.add("wrong")});
+      if(chosen===ans)correct++;
+    });
+    if(unanswered>0 && !confirm(unanswered+" vraag(en) nog niet beantwoord. Toch nakijken?")){
+      mcqs.forEach(function(mcq){mcq.querySelectorAll(".opt").forEach(function(o){o.classList.remove("correct","wrong")})});return;
+    }
+    lastScore=correct;var pct=Math.round(correct/TOTAL*100);
+    exam.classList.add("graded");
+    document.getElementById("ring").style.setProperty("--v",pct);
+    document.getElementById("ringPct").textContent=pct+"%";
+    var passed=correct>=PASS,verdict=document.getElementById("verdict");
+    verdict.className="verdict "+(passed?"pass":"fail");
+    verdict.innerHTML=correct+" / "+TOTAL+" goed — <b>"+(passed?"Geslaagd!":"Nog niet gehaald")+"</b>"+(passed?"<br>Je certificaat staat hieronder klaar.":"<br>Je hebt "+PASS+" van "+TOTAL+" nodig. Bekijk de fouten en probeer opnieuw.");
+    scorebox.classList.add("show");gradeBtn.style.display="none";retryBtn.style.display="";
+    if(passed){passedPct=pct;certLocked.style.display="none";certForm.classList.add("show");certificate.classList.remove("show");}
+  }
+  function retry(){
+    exam.classList.remove("graded");
+    mcqs.forEach(function(mcq){mcq.querySelectorAll("input").forEach(function(i){i.checked=false});mcq.querySelectorAll(".opt").forEach(function(o){o.classList.remove("correct","wrong")})});
+    scorebox.classList.remove("show");gradeBtn.style.display="";retryBtn.style.display="none";
+    exam.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  gradeBtn.addEventListener("click",grade);retryBtn.addEventListener("click",retry);
+
+  // certificaat
+  var certLocked=document.getElementById("certLocked"),certForm=document.getElementById("certForm"),certificate=document.getElementById("certificate"),passedPct=0;
+  function two(n){return(n<10?"0":"")+n}
+  function hashStr(s){var h=0;for(var i=0;i<s.length;i++){h=(h<<5)-h+s.charCodeAt(i);h|=0}return h}
+  document.getElementById("issueBtn").addEventListener("click",function(){
+    var name=(document.getElementById("certName").value||"").trim();
+    if(!name){document.getElementById("certName").focus();return;}
+    var d=new Date(),months=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+    document.getElementById("certNameOut").textContent=name;
+    document.getElementById("certDate").textContent=d.getDate()+" "+months[d.getMonth()]+" "+d.getFullYear();
+    document.getElementById("certScore").textContent=passedPct+"% ("+lastScore+"/"+TOTAL+")";
+    document.getElementById("certRef").textContent="SAP14-"+d.getFullYear()+two(d.getMonth()+1)+two(d.getDate())+"-"+Math.abs(hashStr(name)).toString(36).slice(0,4).toUpperCase();
+    certForm.classList.remove("show");certificate.classList.add("show");certificate.scrollIntoView({behavior:"smooth",block:"center"});
+  });
+  document.getElementById("editName").addEventListener("click",function(){certificate.classList.remove("show");certForm.classList.add("show");document.getElementById("certName").focus();});
+  document.getElementById("printCert").addEventListener("click",function(){window.print()});
+})();
+</script>
+</body>
+</html>
