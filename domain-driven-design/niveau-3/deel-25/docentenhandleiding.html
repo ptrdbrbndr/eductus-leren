@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Deel 25 — Consequenties van bounded contexts voor consistentie: eventual consistency en sagas, conceptueel — Domain-Driven Design — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../ddd.css">
+</head>
+<body>
+<header class="ddd-header">
+  <div class="ddd-header-inner">
+    <a class="ddd-brand" href="../../index.html">Domain-Driven Design</a>
+    <nav class="ddd-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 25 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="ddd-main">
+<div class="ddd-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="ddd-article">
+<h1>Deel 25 — Consequenties van bounded contexts voor consistentie: eventual consistency en sagas, conceptueel</h1>
+<p>Docentenhandleiding · Ductus-cursus Domain-Driven Design · niveau 3 (expert) · deel 25 van 30</p>
+<hr>
+<h2>1. Positie van dit deel</h2>
+<p>Deel 25 sluit het “naar binnen”-blok van niveau 3 af (deel 23: kerndomein heroverwegen, deel 24: KERN saneren, deel 25: wat dat betekent voor consistentie) voordat deel 26 het “naar buiten”-blok opent met de bevestiging van de overname. Het zwaartepunt is strategisch/technisch, met een expliciete grens: dit deel behandelt eventual consistency en sagas als <strong>domeinconcepten</strong> — welke garantie heb je nog, welke niet, wie moet een compensatie zien — niet als implementatietechniek. Verwijs deelnemers die de technische uitwerking willen (berichtenqueues, orkestratie versus choreografie, idempotentie) expliciet naar de database- en architectuurcursus; dit deel gaat daar bewust niet in mee.</p>
+<ul>
+<li><strong>Module-onderdeel:</strong> raakt zijdelings applicatie-architectuurpatronen (niveau 2, deel 19: CQRS, hexagonale architectuur) omdat consistentiegarantie daar een randvoorwaarde is, maar dit deel behandelt geen patroonkeuze — het behandelt de domeinvraag die aan zo’n keuze voorafgaat.</li>
+<li><strong>Werkvorm:</strong> de garantiekaart (nieuw instrument van dit deel).</li>
+<li><strong>Duur:</strong> één dagdeel (circa 3 uur inclusief korte pauze).</li>
+<li><strong>Voorbereiding deelnemers:</strong> deel 24 gelezen (met name de saneringscasus, waar dezelfde tussentijd-problematiek al even opdook). Kennis van aggregates als consistentiegrens (niveau 1, deel 6) is nuttig; wordt kort herhaald in §25.3.</li>
+</ul>
+<h2>2. Tijdschema (dagdeel van circa 3 uur)</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Opening: Otto’s batchschets (reader §25.2), dossierstuk 25-A</td>
+</tr>
+<tr>
+<td>0:15-0:30</td>
+<td>Uitleg bounded context als consistentiegrens (reader §25.3)</td>
+</tr>
+<tr>
+<td>0:30-0:45</td>
+<td>Uitleg eventual consistency, de twee vragen (reader §25.4)</td>
+</tr>
+<tr>
+<td>0:45-1:00</td>
+<td>Opdracht 1 en 2 — strikt of eventueel</td>
+</tr>
+<tr>
+<td>1:00-1:15</td>
+<td>Pauze</td>
+</tr>
+<tr>
+<td>1:15-1:35</td>
+<td>Uitleg sagas en compensatie (reader §25.5)</td>
+</tr>
+<tr>
+<td>1:35-2:00</td>
+<td>Opdracht 3 — een saga met compensatie ontwerpen</td>
+</tr>
+<tr>
+<td>2:00-2:10</td>
+<td>Opdracht 4 — bespreking</td>
+</tr>
+<tr>
+<td>2:10-2:20</td>
+<td>Uitleg de garantiekaart (reader §25.6)</td>
+</tr>
+<tr>
+<td>2:20-2:40</td>
+<td>Opdracht 5 — garantiekaart op een eigen casus</td>
+</tr>
+<tr>
+<td>2:40-2:55</td>
+<td>Opdracht 6 — garantiekaart op het invaarproces, vergelijken met reader §25.7</td>
+</tr>
+<tr>
+<td>2:55-3:00</td>
+<td>Opdracht 7 (reflectie) en vooruitblik (reader §25.8)</td>
+</tr>
+</tbody>
+</table>
+<h2>3. De opening: laat Otto’s aanname eerst zelf zichtbaar worden</h2>
+<p>Begin niet met het onderscheid strikt/eventueel als begrippenkader, maar met dossierstuk 25-A en de vraag: “wat gaat hier mis in Otto’s aanname, en waarom valt dat pas op als iemand er expliciet naar vraagt?” Deelnemers herkennen dit patroon meestal snel uit eigen ervaring — “we gingen ervan uit dat het wel synchroon genoeg zou lopen” is een zin die in vrijwel elke praktijk wel eens is gevallen. Laat die herkenning het vertrekpunt zijn vóór je de theorie introduceert.</p>
+<p>Benoem daarna expliciet, en herhaal dit bij de afsluiting: dit deel gaat niet over hóe je eventual consistency of een saga implementeert. Deelnemers met een technische achtergrond willen hier soms te snel naar implementatiedetails afzakken (berichtenqueues, retries, idempotentiesleutels) — stuur dat bij met: “dat is een uitstekende vraag voor de database- en architectuurcursus; hier houden we het bij wat het domein nog kan garanderen, en wat niet.”</p>
+<h2>4. Veelgemaakte fouten bij strikt/eventueel (opdracht 1 en 2)</h2>
+<table>
+<thead>
+<tr>
+<th>Wat je ziet</th>
+<th>Wat er speelt</th>
+<th>Wat je doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deelnemers kiezen “strikt” voor relatie C omdat het invaren “te belangrijk is om risico te lopen”</td>
+<td>Verwarring tussen belang van het proces en haalbaarheid van strikte consistentie over contextgrenzen heen</td>
+<td>Vraag: “kun je een technische transactie bouwen die KERN én de invaaradministratie in één keer, atomair, bijwerkt, zonder de contextgrens zelf op te heffen?”</td>
+</tr>
+<tr>
+<td>Deelnemers kiezen “eventueel, geen probleem” voor relatie C zonder veld 2 (tijdsgrens) te benoemen</td>
+<td>Eventual consistency wordt behandeld als vrijbrief in plaats van als expliciete, begrensde keuze</td>
+<td>Verwijs naar reader §25.4: “een aantoonbaar eindpunt, geen vage belofte”</td>
+</tr>
+<tr>
+<td>Deelnemers zien relatie B als “eigenlijk ook wel strikt nodig, voor de zekerheid”</td>
+<td>Overvoorzichtigheid zonder afweging van de kosten van onnodige strikte koppeling</td>
+<td>Vraag: “wat kost het de architectuur als je Wegwijzer en het Mutatieplatform strikt consistent zou willen houden, voor een adreswijziging?”</td>
+</tr>
+</tbody>
+</table>
+<h2>5. Begeleiding bij de saga-opdracht (opdracht 3 en 4)</h2>
+<p>De belangrijkste valkuil is een compensatie die technisch “klopt” maar niemand ooit te zien krijgt. Vraag expliciet door: “stel dat deze compensatie vijf keer per maand voorkomt — wie in de organisatie zou dat moeten weten, en ziet die persoon het nu ook echt?” Groepen die de compensatie als pure achtergrondcorrectie ontwerpen, missen het punt uit reader §25.5 dat een compensatie een volwaardige domeingebeurtenis is.</p>
+<h2>6. Begeleiding bij de garantiekaart (opdracht 5 en 6)</h2>
+<p>Veld 4 (“het veld dat het verschil maakt”) is waar de meeste oppervlakkige uitwerkingen stranden — een team dat drie velden zorgvuldig invult en bij veld 4 volstaat met “dat merkt de klant/deelnemer toch niet” zonder een concreet scenario te noemen, heeft de vraag niet echt beantwoord. Vraag door: “noem één concrete actie die iemand in die tussentijd zou kunnen ondernemen — merkt hij dan iets, of niet?”</p>
+<p>Bij opdracht 6, net als in de voorgaande delen: laat de groep eerst zelf tot een uitwerking komen vóórdat reader §25.7 erbij wordt gepakt, met extra aandacht voor veld 4.</p>
+<h2>7. Materiaal</h2>
+<ul>
+<li>Werkboek deel 25 (met dossierstuk 25-A)</li>
+<li>Slidedeck deel 25</li>
+<li>Flip-over of digitaal whiteboard voor opdracht 3 (saga-ontwerp) en opdracht 6</li>
+</ul>
+<h2>8. Aantekeningen over de sluimerende overname-lijn</h2>
+<p>Reader §25.7 sluit af met Iris’ vraag over “een tweede bron van deelnemersmutaties” en de zin “niemand in de kamer weet op dat moment dat de vraag minder hypothetisch is dan hij klinkt.” Dit is de meest expliciete voorbode tot nu toe, bewust net onder de drempel van een onthulling gehouden. Geef bij vragen van deelnemers niet meer prijs dan de tekst biedt: de vraag van Iris is op dit punt in het verhaal oprecht hypothetisch bedoeld door het personage zelf, ook al leest de tekst voor de deelnemer als een voorteken. Deel 26 lost dit op; benoem desgevraagd alleen dat de spanning bewust is opgebouwd.</p>
+
+</article>
+<nav class="ddd-partnav"><a class="ddd-prevnext prev" href="../deel-24/reader.html">&larr; Deel 24 — Deel 24 — Grote ballen modder saneren: strangler fig en anti-corruption layer als saneringsstrategie</a><a class="ddd-prevnext next" href="../deel-26/reader.html">Deel 26 — Deel 26 — Governance van een meerdere-teams-domeinmodel: taal-drift bewaken over de tijd &rarr;</a></nav>
+</main>
+<footer class="ddd-footer">
+  <p>Ductus-cursusfamilie · Domain-Driven Design · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
