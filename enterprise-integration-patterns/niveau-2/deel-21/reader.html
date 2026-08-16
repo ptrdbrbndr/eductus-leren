@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 21 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 2 (professional) · deel 21 van 22</p>
+<hr>
+<h2>21.0 Vijftien delen aan patronen, en nog steeds een tweede incident van drie dagen</h2>
+<p>Ondanks de wire tap, message history, control bus en smart proxy uit deel 15 kostte een nieuw incident — een deelnemer die twee keer een uitkering kreeg, ondanks alle idempotentiemaatregelen uit deel 7 — het integratieteam opnieuw bijna twee dagen om te doorgronden. Ditmaal niet omdat de zichtbaarheid ontbrak (die was er, dankzij deel 15), maar omdat de <strong>losse waarnemingen van zeven verschillende systemen nooit tot één samenhangend verhaal werden samengevoegd.</strong> De wire tap toonde per kanaal wát er gebeurde; niemand kon in één oogopslag zien hoe die losse waarnemingen, verspreid over zeven systemen en drie uur, één en dezelfde oorspronkelijke aanvraag vormden.</p>
+<p>Dit deel bouwt voort op deel 15, maar behandelt een net iets andere laag: niet "hoe zorg ik dat ik kan zien wat er gebeurt" (deel 15), maar <strong>"hoe zorg ik dat losse waarnemingen automatisch tot één samenhangend verhaal worden, in productie, zonder dat een mens ze handmatig aan elkaar moet knopen."</strong> Dit is het onderwerp <strong>observability</strong> — een term die breder is dan monitoring, en die specifiek gaat over het vermogen om, op basis van wat een systeem naar buiten toe blootgeeft, te begrijpen wat er intern gebeurt, ook voor situaties die niemand vooraf heeft voorzien.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-21/figuur-21-1-losse-logregels-versus-gekoppelde-tijdlijn.svg" alt="Zeven losse logregels van zeven systemen, verspreid over drie uur, die pas na handmatig speurwerk bleken samen één verhaal te vertellen — met daarnaast hetzelfde verhaal, nu getoond als één doorlopende, gekoppelde tijdlijn." loading="lazy"><figcaption>Figuur 21-1 — Zeven losse logregels van zeven systemen, verspreid over drie uur, die pas na handmatig speurwerk bleken samen één verhaal te vertellen — met daarnaast hetzelfde verhaal, nu getoond als één doorlopende, gekoppelde tijdlijn.</figcaption></figure>
+<hr>
+<h2>21.1 Distributed tracing: het probleem van deel 15, opgelost door automatische koppeling</h2>
+<p><strong>Distributed tracing</strong> lost het probleem op dat wire tap alleen niet oplost: het koppelt automatisch alle waarnemingen die tot dezelfde oorspronkelijke aanvraag behoren, tot één samenhangende <strong>trace</strong> — een boomstructuur van alle stappen, over alle systemen heen, die uit die ene aanvraag zijn voortgekomen, inclusief hun onderlinge tijdsrelaties.</p>
+<p>Het technische mechanisme hierachter is, in essentie, een uitbreiding van de correlatie-ID uit deel 2-3: elke oorspronkelijke aanvraag krijgt een <strong>trace-ID</strong> die door de hele keten wordt meegegeven — niet alleen bij het oorspronkelijke command-antwoordpaar (waarvoor de correlatie-ID uit deel 2 al bestond), maar bij élke afgeleide actie die uit die aanvraag voortkomt, inclusief compenserende acties (deel 18), enrichment-stappen (deel 13), en detours (deel 15). Elke individuele stap krijgt bovendien een eigen, <strong>span-ID</strong>, met een verwijzing naar de span die hem veroorzaakte — waardoor niet alleen duidelijk is welke stappen bij elkaar horen, maar ook in welke volgorde en met welke onderlinge afhankelijkheid ze plaatsvonden.</p>
+<p>Dit verschilt van de message history uit deel 15 op een cruciaal punt: message history reist <strong>mee met een individueel bericht</strong> en toont zijn eigen route; distributed tracing bouwt een <strong>boomstructuur over meerdere, van elkaar afgeleide berichten heen</strong> — bijvoorbeeld alle vijf oorspronkelijke en compenserende stappen van één saga-instantie (deel 18), of alle tweehonderd afgesplitste berichten van één batch (deel 12) plus hun geaggregeerde resultaat, als één geheel getoond, niet als tweehonderd losse geschiedenissen.</p>
+<blockquote><p><strong>Kernzin 22 van de cursus: correlatie (deel 2-3) koppelt een antwoord aan zijn vraag; distributed tracing koppelt een heel bos van afgeleide acties aan hun gemeenschappelijke oorsprong — hetzelfde onderliggende idee, opgeschaald van één paar naar een volledige boomstructuur.</strong></p></blockquote>
+<hr>
+<h2>21.2 Correlation in productie: waarom het ontwerp uit deel 2-3 niet vanzelf volstaat</h2>
+<p>Deel 2 en 3 introduceerden de correlatie-ID als ontwerpprincipe: elk command krijgt een unieke identifier, en het antwoord neemt die over. In theorie is dit voldoende om elke individuele berichtwisseling te herleiden. In de praktijk, bij het incident van 21.0, bleek dit ontoereikend om drie redenen die specifiek in productie optreden en in een ontwerpfase makkelijk over het hoofd worden gezien.</p>
+<p><strong>Ten eerste: niet elke component in de keten geeft de trace-ID consequent door.</strong> Bij het incident bleek de content enricher uit deel 13, bij het versturen van zijn eigen aanvullende aanroep naar het personeelssysteem, een nieuwe, eigen identifier te genereren in plaats van de oorspronkelijke trace-ID door te geven — een technisch begrijpelijke, maar functioneel schadelijke keuze die de keten van waarnemingen brak op precies het punt waar het incident zich later voordeed.</p>
+<p><strong>Ten tweede: identifiers worden soms alleen in de payload gelogd, niet consistent in elke logregel of metriek.</strong> Zonder een uniforme conventie ("elke logregel bevat, indien beschikbaar, de trace-ID als apart, doorzoekbaar veld") is het samenvoegen van waarnemingen afhankelijk van handmatig parsen van vrije tekst, wat traag en foutgevoelig is — precies waarom het incident van 21.0 twee dagen kostte in plaats van uren.</p>
+<p><strong>Ten derde: asynchrone vertakkingen (recipient list, deel 12; splitter/aggregator, deel 12) vermenigvuldigen het aantal parallelle paden, en zonder een consistente boomstructuur (span-ID's met verwijzing naar hun ouder-span) wordt het onmogelijk om te reconstrueren welke van de vele parallelle paden bij welke oorspronkelijke aanvraag hoorde.</strong></p>
+<p>De praktische les: <strong>correlatie-ID's als ontwerpprincipe (deel 2-3) zijn een noodzakelijke voorwaarde voor observability, maar geen voldoende — er is een aanvullende, organisatiebrede discipline nodig om te garanderen dat elke component, zonder uitzondering, de trace consistent doorgeeft en logt.</strong></p>
+<hr>
+<h2>21.3 Message history in productie: wanneer het patroon uit deel 15 tekortschiet</h2>
+<p>Deel 15 introduceerde message history als een header-veld dat meereist met een bericht. In productie, bij hoge volumes zoals bij Meridiaan's tienduizenden dagelijkse mutaties, blijkt dit patroon twee praktische grenzen te kennen die in het oorspronkelijke ontwerp van deel 15 nog niet volledig werden uitgewerkt.</p>
+<p><strong>De twintig-stops-grens (deel 15) is bruikbaar voor individuele diagnose, maar onvoldoende voor patroonherkenning over vele berichten heen.</strong> Als het integratieteam wil weten "hoe vaak loopt dit specifieke type mutatie via de detour die tijdens het incident van deel 15 is ingezet, en is die detour inmiddels wel of niet verwijderd", is het aflopen van individuele message histories onwerkbaar — dit vraagt een geaggregeerd overzicht over vele berichten, wat de message history zelf niet biedt maar wel voedt: een centraal systeem dat message histories van vele berichten verzamelt en aggregeert, kan die vraag wél beantwoorden.</p>
+<p><strong>Message history toont wát er is gebeurd, maar niet waarom het zo lang duurde.</strong> Voor het incident van 21.0 was niet alleen relevant welke stappen waren doorlopen, maar ook hoe lang elke stap had geduurd — informatie die message history, in zijn eenvoudige vorm ("wie, wanneer"), wel gedeeltelijk bevat (tijdstempels) maar niet gestructureerd genoeg presenteert om snel te zien welke stap de vertraging veroorzaakte. Distributed tracing (21.1), met zijn expliciete boomstructuur en tijdsduren per span, is hiervoor het geschiktere instrument — message history blijft waardevol voor het snel, zelfvoorzienend beantwoorden van "wat is er met dit ene bericht gebeurd" (bijvoorbeeld in het dead letter channel), terwijl distributed tracing beter is voor "waarom duurde dit hele proces zo lang, en waar precies".</p>
+<hr>
+<h2>21.4 Wat Meridiaan uiteindelijk inrichtte</h2>
+<p>Na het incident van 21.0 is bij Meridiaan een drieledige, elkaar aanvullende observability-laag ingericht, die de patronen uit deel 15 niet vervangt maar aanvult:</p>
+<p><strong>Een verplichte, organisatiebrede trace-ID-conventie</strong>, afgedwongen op het niveau van elk endpoint (deel 14): elk endpoint dat een nieuwe uitgaande aanroep of bericht genereert, ongeacht welk patroon (enrichment, compensatie, splitter), moet de trace-ID van de oorspronkelijke aanvraag doorgeven, nooit een nieuwe genereren tenzij het daadwerkelijk een nieuwe, onafhankelijke aanvraag betreft. Dit is een organisatorische afspraak (vergelijkbaar met het consumentenregister uit deel 20), gecontroleerd via geautomatiseerde tests op elk endpoint.</p>
+<p><strong>Een centrale, doorzoekbare tracing-voorziening</strong>, gevoed door de wire tap-mechaniek uit deel 15 (die al headers naar een centraal systeem stuurt), nu uitgebreid met de trace-ID en span-structuur uit 21.1 — waardoor de losse waarnemingen die de wire tap altijd al verzamelde, nu automatisch tot samenhangende trace-bomen worden opgebouwd in plaats van los te blijven staan.</p>
+<p><strong>Message history blijft bestaan, specifiek voor de context waarin distributed tracing minder geschikt is</strong>: het dead letter channel (deel 9), waar een medewerker een individueel, geïsoleerd bericht onderzoekt zonder eerst een centraal tracingsysteem te hoeven raadplegen — precies de reden waarom dit patroon in deel 15 werd geïntroduceerd, en die reden blijft onveranderd geldig naast, niet in plaats van, distributed tracing.</p>
+<hr>
+<h2>Samenvatting van deel 21</h2>
+<ul>
+<li>Distributed tracing lost het probleem op dat wire tap (deel 15) alleen niet oplost: automatische koppeling van losse waarnemingen, over meerdere systemen en afgeleide acties heen, tot één samenhangende trace-boomstructuur.</li>
+<li>Correlatie-ID's als ontwerpprincipe (deel 2-3) zijn noodzakelijk maar niet voldoende voor observability in productie — een organisatiebrede discipline om trace-ID's consistent door te geven en te loggen is aanvullend nodig.</li>
+<li>Message history (deel 15) blijft waardevol voor het zelfvoorzienend beantwoorden van "wat gebeurde er met dit ene bericht", terwijl distributed tracing beter geschikt is voor "waarom duurde dit hele proces zo lang, en waar precies".</li>
+<li>De uiteindelijke observability-laag bij Meridiaan combineert een verplichte trace-ID-conventie, een centrale tracing-voorziening gevoed door de bestaande wire tap-mechaniek, en behoud van message history voor zijn specifieke, oorspronkelijke toepassing.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 22 sluit niveau 2 af met de capstone: verdediging vanuit rollen van een compleet integratieontwerp voor het Programma Mutatieplatform, waarin alle twaalf voorgaande delen van dit niveau — van architectuurstijlen tot observability — moeten samenkomen tot één, verdedigbaar geheel.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-20/reader.html">&larr; Deel 20 — Contractbeheer voor asynchrone koppelingen</a><a class="eip-prevnext next" href="../deel-22/reader.html">Deel 22 — Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

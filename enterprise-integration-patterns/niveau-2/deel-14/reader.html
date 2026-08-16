@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 14 — Endpoint-patronen: messaging gateway, messaging mapper, service activator — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 14 — Endpoint-patronen: messaging gateway, messaging mapper, service activator</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 2 (professional) · deel 14 van 22</p>
+<hr>
+<h2>14.0 Drie teams, drie endpoints, drie interpretaties</h2>
+<p>Met vier systemen inmiddels op de broker en event backbone uit deel 11 aangesloten, ontdekte Caspar bij een code review dat de endpoints — de component uit deel 2 die het kanaal raakt namens de applicatie — er in elk van de drie teams die ze hadden gebouwd compleet anders uitzagen. Het KERN-team had een dun stukje code gebouwd dat inkomende berichten direct doorgaf aan bestaande domeinmethoden. Het team van het Nabestaandenloket had een uitgebreide vertaallaag gebouwd die zowel berichtformaat als domeinmodel actief op elkaar afstemde. Het team van de nieuwe Wegwijzer had, tot Caspars verbazing, de messaginglogica zo diep verweven met de domeinlogica dat de twee niet meer te scheiden waren zonder de hele component te herbouwen.</p>
+<p>Geen van de drie teams had willekeurig gehandeld — elk team had, onbewust, gereageerd op een andere vorm van applicatielogica die ze moesten aansluiten. Het probleem was dat niemand dit verschil had benoemd, waardoor drie legitiem verschillende situaties drie schijnbaar willekeurig verschillende oplossingen hadden gekregen, zonder gedeeld vocabulaire om te bespreken of dat verschil terecht was.</p>
+<p>Dit deel benoemt drie concrete endpointvormen — de <strong>messaging gateway</strong>, de <strong>messaging mapper</strong>, en de <strong>service activator</strong> — die precies de drie situaties beschrijven die Caspar bij de drie teams aantrof, en geeft taal om te beoordelen welke vorm bij welke applicatiestijl hoort.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-14/figuur-14-1-drie-endpoints-scheidslijn.svg" alt="Drie endpoints naast elkaar, elk getekend met een andere dikte van de scheidslijn tussen &quot;applicatielogica&quot; en &quot;messaginglogica&quot; — dun en scherp bij KERN, dikker met een expliciete vertaallaag bij het Nabestaandenloket, en vervaagd/vermengd bij de Wegwijzer." loading="lazy"><figcaption>Figuur 14-1 — Drie endpoints naast elkaar, elk getekend met een andere dikte van de scheidslijn tussen "applicatielogica" en "messaginglogica" — dun en scherp bij KERN, dikker met een expliciete vertaallaag bij het Nabestaandenloket, en vervaagd/vermengd bij de Wegwijzer.</figcaption></figure>
+<hr>
+<h2>14.1 De messaging gateway</h2>
+<p>Een <strong>messaging gateway</strong> verbergt de messaging-infrastructuur volledig achter een interface die eruitziet als een gewone, synchrone methodeaanroep — de applicatielogica "ziet" geen kanalen, berichten of headers, alleen een aanroepbare functie die toevallig, achter de schermen, via messaging is geïmplementeerd.</p>
+<p>Dit patroon is het meest geschikt voor applicaties die al zijn opgebouwd rond aanroep-gestuurde denkwijzen (bijvoorbeeld domeinmodellen met expliciete methodenamen als <code>verwerkAdreswijziging(mutatie)</code>), en waar het te kostbaar of onwenselijk zou zijn om die applicatielogica te herschrijven om expliciet met berichten om te gaan. KERN's endpoint, zoals Caspar het aantrof, was in essentie al een messaging gateway: de applicatielogica riep gewoon <code>verwerkMutatie(gegevens)</code> aan, zonder te weten dat de aanlevering van die aanroep via een bericht op een kanaal liep.</p>
+<p>De kracht van dit patroon is ook zijn grootste risico: omdat de aanroep er <em>synchroon uitziet</em> voor de applicatielogica, is het verleidelijk om ook synchroon gedrag te veronderstellen — bijvoorbeeld te verwachten dat de aanroep een directe returnwaarde geeft die het resultaat van de verwerking weerspiegelt. Als de onderliggende messaging asynchroon is (wat het meestal hoort te zijn, gezien niveau 1), moet de gateway expliciet ontwerpen hoe hij dat verschil overbrugt: geeft hij direct een "geaccepteerd"-waarde terug (vergelijkbaar met de ontvangstbevestiging uit deel 3) en levert het echte resultaat later via een callback of een aparte statusopvraging? Of doet hij, tegen het advies van deel 3 in, alsnog een blokkerende aanroep? Bij Meridiaan is voor de eerste vorm gekozen, met een expliciete naamgevingsconventie (<code>verwerkMutatie</code> retourneert een referentienummer, geen resultaat) om verwarring te voorkomen.</p>
+<blockquote><p><strong>Kernzin 14 van de cursus: een messaging gateway verbergt de infrastructuur, niet de asynchrone aard van de communicatie — verberg je dat laatste ook, dan is de gateway een leugen die de applicatielogica op het verkeerde been zet.</strong></p></blockquote>
+<hr>
+<h2>14.2 De messaging mapper</h2>
+<p>Een <strong>messaging mapper</strong> doet expliciet wat de messaging gateway impliciet en onzichtbaar doet: hij vertaalt actief tussen het berichtformaat op het kanaal en het domeinmodel van de applicatie, als een zichtbare, eigenstandige component — niet verstopt achter een aanroep-interface, maar als herkenbaar onderdeel van het endpoint.</p>
+<p>Dit patroon past bij applicaties waar het domeinmodel een eigen, rijke structuur heeft die niet één-op-één overeenkomt met het berichtformaat — precies de situatie bij het Nabestaandenloket, waar het interne model van een "nabestaandenzaak" uit meerdere, onderling samenhangende objecten bestaat die niet in een enkele, platte methodeaanroep passen zoals bij KERN. De messaging mapper bij het Nabestaandenloket zet een binnenkomend mutatiebericht om in een reeks domeinobjecten, inclusief het toepassen van domeinregels over hoe die objecten zich tot elkaar verhouden — iets dat het KERN-team, met zijn eenvoudiger domeinmodel, nooit nodig had.</p>
+<p>Het onderscheid met een translator (deel 5) is de moeite waard om scherp te trekken: een translator vertaalt tussen twee <em>berichtformaten</em> (bijvoorbeeld intern formaat naar extern administrateurformaat), terwijl een messaging mapper vertaalt tussen een <em>berichtformaat</em> en een <em>domeinmodel</em> — de grens tussen de messaginglaag en de applicatielaag zelf, niet tussen twee externe partijen. Een messaging mapper is dus, per definitie, onderdeel van het endpoint van één specifieke applicatie, terwijl een translator vaak "tussen" twee applicaties opereert.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-14/figuur-14-2-messaging-mapper.svg" alt="Het Nabestaandenloket-endpoint: binnenkomend bericht → messaging mapper (expliciete component) → een reeks domeinobjecten die worden doorgegeven aan de bestaande domeinlogica." loading="lazy"><figcaption>Figuur 14-2 — Het Nabestaandenloket-endpoint: binnenkomend bericht → messaging mapper (expliciete component) → een reeks domeinobjecten die worden doorgegeven aan de bestaande domeinlogica.</figcaption></figure>
+<hr>
+<h2>14.3 De service activator</h2>
+<p>Een <strong>service activator</strong> verbindt een binnenkomend bericht met een bestaande, vaak al langer bestaande service of applicatiecomponent die zelf nooit voor messaging is ontworpen — het "activeert" die service door de messaging-aanroep te vertalen naar wat die service oorspronkelijk verwachtte (vaak een directe methodeaanroep of een lokale procedure-aanroep), zonder de onderliggende service zelf te hoeven aanpassen.</p>
+<p>Dit lijkt sterk op de messaging gateway, en het onderscheid is een kwestie van richting en historie: een messaging gateway wordt doorgaans bewust ontworpen als deel van een nieuw of vernieuwd systeem dat messaging als eerste-klas concept omarmt, terwijl een service activator typisch wordt toegevoegd rond een <strong>bestaand</strong> systeem dat niet is aangepast en ook niet zal worden aangepast — de messaging-kant is een buitenlaag om een oudere applicatie in het nieuwe landschap te laten meedraaien.</p>
+<p>Dit was precies de situatie bij het personeelssysteem uit deel 13: een verouderde applicatie zonder moderne koppelvlakken, die de content enricher moest raadplegen. In plaats van het personeelssysteem zelf te herbouwen om berichten te kunnen ontvangen, is een service activator ervoor geplaatst die binnenkomende verrijkingsverzoeken vertaalt naar de bestaande, verouderde aanroepmethode van dat systeem (in dit geval een lokale procedure-aanroep die het systeem al decennia ondersteunde), en het antwoord weer terugvertaalt naar een bericht op het antwoordkanaal.</p>
+<p>De service activator draagt hierdoor een specifiek risico dat noch de gateway noch de mapper in dezelfde mate heeft: <strong>hij kan de onvolkomenheden van de onderliggende, oudere service niet verbergen, alleen doorgeven.</strong> Als het personeelssysteem zelf onbetrouwbaar en traag is (zoals in deel 13 vastgesteld), kan de service activator dat niet oplossen — hij kan alleen zorgen dat die onbetrouwbaarheid zich op een gecontroleerde, zichtbare manier manifesteert in de messaging-laag (bijvoorbeeld via het dead letter channel uit deel 9), in plaats van als een onvoorspelbare, ongedocumenteerde storing.</p>
+<hr>
+<h2>14.4 Drie endpointvormen naast elkaar</h2>
+<table>
+<thead>
+<tr><th>Patroon</th><th>Wanneer</th><th>Wat het verbergt</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Messaging gateway</strong></td><td>Applicatie is aanroep-gestuurd, wil messaging niet "zien"</td><td>De hele messaging-infrastructuur, achter een aanroep-achtige interface</td></tr>
+<tr><td><strong>Messaging mapper</strong></td><td>Rijk domeinmodel dat niet één-op-één met het berichtformaat overeenkomt</td><td>Niets — maakt de vertaling juist expliciet zichtbaar</td></tr>
+<tr><td><strong>Service activator</strong></td><td>Bestaande, niet voor messaging ontworpen service moet worden aangesloten</td><td>De messaging-aard voor de oude service, niet de onvolkomenheden van die service zelf</td></tr>
+</tbody></table>
+<p>Terug naar Caspars ontdekking bij de drie teams: het KERN-team had, terecht voor hun eenvoudige domeinmodel, een messaging gateway gebouwd. Het Nabestaandenloket-team had, terecht voor hun rijke domeinmodel, een messaging mapper nodig — hun instinct was juist, ook al hadden ze het patroon nooit met naam benoemd. Het Wegwijzer-team had echter geen van drieën correct toegepast: hun vermenging van messaging- en applicatielogica was, in de terminologie van dit deel, gewoon een ontbrekend endpoint — precies de fout die deel 2 al waarschuwde te vermijden ("alleen het endpoint hoort het kanaal te kennen"), nu zichtbaar op landschapsschaal omdat er eindelijk een vergelijkingsmateriaal was om het als afwijking te herkennen.</p>
+<hr>
+<h2>Samenvatting van deel 14</h2>
+<ul>
+<li>Een messaging gateway verbergt de messaging-infrastructuur achter een aanroep-achtige interface, geschikt voor aanroep-gestuurde applicatielogica — met als risico dat de asynchrone aard ook onbedoeld verborgen raakt.</li>
+<li>Een messaging mapper vertaalt expliciet tussen berichtformaat en een rijk domeinmodel, als zichtbaar onderdeel van het endpoint — anders dan een translator (deel 5), die tussen twee berichtformaten van verschillende applicaties vertaalt.</li>
+<li>Een service activator sluit een bestaande, niet voor messaging ontworpen service aan zonder die service zelf aan te passen, maar kan de onvolkomenheden van die service niet verbergen, alleen zichtbaar en beheersbaar maken.</li>
+<li>Het ontbreken van een van deze drie, herkenbare vormen — zoals bij de Wegwijzer — is zelf een signaal dat applicatie- en messaginglogica ongewenst zijn vermengd.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 15 behandelt de systeembeheerpatronen die niveau 2 nodig heeft om een landschap van deze omvang operationeel te bewaken: control bus, wire tap, detour, message history en smart proxy — patronen die het mogelijk maken om in te grijpen op, en inzicht te krijgen in, een keten zonder de keten zelf te herbouwen.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-13/reader.html">&larr; Deel 13 — Transformatie diepgaand: content enricher, content filter, claim check</a><a class="eip-prevnext next" href="../deel-15/reader.html">Deel 15 — Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

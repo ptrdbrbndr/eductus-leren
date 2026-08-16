@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 2 — Messagingfundamenten: kanaal, bericht, endpoint — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 2 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 2 — Messagingfundamenten: kanaal, bericht, endpoint</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 1 (fundament) · deel 2 van 10</p>
+<hr>
+<h2>2.0 Drie woorden die Caspar niet uit elkaar had</h2>
+<p>Twee weken na het incident van deel 1 presenteerde Caspar zijn eerste ontwerp voor de ontkoppeling van Werkgeversportaal en KERN. Op het whiteboard stond één rechthoek met de tekst "message queue" en twee pijlen erheen. Zijn architectuurboard stelde drie vragen die hij geen van drieën scherp kon beantwoorden:</p>
+<p><em>Wat staat er precies ín die rechthoek — is dat één ding, of zijn dat meerdere dingen?</em></p>
+<p><em>Als het Werkgeversportaal en het Nabestaandenloket allebei iets met dezelfde mutatie moeten doen, is dat dan dezelfde rechthoek of twee?</em></p>
+<p><em>Waar in KERN wordt straks de code aangepast — en waar niet?</em></p>
+<p>Caspar had, zoals hij zelf toegaf, "een wolk getekend en er messaging op geschreven". Dat is een veelgemaakte fout bij de eerste stap richting asynchrone integratie: het woord "messaging" wordt gebruikt als één concept, terwijl het uit drie onderscheiden bouwstenen bestaat die stuk voor stuk eigen ontwerpbeslissingen vergen.</p>
+<p>Dit deel maakt die drie bouwstenen expliciet: het <strong>kanaal</strong>, het <strong>bericht</strong>, en het <strong>endpoint</strong>. Alle patronen die in niveau 1 en 2 volgen, zijn combinaties en verbijzonderingen van deze drie.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-02/figuur-2-1-wolk-versus-bouwstenen.svg" alt="Caspars whiteboard: de ene wolk versus de drie afzonderlijke bouwstenen, met bij elk een korte definitiezin" loading="lazy"><figcaption>Figuur 2-1 — Caspars whiteboard: de ene wolk versus de drie afzonderlijke bouwstenen, met bij elk een korte definitiezin</figcaption></figure>
+<hr>
+<h2>2.1 Het kanaal</h2>
+<p>Een <strong>message channel</strong> is een virtuele pijp tussen twee of meer applicaties waarlangs berichten stromen. "Virtueel" is hier het sleutelwoord: het kanaal is geen fysieke draad, het is een logische afspraak — een naam, een adres, een wachtrij of topic — waarover zender en ontvanger het eens zijn.</p>
+<p>Drie eigenschappen van een kanaal bepalen vrijwel elke volgende ontwerpkeuze in deze cursus:</p>
+<p><strong>Een kanaal draagt precies één soort bericht.</strong> Niet omdat de techniek dat afdwingt — de meeste brokers laten willekeurige inhoud toe — maar omdat een kanaal zonder deze discipline onbruikbaar wordt. Als het "mutatiekanaal" zowel dienstverbandmutaties als adreswijzigingen als foutmeldingen bevat, moet elke ontvanger eerst uitzoeken wat voor bericht dit is voordat hij weet hoe te reageren. Dat is precies het soort vermenging waar Caspars "wolk" aan leed.</p>
+<p><strong>Een kanaal heeft een eigenaar van het contract, niet van de techniek.</strong> Er moet iets of iemand zijn die vastlegt wat er wél en niet over dit kanaal mag — vergelijkbaar met een API-contract, maar dan voor een berichtformaat in plaats van een resource. Zonder die eigenaar verwatert een kanaal binnen een jaar tot een verzameling losse afspraken die niemand meer overziet.</p>
+<p><strong>Een kanaal is punt-tot-punt of publish-subscribe, nooit allebei tegelijk voor dezelfde toepassing.</strong> Bij <strong>point-to-point</strong> haalt precies één ontvanger elk bericht van het kanaal — geschikt voor werk dat maar één keer gedaan moet worden, zoals "verwerk deze mutatie". Bij <strong>publish-subscribe</strong> ontvangt élke geabonneerde ontvanger een kopie van elk bericht — geschikt voor gebeurtenissen die meerdere partijen aangaan, zoals "er is een mutatie geweest". Dit onderscheid is zo fundamenteel dat het in deel 6 een volledig eigen paragraaf krijgt; voor nu is het genoeg om te weten dat de keuze vroeg in het ontwerp gemaakt moet worden, want zij bepaalt de hele verdere vormgeving.</p>
+<blockquote>
+<p><strong>Kernzin 2 van de cursus: een kanaal is een contract met een naam, niet een technisch detail — behandel het ontwerp ervan met dezelfde zorgvuldigheid als een API-contract.</strong></p>
+</blockquote>
+<hr>
+<h2>2.2 Het bericht</h2>
+<p>Een <strong>message</strong> is de eenheid die over een kanaal reist. Elk bericht bestaat, ongeacht techniek of formaat, uit twee delen die je altijd afzonderlijk moet ontwerpen:</p>
+<p><strong>De header</strong> bevat metadata over het bericht: waar komt het vandaan, wat voor soort bericht is dit, hoort het bij een lopend gesprek (zie 2.4, correlatie), wanneer is het verzonden, hoe lang is het geldig. De header is voor de infrastructuur en voor routeringslogica — niet voor de inhoud van de zaak zelf.</p>
+<p><strong>De payload (body)</strong> bevat de eigenlijke inhoud: bij Meridiaan bijvoorbeeld het BSN-gehashte deelnemersnummer, het type mutatie, de gewijzigde velden.</p>
+<p>Dit onderscheid is niet decoratief. Een router die op inhoud beslist (zie deel 4) moet dat idealiter doen op basis van header-velden, niet door de hele payload te moeten inlezen en interpreteren — anders is elke component in de keten gedwongen het volledige berichtformaat te kennen, ook onderdelen waarmee hij niets doet. Dat vergroot koppeling precies op de plek waar messaging die juist moest verminderen.</p>
+<p><strong>Drie berichtstypen, drie bedoelingen.</strong></p>
+<table>
+<thead>
+<tr><th>Type</th><th>Bedoeling</th><th>Voorbeeld bij Meridiaan</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Command message</strong></td><td>"Doe dit" — een expliciete opdracht aan één verantwoordelijke ontvanger</td><td>"Verwerk deze dienstverbandmutatie" naar KERN</td></tr>
+<tr><td><strong>Event message</strong></td><td>"Dit is gebeurd" — een feit, zonder te voorschrijven wat de ontvanger ermee doet</td><td>"Dienstverband is gewijzigd" naar wie er ook maar in geïnteresseerd is</td></tr>
+<tr><td><strong>Document message</strong></td><td>"Hier zijn gegevens" — een dataoverdracht zonder opdracht én zonder gebeurtenis-connotatie</td><td>Een volledig deelnemersdossier ten behoeve van een rapportage</td></tr>
+</tbody>
+</table>
+<p>Het onderscheid tussen command en event is de belangrijkste van de drie, en de meest verwaarloosde in de praktijk. Een command heeft precies één logische ontvanger die verantwoordelijk is voor de uitvoering — ook als er technisch meerdere systemen naar luisteren, is er één die "ja" of "nee" mag zeggen. Een event heeft geen enkele ontvanger die iets verplicht is te doen; het feit is gebeurd, punt, en het is aan elke luisteraar zelf om te bepalen of het relevant is.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-02/figuur-2-2-anatomie-bericht.svg" alt="Anatomie van een bericht: header (herkomst, type, correlatie, timestamp) boven de payload (inhoud), met een zijbalk die de drie berichtstypen toont als drie gekleurde enveloppen" loading="lazy"><figcaption>Figuur 2-2 — anatomie van een bericht: header (herkomst, type, correlatie, timestamp) boven de payload (inhoud), met een zijbalk die de drie berichtstypen toont als drie gekleurde enveloppen</figcaption></figure>
+<p>Caspars eerste ontwerpfout, bij het navragen, bleek precies hier te zitten: zijn "mutatiekanaal" droeg zowel commands (verwerk dit) als events (dit is gewijzigd) door elkaar, zonder dat een header-veld dat onderscheid maakte. Het Nabestaandenloket, dat alleen in het event geïnteresseerd was, moest elk bericht openen om te zien of het iets met hem te maken had.</p>
+<hr>
+<h2>2.3 Het endpoint</h2>
+<p>Een <strong>message endpoint</strong> is de plek waar een applicatie het kanaal raakt — het stukje code dat verantwoordelijk is voor het versturen naar, of ontvangen van, een kanaal. Endpoints zijn de grens tussen "applicatielogica" (wat KERN inhoudelijk doet met een mutatie) en "messaginglogica" (hoe die mutatie het kanaal op- en afkomt).</p>
+<p>Dit onderscheid is waarom deel 2 relevant is voor de vraag die het architectuurboard aan Caspar stelde: <em>waar in KERN wordt straks de code aangepast?</em> Het antwoord hoort te zijn: uitsluitend in het endpoint, nooit dieper in de applicatielogica. Als de verwerkingslogica van KERN zelf moet weten dát er een kanaal is, ontstaat precies de starre koppeling die WGP 2.0 fataal werd — alleen nu met een wachtrij ertussen in plaats van een directe aanroep.</p>
+<p>Een goed ontworpen endpoint heeft daarom twee eigenschappen:</p>
+<p><strong>Het kent het kanaal, de applicatielogica kent het endpoint.</strong> KERN roept niet "stuur dit bericht naar kanaal X" aan, maar "verwerk deze mutatie" — het endpoint vertaalt dat intern naar het plaatsen op een kanaal. Andersom: het endpoint roept niet rechtstreeks diep in KERN's domeinlogica, maar levert een binnengekomen bericht af op een punt dat de applicatie zelf bepaalt.</p>
+<p><strong>Het is vervangbaar zonder de applicatielogica te raken.</strong> Als Meridiaan volgend jaar van de ene brokertechnologie naar de andere overstapt (een reëel scenario, zie de Toolbijlage), zou dat een endpoint-aangelegenheid moeten zijn, niet een herbouw van KERN's mutatieverwerking.</p>
+<p>Deze twee eigenschappen samen zijn de reden dat "messaging toevoegen" in een bestaand systeem zelden een kwestie is van "een bibliotheek importeren" — het vergt een bewuste laag tussen applicatie en kanaal, ook als die laag klein is.</p>
+<hr>
+<h2>2.4 Correlatie: hoe een antwoord zijn vraag terugvindt</h2>
+<p>Eén probleem is met kanaal, bericht en endpoint alleen nog niet opgelost, en het is precies het probleem waar het Werkgeversportaal in deel 1 tegenaan liep: als een gebruiker een mutatie indient en later wil weten of die gelukt is, hoe weet het systeem welk antwoordbericht bij welke oorspronkelijke vraag hoort?</p>
+<p>Het antwoord is een <strong>correlation identifier</strong>: een uniek kenmerk dat het aanvraagbericht meekrijgt in de header, en dat het antwoordbericht overneemt. Zonder dit kenmerk kan een ontvanger van een antwoordkanaal niet vaststellen welk van de mogelijk honderd openstaande verzoeken dit antwoord beantwoordt.</p>
+<p>Dit lijkt een detail maar is een van de meest onderschatte ontwerpbeslissingen in messaging: vergeet je een correlatie-ID, dan is asynchrone communicatie ronduit onbruikbaar zodra er meer dan één bericht tegelijk onderweg is — en dat is bij Meridiaan, met honderden mutaties per uur, vanaf dag één het geval.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-02/figuur-2-3-correlatie-tijdlijnen.svg" alt="Twee tijdlijnen naast elkaar: het Werkgeversportaal verstuurt drie mutaties kort na elkaar; drie antwoordberichten komen in andere volgorde terug; alleen de correlatie-ID's koppelen ze correct aan elkaar" loading="lazy"><figcaption>Figuur 2-3 — twee tijdlijnen naast elkaar: het Werkgeversportaal verstuurt drie mutaties kort na elkaar; drie antwoordberichten komen in andere volgorde terug; alleen de correlatie-ID's koppelen ze correct aan elkaar</figcaption></figure>
+<hr>
+<h2>2.5 Hoe de drie bouwstenen samen Caspars ontwerp corrigeren</h2>
+<p>Terug naar het whiteboard. Met kanaal, bericht en endpoint uit elkaar getrokken, wordt Caspars ontwerp opnieuw tekenbaar — nog steeds zonder brokertechnologie te kiezen, want dat is toolneutraal en komt in de Toolbijlage.</p>
+<ul>
+<li>Eén <strong>mutatiekanaal</strong>, point-to-point, uitsluitend command messages ("verwerk deze mutatie") — precies één ontvanger: KERN.</li>
+<li>Eén apart <strong>mutatie-gebeurd-kanaal</strong>, publish-subscribe, uitsluitend event messages ("dienstverband is gewijzigd") — meerdere geabonneerden: Nabestaandenloket, audit-trail, rapportagetabel.</li>
+<li>Een <strong>endpoint in het Werkgeversportaal</strong> dat de mutatie verpakt met een correlatie-ID en op het mutatiekanaal plaatst.</li>
+<li>Een <strong>endpoint in KERN</strong> dat berichten van het mutatiekanaal afneemt, ze doorgeeft aan de bestaande verwerkingslogica, en na afronding een event op het mutatie-gebeurd-kanaal plaatst.</li>
+</ul>
+<p>Twee kanalen, niet één wolk. Dat onderscheid alleen al had het derde bezwaar van het architectuurboord (Nabestaandenloket versus Werkgeversportaal, dezelfde rechthoek of niet) beantwoord voordat de vraag gesteld werd.</p>
+<hr>
+<h2>Samenvatting van deel 2</h2>
+<ul>
+<li>Messaging bestaat uit drie te onderscheiden bouwstenen: kanaal, bericht, endpoint. Ze door elkaar behandelen ("een wolk") is de meest voorkomende beginnersfout.</li>
+<li>Een kanaal draagt precies één soort bericht, heeft een contracteigenaar, en is óf point-to-point óf publish-subscribe.</li>
+<li>Een bericht bestaat uit header (metadata, routering) en payload (inhoud). Command, event en document messages hebben elk een andere bedoeling — het onderscheid command/event is het belangrijkste.</li>
+<li>Een endpoint is de grens tussen applicatielogica en messaginglogica; alleen het endpoint hoort het kanaal te kennen.</li>
+<li>Een correlation identifier koppelt een antwoordbericht terug aan zijn oorspronkelijke aanvraag — onmisbaar zodra meer dan één bericht tegelijk onderweg is.</li>
+</ul>
+<h2>Vooruitblik</h2>
+<p>Deel 3 werkt de message construction-patronen verder uit: hoe bouw je een command, event of document message concreet op, en hoe gebruik je correlatie in een volwaardig request/reply-patroon zonder terug te vallen op synchroon wachten.</p>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-01/reader.html">&larr; Deel 1 — Van synchroon naar asynchroon: waarom messaging</a><a class="eip-prevnext next" href="../deel-03/reader.html">Deel 3 — Message Construction: command, event, document en request-reply &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 27 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 3 · deel 27 van 30</p>
+<hr>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest.</p>
+<hr>
+<h2>Opdracht 27.1 — Welk patroon, welk probleem</h2>
+<p>Bepaal voor elk scenario welk van de drie patronen (circuit breaker, bulkhead, backpressure) het meest passend is, en motiveer.</p>
+<p>a. Een downstream-systeem is volledig onbereikbaar door een storing; verdere aanroepen zouden alleen tijd verspillen.</p>
+<p>b. Twee soorten verkeer (kritiek en niet-kritiek) delen dezelfde verwerkingscapaciteit, en het niet-kritieke verkeer verdringt af en toe het kritieke.</p>
+<p>c. Een consument kan het aangeboden tempo net niet bijbenen, maar functioneert verder normaal — de wachtrij groeit langzaam.</p>
+<hr>
+<h2>Opdracht 27.2 — De asynchrone circuit breaker ontwerpen</h2>
+<p>Ontwerp, voor de georkestreerde afhankelijkheid tussen rekenkern en datakwaliteitscontrole (deel 25), een asynchrone circuit breaker. Beschrijf: wanneer opent het circuit, en wat gebeurt er met een aanvraag terwijl het circuit open staat?</p>
+<hr>
+<h2>Opdracht 27.3 — Bulkhead-capaciteit verdelen</h2>
+<p>Meridiaan's rekenkern verwerkt zowel reguliere invaaraanvragen (wettelijk tijdgebonden) als controleherberekeningen (minder urgent). Ontwerp een bulkhead-verdeling, en beargumenteer waarom de kritieke aanvragen een gegarandeerde, niet louter een grotere, capaciteit moeten krijgen.</p>
+<hr>
+<h2>Zelftoets deel 27</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Wat is het verschil tussen een poison message (deel 26) en het cascade-effect van dit deel?</li>
+<li>Wat doet een asynchrone circuit breaker, en hoe verschilt hij van de synchrone variant?</li>
+<li>Wat is een bulkhead, en welk eerder deel-8-principe past hij toe op capaciteit in plaats van volgorde?</li>
+<li>Wat is backpressure, en waarom is het complementair aan, niet vervangend voor, de andere twee patronen?</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 27.1</h2>
+<p>a. <strong>Circuit breaker.</strong> Structureel falen, geen zin in verdere pogingen totdat hersteld — precies het "aan/uit"-gedrag dat dit patroon biedt.</p>
+<p>b. <strong>Bulkhead.</strong> Het probleem is verdringing tussen verkeerssoorten, niet structureel falen of geleidelijke overbelasting — gescheiden capaciteitspools lossen dit direct op.</p>
+<p>c. <strong>Backpressure.</strong> Geen structureel falen, geen verdringing tussen soorten, maar een geleidelijk tempoverschil dat om gecontroleerde vertraging vraagt, niet om volledige onderbreking.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de drie patronen zijn niet inwisselbaar — elk past bij een ander soort probleem, en het verkeerd toepassen (bijvoorbeeld een circuit breaker gebruiken voor situatie c) zou onnodig hard ingrijpen waar een geleidelijke maatregel had volstaan.</p>
+<h2>Uitwerking 27.2</h2>
+<p>Het circuit opent zodra een vastgestelde drempel wordt overschreden — bijvoorbeeld: meer dan 30% van de aanroepen in de afgelopen vijf minuten duurt langer dan de acceptabele grens, of een aantal opeenvolgende aanroepen mislukt. Zodra open: nieuwe aanvragen worden niet naar het datakwaliteitscontrolesysteem verstuurd, maar de orkestrator retourneert onmiddellijk een expliciet "tijdelijk niet beschikbaar"-signaal naar de aanvrager (in lijn met deel 3), zodat de rekenkern geen capaciteit vasthoudt in afwachting van een antwoord dat toch te lang zou duren. Een periodieke, lichte testaanroep (bijvoorbeeld elke minuut) toetst of het datakwaliteitscontrolesysteem hersteld is; bij succes sluit het circuit weer.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de asynchrone vorm verschilt van de synchrone vooral in wat er gebeurt bij een open circuit — geen directe foutmelding aan een wachtende aanroeper, maar een expliciet, asynchroon signaal dat de aanvrager kan verwerken zonder zelf te blokkeren.</p>
+<h2>Uitwerking 27.3</h2>
+<p>Twee aparte capaciteitspools: een gereserveerde pool voor invaaraanvragen die nooit door controleherberekeningen kan worden aangesproken (bijvoorbeeld 80% van de totale rekenkerncapaciteit, hard gescheiden), en een kleinere, gedeelde of aparte pool voor controleherberekeningen (de resterende 20%). Een "grotere" in plaats van "gegarandeerde" capaciteit zou nog steeds toelaten dat, bij extreme piekbelasting van controleherberekeningen, ook de invaaraanvragen alsnog worden verdrongen — alleen bij een harde, technische scheiding is de wettelijk tijdgebonden aanvraag structureel beschermd, ongeacht hoe extreem de belasting van het andere verkeerstype wordt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "meer capaciteit toewijzen" is geen garantie, alleen een statistische verbetering; een echte bulkhead vereist een harde technische scheiding die niet onder extreme omstandigheden alsnog kan worden doorbroken.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Een circuit breaker beschermt tegen structureel falen, een bulkhead tegen verdringing tussen verkeerssoorten, backpressure tegen geleidelijke overbelasting — alle drie nodig, want ze beschermen tegen verschillende faalpatronen.</li>
+<li>Een poison message is een individueel, schadelijk bericht dat een component blokkeert; het cascade-effect van dit deel is structurele overbelasting van één component die zich, via bindende afhankelijkheden, verspreidt naar andere, op zichzelf gezonde componenten.</li>
+<li>Een asynchrone circuit breaker onderbreekt niet het kanaal zelf, maar het wachten op een tijdig antwoord — hij geeft de aanvrager een expliciet, non-blocking signaal in plaats van te blijven wachten, in lijn met deel 3's non-blocking-principe.</li>
+<li>Een bulkhead isoleert capaciteit tussen verkeerssoorten met gescheiden pools — een toepassing van het partitioneringsprincipe uit deel 8, maar dan voor capaciteitsisolatie in plaats van volgordegarantie.</li>
+<li>Backpressure laat een overbelaste consument expliciet zijn tempo terugkoppelen naar zenders, voor gecontroleerde vertraging. Het is complementair omdat het een ander faalpatroon (geleidelijke overbelasting) adresseert dan structureel falen (circuit breaker) of verdringing (bulkhead).</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-26/reader.html">&larr; Deel 26 — Poison messages en retry-topologie op schaal</a><a class="eip-prevnext next" href="../deel-28/reader.html">Deel 28 — Governance en lifecycle van een event backbone &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

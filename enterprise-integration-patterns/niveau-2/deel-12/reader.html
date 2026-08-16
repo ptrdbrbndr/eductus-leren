@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 12 — Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 12 — Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 2 (professional) · deel 12 van 22</p>
+<hr>
+<h2>12.0 Een salariscorrectie die naar zes bestemmingen tegelijk moest</h2>
+<p>Met de broker-architectuur uit deel 11 op zijn plaats kreeg Caspar een routeringsvraag die de content-based router uit deel 4 niet kon beantwoorden. Een salariscorrectie boven een bepaalde drempel moest, bleek uit een nieuwe compliance-eis voor de Wtp-voorbereiding, niet alleen naar KERN voor verwerking, maar gelijktijdig naar: het interne controleteam, een externe accountant (alleen voor correcties boven €10.000), de risicomanagementafdeling, en — uitsluitend als de deelnemer een lopende uitkering had — ook naar de uitkeringsadministratie.</p>
+<p>Dit is geen content-based router-probleem: de bestemmingen zijn niet één van meerdere vaste opties (zoals in deel 4: adreswijziging óf dienstverbandmutatie óf salariscorrectie), maar een <strong>variabele combinatie</strong> van meerdere, soms afhankelijk van meerdere criteria tegelijk. En het is ook geen publish-subscribe-vraagstuk uit deel 6, want niet elke geïnteresseerde partij is voor elk bericht evenzeer relevant — de externe accountant is bijvoorbeeld alleen relevant bóven €10.000, iets wat een gewoon abonnement niet kan uitdrukken.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-12/figuur-12-1-vertakking-zes-bestemmingen.svg" alt="Eén salariscorrectiebericht met een vertakking naar zes mogelijke bestemmingen, waarbij drie takken een voorwaarde tonen (&quot;&gt;€10.000&quot;, &quot;alleen bij lopende uitkering&quot;) en drie takken altijd actief zijn." loading="lazy"><figcaption>Figuur 12-1 — Eén salariscorrectiebericht met een vertakking naar zes mogelijke bestemmingen, waarbij drie takken een voorwaarde tonen (">€10.000", "alleen bij lopende uitkering") en drie takken altijd actief zijn.</figcaption></figure>
+<p>Dit deel behandelt drie patronen die dit soort samengestelde en dynamische routeringsvragen oplossen: de <strong>dynamic router</strong>, de <strong>recipient list</strong>, en het paar <strong>splitter/aggregator</strong>.</p>
+<hr>
+<h2>12.1 De dynamic router</h2>
+<p>De content-based router uit deel 4 werkt met een <strong>vaste</strong> set regels: mutatietype X gaat naar kanaal Y, ingebouwd en te wijzigen alleen door de router zelf aan te passen. Een <strong>dynamic router</strong> verschilt hierin fundameneel: de routeringsregels worden niet in de router zelf vastgelegd, maar op een andere plek beheerd — bijvoorbeeld in een configuratietabel, een extern regelbestand, of een raadpleegbare service — en de router leest die regels bij elke beslissing opnieuw uit.</p>
+<p>Het voordeel is niet snelheid of elegantie, maar <strong>wijzigbaarheid zonder hercompilatie of herimplementatie van de router zelf</strong>. Bij Meridiaan bleek dit relevant zodra de compliance-eis (welke drempel, welke bestemmingen) meermaals wijzigde tijdens de eerste maanden van de Wtp-voorbereiding — elke wijziging in de router zelf zou een releasecyclus hebben gevergd, terwijl een wijziging in de configuratietabel binnen een uur kon worden doorgevoerd door het compliance-team zelf, zonder ontwikkelaarsinzet.</p>
+<p>Dit voordeel heeft een prijs die niet onderschat mag worden: <strong>een dynamic router is per definitie minder voorspelbaar op basis van de code alleen.</strong> Waar een content-based router zijn volledige gedrag toont in zijn eigen broncode, moet een dynamic router altijd samen met zijn actuele configuratie worden gelezen om te begrijpen wat hij op een gegeven moment doet. Dit vraagt aanvullende discipline: versiebeheer op de configuratie zelf, en — cruciaal, gezien deel 9 — dezelfde zichtbaarheidseisen als voor foutafhandeling: als een dynamic router een bericht routeert op basis van regels die niemand meer kan reconstrueren zoals ze een maand geleden waren, is een audit achteraf onmogelijk.</p>
+<blockquote><p><strong>Kernzin 11 van de cursus: wijzigbaarheid zonder codewijziging is waardevol precies wanneer de regels vaker veranderen dan de code eromheen — en wordt een risico zodra niemand meer bijhoudt wat de regels op enig moment waren.</strong></p></blockquote>
+<hr>
+<h2>12.2 De recipient list</h2>
+<p>Waar een content-based router (statisch of dynamisch) een bericht naar <strong>één</strong> bestemming uit meerdere mogelijke opties stuurt, stuurt een <strong>recipient list</strong> een bericht naar <strong>een berekende verzameling</strong> van bestemmingen tegelijk — precies het probleem van de salariscorrectie in 12.0.</p>
+<p>De kern van een recipient list is een functie die, gegeven de inhoud van het bericht, de lijst van bestemmingen berekent. Voor de casus van 12.0 zou die functie er, informeel, zo uitzien:</p>
+<ul>
+<li>Altijd: KERN, interne controleteam, risicomanagementafdeling</li>
+<li>Als bedrag > €10.000: voeg toe: externe accountant</li>
+<li>Als deelnemer een lopende uitkering heeft: voeg toe: uitkeringsadministratie</li>
+</ul>
+<p>Een recipient list moet, om houdbaar te blijven, aan een vergelijkbare eis voldoen als de content-based router uit deel 4: de berekening van de bestemmingslijst hoort declaratief en transparant te zijn, niet verstopt in een lange keten van imperatieve code. Bij Meridiaan is dit opgelost door de recipient list-logica in dezelfde configuratietabel als de dynamic router uit 12.1 onder te brengen, met dit verschil: waar de dynamic router één bestemming teruggeeft, geeft deze berekening een lijst terug.</p>
+<p><strong>Een essentieel verschil met eenvoudige publish-subscribe (deel 6):</strong> bij publish-subscribe bepaalt elke abonnee zelf, onafhankelijk, of hij een bericht relevant vindt — de zender weet niet eens hoeveel abonnees er zijn. Bij een recipient list bepaalt de <strong>zendende kant</strong> (of een component vlak na de zender) welke ontvangers relevant zijn, gebaseerd op de inhoud van dit specifieke bericht. Dit is een bewuste, expliciete beslissing per bericht, niet een impliciet abonnement. De keuze tussen beide hangt af van waar de kennis hoort te zitten: als de regel "wie is geïnteresseerd" logisch bij de boodschap zelf hoort (zoals hier: een compliance-eis die bepaalt wie een salariscorrectie moet zien), is een recipient list passender; als de regel logisch bij de ontvanger hoort ("ik wil alle mutatie-gebeurtenissen zien, ongeacht type"), is publish-subscribe passender.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-12/figuur-12-2-recipient-list.svg" alt="De recipient list als vertakkingscomponent: één inkomend bericht, een berekeningsstap die de bestemmingslijst bepaalt op basis van bedrag en uitkeringsstatus, en een variabel aantal uitgaande pijlen." loading="lazy"><figcaption>Figuur 12-2 — De recipient list als vertakkingscomponent: één inkomend bericht, een berekeningsstap die de bestemmingslijst bepaalt op basis van bedrag en uitkeringsstatus, en een variabel aantal uitgaande pijlen.</figcaption></figure>
+<hr>
+<h2>12.3 Splitter en aggregator: het omgekeerde probleem, en de terugkeer</h2>
+<p>Niet elk routeringsvraagstuk gaat over "één bericht naar meerdere bestemmingen sturen". Soms is het omgekeerde nodig: <strong>één bericht bevat meerdere, zelfstandig te verwerken onderdelen</strong>, die elk apart door de keten moeten, waarna de resultaten weer moeten worden samengevoegd tot één antwoord.</p>
+<p>Bij Meridiaan deed dit zich voor bij de jaarlijkse batchcorrectie: een werkgever levert één bestand aan met tweehonderd individuele salariscorrecties voor tweehonderd verschillende deelnemers. Deze moeten stuk voor stuk door dezelfde validatie- en verwerkingsketen als een individuele correctie (inclusief de recipient list uit 12.2, want ook een individuele correctie uit deze batch kan boven €10.000 uitkomen), maar de werkgever wil uiteindelijk één samengevat resultaat: hoeveel zijn er geslaagd, hoeveel gefaald, en waarom.</p>
+<p>Een <strong>splitter</strong> breekt het ene binnenkomende bericht op in <em>n</em> afzonderlijke berichten — in dit geval tweehonderd individuele salariscorrectieberichten, elk met een eigen bericht-ID (deel 3, cruciaal voor idempotentie) en een gedeeld <strong>correlatiekenmerk</strong> dat aangeeft tot welke oorspronkelijke batch ze behoren. Elk van de tweehonderd doorloopt vervolgens zelfstandig de bestaande keten — dezelfde router, dezelfde translator, dezelfde recipient list als een individuele correctie, zonder dat die componenten ook maar hoeven te weten dat dit bericht uit een batch komt.</p>
+<p>Een <strong>aggregator</strong> doet het omgekeerde: hij verzamelt de resultaten van alle berichten met hetzelfde batchcorrelatiekenmerk, en combineert ze tot één samengevat resultaat zodra — en dit is de lastigste ontwerpvraag van het patroon — <strong>bekend is wanneer de verzameling compleet is</strong>. Drie strategieën zijn gangbaar:</p>
+<p><strong>Tellen.</strong> De splitter geeft bij het opsplitsen ook het totale aantal onderdelen mee (in dit geval: 200); de aggregator weet dan precies wanneer hij compleet is.</p>
+<p><strong>Time-out.</strong> De aggregator wacht een vooraf bepaalde tijd en meldt daarna het resultaat als (mogelijk) onvolledig — nuttig wanneer het totale aantal onderdelen vooraf niet bekend is, maar met het risico dat een langzame deelverwerking ten onrechte als "gefaald" wordt gerapporteerd.</p>
+<p><strong>Een expliciet afsluitbericht.</strong> Een apart, laatste bericht in de reeks markeert het einde van de batch — vergelijkbaar met tellen, maar bruikbaar wanneer het totale aantal pas tijdens verwerking bekend wordt.</p>
+<p>Bij Meridiaan is voor tellen gekozen, omdat het totale aantal deelnemers in een batchbestand al bij binnenkomst bekend is — de meest robuuste van de drie strategieën, wanneer beschikbaar.</p>
+<blockquote><p><strong>Kernzin 12 van de cursus: een splitter zonder een bijbehorend, expliciet ontworpen aggregatiemechanisme is een gebroken belofte — de afzonderlijke delen bestaan, maar niemand weet ooit zeker of het geheel compleet is teruggekomen.</strong></p></blockquote>
+<figure class="eip-figure"><img src="../../figuren/deel-12/figuur-12-3-split-aggregate-batch.svg" alt="Eén batchbericht (200 correcties) → splitter → 200 afzonderlijke berichten, elk door de volledige keten (router, translator, recipient list) → aggregator die wacht op alle 200 (tellen-strategie) → één samengevat resultaatbericht terug naar de werkgever." loading="lazy"><figcaption>Figuur 12-3 — Eén batchbericht (200 correcties) → splitter → 200 afzonderlijke berichten, elk door de volledige keten (router, translator, recipient list) → aggregator die wacht op alle 200 (tellen-strategie) → één samengevat resultaatbericht terug naar de werkgever.</figcaption></figure>
+<hr>
+<h2>12.4 Hoe de drie patronen zich tot elkaar verhouden</h2>
+<p>De drie patronen van dit deel lossen, net als in deel 5 (translator/envelope wrapper/normalizer), aantoonbaar verschillende problemen op:</p>
+<table>
+<thead>
+<tr><th>Patroon</th><th>Probleem</th><th>Richting</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Dynamic router</strong></td><td>Eén bestemming, regels wijzigen vaker dan code</td><td>Eén-op-één, wijzigbaar</td></tr>
+<tr><td><strong>Recipient list</strong></td><td>Meerdere, berekende bestemmingen tegelijk</td><td>Eén-op-veel, door de zendende kant bepaald</td></tr>
+<tr><td><strong>Splitter/aggregator</strong></td><td>Eén bericht met meerdere zelfstandige onderdelen</td><td>Eén-naar-veel-en-weer-terug</td></tr>
+</tbody></table>
+<p>Ze zijn bovendien combineerbaar: bij Meridiaan doorloopt elk van de tweehonderd door de splitter geproduceerde berichten óók de recipient list uit 12.2, wat betekent dat één batchbericht in potentie kan uitmonden in honderden individuele afleveringen, verspreid over meerdere bestemmingen, voordat de aggregator alles weer samenbrengt tot één antwoord aan de werkgever.</p>
+<hr>
+<h2>Samenvatting van deel 12</h2>
+<ul>
+<li>Een dynamic router leest zijn routeringsregels uit een extern beheerde bron in plaats van vast in de code, met als voordeel snelle wijzigbaarheid en als prijs de noodzaak van versiebeheer en auditeerbaarheid van die regels.</li>
+<li>Een recipient list stuurt een bericht naar een berekende verzameling bestemmingen, bepaald door de zendende kant op basis van de inhoud — anders dan publish-subscribe, waar elke ontvanger zelf beslist.</li>
+<li>Een splitter breekt één bericht op in zelfstandige onderdelen die elk de volledige keten doorlopen; een aggregator voegt de resultaten weer samen, met tellen, time-out, of een expliciet afsluitbericht als strategieën om te weten wanneer de verzameling compleet is.</li>
+<li>Een splitter zonder bijbehorende aggregatiestrategie laat onbeantwoord of het geheel ooit compleet terugkomt.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 13 verdiept de transformatie-patroonfamilie van niveau 1 op vergelijkbare wijze: de content enricher, content filter en claim check — nodig zodra transformatie niet langer alleen formaten omzet, maar ontbrekende gegevens moet aanvullen of grote payloads efficiënt door de keten moet leiden.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-11/reader.html">&larr; Deel 11 — Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone</a><a class="eip-prevnext next" href="../deel-13/reader.html">Deel 13 — Transformatie diepgaand: content enricher, content filter, claim check &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

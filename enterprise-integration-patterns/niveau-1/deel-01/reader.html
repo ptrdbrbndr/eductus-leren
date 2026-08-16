@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 1 — Van synchroon naar asynchroon: waarom messaging — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 1 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 1 — Van synchroon naar asynchroon: waarom messaging</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 1 (fundament) · deel 1 van 10</p>
+<hr>
+<h2>1.0 De koppeling die zeven keer per dag vastliep</h2>
+<p>Op de derde maandag na de stopzetting van WGP 2.0 kreeg Caspar Rijnders zijn eerste incident als integratiearchitect bij Meridiaan Pensioen N.V. De koppeling tussen het Werkgeversportaal en KERN, het kernsysteem, was die ochtend zeven keer blijven hangen. Niet gecrasht — hangen. Het portaal wachtte op een antwoord van KERN dat niet kwam, de gebruiker zag een draaiend wieltje, en na dertig seconden verscheen een foutmelding die niemand kon plaatsen: "time-out bij mutatieverwerking".</p>
+<p>De koppeling zelf was, technisch gezien, keurig gebouwd: een REST-aanroep, synchroon, met een duidelijk contract. Het Werkgeversportaal stuurt een mutatie, wacht op het antwoord, en toont dat antwoord aan de gebruiker. Zolang KERN binnen een paar honderd milliseconden reageert, werkt dit onberispelijk.</p>
+<p>Het probleem was niet de koppeling. Het probleem was wat er sinds twee weken ván afhing. KERN was uitgebreid met een asynchrone verwerkingsstap — een validatie tegen de externe pensioenadministrateur, die zelf weer afhankelijk was van een derde partij. Die validatie kon een halve seconde duren, of veertig seconden, afhankelijk van de belasting bij de administrateur. Het Werkgeversportaal wist dat niet. Het deed wat het altijd deed: de aanroep doen en wachten, met een time-out van dertig seconden omdat niemand zich ooit had voorgesteld dat het langer zou kunnen duren.</p>
+<p>Caspar loste het incident die dag op door de time-out naar negentig seconden te verhogen. Dat is geen oplossing, het is uitstel — en dat wist hij, want binnen een kwartaal zou de externe administrateur een nieuwe koppeling opleveren die nóg een stap toevoegde.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-01/figuur-1-1-synchrone-keten.svg" alt="De keten Werkgeversportaal → KERN → externe pensioenadministrateur, met bij elke pijl een synchrone request/response-verbinding en een oplopende onzekere wachttijd" loading="lazy"><figcaption>Figuur 1-1 — de keten Werkgeversportaal → KERN → externe pensioenadministrateur, met bij elke pijl een synchrone request/response-verbinding en een oplopende onzekere wachttijd</figcaption></figure>
+<p>Dit deel gaat over waarom die oplossing structureel niet houdbaar is, en wat het alternatief is.</p>
+<hr>
+<h2>1.1 Wat request/response veronderstelt</h2>
+<p>Elke synchrone aanroep — of het nu REST, RPC of iets ouders is — rust op drie veronderstellingen die zelden hardop worden uitgesproken:</p>
+<p><strong>De ontvanger is nu beschikbaar.</strong> Niet over vijf minuten, niet zodra de wachtrij leeg is: nu, op het moment van de aanroep.</p>
+<p><strong>De ontvanger antwoordt binnen een voorspelbare tijd.</strong> De aanroeper reserveert een thread, een verbinding, een gebruiker die wacht, voor de duur van dat antwoord. Hoe lang dat duurt, moet ergens binnen een marge liggen die de aanroeper vooraf heeft ingeschat — vandaar de time-out.</p>
+<p><strong>Aanroeper en ontvanger zijn tegelijk operationeel.</strong> Niet alleen nu beschikbaar, maar ook: als de aanroeper herstart, herstelt hij de aanroep opnieuw zelf. Er is geen derde partij die onthoudt dat de aanroep nog moet gebeuren.</p>
+<p>Deze drie veronderstellingen zijn precies wat de API-cursus als vertrekpunt neemt en met gateways, statuscodes en circuit breakers beheersbaar maakt. Ze blijven waar. Wat verandert is de vraag wat je doet zodra één van de drie niet meer standhoudt — niet als uitzondering, maar structureel, omdat een keten schakels bevat die je niet beheerst.</p>
+<blockquote>
+<p><strong>Kernzin 1 van de cursus: elke synchrone aanroep in een keten erft de traagste, minst beschikbare schakel van die keten — of je dat nu wilde of niet.</strong></p>
+</blockquote>
+<p>Dat is precies wat er bij het Werkgeversportaal gebeurde. Niemand had een langzame koppeling gebouwd. Er ontstond er één, door optelling, op een plek waar niemand naar keek.</p>
+<hr>
+<h2>1.2 Drie signalen dat request/response niet meer past</h2>
+<p>Niet elke trage koppeling is een reden om over te stappen. Er zijn drie signalen die, los of samen, aangeven dat het probleem niet met een langere time-out is op te lossen.</p>
+<p><strong>Signaal 1: de verwerkingstijd is inherent onvoorspelbaar.</strong> Niet "meestal snel, soms traag" door toevallige belasting, maar structureel variabel omdat er een externe partij, een batchproces of een menselijke handeling in de keten zit. De validatiestap bij de externe administrateur is hiervan een voorbeeld: soms is het antwoord er in milliseconden, soms moet een medewerker daar handmatig ingrijpen.</p>
+<p><strong>Signaal 2: zender en ontvanger hoeven niet gelijktijdig te bestaan.</strong> Als het Werkgeversportaal een mutatie aanlevert om vier uur 's nachts, hoeft KERN niet op dat moment wakker te zijn. Sterker: als KERN op dat moment een onderhoudsvenster heeft, moet de mutatie gewoon blijven staan tot het weer online is — niet foutmelden aan een werkgever die toevallig 's nachts een dienstverband beëindigt.</p>
+<p><strong>Signaal 3: één actie moet meerdere, onafhankelijke ontvangers bereiken.</strong> Een mutatie in KERN moet niet alleen worden verwerkt, maar ook het Nabestaandenloket bijwerken, een audit-trail vullen, en mogelijk een signalering naar de externe administrateur triggeren. Vier synchrone aanroepen achter elkaar bouwen betekent: de totale wachttijd is de som van vier wachttijden, en als één van de vier onbereikbaar is, faalt de hele keten — ook voor de drie andere die het wél hadden gered.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-01/figuur-1-2-drie-signalen.svg" alt="Drie signalen naast elkaar, elk met een minikader: onvoorspelbare verwerkingstijd, ontkoppeling in tijd, één-naar-veel-verspreiding" loading="lazy"><figcaption>Figuur 1-2 — drie signalen naast elkaar, elk met een minikader: onvoorspelbare verwerkingstijd, ontkoppeling in tijd, één-naar-veel-verspreiding</figcaption></figure>
+<p>Bij het Werkgeversportaal-incident golden signaal 1 en 2 allebei. Dat is waarom het geen incident was dat om een dikkere lijn vroeg, maar om een ander soort verbinding.</p>
+<hr>
+<h2>1.3 Wat messaging concreet anders doet</h2>
+<p>Messaging vervangt de directe aanroep door een tussenstation: een <strong>bericht</strong> wordt op een <strong>kanaal</strong> gezet, en de zender is klaar zodra het bericht daar veilig staat — niet zodra de ontvanger het heeft verwerkt.</p>
+<p>Dat ene zinnetje bevat het hele verschil. Bij request/response valt "verzonden" en "verwerkt" praktisch samen: de aanroeper weet het antwoord voordat hij verdergaat. Bij messaging vallen ze uit elkaar. De zender weet alleen: het bericht staat op het kanaal. Wat de ontvanger ermee doet, en wanneer, is een aparte vraag.</p>
+<p>Dit lost de drie veronderstellingen van request/response niet stuk voor stuk op — het maakt ze overbodig:</p>
+<table>
+<thead>
+<tr><th>Veronderstelling bij request/response</th><th>Wat messaging daarvoor in de plaats zet</th></tr>
+</thead>
+<tbody>
+<tr><td>Ontvanger is nu beschikbaar</td><td>Het kanaal bewaart het bericht tot de ontvanger er is</td></tr>
+<tr><td>Antwoord binnen voorspelbare tijd</td><td>Zender gaat verder zodra het bericht geplaatst is; verwerkingstijd van de ontvanger raakt de zender niet</td></tr>
+<tr><td>Beide tegelijk operationeel</td><td>Het kanaal overbrugt de tijd ertussen</td></tr>
+</tbody>
+</table>
+<p>De prijs die hiervoor wordt betaald, komt in 1.4 en in deel 7 en 8 uitgebreid terug: als je niet meer wacht op een antwoord, moet je expliciet regelen wat je zeker weet en wat niet. Bij request/response krijg je die zekerheid gratis — een uitgebleven antwoord ís een foutmelding. Bij messaging moet je zelf bedenken hoe je weet of een bericht is aangekomen, en wat er gebeurt als het twee keer aankomt.</p>
+<hr>
+<h2>1.4 Wat je ervoor inlevert</h2>
+<p>Messaging is geen upgrade zonder nadeel. Drie dingen worden structureel moeilijker, en het is beroepsoneerlijk om dat pas in deel 7 te vermelden.</p>
+<p><strong>Volgorde is niet meer vanzelfsprekend.</strong> Bij een synchrone keten van aanroepen is de volgorde de volgorde van de code. Bij messaging kunnen twee berichten via verschillende paden, met verschillende snelheid, bij de ontvanger aankomen — en soms is dat prima, en soms is het een dataintegriteitsprobleem. Deel 8 gaat hier volledig over.</p>
+<p><strong>Foutafhandeling verschuift van "meteen zichtbaar" naar "ergens in een wachtrij".</strong> Bij request/response ziet de gebruiker een foutmelding. Bij messaging kan een bericht dat niet te verwerken is, stil in een wachtrij blijven staan — tenzij je expliciet een vangnet bouwt. Deel 9 introduceert dat vangnet.</p>
+<p><strong>Debuggen verandert van aard.</strong> "Waarom werkt dit niet" wordt niet meer beantwoord door één stack trace, maar door de vraag: waar in de keten van kanalen bevindt dit bericht zich, en wat is er sindsdien mee gebeurd. Dat vraagt andere gereedschappen en andere gewoontes, die in niveau 2 (deel 21, observability) aan bod komen.</p>
+<p>Caspar formuleerde het na het derde incident zo tegen zijn architectuurboard: <em>"Ik ruil een probleem dat ik meteen zie, in voor een probleem dat ik moet leren zien."</em> Dat is de kern van de afweging in dit deel — en de reden dat deze cursus niet begint met "messaging is beter", maar met de vraag wanneer het dat is.</p>
+<hr>
+<h2>1.5 Afbakening ten opzichte van de API-cursus</h2>
+<p>Deze cursus begint precies waar request/response niet meer past. Dat is geen waardeoordeel over API's: de meeste koppelingen bij Meridiaan zijn en blijven terecht synchroon — een gebruiker die op "opslaan" klikt, wil weten of het gelukt is, niet drie kwartier later een bevestigingsmail.</p>
+<table>
+<thead>
+<tr><th>Onderwerp</th><th>Blijft bij de API-cursus</th><th>Hoort hier</th></tr>
+</thead>
+<tbody>
+<tr><td>Communicatiestijl</td><td>Request/response, blocking</td><td>Fire-and-forget, event-driven, publish/subscribe</td></tr>
+<tr><td>Contractvorm</td><td>OpenAPI/REST-resourcemodellering</td><td>Berichtformaat, kanaalcontract, schema-evolutie</td></tr>
+<tr><td>Ontsluiting</td><td>API-gateway, rate limiting, API-management</td><td>Message broker, event backbone, messaging-endpoints</td></tr>
+<tr><td>Betrouwbaarheid</td><td>HTTP-statuscodes, retries per aanroep</td><td>Idempotentie, leveringsgaranties, volgorde</td></tr>
+</tbody>
+</table>
+<figure class="eip-figure"><img src="../../figuren/deel-01/figuur-1-3-twee-kaartlagen.svg" alt="Eén keten, twee kaartlagen: bovenin de synchrone laag (gebruiker → portaal → gateway), onderin de asynchrone laag (KERN → externe administrateur → Nabestaandenloket), met de plek waar Caspars incident ontstond precies op de overgang" loading="lazy"><figcaption>Figuur 1-3 — één keten, twee kaartlagen: bovenin de synchrone laag (gebruiker → portaal → gateway), onderin de asynchrone laag (KERN → externe administrateur → Nabestaandenloket), met de plek waar Caspars incident ontstond precies op de overgang</figcaption></figure>
+<p>Onthoud dit onderscheid goed: de vraag is nooit "REST of messaging" als architectuurkeuze voor een heel systeem, maar "past dit specifieke contact bij het request/response-patroon, of niet" — telkens opnieuw, per koppeling.</p>
+<hr>
+<h2>1.6 Wat er dit deel is gebeurd bij Meridiaan</h2>
+<p>Caspar Rijnders is de nieuwe integratiearchitect bij Meridiaan Pensioen, aangesteld nadat WGP 2.0 als watervalproject strandde op onder andere de starre, hard-gecodeerde puntkoppelingen tussen systemen. Zijn eerste weken bestaan uit brandjes blussen op precies zulke koppelingen: synchrone aanroepen die falen zodra een schakel in de keten trager of onbeschikbaar wordt.</p>
+<p>Dit deel introduceert hem niet als expert maar als iemand die het probleem voor het eerst scherp voelt. De rest van niveau 1 bouwt, koppeling voor koppeling, het instrumentarium op waarmee hij het structureel oplost.</p>
+<hr>
+<h2>Samenvatting van deel 1</h2>
+<ul>
+<li>Elke synchrone aanroep in een keten erft de traagste, minst beschikbare schakel van die keten.</li>
+<li>Drie signalen wijzen op een verkeerde pasvorm van request/response: onvoorspelbare verwerkingstijd, ontkoppeling in tijd nodig, of één-naar-veel-verspreiding.</li>
+<li>Messaging vervangt directe aanroepen door een kanaal: de zender is klaar zodra het bericht daar staat, niet zodra het is verwerkt.</li>
+<li>Dit lost niets gratis op: volgorde, foutafhandeling en debuggen worden structureel anders, niet vanzelf makkelijker.</li>
+<li>Deze cursus begint waar request/response niet meer past — de keuze ligt per koppeling, niet per systeem.</li>
+</ul>
+<h2>Vooruitblik</h2>
+<p>Deel 2 opent de doos die in dit deel dicht bleef: wat is een kanaal precies, wat is een bericht precies, en wat is een endpoint — de drie bouwstenen waarmee de rest van de cursus werkt.</p>
+
+</article>
+<nav class="eip-partnav"><span></span><a class="eip-prevnext next" href="../deel-02/reader.html">Deel 2 — Messagingfundamenten: kanaal, bericht, endpoint &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

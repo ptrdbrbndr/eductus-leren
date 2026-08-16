@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 20 — Contractbeheer voor asynchrone koppelingen — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 20 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 20 — Contractbeheer voor asynchrone koppelingen</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 2 (professional) · deel 20 van 22</p>
+<hr>
+<h2>20.0 Context in het kort</h2>
+<p>Deze reader gebruikt doorlopend een casus: Meridiaan Pensioen N.V., een Nederlandse pensioenuitvoerder, verstuurt via een event-gedreven kanaal het bericht "mutatie geregistreerd" naar meerdere, onafhankelijke afnemers — onder andere een Nabestaandenloket en een audit-systeem. Dit is een <strong>event message</strong>: een feit ("dit is gebeurd"), gepubliceerd op een kanaal waarop meerdere partijen zich onafhankelijk van elkaar kunnen abonneren, zonder dat de zender weet wie er allemaal luistert of wat ze met het bericht doen. Dat is voldoende achtergrond om dit deel zelfstandig te volgen.</p>
+<hr>
+<h2>20.1 Een veld dat "gewoon" werd hernoemd</h2>
+<p>Het integratieteam van Meridiaan besloot op een dinsdag het veld <code>bedrag</code> in het mutatiebericht te hernoemen naar <code>mutatiebedrag</code>, om het contract eenduidiger te maken nu er ook een <code>premiebedrag</code>-veld was bijgekomen. De wijziging leek triviaal — een simpele hernoeming, geen verandering van betekenis of type. Diezelfde week bleek de rapportagetabel van de risicomanagementafdeling, die het <code>bedrag</code>-veld gebruikte, stilzwijgend nullen te tonen in plaats van bedragen: het veld dat de code verwachtte, bestond simpelweg niet meer.</p>
+<p>Dit is het scenario waar dit deel om draait, en het is fundamenteel anders dan een vergelijkbare wijziging in een synchrone API. Bij een REST-endpoint zou een consument die een verplicht veld verwacht, direct een fout krijgen bij de eerstvolgende aanroep — zichtbaar, onmiddellijk, en gekoppeld aan een specifieke aanroeper die je kunt informeren. Bij een event-gedreven kanaal weet de zender niet eens hoeveel abonnees er zijn, laat staan wie ze zijn of welke velden ze precies gebruiken. Er is geen moment van "aanroepen" waarop een fout zichtbaar wordt — er is alleen een stroom berichten die, na de wijziging, gewoon doorgaat, terwijl ergens, onopgemerkt, een consument stilletjes verkeerde of ontbrekende data verwerkt.</p>
+<blockquote><p><strong>Kernzin — contractbeheer: bij een synchrone API breekt een contractwijziging zichtbaar en onmiddellijk; bij een event-gedreven kanaal breekt hij stil en vertraagd, bij een consument die de zender vaak niet eens kent.</strong></p></blockquote>
+<hr>
+<h2>20.2 Schema-evolutie: wijzigingen die wél en niet veilig zijn</h2>
+<p><strong>Schema-evolutie</strong> is de discipline van het laten wijzigen van een berichtformaat over de tijd, zonder bestaande consumenten te breken. De kern van deze discipline is het onderscheid tussen twee soorten wijzigingen:</p>
+<p><strong>Achterwaarts-compatibele wijzigingen</strong> laten bestaande consumenten ongestoord doorwerken, ook als zij de wijziging niet kennen. Het <strong>toevoegen</strong> van een nieuw, optioneel veld is het klassieke voorbeeld: een consument die het nieuwe veld niet kent, negeert het simpelweg en blijft functioneren zoals voorheen. Ook het <strong>verruimen</strong> van een bestaand veld (bijvoorbeeld een tekstveld dat langer mag worden) is doorgaans veilig, mits consumenten niet stilzwijgend afkappen op de oude, kortere lengte op een manier die betekenis verandert.</p>
+<p><strong>Niet-achterwaarts-compatibele wijzigingen</strong> breken bestaande consumenten, vaak zonder directe foutmelding. Het <strong>hernoemen</strong> van een veld (zoals bij Meridiaan) is hiervan het meest voorkomende voorbeeld: voor de consument bestaat het oude veld simpelweg niet meer, en de meeste implementaties geven hierbij geen fout maar stilzwijgend een lege of standaardwaarde — precies het "nullen in plaats van bedragen"-scenario. Ook het <strong>verwijderen</strong> van een veld, het <strong>wijzigen van een datatype</strong> (bijvoorbeeld van tekst naar getal), en het <strong>verplicht maken</strong> van een voorheen optioneel veld vallen in deze categorie.</p>
+<table>
+<thead>
+<tr><th>Wijziging</th><th>Achterwaarts-compatibel?</th></tr>
+</thead>
+<tbody>
+<tr><td>Nieuw, optioneel veld toevoegen</td><td>Ja</td></tr>
+<tr><td>Bestaand veld verruimen (langer, breder bereik)</td><td>Doorgaans ja</td></tr>
+<tr><td>Veld hernoemen</td><td>Nee</td></tr>
+<tr><td>Veld verwijderen</td><td>Nee</td></tr>
+<tr><td>Datatype wijzigen</td><td>Nee</td></tr>
+<tr><td>Optioneel veld verplicht maken</td><td>Nee</td></tr>
+</tbody></table>
+<p>De praktische consequentie: <strong>hernoemen is bijna nooit de juiste eerste stap.</strong> In plaats daarvan: voeg het nieuwe veld (<code>mutatiebedrag</code>) toe naast het oude (<code>bedrag</code>), laat beide een periode lang naast elkaar bestaan met identieke inhoud, en verwijder het oude veld pas nadat is vastgesteld dat geen enkele consument het nog gebruikt — een proces dat expliciete tijd en, zoals paragraaf 20.3 laat zien, expliciete kennis van wie er nog luistert vereist.</p>
+<hr>
+<h2>20.3 Het fundamentele probleem: je weet niet wie er luistert</h2>
+<p>De reden dat schema-evolutie bij event-gedreven kanalen moeilijker is dan bij synchrone API's, zit niet alleen in de timing van foutmeldingen (20.1) maar in een dieper gelegen eigenschap: <strong>de zender kent zijn consumenten niet.</strong> Dat is precies de kracht van publish-subscribe — lage koppeling, iedereen kan zich onafhankelijk abonneren — maar het maakt de vraag "wie raakt deze wijziging?" onbeantwoordbaar zonder aanvullende discipline.</p>
+<p>Bij een synchrone API-gateway is er vaak een registratie van geautoriseerde consumenten, of op zijn minst een logbestand van wie welke endpoint aanroept. Bij een puur event-gedreven kanaal bestaat die registratie niet automatisch — het integratieteam van Meridiaan wist letterlijk niet dat de risicomanagement-rapportagetabel het <code>bedrag</code>-veld gebruikte, totdat de schade al was opgetreden.</p>
+<p>Twee praktische maatregelen verkleinen dit risico:</p>
+<p><strong>Een expliciet, bijgehouden register van bekende consumenten</strong>, ook al is abonneren technisch vrij — teams die een nieuw abonnement starten, worden verzocht zich te melden bij de eigenaar van het kanaal, vergelijkbaar met de eigenaarschapseis die eerder in deze cursusfamilie voor foutkanalen werd gesteld. Dit is geen technische afdwinging (die zou de lage koppeling ondermijnen) maar een organisatorische afspraak.</p>
+<p><strong>Consumer-driven contracts</strong>, uitgewerkt in 20.4, die het probleem omdraaien: in plaats van dat de zender moet raden wie er luistert, specificeert elke consument expliciet wat hij verwacht, en die verwachtingen worden geautomatiseerd getoetst vóórdat een wijziging wordt doorgevoerd.</p>
+<hr>
+<h2>20.4 Consumer-driven contracts</h2>
+<p>Een <strong>consumer-driven contract</strong> is een expliciete, door de consument zelf opgestelde specificatie van welke velden hij daadwerkelijk gebruikt uit een bericht — niet het volledige berichtformaat, maar precies dat deel waarvan de consument afhankelijk is. Deze contracten worden verzameld op een centrale plek (bijvoorbeeld een gedeelde repository), en vóórdat de zender een wijziging aan het berichtformaat doorvoert, wordt die wijziging automatisch getoetst tegen <strong>elk</strong> bekend consumer-driven contract.</p>
+<p>Toegepast op het incident van 20.1: als de risicomanagement-rapportagetabel een consumer-driven contract had gepubliceerd dat expliciet vermeldde "ik gebruik het veld <code>bedrag</code>", dan zou de geautomatiseerde toets vóór het doorvoeren van de hernoeming direct hebben gefaald — niet pas na de productie-incident, maar al in de ontwikkel- of testfase van de wijziging zelf.</p>
+<p>Dit patroon keert het fundamentele probleem uit 20.3 letterlijk om: in plaats van dat de zender raadt wie er luistert en wat ze nodig hebben, <strong>verklaren consumenten expliciet wat ze nodig hebben</strong>, en die verklaringen worden een geautomatiseerd onderdeel van het wijzigingsproces. De prijs hiervoor is discipline aan de consumentkant: een consument die zijn contract nooit publiceert of nooit actualiseert, blijft even onzichtbaar als voorheen — het patroon werkt alleen als beide kanten (zender én consument) de afspraak naleven.</p>
+<blockquote><p><strong>Vuistregel: bij een synchrone API is compatibiliteit vaak impliciet af te dwingen doordat elke aanroep direct feedback geeft; bij event-gedreven kanalen moet compatibiliteit expliciet worden georganiseerd, via schema-evolutiediscipline en, waar mogelijk, consumer-driven contracts.</strong></p></blockquote>
+<hr>
+<h2>20.5 Wat Meridiaan er uiteindelijk mee deed</h2>
+<p>Na het incident is bij Meridiaan een tweeledige aanpak ingevoerd. Ten eerste: elke veldwijziging op een event-gedreven kanaal volgt voortaan het additief-eerst-principe uit 20.2 — nieuwe velden toevoegen, oude pas verwijderen na een vastgestelde overgangsperiode (bij Meridiaan: minimaal een kwartaal, om ook kwartaalrapportages de kans te geven om mee te bewegen). Ten tweede: elk team dat een nieuw abonnement op een event-gedreven kanaal start, publiceert een minimaal contract (welke velden worden gebruikt) in een gedeeld register, dat het integratieteam raadpleegt vóórdat een wijziging aan het kanaal wordt goedgekeurd.</p>
+<p>Geen van beide maatregelen is technisch geavanceerd — de waarde zit in de discipline, niet in het gereedschap. Dat is precies waarom dit onderwerp, ondanks zijn schijnbare eenvoud, een eigen deel verdient: het probleem is niet moeilijk om te <em>begrijpen</em>, het is moeilijk om <em>consequent toe te passen</em> in een landschap waar het verleidelijk is om "even snel een veld te hernoemen".</p>
+<hr>
+<h2>Samenvatting van deel 20</h2>
+<ul>
+<li>Een contractwijziging op een event-gedreven kanaal breekt stil en vertraagd, bij consumenten die de zender vaak niet eens kent — anders dan bij een synchrone API, waar een breking direct en zichtbaar is.</li>
+<li>Achterwaarts-compatibele wijzigingen (nieuw optioneel veld, verruiming) laten bestaande consumenten ongestoord doorwerken; niet-compatibele wijzigingen (hernoemen, verwijderen, type wijzigen, optioneel verplicht maken) breken hen, vaak zonder foutmelding.</li>
+<li>Het fundamentele probleem is dat de zender zijn consumenten niet kent — een expliciet consumentenregister en consumer-driven contracts keren dit om door consumenten hun afhankelijkheden zelf te laten verklaren.</li>
+<li>De discipline (additief-eerst, overgangsperiodes, expliciete registratie) is organisatorisch, niet primair technisch — en juist daarom makkelijk te verwaarlozen totdat een incident de kosten ervan zichtbaar maakt.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 21 keert terug naar de hoofdlijn van de cursus en verdiept observability in ketens: distributed tracing, correlation, en message history in productie — hoe je, in een landschap dat inmiddels tien delen aan patronen diep is, ziet wat er in productie daadwerkelijk gebeurt, real-time.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-19/reader.html">&larr; Deel 19 — Outbox-pattern en transactional messaging</a><a class="eip-prevnext next" href="../deel-21/reader.html">Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

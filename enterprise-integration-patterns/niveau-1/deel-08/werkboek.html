@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 1 · deel 8 van 10</p>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>Opdracht 8.1 — Idempotent, maar toch fout</h2>
+<p>Leg uit waarom de drie adreswijzigingen uit 8.0 elk individueel idempotent waren (volgens de definitie uit deel 7), en toch tot een foutief eindresultaat leidden. Wat zegt dit over de relatie tussen idempotentie en volgorde?</p>
+<hr>
+<h2>Opdracht 8.2 — Commutatief of niet</h2>
+<p>Bepaal voor elk paar berichten of ze commutatief zijn (volgorde maakt niet uit) of niet (volgorde maakt wel uit).</p>
+<ol>
+<li>Twee adreswijzigingen voor dezelfde deelnemer, kort na elkaar ingediend.</li>
+<li>Een adreswijziging voor deelnemer A en een salariscorrectie voor deelnemer B.</li>
+<li>Een dienstverbandmutatie ("in dienst") en een adreswijziging, allebei voor dezelfde deelnemer, kort na elkaar.</li>
+<li>Twee salariscorrecties voor dezelfde deelnemer: eerst "corrigeer naar €12.340", dan "corrigeer naar €12.500".</li>
+</ol>
+<hr>
+<h2>Opdracht 8.3 — Partitioneringssleutel kiezen</h2>
+<p>Meridiaan overweegt drie mogelijke partitioneringssleutels voor het mutatiekanaal: deelnemersnummer, werkgevers-ID, en mutatietype. Beoordeel elke optie op basis van kernzin 8 (volgorde doet er alleen toe binnen de grens van hetzelfde object).</p>
+<hr>
+<h2>Opdracht 8.4 — Leveringsgarantie versus guaranteed delivery</h2>
+<p>Een collega zegt: "we hebben at-least-once ingesteld, dus onze berichten zijn gegarandeerd betrouwbaar." Leg uit wat er ontbreekt aan deze bewering, aan de hand van de vuistregel in 8.3.</p>
+<hr>
+<h2>Zelftoets deel 8</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is het verschil tussen het probleem dat idempotentie oplost (deel 7) en het probleem dat volgordeborging oplost (dit deel)?</li>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Wat betekent "commutatief" in de context van dit deel, en geef een voorbeeld van twee commutatieve en twee niet-commutatieve berichten.</li>
+<li>Waarom is "volgorde over het hele kanaal afdwingen" een zware maatregel, en wat is het goedkopere alternatief?</li>
+<li>Hoe kies je een goede partitioneringssleutel?</li>
+<li>Wat is guaranteed delivery, en hoe verschilt het van de leveringsgaranties uit deel 7?</li>
+<li>Waarom bleven de drie adreswijzigingen uit 8.0 elk individueel idempotent, maar leidde hun combinatie toch tot een fout?</li>
+</ol>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 8.1</h2>
+<p>Elke afzonderlijke adreswijziging was idempotent: "stel adres in op X" geeft, twee keer uitgevoerd, hetzelfde resultaat als één keer — precies de definitie uit deel 7. Het probleem zat niet in herhaling van hetzélfde bericht, maar in de verkeerde volgorde van drie verschíllende berichten die elk een ander adres instelden. Idempotentie zegt niets over de relatie tússen verschillende berichten, alleen over het effect van herhaling van één en hetzelfde bericht.</p>
+<p><strong>Wat je hier moet meenemen:</strong> idempotentie en volgordegarantie zijn orthogonale eigenschappen — de ene lost het probleem van de andere niet op. Een systeem kan volledig idempotent zijn en toch systematisch foutieve eindresultaten opleveren door verkeerde volgorde.</p>
+<h2>Uitwerking 8.2</h2>
+<p>a. <strong>Niet commutatief.</strong> Precies de casus van dit deel — het eindresultaat hangt af van welke wijziging het laatst wordt toegepast.</p>
+<p>b. <strong>Commutatief.</strong> Verschillende deelnemers, geen onderlinge afhankelijkheid — het maakt niet uit welke van de twee eerst wordt verwerkt.</p>
+<p>c. <strong>Waarschijnlijk niet commutatief</strong>, en subtieler dan a: hoewel de twee berichten verschillende velden raken (dienstverbandstatus versus adres), kan er een impliciete afhankelijkheid bestaan als bijvoorbeeld de adreswijziging alleen geldig is voor een deelnemer die al "in dienst" is. Dit is een goed voorbeeld van een grensgeval dat op het eerste gezicht commutatief lijkt (andere velden) maar het bij nader inzien niet is door een bedrijfsregel die de twee velden aan elkaar koppelt.</p>
+<p>d. <strong>Niet commutatief</strong>, ook al zijn beide operaties individueel idempotent (elk "corrigeer naar" is idempotent op zichzelf). Het eindresultaat (€12.340 of €12.500) hangt af van welke van de twee het laatst wordt toegepast — dit is bewust dezelfde valkuil als in 8.1: idempotentie van elke afzonderlijke operatie garandeert niets over de combinatie van twee verschillende operaties op hetzelfde veld.</p>
+<p><strong>Wat je hier moet meenemen:</strong> situatie c laat zien dat "commutatief" niet alleen afhangt van of twee berichten hetzelfde veld raken, maar ook van verborgen bedrijfsregels die velden aan elkaar koppelen — dezelfde soort verborgen aanname als de volgorde-afhankelijkheid tussen abonnees in deel 6.</p>
+<h2>Uitwerking 8.3</h2>
+<p><strong>Deelnemersnummer</strong> — juiste keuze, zoals in de reader. Volgorde doet ertoe binnen de mutatiegeschiedenis van één deelnemer; verschillende deelnemers zijn onderling commutatief.</p>
+<p><strong>Werkgevers-ID</strong> — te grofmazig. Dit zou alle mutaties van alle deelnemers bij één werkgever naar dezelfde verwerker dwingen, ook als die deelnemers onderling volledig commutatief zijn (deelnemer A's adreswijziging heeft geen enkele relatie met deelnemer B's salariscorrectie, ook al werken ze voor dezelfde werkgever). Dit kost onnodig doorvoersnelheid zonder een echt volgordeprobleem op te lossen.</p>
+<p><strong>Mutatietype</strong> — verkeerde sleutel, verwart twee verschillende beslissingen. Dit is de sleutel die in deel 4 voor routering werd gebruikt (welk kanaal), niet voor volgordeborging (welke verwerker binnen een kanaal). Partitioneren op mutatietype zou juist averechts werken: het zou bijvoorbeeld alle salariscorrecties van álle deelnemers door dezelfde verwerker forceren, terwijl salariscorrecties van verschillende deelnemers onderling wél commutatief zijn — en het zou de drie mutaties van 8.0 (die toevallig alle drie adreswijzigingen waren, dus toevallig hetzelfde type) niet noodzakelijk in de juiste onderlinge volgorde houden als er tussendoor een ander type voor dezelfde deelnemer was verzonden.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de juiste partitioneringssleutel valt samen met de grens waarbinnen commutativiteit ophoudt te gelden — niet met een sleutel die toevallig ook bestaat (zoals werkgever of type) maar een andere grens beschrijft.</p>
+<h2>Uitwerking 8.4</h2>
+<p>At-least-once (deel 7) beschrijft alleen het gedrag van de zender: blijft hij proberen totdat hij een bevestiging krijgt. Het zegt niets over wat er gebeurt nádat het kanaal die bevestiging heeft afgegeven — als de broker zelf berichten alleen in geheugen bewaart en herstart voordat een ontvanger het bericht heeft opgehaald, kan het bericht alsnog verloren gaan, terwijl de zender allang tevreden is gestopt met retryen (hij heeft immers zijn bevestiging al gekregen). Dat is precies wat er bij de geplande broker-herstart bij Meridiaan gebeurde.</p>
+<p>Om werkelijk "gegarandeerd betrouwbaar" te zijn, moet naast de leveringsgarantie (zendergedrag) ook guaranteed delivery (persistente opslag in het kanaal zelf) expliciet zijn geconfigureerd. Dit is typisch een infrastructurele instelling, geen berichtenontwerp-keuze — en dus makkelijk te vergeten, omdat het niet zichtbaar is in de code die berichten verstuurt of ontvangt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "we hebben een leveringsgarantie ingesteld" beantwoordt maar de helft van de vraag "is dit bericht veilig". De andere helft zit in de configuratie van het kanaal zelf.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Idempotentie beschermt tegen een dubbel bericht met hetzelfde effect als één keer; volgordeborging beschermt tegen twee verschillende berichten die, verkeerd geordend, een ander eindresultaat opleveren dan bedoeld.</li>
+<li>Volgorde doet er alleen toe binnen de grens van hetzelfde object — bewaak volgorde per deelnemer, per polis, per entiteit, nooit over het hele kanaal in het algemeen.</li>
+<li>Commutatief betekent dat het eindresultaat hetzelfde is ongeacht de volgorde van toepassing. Voorbeeld commutatief: mutaties van twee verschillende deelnemers. Voorbeeld niet-commutatief: twee opeenvolgende adreswijzigingen van dezelfde deelnemer.</li>
+<li>Het dwingt alle berichten door één seriële verwerker, wat de doorvoersnelheid van parallelle verwerking grotendeels tenietdoet. Het goedkopere alternatief: partitioneer op een sleutel die samenvalt met de grens waarbinnen volgorde ertoe doet, zodat parallellie tussen objecten behouden blijft.</li>
+<li>Kies een sleutel die samenvalt met de grens waarbinnen commutativiteit ophoudt te gelden — niet fijnmaziger (verliest de volgordegarantie) en niet grover (kost onnodig doorvoersnelheid) dan die grens.</li>
+<li>Guaranteed delivery is de garantie dat een bericht, eenmaal aangenomen door het kanaal, niet meer verloren gaat vóór aflevering, ook niet bij een storing van het kanaal zelf. Leveringsgaranties (deel 7) beschrijven het gedrag van de zender (blijft hij proberen); guaranteed delivery beschrijft wat er ná aanname met het bericht gebeurt.</li>
+<li>Omdat idempotentie alleen garandeert dat herhaling van hetzélfde bericht geen extra effect heeft — het zegt niets over de combinatie van meerdere, verschillende berichten die in de verkeerde volgorde worden toegepast.</li>
+</ol>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-07/reader.html">&larr; Deel 7 — Betrouwbaarheid I: garanties en idempotentie</a><a class="eip-prevnext next" href="../deel-09/reader.html">Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

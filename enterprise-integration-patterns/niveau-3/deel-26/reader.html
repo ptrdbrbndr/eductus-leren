@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 26 — Poison messages en retry-topologie op schaal — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 26 — Poison messages en retry-topologie op schaal</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 3 (expert) · deel 26 van 30</p>
+<hr>
+<h2>26.0 Eén bericht dat de hele rekenkern platlegde</h2>
+<p>Tijdens een testrun van de invaarketen bleek één specifiek deelnemersdossier — met een historische, decennia oude gegevensinconsistentie die niemand ooit had opgemerkt omdat hij nooit relevant was geweest voor gewone mutaties — de rekenkern bij elke verwerkingspoging te laten vastlopen. Niet gecrasht: <strong>vastgelopen</strong>, in een oneindige berekeningslus die de rekenkern volledig in beslag nam. Omdat de retry-strategie van deel 9 automatisch een nieuwe poging deed zodra de vorige "mislukte" (technisch gezien liep de lus wel af, na een zeer lange tijd, met een generieke fout), werd dit specifieke dossier keer op keer opnieuw aangeboden — en blokkeerde daarmee, door de gedeelde rekenkerncapaciteit, ook de verwerking van alle andere, gezonde dossiers die toevallig achter dit ene dossier in de wachtrij stonden.</p>
+<p>Dit is een <strong>poison message</strong>: een bericht dat, in tegenstelling tot het gewone onderscheid uit deel 9 (structureel ongeldig versus tijdelijk mislukt), geen van beide is — het is <strong>individueel, structureel schadelijk voor de verwerkende component zelf</strong>, ongeacht hoe vaak of hoe zorgvuldig het opnieuw wordt aangeboden. Het bericht zelf is niet per se ongeldig (het dossier bestaat, de velden zijn correct gevormd), maar de combinatie van dit specifieke bericht en deze specifieke verwerkingslogica leidt tot een uitputtend, blokkerend faalpatroon.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-26/figuur-26-1-poison-message-blokkade.svg" alt="Een wachtrij met tien dossiers; het eerste dossier (&quot;poison&quot;) blokkeert de rekenkern in een lus, waardoor de negen gezonde dossiers erachter nooit worden bereikt — met een tijdlijn die laat zien hoe de vertraging zich opstapelt." loading="lazy"><figcaption>Figuur 26-1 — Een wachtrij met tien dossiers; het eerste dossier ("poison") blokkeert de rekenkern in een lus, waardoor de negen gezonde dossiers erachter nooit worden bereikt — met een tijdlijn die laat zien hoe de vertraging zich opstapelt.</figcaption></figure>
+<hr>
+<h2>26.1 Waarom het onderscheid uit deel 9 hier tekortschiet</h2>
+<p>Deel 9 onderscheidde invalid message channel (structureel ongeldig, geen retry zinvol) van dead letter channel (tijdelijk mislukt, retry met backoff zinvol). Een poison message past in geen van beide categorieën netjes: het bericht is niet structureel ongeldig in de zin van deel 9 (het voldoet aan het schema, de velden zijn correct), maar het is ook niet "tijdelijk" mislukt in de zin dat een latere poging waarschijnlijker zou slagen — integendeel, elke identieke poging zal identiek mislukken, omdat de oorzaak in de <strong>combinatie</strong> van bericht en verwerkingslogica zit, niet in een tijdelijke externe omstandigheid.</p>
+<blockquote><p><strong>Kernzin 26 van de cursus: een poison message onderscheidt zich van de twee categorieën uit deel 9 doordat retries niet alleen nutteloos zijn, maar actief schadelijk — elke herhaalde poging verbruikt capaciteit die andere, gezonde berichten nodig hebben, zonder ooit dichter bij een oplossing te komen.</strong></p></blockquote>
+<p>De praktische consequentie: een retry-strategie die uitsluitend is afgestemd op "hoe vaak proberen we het" (deel 9) moet worden aangevuld met een mechanisme dat specifiek detecteert <strong>wanneer een bericht de verwerkende component zelf schaadt</strong>, onafhankelijk van het aantal pogingen — en dat bericht dan onmiddellijk isoleert, niet pas na het uitputten van een retry-budget dat in dit geval nooit tot een oplossing had kunnen leiden.</p>
+<hr>
+<h2>26.2 Retry-topologie: schaal verandert het risico</h2>
+<p>Op de schaal van niveau 1 (één koppeling) was een poison message een geïsoleerd incident. Op de schaal van niveau 3, waar de rekenkern duizenden dossiers per dag verwerkt via een gedeelde, parallel verwerkende infrastructuur (deel 16), verandert de aard van het risico: één poison message blokkeert niet alleen zichzelf, maar — zoals 26.0 liet zien — potentieel de hele wachtrij erachter, of, bij partitionering (deel 8), minstens de hele partitie waarin het toevallig terechtkwam.</p>
+<p>Dit vraagt een expliciet ontworpen <strong>retry-topologie</strong>: niet één simpele retry-met-backoff (deel 9), maar een gelaagde structuur die voorkomt dat één schadelijk bericht de doorstroom van gezonde berichten blokkeert.</p>
+<p><strong>Isolatie per bericht, niet per wachtrij.</strong> Als één bericht een verwerkingspoging structureel laat vastlopen (bijvoorbeeld door een time-out te overschrijden die voor een normaal bericht ruim voldoende zou zijn), moet dat specifieke bericht apart worden behandeld — verplaatst naar een geïsoleerde "quarantainewachtrij" — zonder de hoofdwachtrij te blokkeren voor de berichten erachter. Dit vraagt technisch een mechanisme dat een individuele verwerking kan afbreken (een time-out op de verwerking zelf, niet alleen op de aflevering) en het probleembericht apart kan doorsturen, in plaats van te wachten tot de hele poging "faalt" op de gewone manier.</p>
+<p><strong>Een lager retry-budget voor snel-falende patronen.</strong> In lijn met de asymmetrie uit deel 9 (structurele fouten verdienen kortere retry-reeksen dan tijdelijke), maar hier verder aangescherpt: een verwerking die een duidelijk teken van een poison-patroon vertoont (bijvoorbeeld: verwerkingstijd die exponentieel oploopt in plaats van een normale, begrensde tijd), verdient een minimaal retry-budget — vaak nul aanvullende pogingen na de eerste — omdat elke extra poging bewezen schadelijk is, niet slechts kansloos.</p>
+<p><strong>Circuit-achtig gedrag op componentniveau</strong>, vooruitwijzend naar deel 27: als een rekenkern-instantie meerdere poison messages kort na elkaar tegenkomt, is dat zelf een signaal dat om een bredere maatregel vraagt dan het isoleren van individuele berichten — mogelijk is er een systematisch probleem (een edge case in de rekenlogica die vaker voorkomt dan gedacht) dat om onderzoek vraagt, niet alleen om isolatie van losse gevallen.</p>
+<hr>
+<h2>26.3 Wat Meridiaan uiteindelijk inrichtte</h2>
+<p>Na het incident van 26.0 is bij de rekenkern een expliciete verwerkingstime-out ingesteld (los van de gebruikelijke berichtaflevering-time-out uit deel 7-8): als de daadwerkelijke berekening langer duurt dan een ruim bemeten, maar begrensd maximum, wordt de verwerking actief afgebroken en het bericht direct naar een quarantainewachtrij verplaatst — met, cruciaal, een aparte, hogere prioriteit voor menselijk onderzoek dan het gewone dead letter channel (deel 9), omdat een poison message in de invaarketen per definitie een teken is van een datakwaliteitsprobleem dat de eerdere validatiestap (deel 25) blijkbaar had moeten, maar niet had, opgevangen.</p>
+<p>Dit laatste punt is de belangrijkste les van dit deel voor de bredere keten: <strong>elke poison message die de rekenkern bereikt, is óók een signaal dat de datakwaliteitscontrole (deel 25) een gat heeft</strong> — het incident wordt dus niet alleen technisch opgelost (isolatie, quarantaine), maar ook gebruikt om de eerdere, blokkerende validatiestap te verscherpen, zodat toekomstige, vergelijkbare dossiers al ver vóór de rekenkern worden herkend.</p>
+<hr>
+<h2>Samenvatting van deel 26</h2>
+<ul>
+<li>Een poison message is geen structureel ongeldig bericht en geen tijdelijk mislukt bericht (deel 9), maar een bericht dat de verwerkende component zelf structureel schaadt, onafhankelijk van het aantal pogingen.</li>
+<li>Retries op een poison message zijn niet alleen nutteloos maar actief schadelijk — ze verbruiken gedeelde capaciteit die andere, gezonde berichten nodig hebben.</li>
+<li>Een retry-topologie op schaal vraagt isolatie per bericht (quarantaine, niet de hele wachtrij blokkeren), een verlaagd retry-budget voor snel-falende patronen, en signalering naar bredere maatregelen bij herhaalde poison-patronen.</li>
+<li>Bij Meridiaan is een poison message in de invaarketen expliciet ook een signaal dat de eerdere datakwaliteitscontrole (deel 25) verscherpt moet worden.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 27 bouwt hierop voort met resilience patterns die specifiek een component beschermen tegen overbelasting door zijn omgeving: circuit breaker, bulkhead, en backpressure — asynchrone varianten van patronen die de API-cursus synchroon behandelt.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-25/reader.html">&larr; Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit</a><a class="eip-prevnext next" href="../deel-27/reader.html">Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

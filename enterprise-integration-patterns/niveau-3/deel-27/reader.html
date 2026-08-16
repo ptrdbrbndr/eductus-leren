@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 27 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 3 (expert) · deel 27 van 30</p>
+<hr>
+<h2>27.0 Een langzaam systeem dat een gezond systeem meesleepte</h2>
+<p>Twee weken na het poison-message-incident van deel 26 deed zich een ander soort probleem voor: het datakwaliteitscontrolesysteem begon, door een onverwacht hoog volume aan gelijktijdige invaaraanvragen tijdens een piekperiode, structureel trager te reageren dan normaal — niet vastgelopen zoals bij een poison message, maar <strong>consistent, aanhoudend traag</strong>, ruim boven de normale verwerkingstijd. De rekenkern, die op elke validatie-uitkomst wachtte voordat hij verderging (deel 25's georkestreerde, blokkerende afhankelijkheid), begon zelf ook capaciteit vast te houden voor elke wachtende aanvraag — met als gevolg dat, binnen een uur, ook de rekenkern zelf overbelast raakte en trager werd voor iedereen, inclusief aanvragen die niets met de piekbelasting te maken hadden.</p>
+<p>Dit is een ander patroon dan een poison message: geen individueel, schadelijk bericht, maar een <strong>structurele overbelasting van één component die zich, via bindende afhankelijkheden, verspreidt naar andere, op zichzelf gezonde componenten</strong> — een cascade-effect. Dit deel behandelt drie patronen die dit voorkomen, elk bekend uit de synchrone wereld van de API-cursus, hier vertaald naar hun asynchrone vorm.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-27/figuur-27-1-cascade-tijdlijn.svg" alt="Een tijdlijn: eerst alleen het datakwaliteitscontrolesysteem traag, dan binnen een uur ook de rekenkern, dan de hele invaarketen — een cascade die zich als een golf door de keten verspreidt." loading="lazy"><figcaption>Figuur 27-1 — Een tijdlijn: eerst alleen het datakwaliteitscontrolesysteem traag, dan binnen een uur ook de rekenkern, dan de hele invaarketen — een cascade die zich als een golf door de keten verspreidt.</figcaption></figure>
+<hr>
+<h2>27.1 De circuit breaker, asynchroon</h2>
+<p>De <strong>circuit breaker</strong> uit de API-cursus onderbreekt, bij een synchrone aanroep, actief de verbinding naar een structureel falende of trage downstream-dienst — na een aantal mislukkingen "opent" het circuit, en verdere aanroepen falen onmiddellijk in plaats van te wachten op een timeout, totdat een periodieke testaanroep aangeeft dat de dienst hersteld is.</p>
+<p>In een asynchrone keten is de vertaling niet triviaal, omdat er, anders dan bij een synchrone aanroep, geen aanvrager is die "wacht" op een direct antwoord (deel 3) — het circuit-breaker-concept moet daarom worden toegepast op de <strong>plek waar een asynchrone consument alsnog blokkerend of semi-blokkerend gedrag vertoont</strong>, zoals bij Meridiaan's georkestreerde afhankelijkheid tussen rekenkern en datakwaliteitscontrole (deel 25), waar de rekenkern feitelijk wacht op een antwoord voordat hij verdergaat.</p>
+<p>De asynchrone circuit breaker werkt hier als volgt: de orkestrator (deel 17) die de afhankelijkheid tussen rekenkern en datakwaliteitscontrole beheert, houdt het slagingspercentage en de antwoordtijd van recente aanroepen bij. Zodra een drempel wordt overschreden (bijvoorbeeld: meer dan een vastgesteld percentage aanroepen duurt langer dan een acceptabele grens), "opent" het circuit: nieuwe aanvragen aan het datakwaliteitscontrolesysteem worden niet langer verstuurd, maar onmiddellijk teruggekoppeld als "tijdelijk niet beschikbaar" — met een expliciet, apart bericht naar de aanvrager (in lijn met deel 3's non-blocking-principe), in plaats van dat de rekenkern zelf capaciteit blijft vasthouden in afwachting van een antwoord dat toch te lang zou duren.</p>
+<blockquote><p><strong>Kernzin 27 van de cursus: een asynchrone circuit breaker onderbreekt niet de verbinding zelf (die blijft, als kanaal, gewoon bestaan) maar het <em>wachten op een tijdig antwoord</em> — hij beschermt de wachtende partij, niet het kanaal.</strong></p></blockquote>
+<hr>
+<h2>27.2 De bulkhead</h2>
+<p>Een <strong>bulkhead</strong> (naar het scheepvaartconcept van waterdichte compartimenten die voorkomen dat één lek het hele schip doet zinken) isoleert capaciteit tussen verschillende soorten verkeer, zodat overbelasting door het ene type verkeer niet automatisch de capaciteit voor een ander type verkeer opeet.</p>
+<p>Bij Meridiaan bleek het incident van 27.0 verergerd doordat de rekenkern <strong>één gedeelde capaciteitspool</strong> gebruikte voor zowel reguliere invaaraanvragen als voor een tweede, minder kritieke functie: het herberekenen van reeds ingevaren aanspraken ten behoeve van periodieke controlerapportages. Toen de piekbelasting toesloeg, verbruikten beide soorten aanvragen dezelfde, beperkte capaciteit — de kritieke, wettelijk tijdgebonden invaaraanvragen wachtten letterlijk achter de minder urgente controleherberekeningen.</p>
+<p>Een bulkhead lost dit op door <strong>aparte capaciteitspools</strong> toe te wijzen aan elk type verkeer: een vaste, gereserveerde capaciteit voor reguliere invaaraanvragen die nooit door controleherberekeningen kan worden opgesoupeerd, en een aparte, kleinere pool voor de minder kritieke functie. Dit is, conceptueel, een asynchrone toepassing van hetzelfde partitioneringsprincipe dat deel 8 introduceerde — alleen daar ging het om volgordegarantie per object, hier om <strong>capaciteitsisolatie per verkeerssoort</strong>.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-27/figuur-27-2-gedeelde-versus-gescheiden-pools.svg" alt="Eén gedeelde capaciteitspool (vóór de maatregel) versus twee gescheiden pools — invaaraanvragen en controleherberekeningen — elk met een eigen, gegarandeerde capaciteit die niet door de andere kan worden opgesoupeerd." loading="lazy"><figcaption>Figuur 27-2 — Eén gedeelde capaciteitspool (vóór de maatregel) versus twee gescheiden pools — invaaraanvragen en controleherberekeningen — elk met een eigen, gegarandeerde capaciteit die niet door de andere kan worden opgesoupeerd.</figcaption></figure>
+<hr>
+<h2>27.3 Backpressure</h2>
+<p><strong>Backpressure</strong> is het mechanisme waarmee een trage of overbelaste consument expliciet aan zijn zender(s) signaleert dat hij minder snel kan verwerken dan er wordt aangeboden, zodat de zender zijn eigen tempo kan aanpassen — in plaats van dat de consument onder de druk bezwijkt, of dat berichten zich onbeheerst opstapelen in een steeds groter wordende wachtrij.</p>
+<p>Dit is fundamenteel anders dan de circuit breaker (27.1), die een verbinding volledig onderbreekt bij structureel falen — backpressure is een <strong>geleidelijk, continu signaal</strong>, bedoeld voor de situatie waarin een consument nog wel functioneert, maar niet op het tempo dat wordt aangeboden. Bij Meridiaan is dit toegepast op de relatie tussen de mutatie-invoerbronnen (deel 5: portaal, csv-batch, zelfbedieningsportaal) en de rekenkern: als de rekenkern's wachtrij een ingestelde drempel nadert, signaleert hij expliciet terug naar de invoerbronnen dat zij hun aanlevertempo moeten vertragen — bijvoorbeeld door de csv-batchupload zijn volgende batch pas na een langere pauze te laten aanbieden.</p>
+<p>Zonder backpressure zou de wachtrij onbeperkt blijven groeien totdat een harde limiet wordt bereikt (geheugen vol, opslag vol), met een abrupte, oncontroleerbare storing als gevolg — vergelijkbaar met hoe een niet-ingestelde message history (deel 15) onbeperkt kan groeien. Met backpressure ontstaat een <strong>gecontroleerde vertraging</strong> die zich evenredig over de hele keten verdeelt, in plaats van een oncontroleerbare instorting bij één component.</p>
+<blockquote><p><strong>Vuistregel: een circuit breaker beschermt tegen structureel falen (aan of uit); een bulkhead beschermt tegen verdringing tussen verkeerssoorten (gescheiden ruimtes); backpressure beschermt tegen geleidelijke overbelasting (gecontroleerd vertragen). Alle drie zijn nodig, want ze beschermen tegen verschillende faalpatronen.</strong></p></blockquote>
+<hr>
+<h2>Samenvatting van deel 27</h2>
+<ul>
+<li>Overbelasting van één component kan, via bindende afhankelijkheden, cascaderen naar andere, op zichzelf gezonde componenten — een ander patroon dan het geïsoleerde faalgedrag van een poison message (deel 26).</li>
+<li>De circuit breaker, asynchroon vertaald, onderbreekt niet het kanaal maar het wachten op een tijdig antwoord, en geeft de aanvrager een expliciet, non-blocking signaal in plaats van te blijven wachten.</li>
+<li>Een bulkhead isoleert capaciteit tussen verkeerssoorten, zodat minder kritiek verkeer nooit de capaciteit voor kritiek, tijdgebonden verkeer kan opsouperen.</li>
+<li>Backpressure laat een overbelaste consument expliciet zijn tempo terugkoppelen naar zenders, voor een gecontroleerde vertraging in plaats van een oncontroleerbare instorting.</li>
+<li>De drie patronen beschermen tegen verschillende faalpatronen en zijn complementair, niet inwisselbaar.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 28 verlaat individuele incidentbestrijding en behandelt governance en lifecycle van een event backbone op de schaal die de Stelselovergang vereist: versiebeleid, deprecatie, en de impact van wijzigingen op een groeiend aantal, deels wettelijk verplichte consumenten.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-26/reader.html">&larr; Deel 26 — Poison messages en retry-topologie op schaal</a><a class="eip-prevnext next" href="../deel-28/reader.html">Deel 28 — Governance en lifecycle van een event backbone &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

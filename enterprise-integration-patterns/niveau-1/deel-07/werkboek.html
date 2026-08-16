@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 7 — Betrouwbaarheid I: garanties en idempotentie — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 7 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 7 — Betrouwbaarheid I: garanties en idempotentie</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 1 · deel 7 van 10</p>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>Opdracht 7.1 — Welke garantie voor welk scenario</h2>
+<p>Bepaal voor elk scenario welke leveringsgarantie het beste past, en motiveer met het risico dat je wilt vermijden.</p>
+<ol>
+<li>Een "hartslag"-bericht dat elke tien seconden aangeeft dat een systeem nog leeft, gebruikt voor monitoring.</li>
+<li>Een salariscorrectie.</li>
+<li>Een druk bezochte statistiekteller die het aantal paginaweergaven bijhoudt, waarbij een incidentele afwijking van een paar tellen geen enkele consequentie heeft.</li>
+</ol>
+<hr>
+<h2>Opdracht 7.2 — Idempotent of niet</h2>
+<p>Bepaal voor elke operatie of hij idempotent is. Zo nee: herschrijf hem naar een idempotente variant, indien mogelijk.</p>
+<ol>
+<li><code>voeg 50 punten toe aan de loyaliteitsrekening</code></li>
+<li><code>stel de status van mutatie X in op 'verwerkt'</code></li>
+<li><code>verstuur een bevestigingsmail naar de werkgever</code></li>
+<li><code>verwijder deelnemer Y uit de wachtlijst</code></li>
+</ol>
+<hr>
+<h2>Opdracht 7.3 — Welk niveau van idempotentie</h2>
+<p>Voor elk scenario: welk van de drie niveaus uit 7.3 (verwerkingslog, idempotente operatie, atomaire borging) is minimaal nodig, en waarom volstaat een lager niveau niet?</p>
+<ol>
+<li>Het versturen van een e-mailbevestiging (geen financiële consequentie bij een enkele dubbele mail).</li>
+<li>De salariscorrectie uit de hoofdcasus.</li>
+<li>Een mutatie die zowel een saldo aanpast als een audit-regel wegschrijft, waarbij beide altijd samen moeten kloppen.</li>
+</ol>
+<hr>
+<h2>Opdracht 7.4 — Idempotentie versus correlatie</h2>
+<p>Een ontwikkelaar stelt voor om de correlatie-ID te hergebruiken als bericht-ID voor idempotentiecontrole, "om niet twee velden te hoeven bijhouden". Leg aan de hand van 7.4 uit wanneer dit misgaat.</p>
+<hr>
+<h2>Zelftoets deel 7</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Noem de drie leveringsgaranties en het risico dat elk van hen accepteert.</li>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Waarom is at-least-once in de praktijk de meest gangbare keuze?</li>
+<li>Wat is idempotentie, en wiens verantwoordelijkheid is het om die te bouwen — de zender, het kanaal, of de ontvanger?</li>
+<li>Noem de drie niveaus van idempotentie-ontwerp.</li>
+<li>Waarom is "verhoog het saldo met €340" niet idempotent, en "stel het saldo in op €12.340" wel?</li>
+<li>Wat is het verschil tussen idempotentie en correlatie, en waarom gebruik je er bij voorkeur twee aparte identifiers voor?</li>
+</ol>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 7.1</h2>
+<p>a. <strong>At-most-once</strong> is hier verdedigbaar: als één hartslag verloren gaat, volgt er over tien seconden vanzelf een nieuwe. Het risico van at-least-once (dubbele hartslagen) voegt hier niets toe, en het risico van at-most-once (een gemiste hartslag) wordt door de aard van het bericht zelf binnen tien seconden gecorrigeerd.</p>
+<p>b. <strong>At-least-once</strong>, met verplichte idempotentie aan de ontvangende kant — precies de casus van dit deel. Berichtverlies is hier onacceptabel (een deelnemer die zijn correctie nooit krijgt), dus at-most-once valt af; volledige exactly-once is niet nodig zolang idempotentie het duplicatierisico van at-least-once opvangt.</p>
+<p>c. <strong>At-most-once</strong> is hier verdedigbaar, om dezelfde reden als a: het scenario zelf tolereert kleine afwijkingen, dus de eenvoud van at-most-once weegt op tegen het kleine risico op afwijking.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze hangt niet af van "hoe belangrijk voelt dit bericht", maar van de concrete vraag: wat kan dit specifieke systeem beter hebben — een gemist bericht of een dubbel bericht? Bij a en c is een gemist bericht draaglijker; bij b niet.</p>
+<h2>Uitwerking 7.2</h2>
+<p>a. <strong>Niet idempotent.</strong> Twee keer uitvoeren = 100 punten in plaats van 50. Herschrijf naar: <code>stel de loyaliteitsrekening in op [huidig totaal + 50, berekend op het moment van de oorspronkelijke transactie]</code> — in de praktijk vaak opgelost door de optelling zelf te koppelen aan een uniek transactie-ID dat maar één keer wordt toegepast (dus eigenlijk niveau 1-idempotentie: een verwerkingslog per transactie, niet een herschrijving van de optelling zelf, want "50 punten toevoegen" is inherent een optelling en moeilijk zuiver idempotent te herschrijven zonder de transactie-ID-benadering).</p>
+<p>b. <strong>Idempotent.</strong> Twee keer "stel in op 'verwerkt'" geeft hetzelfde eindresultaat als één keer. Dit is een voorbeeld van een operatie die van nature al idempotent is, zonder aanpassing nodig.</p>
+<p>c. <strong>Niet idempotent in het zichtbare effect</strong> (de werkgever krijgt twee mails), maar ook niet gevaarlijk in dezelfde zin als a — geen datacorruptie, wel een ongewenste dubbele communicatie. Herschrijf door een verwerkingslog op bericht-ID te gebruiken (niveau 1): controleer vóór verzending of deze specifieke mail al is verstuurd voor dit bericht-ID.</p>
+<p>d. <strong>Idempotent</strong>, mits de operatie zelf al zo is geformuleerd: "verwijderen" van iets dat al verwijderd is, heeft doorgaans geen extra effect (de deelnemer staat na de tweede uitvoering nog steeds niet op de wachtlijst). Let op: dit is alleen waar als "verwijderen" geen foutmelding of bijeffect geeft wanneer het element al afwezig is — een implementatie die een exception gooit bij een niet-bestaand element is in de praktijk alsnog niet idempotent.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "toevoegen" en "optellen" zijn typisch niet idempotent van aard; "instellen op" en "verwijderen" zijn dat vaak wel, mits zorgvuldig geïmplementeerd.</p>
+<h2>Uitwerking 7.3</h2>
+<p>a. <strong>Niveau 1 (verwerkingslog)</strong> volstaat. Het risico van een enkele gemiste of dubbele mail door een randgeval in de log-controle is acceptabel gezien de lage impact.</p>
+<p>b. <strong>Niveau 1 én niveau 2 samen</strong>, zoals in de reader beschreven: een verwerkingslog als eerste linie, plus een idempotent geformuleerde operatie ("corrigeer naar eindbedrag") als vangnet mocht de log om welke reden dan ook falen. Niveau 1 alleen is kwetsbaar voor het randgeval waarin de crash tussen "ID genoteerd" en "verwerking afgerond" valt.</p>
+<p>c. <strong>Niveau 3 (atomaire borging)</strong> is hier het meest passend: saldo-aanpassing en audit-regel moeten samen kloppen, dus zowel de verwerkingslogregistratie als de daadwerkelijke verwerking (inclusief beide deelacties) horen binnen dezelfde transactionele grens te vallen. Een niveau 1-log die los van de transactie wordt bijgewerkt, loopt het risico dat een crash tussen de twee deelacties een inconsistente toestand achterlaat die de log niet detecteert.</p>
+<p><strong>Wat je hier moet meenemen:</strong> hoe hoger de consequentie van een inconsistentie, hoe dichter de idempotentieborging bij de daadwerkelijke verwerking moet liggen — bij lage impact is een aparte, losstaande log voldoende; bij hoge impact moet de borging in dezelfde transactie zitten.</p>
+<h2>Uitwerking 7.4</h2>
+<p>Zolang er een strikte één-op-één-relatie is tussen een verzoek en zijn eventuele retries (dezelfde correlatie-ID bij elke poging), lijkt dit te werken. Het gaat mis zodra die aanname niet standhoudt — bijvoorbeeld als het portaal bij een retry per ongeluk een nieuwe correlatie-ID genereert (wat op zich een begrijpelijke implementatiekeuze kan zijn als "elke poging is een nieuw verzoek vanuit het perspectief van wachten-op-antwoord"). Dan zou de idempotentiecontrole bij KERN het duplicaat niet herkennen — het lijkt qua correlatie-ID een nieuw verzoek, terwijl het feitelijk hetzelfde bericht is.</p>
+<p>Andersom: als een deelnemer bewust twee keer dezelfde statusvraag stelt (twee legitiem verschillende verzoeken, toevallig met identieke inhoud), zou hergebruik van bericht-ID als correlatie-ID de twee antwoorden mogelijk door elkaar halen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> twee losse identifiers kosten iets meer implementatiemoeite, maar voorkomen een subtiele en moeilijk te reproduceren fout die pas optreedt bij specifiek retry- of herhalingsgedrag — precies het soort fout dat in productie zichtbaar wordt en in een testomgeving met voorspelbaar gedrag onopgemerkt blijft.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>At-most-once (accepteert berichtverlies), at-least-once (accepteert dubbele aflevering), exactly-once (accepteert hoge coördinatiekosten, en is over de volle keten zelden volledig gegarandeerd).</li>
+<li>Vraag niet welke garantie het beste is, vraag wat je systeem kan hebben — een gemist bericht of een dubbel bericht — en bouw voor het scenario dat overblijft.</li>
+<li>Omdat berichtverlies voor de meeste zakelijke toepassingen vrijwel nooit acceptabel is, terwijl dubbele aflevering, mits opgevangen via idempotentie, volledig beheersbaar is.</li>
+<li>De eigenschap dat hetzelfde bericht twee keer verwerken hetzelfde resultaat oplevert als één keer. Het is de verantwoordelijkheid van de ontvanger, niet van het kanaal of de zender.</li>
+<li>Een eenvoudige verwerkingslog op bericht-ID; idempotente operaties zelf; atomaire borging binnen dezelfde transactie.</li>
+<li>"Verhoog met" is een relatieve wijziging waarbij herhaling het effect optelt; "stel in op" is een absolute toewijzing waarbij herhaling geen extra effect heeft, ongeacht hoe vaak de operatie wordt uitgevoerd.</li>
+<li>Correlatie koppelt een antwoord terug aan zijn oorspronkelijke aanvraag; idempotentie herkent een duplicaat van hetzelfde verzoek. Ze lossen verschillende problemen op, en een retry kan bijvoorbeeld hetzelfde bericht-ID hebben maar per ongeluk een andere correlatie-ID, of omgekeerd — twee aparte identifiers voorkomen dat deze twee mechanismen elkaar in de weg zitten.</li>
+</ol>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-06/reader.html">&larr; Deel 6 — Point-to-point vs. publish-subscribe kanalen, verdiept</a><a class="eip-prevnext next" href="../deel-08/reader.html">Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

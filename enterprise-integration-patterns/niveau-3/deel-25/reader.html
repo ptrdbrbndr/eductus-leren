@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 25 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 3 (expert) · deel 25 van 30</p>
+<hr>
+<h2>25.0 Vijf systemen, één deelnemer, één invaarmoment</h2>
+<p>Het invaarproces voor één deelnemer blijkt, uitgewerkt, een keten van minstens vijf systemen te doorlopen: KERN levert de brondata (huidige aanspraak, deelnemersgegevens), een apart <strong>datakwaliteitscontrolesysteem</strong> (nieuw gebouwd specifiek voor de Stelselovergang) valideert of die brondata voldoende betrouwbaar is om in te varen, een <strong>rekenkern</strong> (eveneens nieuw, gespecialiseerd in de complexe Wtp-rekenregels) berekent de nieuwe aanspraak, een <strong>invaaradministratie</strong> (event-sourced, zoals in deel 24 geïntroduceerd) legt het resultaat onveranderlijk vast, en tot slot het <strong>Werkgeversportaal en Nabestaandenloket</strong> die de deelnemer en diens eventuele nabestaanden informeren.</p>
+<p>Dit is, structureel, geen nieuw probleem — het is het proceseigenaarschap-vraagstuk van deel 17 (orkestratie versus choreografie) en het compensatievraagstuk van deel 18 (saga's), nu toegepast op een keten waarvan <strong>elke stap zelf al de strengere event-sourcing-eisen van deel 23-24 moet naleven.</strong> Wat deze keten uniek maakt, is niet een nieuw patroon, maar de <strong>stapeling</strong> van eisen: elke stap moet niet alleen correct zijn (zoals altijd), maar ook zijn eigen correctheid onweerlegbaar kunnen bewijzen, jarenlang, aan een externe toezichthouder.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-25/figuur-25-1-vijf-systemen-bewijslast.svg" alt="Vijf systemen in een keten, elk met een eigen &quot;bewijslast&quot;-label: brondata (herkomst), datakwaliteit (validatiecriteria), rekenkern (toegepaste regels + versie), invaaradministratie (onveranderlijk vastgelegd), communicatie (bevestiging van kennisgeving)." loading="lazy"><figcaption>Figuur 25-1 — Vijf systemen in een keten, elk met een eigen "bewijslast"-label: brondata (herkomst), datakwaliteit (validatiecriteria), rekenkern (toegepaste regels + versie), invaaradministratie (onveranderlijk vastgelegd), communicatie (bevestiging van kennisgeving).</figcaption></figure>
+<hr>
+<h2>25.1 Waarom datakwaliteit een eigen stap in de keten is, niet een zijdelingse controle</h2>
+<p>Bij een gewone mutatie (niveau 1-2) was datavalidatie doorgaans een filter of enrichment-stap (deel 4, 13) — belangrijk, maar functioneel ondergeschikt aan de hoofdstroom. Bij invaren is datakwaliteit een <strong>eigen, gelijkwaardige stap in de keten</strong>, om een reden die rechtstreeks uit de wettelijke context volgt: een aanspraak die wordt ingevaren op basis van onbetrouwbare brondata, kan niet zomaar achteraf worden gecorrigeerd zoals een gewone mutatie — het invaarmoment zelf is, zoals deel 23 vaststelde, een onomkeerbaar, wettelijk feit. Een fout die pas na het invaren aan het licht komt, vergt niet een eenvoudige correctie maar een formeel hersteltraject, potentieel met toezichtimplicaties.</p>
+<p>Dit verklaart de architectuurkeuze bij Meridiaan: het datakwaliteitscontrolesysteem is een <strong>verplichte, blokkerende stap</strong> vóór de rekenkern, georkestreerd (deel 17) in plaats van choreografisch — niet omdat orkestratie in het algemeen beter is (deel 17 stelde dat expliciet niet), maar omdat de vuistregel uit dat deel hier ondubbelzinnig naar orkestratie wijst: een bindende, onderling afhankelijke volgorde (geen berekening zonder gevalideerde data) die expliciete bewaking verdient.</p>
+<blockquote><p><strong>Kernzin 25 van de cursus: bij wettelijk onomkeerbare stappen is de vuistregel voor orkestratie versus choreografie (deel 17) niet langer een architectuurvoorkeur maar een compliance-eis — de bindende afhankelijkheid bestaat niet alleen technisch, maar ook juridisch.</strong></p></blockquote>
+<hr>
+<h2>25.2 Saga-compensatie wanneer "compenseren" een formeel traject wordt</h2>
+<p>Deel 18 introduceerde saga-compensatie met de vuistregel dat compensatie zwaarder wordt naarmate een proces verder is gevorderd. Bij invaren is deze asymmetrie extremer dan bij enige eerdere casus in de cursus: een compensatie ná het invaarmoment zelf is, formeel, geen "compenserende actie" in de zin van deel 18 meer, maar een <strong>hersteltraject met eigen wettelijke kaders</strong> — Meridiaan kan een invaarbesluit niet stilletjes corrigeren met een nieuw, tegenovergesteld event zoals bij een gewone salariscorrectie; er gelden specifieke procedures voor herstel van een onjuist ingevaren aanspraak, vaak met kennisgevingsplicht aan de deelnemer en soms aan de toezichthouder.</p>
+<p>Dit heeft een directe technische consequentie voor het ontwerp van de saga: <strong>de compensatiegrens moet vóór het onomkeerbare punt liggen, niet erna.</strong> Bij Meridiaan is daarom, tussen de rekenkern en de invaaradministratie, een expliciete, laatste <strong>goedkeuringsstap</strong> ingebouwd — een moment waarop een mens (of een geautomatiseerde, maar apart auditeerbare, laatste controle) de berekening beoordeelt vóórdat het onomkeerbare invaar-event wordt gepubliceerd. Alles vóór dit punt kan, volgens de gewone saga-logica van deel 18, worden gecompenseerd met een nieuw event. Alles ná dit punt niet meer — het formele hersteltraject wordt dan de enige weg, en dat traject valt buiten de scope van wat deze cursus als "compensatie" beschrijft.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-25/figuur-25-2-compenseerbaar-onomkeerbaar.svg" alt="De keten van 25.0 met een verticale streep tussen de goedkeuringsstap en de invaaradministratie, gelabeld &quot;compenseerbaar&quot; links en &quot;onomkeerbaar — formeel hersteltraject&quot; rechts." loading="lazy"><figcaption>Figuur 25-2 — De keten van 25.0 met een verticale streep tussen de goedkeuringsstap en de invaaradministratie, gelabeld "compenseerbaar" links en "onomkeerbaar — formeel hersteltraject" rechts.</figcaption></figure>
+<hr>
+<h2>25.3 De event backbone als gedeelde, wettelijke infrastructuur</h2>
+<p>Alle vijf systemen uit 25.0 publiceren en consumeren events op één, gedeelde event backbone (deel 11, nu met de eisen van deel 23) — niet vijf losse kanalen, maar één infrastructuur die de volledige, herleidbare keten van elk individueel invaarproces bewaart. Dit is een bewuste architectuurkeuze: door alle vijf systemen op dezelfde backbone te laten publiceren, kan een DNB-auditor, gegeven een deelnemersnummer, de volledige keten reconstrueren — van brondata via validatie en berekening tot goedkeuring en invaren — als één samenhangende trace (deel 21, nu toegepast op een wettelijk bewijsdoel in plaats van op incidentdiagnose).</p>
+<p>Dit stelt een aanvullende eis aan de trace-ID-conventie uit deel 21: waar die conventie in niveau 2 primair diende om een incidentonderzoek te versnellen, dient dezelfde conventie hier om een <strong>compleet, wettelijk reconstrueerbaar bewijsdossier</strong> te vormen. De technische mechaniek is identiek; het doel, en daarmee de zorgvuldigheid waarmee hij wordt gehandhaafd, is fundamenteel verzwaard.</p>
+<hr>
+<h2>Samenvatting van deel 25</h2>
+<ul>
+<li>De invaarketen combineert vijf systemen, waarvan de eisen uit deel 17 (orkestratie/choreografie) en deel 18 (saga's) onveranderd gelden, maar met een stapeling van de strengere eisen uit deel 23-24.</li>
+<li>Datakwaliteitscontrole is bij invaren een verplichte, blokkerende, georkestreerde stap — omdat de bindende afhankelijkheid niet alleen technisch maar ook juridisch is.</li>
+<li>De saga-compensatiegrens moet vóór het onomkeerbare invaarmoment liggen; daarna is compensatie in de zin van deel 18 niet meer mogelijk, alleen een formeel hersteltraject buiten de scope van deze cursus.</li>
+<li>Eén gedeelde event backbone, gevoed door alle vijf systemen, maakt een compleet, wettelijk reconstrueerbaar bewijsdossier mogelijk via dezelfde trace-ID-conventie als deel 21, nu voor een wettelijk in plaats van operationeel doel.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 26 behandelt wat er gebeurt als een bericht in deze keten, ondanks alle zorgvuldigheid, niet te verwerken blijkt: poison messages en retry-topologie op schaal — een verdieping van deel 9, nu toegepast op een keten waar een verkeerd afgehandeld bericht geen operationeel ongemak maar een compliance-risico is.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-24/reader.html">&larr; Deel 24 — Event sourcing als drager</a><a class="eip-prevnext next" href="../deel-26/reader.html">Deel 26 — Poison messages en retry-topologie op schaal &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 7 — Betrouwbaarheid I: garanties en idempotentie — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 7 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 7 — Betrouwbaarheid I: garanties en idempotentie</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 1 (fundament) · deel 7 van 10</p>
+<hr>
+<h2>7.0 De salariscorrectie die twee keer werd toegepast</h2>
+<p>Zes weken na de introductie van router en filter (deel 4) deed zich een nieuw incident voor, dit keer niet door een ontwerpfout maar door iets dat op het eerste gezicht een storing leek: een kortstondige netwerkonderbreking tussen het Werkgeversportaal en het mutatiekanaal. De verzendcomponent van het portaal kreeg geen bevestiging terug dat zijn bericht was aangekomen, en deed — precies zoals het hoorde te doen bij een uitblijvende bevestiging — een nieuwe poging. Beide pogingen kwamen uiteindelijk aan bij KERN, seconden na elkaar.</p>
+<p>Het probleem: het ging om een salariscorrectie van €340. KERN had geen enkele manier om te herkennen dat het tweede bericht een herhaling was van het eerste, en verwerkte het simpelweg twee keer. De deelnemer kreeg een correctie van €680 in plaats van €340.</p>
+<p>Dit incident is fundamenteel anders dan de vorige. Het portaal deed niets fout — een retry na een uitgebleven bevestiging is precies het gedrag dat je van een betrouwbaar systeem verwacht, en zonder die retry zou het bericht bij een échte storing verloren zijn gegaan. Het probleem lag aan de ontvangende kant: KERN was niet ontworpen om met de consequentie van die retry om te gaan.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-07/figuur-7-1-retry-tijdlijn.svg" alt="Tijdlijn: bericht 1 verzonden, netwerkonderbreking, geen bevestiging, bericht 1 (retry) verzonden, beide berichten komen aan bij KERN met 2 seconden verschil, beide worden verwerkt" loading="lazy"><figcaption>Figuur 7-1 — tijdlijn: bericht 1 verzonden, netwerkonderbreking, geen bevestiging, bericht 1 (retry) verzonden, beide berichten komen aan bij KERN met 2 seconden verschil, beide worden verwerkt</figcaption></figure>
+<p>Dit deel behandelt wat messaging-systemen wél en niet garanderen over aflevering, en waarom die garantie zelden is wat je écht nodig hebt — wat je nodig hebt is een garantie over <em>verwerking</em>, en dat is een andere vraag die je zelf moet beantwoorden.</p>
+<hr>
+<h2>7.1 Drie leveringsgaranties, drie prijskaartjes</h2>
+<p>Elke messaging-technologie kiest, expliciet of impliciet, één van drie fundamentele leveringsgaranties. Het is essentieel deze te kennen omdat ze verschillende consequenties hebben, en geen van drie is "gewoon beter" — elke garantie heeft een prijs.</p>
+<p><strong>At-most-once ("hooguit één keer").</strong> Een bericht wordt verzonden en, als het onderweg verloren gaat, is dat definitief — er is geen retry. Dit is de garantie met het laagste risico op dubbele verwerking, maar met het hoogste risico op berichtverlies. Geschikt voor situaties waar een gemist bericht minder schadelijk is dan een dubbel verwerkt bericht, en waar hertransmissie sowieso via een ander mechanisme (bijvoorbeeld een periodieke volledige synchronisatie) wordt opgevangen.</p>
+<p><strong>At-least-once ("minstens één keer").</strong> Een bericht wordt hertransmitteerd totdat een bevestiging van aankomst is ontvangen. Dit garandeert dat een bericht nooit stilzwijgend verloren gaat, ten koste van het risico dat het bericht — zoals bij Caspars salariscorrectie — meer dan één keer aankomt. Dit is de meest gangbare garantie in praktijksystemen, en precies degene die bij Meridiaan actief was.</p>
+<p><strong>Exactly-once ("precies één keer").</strong> Een bericht komt gegarandeerd exact één keer aan, niet meer en niet minder. Dit klinkt als de ideale garantie, en is in de praktijk de duurste om echt waar te maken: volledige exactly-once-semantiek over onbetrouwbare netwerken vereist gedistribueerde coördinatie tussen zender, kanaal en ontvanger die aanzienlijke prestatiekosten met zich meebrengt, en veel systemen die "exactly-once" claimen, leveren in werkelijkheid een specifieke, beperktere garantie (bijvoorbeeld exactly-once binnen één technologie-ecosysteem, niet over de volle keten).</p>
+<blockquote>
+<p><strong>Kernzin 7 van de cursus: vraag niet "welke garantie is het beste", vraag "wat kan mijn systeem hebben — een gemist bericht, of een dubbel bericht — en bouw voor het scenario dat overblijft."</strong></p>
+</blockquote>
+<figure class="eip-figure"><img src="../../figuren/deel-07/figuur-7-2-drie-balansen.svg" alt="Drie balansen naast elkaar: at-most-once (weegt door naar berichtverlies), at-least-once (weegt door naar dubbele aflevering), exactly-once (in balans, met een zwaar gewicht 'coördinatiekosten' eronder)" loading="lazy"><figcaption>Figuur 7-2 — drie balansen naast elkaar: at-most-once (weegt door naar berichtverlies), at-least-once (weegt door naar dubbele aflevering), exactly-once (in balans, met een zwaar gewicht "coördinatiekosten" eronder)</figcaption></figure>
+<hr>
+<h2>7.2 Waarom at-least-once de praktische norm is</h2>
+<p>In de meeste praktijksituaties, inclusief die van Meridiaan, is at-least-once de gekozen garantie — niet omdat het de beste garantie is in abstracte zin, maar omdat het de beste verhouding biedt tussen haalbaarheid en risico. Berichtverlies (het risico van at-most-once) is voor een financiële mutatie vrijwel nooit acceptabel: een verloren salariscorrectie betekent een deelnemer die zijn geld nooit krijgt, zonder dat iemand het merkt totdat een klacht binnenkomt. Dubbele aflevering (het risico van at-least-once) is daarentegen zichtbaar en, mits juist opgevangen, volledig beheersbaar.</p>
+<p>Dat laatste — "mits juist opgevangen" — is de kern van dit deel. At-least-once verplaatst het probleem niet weg, het maakt het expliciet en oplosbaar: in plaats van te hopen dat berichten niet verdubbelen (onmogelijk te garanderen bij netwerkonzekerheid), bouw je een ontvanger die correct omgaat met een verdubbeld bericht. Dat mechanisme heet <strong>idempotentie</strong>.</p>
+<hr>
+<h2>7.3 Idempotentie: hetzelfde bericht, hetzelfde resultaat</h2>
+<p>Een verwerking is <strong>idempotent</strong> als het twee keer (of vaker) uitvoeren ervan exact hetzelfde resultaat oplevert als het één keer uitvoeren — niet "een vergelijkbaar resultaat", maar precies hetzelfde eindresultaat, zonder ongewenste bijeffecten van de herhaling.</p>
+<p>Dit is geen eigenschap van het bericht, en ook geen eigenschap van het kanaal — het is een eigenschap die de <strong>ontvanger</strong> moet bouwen. Het bericht-ID uit deel 3 (§3.1) is hiervoor de sleutel: bij binnenkomst van een bericht controleert de ontvanger eerst of dit bericht-ID al eerder is verwerkt. Zo ja, dan wordt het bericht genegeerd (of, preciezer: het eerder berekende resultaat wordt hergebruikt, zonder de onderliggende actie opnieuw uit te voeren) — precies wat KERN had moeten doen met de tweede salariscorrectie.</p>
+<p><strong>Drie niveaus van idempotentie-ontwerp, van eenvoudig naar robuust:</strong></p>
+<p><strong>Niveau 1: een eenvoudige verwerkingslog.</strong> De ontvanger houdt een lijst bij van reeds verwerkte bericht-ID's (met een redelijke bewaartermijn) en controleert daartegen vóór verwerking. Eenvoudig te bouwen, werkt goed zolang de controle en de daadwerkelijke verwerking niet uit elkaar kunnen vallen — bijvoorbeeld door een crash tussen "ID genoteerd" en "verwerking afgerond".</p>
+<p><strong>Niveau 2: idempotente operaties zelf.</strong> In plaats van (of aanvullend op) een verwerkingslog, wordt de verwerking zo ontworpen dat herhaling geen verschil maakt. "Verhoog het saldo met €340" is niet idempotent (twee keer uitvoeren = €680 verhoging); "stel het saldo in op €12.340" is dat wél (twee keer uitvoeren = zelfde eindstand). Waar mogelijk is deze vorm robuuster dan niveau 1, omdat ze niet afhankelijk is van een aparte, foutgevoelige boekhouding van bericht-ID's.</p>
+<p><strong>Niveau 3: idempotentie geborgd binnen dezelfde transactie.</strong> De sterkste vorm: het noteren van "dit bericht-ID is verwerkt" en de daadwerkelijke verwerking gebeuren atomair, binnen dezelfde databasetransactie, zodat een crash tussenin onmogelijk tot een inconsistente toestand leidt. Dit vereist dat de opslag van verwerkingslog en de opslag van het resultaat dezelfde transactionele grens delen — niet altijd triviaal wanneer meerdere systemen betrokken zijn, en een onderwerp dat in niveau 2 (deel 19, transactional messaging) dieper wordt behandeld.</p>
+<p>Bij Meridiaan is voor de salariscorrectieverwerking gekozen voor een combinatie van niveau 1 (een verwerkingslog op bericht-ID) en, waar mogelijk, niveau 2: in plaats van "verhoog met €340" wordt het command herschreven naar "corrigeer naar eindbedrag X", waardoor een eventuele dubbele verwerking sowieso geen extra effect zou hebben, zelfs als de verwerkingslog om welke reden dan ook zou falen.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-07/figuur-7-3-idempotentie-varianten.svg" alt="Twee verwerkingsvarianten naast elkaar: 'verhoog met €340' (niet-idempotent, tweede uitvoering verdubbelt het effect) versus 'corrigeer naar €12.340' (idempotent, tweede uitvoering heeft geen extra effect)" loading="lazy"><figcaption>Figuur 7-3 — twee verwerkingsvarianten naast elkaar: "verhoog met €340" (niet-idempotent, tweede uitvoering verdubbelt het effect) versus "corrigeer naar €12.340" (idempotent, tweede uitvoering heeft geen extra effect)</figcaption></figure>
+<hr>
+<h2>7.4 Idempotentie is geen vervanging voor correlatie</h2>
+<p>Een veelgemaakte begripsverwarring: idempotentie (dit deel) en correlatie (deel 2 en 3) lossen verschillende problemen op, ook al gebruiken ze allebei een identifier in de header.</p>
+<p><strong>Correlatie</strong> koppelt een antwoordbericht terug aan de oorspronkelijke aanvraag — het gaat over het bij elkaar houden van een vraag-en-antwoordpaar.</p>
+<p><strong>Idempotentie</strong> voorkomt dat hetzelfde bericht twee keer effect heeft — het gaat over het herkennen van een duplicaat van hetzelfde verzoek.</p>
+<p>Een command message heeft in de praktijk vaak beide nodig, met twee afzonderlijke identifiers: het bericht-ID (voor idempotentie: "is dit specifieke bericht al eerder verwerkt") en de correlatie-ID (voor het antwoord: "welk verzoek hoort bij dit antwoord"). Ze kunnen soms samenvallen in eenvoudige gevallen, maar het is een denkfout om aan te nemen dat ze altijd hetzelfde zijn — bijvoorbeeld bij een retry heeft de herhaalde poging typisch hetzelfde bericht-ID (het is immers hetzelfde verzoek) maar zou, als er per ongeluk een nieuwe correlatie-ID werd gegenereerd bij elke poging, de koppeling met het eerdere antwoord alsnog verloren gaan.</p>
+<hr>
+<h2>Samenvatting van deel 7</h2>
+<ul>
+<li>Elke messaging-technologie kiest een leveringsgarantie: at-most-once (risico op verlies), at-least-once (risico op duplicatie), exactly-once (duur, en zelden volledig waargemaakt over de volle keten).</li>
+<li>At-least-once is de praktische norm omdat berichtverlies vrijwel nooit acceptabel is en duplicatie, mits opgevangen, beheersbaar is.</li>
+<li>Idempotentie is de eigenschap die de ontvanger moet bouwen: hetzelfde bericht twee keer verwerken levert hetzelfde resultaat op als één keer.</li>
+<li>Drie niveaus: een verwerkingslog op bericht-ID, idempotente operaties zelf ("stel in op X" in plaats van "verhoog met X"), en atomaire borging binnen één transactie.</li>
+<li>Idempotentie en correlatie lossen verschillende problemen op en gebruiken bij voorkeur afzonderlijke identifiers.</li>
+</ul>
+<h2>Vooruitblik</h2>
+<p>Deel 8 werkt het tweede betrouwbaarheidsvraagstuk uit: volgorde. Als berichten via verschillende paden of met retries aankomen, is de volgorde van aankomst niet meer gegarandeerd gelijk aan de volgorde van verzending — en voor sommige mutaties, zoals opeenvolgende saldocorrecties, maakt die volgorde wel degelijk uit.</p>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-06/reader.html">&larr; Deel 6 — Point-to-point vs. publish-subscribe kanalen, verdiept</a><a class="eip-prevnext next" href="../deel-08/reader.html">Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

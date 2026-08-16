@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 9 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 1 · deel 9 van 10</p>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>Opdracht 9.1 — Invalid of dead letter?</h2>
+<p>Bepaal voor elk van de volgende mislukkingen of het bij het invalid message channel of het dead letter channel hoort, en motiveer.</p>
+<ol>
+<li>Een mutatiebericht mist het verplichte veld <code>mutatietype</code>.</li>
+<li>Een mutatiebericht verwijst naar deelnemersnummer 99999, dat niet bestaat in KERN.</li>
+<li>De externe pensioenadministrateur is tien minuten onbereikbaar door een storing aan hun kant.</li>
+<li>Een salariscorrectiebericht bevat een bedrag als tekst ("driehonderdveertig euro") in plaats van een numerieke waarde.</li>
+<li>Een verwerkingsstap in KERN faalt door een tijdelijk volle schijf op de server.</li>
+</ol>
+<hr>
+<h2>Opdracht 9.2 — Retry-strategie ontwerpen</h2>
+<p>Ontwerp, voor elk van de twee mislukkingsoorzaken hieronder, een passende retry-strategie (aantal pogingen, tussenpozen) vóórdat een bericht naar het dead letter channel gaat.</p>
+<ol>
+<li>Tijdelijke netwerkonderbreking richting de externe administrateur (doorgaans hersteld binnen enkele minuten).</li>
+<li>Een verkeerd geconfigureerd wachtwoord in de koppeling met de externe administrateur.</li>
+</ol>
+<hr>
+<h2>Opdracht 9.3 — Wat had het incident van 9.0 voorkomen</h2>
+<p>Bekijk de drie eigenschappen van een houdbaar invalid message channel (9.2) en de twee ontwerpbeslissingen van een houdbaar dead letter channel (9.3). Welke van deze vijf punten had het incident uit 9.0 (214 onopgemerkte berichten) concreet voorkomen, en welke niet?</p>
+<hr>
+<h2>Opdracht 9.4 — Replay veilig maken</h2>
+<p>Een bericht in het dead letter channel is drie dagen geleden mislukt door een storing bij de externe administrateur die inmiddels is verholpen. Het integratieteam wil het bericht opnieuw aanbieden aan het oorspronkelijke kanaal (replay). Welke twee eerdere patronen uit deze cursus maken dit veilig, en waarom zou replay zonder die patronen riskant zijn?</p>
+<hr>
+<h2>Zelftoets deel 9</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Wat is het verschil tussen een structureel ongeldig bericht en een tijdelijk onverwerkbaar bericht, en welk patroon hoort bij elk?</li>
+<li>Noem de drie eigenschappen van een houdbaar invalid message channel.</li>
+<li>Noem de twee ontwerpbeslissingen die een dead letter channel houdbaar maken.</li>
+<li>Waarom is een lange, vaste retry-reeks niet altijd de juiste strategie?</li>
+<li>Wat is replay, en welke twee eerdere patronen maken het veilig?</li>
+<li>Waarom is stille verdwijning van een bericht erger dan een zichtbare foutmelding?</li>
+</ol>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 9.1</h2>
+<p>a. <strong>Invalid message channel.</strong> Structureel ongeldig — geen enkele retry lost een ontbrekend verplicht veld op.</p>
+<p>b. <strong>Invalid message channel.</strong> Ook al is het bericht syntactisch correct gevormd, het verwijst naar iets dat niet bestaat — dit is inhoudelijk net zo onverwerkbaar als een ontbrekend veld, en retries maken het niet beter.</p>
+<p>c. <strong>Dead letter channel</strong> (na retries met backoff). Dit is een tijdelijke omstandigheid; het bericht zelf is prima gevormd en zal na de storing waarschijnlijk gewoon verwerkt kunnen worden.</p>
+<p>d. <strong>Invalid message channel.</strong> Een verkeerd datatype is een vormfout, geen tijdelijke omstandigheid.</p>
+<p>e. <strong>Dead letter channel</strong> (na een beperkt aantal retries — een volle schijf lost zichzelf mogelijk niet snel op, dus hier is een korte retry-poging met snel doorsturen naar dead letter passender dan lang blijven proberen).</p>
+<p><strong>Wat je hier moet meenemen:</strong> de toetssteen is steeds: zou een retry dit kunnen oplossen? Bij a, b en d is het antwoord principieel nee (het bericht zelf moet eerst gecorrigeerd worden); bij c en e is het antwoord mogelijk ja, al is bij e de kans kleiner dan bij c, wat vraagt om een kortere retry-termijn voordat het bericht wordt doorgezet.</p>
+<h2>Uitwerking 9.2</h2>
+<p>a. Een oplopende backoff-strategie is hier passend: bijvoorbeeld drie tot vijf pogingen met tussenpozen die exponentieel toenemen (bijvoorbeeld 5, 15, 45, 135 seconden), zodat een kortstondige storing tijd krijgt om zichzelf te herstellen zonder de administrateur onnodig te belasten met te snel opeenvolgende pogingen.</p>
+<p>b. Hier is een lange retry-strategie zinloos: een verkeerd wachtwoord lost zichzelf niet op na een paar minuten wachten. Een kleiner aantal snelle pogingen (bijvoorbeeld twee, met een korte tussenpoos om een eventuele flakkerende verbinding uit te sluiten) gevolgd door directe doorzending naar het dead letter channel is hier passender — met een duidelijke foutreden ("authenticatie mislukt") zodat een mens het snel kan herkennen als iets dat handmatige actie vereist, niet geduld.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het aantal en de tijdsafstand van retries is geen technisch standaardgetal maar een bewuste inschatting van hoe waarschijnlijk het is dat de oorzaak zichzelf binnen die tijd oplost. Bij twijfel is het beter een fout sneller zichtbaar te maken (kortere retry-reeks) dan hem lang te verbergen achter steeds nieuwe pogingen.</p>
+<h2>Uitwerking 9.3</h2>
+<p><strong>Actieve monitoring</strong> (van beide kanalen) had het incident het meest direct voorkomen — dit was letterlijk het ontbrekende element: de wachtrij bestond, maar niemand keek ernaar. Zonder monitoring zijn alle andere maatregelen zinloos, want ze verhogen alleen de kwaliteit van informatie die niemand bekijkt.</p>
+<p><strong>Reden van afwijzing vastleggen</strong> had het onderzoek ná ontdekking versneld, maar het incident zelf (drie maanden onopgemerkt) niet voorkomen — dit lost een ander probleem op (hoe snel je begrijpt wat er gebeurd is), niet het kernprobleem (dat niemand het opmerkte).</p>
+<p><strong>Retry-strategie bewust kiezen</strong> had de omvang van het probleem mogelijk beperkt (minder berichten hadden de retry-limiet bereikt als de strategie beter was afgestemd op de daadwerkelijke oorzaken), maar had het onopgemerkt blijven zelf niet voorkomen.</p>
+<p><strong>Een eigenaar voor opvolging</strong> en <strong>actieve monitoring</strong> horen in de praktijk samen: een eigenaar zonder monitoringsysteem heeft niets om op te volgen, en monitoring zonder eigenaar leidt tot genegeerde alerts. Samen hadden ze het incident structureel voorkomen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> van de vijf ontwerpeigenschappen is monitoring (gekoppeld aan een eigenaar) de enige die het kernprobleem van 9.0 — onopgemerktheid — direct aanpakt. De andere vier verbeteren de kwaliteit van de foutafhandeling, maar lossen niet het probleem op dat er helemaal niemand keek.</p>
+<h2>Uitwerking 9.4</h2>
+<p><strong>Idempotentie (deel 7)</strong>: als het oorspronkelijke bericht-ID bewaard blijft en wordt hergebruikt bij de replay, herkent de ontvanger (mocht het bericht via een ander pad toch al gedeeltelijk verwerkt zijn geraakt) dat dit dezelfde transactie is en voorkomt dubbele verwerking.</p>
+<p><strong>Volgordeborging (deel 8)</strong>: als er inmiddels, in de drie dagen sinds de mislukking, nieuwere berichten voor dezelfde deelnemer zijn verwerkt, moet de replay niet zomaar vóór die nieuwere berichten worden ingevoegd — anders ontstaat opnieuw het probleem van deel 8, nu veroorzaakt door de replay zelf in plaats van door parallelle verwerking.</p>
+<p>Zonder deze twee patronen zou een replay het risico lopen om ofwel een dubbele verwerking te veroorzaken (geen idempotentie) ofwel een inmiddels achterhaalde toestand opnieuw toe te passen bovenop nieuwere, geldigere mutaties (geen volgordeborging) — in beide gevallen zou de "oplossing" (replay) een nieuw incident veroorzaken in plaats van het oorspronkelijke te herstellen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> foutafhandeling in dit deel bouwt letterlijk voort op de garanties uit deel 7 en 8 — replay is pas veilig omdat die garanties er al liggen, niet los daarvan.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Een structureel ongeldig bericht en een tijdelijk onverwerkbaar bericht zijn twee verschillende problemen — behandel ze niet in dezelfde wachtrij, want de vervolgstap is voor beide anders.</li>
+<li>Een structureel ongeldig bericht (ontbrekend veld, ongeldige referentie) hoort bij het invalid message channel; een tijdelijk of onherstelbaar mislukte verwerking van een op zichzelf geldig bericht hoort bij het dead letter channel.</li>
+<li>Het bericht wordt niet stilzwijgend verworpen (actief gemonitord); het bevat de reden van afwijzing; er is een eigenaar verantwoordelijk voor opvolging.</li>
+<li>Een bewuste retry-strategie (aantal pogingen en tussenpozen, afgestemd op de aard van de fout) vóórdat berichten in het dead letter channel belanden; actieve monitoring met een expliciet herstelpad (vaak replay).</li>
+<li>Omdat niet elke mislukking dezelfde kans heeft zichzelf op te lossen — een tijdelijke storing kan baat hebben bij langere, oplopende tussenpozen, terwijl een structurele fout (zoals een verkeerd wachtwoord) na honderd pogingen nog steeds niet zal slagen en beter snel zichtbaar wordt gemaakt.</li>
+<li>Replay is het opnieuw aanbieden van een eerder mislukt bericht aan het oorspronkelijke kanaal, nadat de onderliggende oorzaak is verholpen. Idempotentie (deel 7) voorkomt dubbele verwerking bij een eventuele gedeeltelijke eerdere verwerking; volgordeborging (deel 8) voorkomt dat de replay een inmiddels achterhaalde toestand toepast bovenop nieuwere mutaties.</li>
+<li>Omdat het geen signaal geeft dat er iets mis is — de gebruiker of het systeem gaat ervan uit dat alles goed is gekomen (mede door de asynchrone ontvangstbevestiging uit deel 3), terwijl in werkelijkheid de garanties uit deel 7 en 8 zonder zichtbare foutafhandeling geen enkele waarde hebben.</li>
+</ol>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-08/reader.html">&larr; Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery</a><a class="eip-prevnext next" href="../deel-10/reader.html">Deel 10 — Examentraining en capstone: de verdediging &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

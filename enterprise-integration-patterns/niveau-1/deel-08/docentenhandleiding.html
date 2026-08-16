@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery</h1>
+<p>Docentenhandleiding · Ductus-cursus Enterprise Integration Patterns · niveau 1 · deel 8 van 10</p>
+<hr>
+<h2>Positie van dit deel</h2>
+<p>Deel 8 sluit de betrouwbaarheidstweeling af en behandelt het tweede grote misverstand in messaging na "een garantie instellen lost het op" (deel 7): "idempotentie lost alles op". Dit deel moet die illusie doorprikken door te laten zien dat idempotentie en volgordeborging orthogonale, losstaande eigenschappen zijn — een systeem kan volledig idempotent zijn en toch systematisch verkeerde eindresultaten opleveren.</p>
+<p>De kern van het deel is niet de techniek van partitionering (die is, eenmaal begrepen, relatief eenvoudig) maar het onderscheid tussen "volgorde over het hele kanaal" en "volgorde per object" — en het vermogen om, gegeven een paar berichten, te bepalen of ze commutatief zijn. Dat laatste (opdracht 8.2, met name situatie c) is de moeilijkste en waardevolste vaardigheid van het deel.</p>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kan de deelnemer:</p>
+<ol>
+<li>het verschil tussen idempotentie (deel 7) en volgordeborging (dit deel) uitleggen en beide problemen herkennen in een gegeven scenario;</li>
+<li>bepalen of twee berichten commutatief zijn, inclusief grensgevallen met verborgen bedrijfsregels;</li>
+<li>een passende partitioneringssleutel kiezen op basis van de grens waarbinnen volgorde ertoe doet;</li>
+<li>het verschil tussen leveringsgarantie (deel 7) en guaranteed delivery uitleggen.</li>
+</ol>
+<h2>Tijdsindeling (één dagdeel, 3 uur 30 met twee pauzes)</h2>
+<table>
+<thead>
+<tr><th>Tijd</th><th>Onderdeel</th><th>Vorm</th></tr>
+</thead>
+<tbody>
+<tr><td>0:00–0:15</td><td>Terugblik deel 7, huiswerkbespreking</td><td>Kort rondje</td></tr>
+<tr><td>0:15–0:40</td><td>Het incident: drie adreswijzigingen, verkeerde volgorde</td><td>Vertelling, slides 4–9</td></tr>
+<tr><td>0:40–1:00</td><td>Idempotent maar toch fout</td><td>Opdracht 8.1, plenair</td></tr>
+<tr><td>1:00–1:15</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>1:15–1:45</td><td>Commutatief of niet</td><td>Slides 12–15, opdracht 8.2 — kern van het dagdeel</td></tr>
+<tr><td>1:45–2:20</td><td>Partitionering en sequencing</td><td>Slides 16–21, opdracht 8.3</td></tr>
+<tr><td>2:20–2:35</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>2:35–3:00</td><td>Guaranteed delivery</td><td>Slides 22–26, opdracht 8.4</td></tr>
+<tr><td>3:00–3:15</td><td>Terug naar het incident</td><td>Bespreking</td></tr>
+<tr><td>3:15–3:30</td><td>Afsluiting niveau 1-betrouwbaarheid, vooruitblik</td><td>Slide 29–30</td></tr>
+</tbody>
+</table>
+<p><strong>Huiswerk voor deel 9:</strong> geen specifieke opdracht — deel 9 (foutafhandeling) behandelt wat er gebeurt als een bericht, ondanks alle garanties uit deel 7-8, alsnog niet verwerkt kan worden.</p>
+<h2>Bij welke groep werkt dit hoe</h2>
+<p><strong>Ontwikkelaars met ervaring in Kafka of vergelijkbare partition-based streaming.</strong> Kennen het concept partitionering al technisch, maar hebben het soms nooit expliciet verbonden aan de vraag "wat is mijn commutativiteitsgrens" — voor hen is partitioneringssleutel vaak een performance-instelling geweest, niet een correctheidsinstelling. Herformuleer voor deze groep expliciet: de sleutel is hier niet primair voor doorvoersnelheid, maar voor correctheid, met snelheid als aangename bijkomstigheid.</p>
+<p><strong>Architecten zonder implementatiedetail.</strong> Vinden opdracht 8.2c (dienstverbandmutatie + adreswijziging, verborgen afhankelijkheid) het lastigst, en dat is precies de bedoeling — het laat zien dat commutativiteit niet uit het berichtformaat alleen is af te lezen, maar bedrijfskennis vereist.</p>
+<p><strong>Deelnemers met een database-achtergrond.</strong> Herkennen guaranteed delivery snel als vergelijkbaar met write-ahead-logging of transactionele persistentie in een database. Gebruik die analogie: een bericht dat alleen in geheugen staat is vergelijkbaar met een database-write die nog niet naar schijf is weggeschreven.</p>
+<h2>Valkuilen bij de uitleg</h2>
+<p><strong>Volgorde als "vanzelfsprekend belangrijk" behandelen, zonder de commutativiteitsvraag te stellen.</strong> Het is verleidelijk om te zeggen "volgorde is altijd belangrijk bij messaging" — dat klopt niet, en het ondermijnt de kernzin. Leg steeds eerst de vraag "zijn deze twee berichten commutatief?" voordat je concludeert dat volgordeborging nodig is.</p>
+<p><strong>Partitionering presenteren als puur technische keuze.</strong> De sleutelkeuze in opdracht 8.3 is een correctheidsbeslissing, geen performance-tuning. Een verkeerde sleutel (te grofmazig of te fijnmazig, of überhaupt de verkeerde dimensie zoals mutatietype) is een functionele bug, geen suboptimalisatie.</p>
+<p><strong>Guaranteed delivery en leveringsgarantie (deel 7) door elkaar laten lopen.</strong> Dit gebeurt vaak, want beide gaan over "gaat een bericht verloren". Gebruik de vuistregel uit 8.3 consequent: leveringsgarantie beschermt de reis van zender naar kanaal, guaranteed delivery beschermt het verblijf ín het kanaal.</p>
+<h2>Discussievragen</h2>
+<p>Kies er twee, afhankelijk van de groep.</p>
+<ol>
+<li>Noem een kanaal bij jullie waarvan niemand ooit expliciet heeft vastgesteld of volgorde ertoe doet. Wat zou het antwoord waarschijnlijk zijn als je het zou onderzoeken?</li>
+<li>Is er bij jullie een partitioneringssleutel gekozen op basis van performance, zonder de commutativiteitsvraag te stellen? Zou die sleutel ook de juiste zijn voor correctheid?</li>
+<li>Weet iemand of jullie broker-infrastructuur berichten persistent opslaat, of alleen in geheugen? Hoe zou je dat testen zonder productie te verstoren?</li>
+<li>Voor gemengde groepen: is het concept "commutatief" ook toepasbaar buiten messaging — bijvoorbeeld bij twee gelijktijdige wijzigingen in hetzelfde Excel-bestand? (Stuur naar: ja, hetzelfde onderliggende idee — de vraag is altijd of de volgorde van twee wijzigingen het eindresultaat beïnvloedt.)</li>
+</ol>
+<h2>Antwoordmodel voor de moeilijkste bespreking (opdracht 8.2, situatie c)</h2>
+<p>De meest voorkomende eerste reactie op situatie c (dienstverbandmutatie + adreswijziging, dezelfde deelnemer) is: "commutatief, want het zijn verschillende velden — adres en dienstverbandstatus raken elkaar niet."</p>
+<p>Laat de groep zelf de verborgen aanname vinden door te vragen: <strong>is er een bedrijfsregel die deze twee velden aan elkaar koppelt, ook al lijken het losse velden?</strong> Concreet: mag een adreswijziging worden doorgevoerd voor een deelnemer die (nog) niet "in dienst" is? Als het antwoord "nee, dat mag pas na indiensttreding" is, dan is er wel degelijk een volgorde-afhankelijkheid: de adreswijziging kan alleen correct verwerkt worden als de dienstverbandmutatie eerst is toegepast. Twee berichten die op het eerste gezicht disjuncte velden raken, kunnen alsnog niet-commutatief zijn door een regel die niet in het berichtformaat zelf zichtbaar is.</p>
+<p>Dit is het scherpste punt van het hele deel: <strong>commutativiteit is geen eigenschap die je uit het berichtformaat kunt aflezen — het vereist kennis van de onderliggende bedrijfsregels.</strong> Precies hetzelfde soort verborgen aanname als de audit-trail/Nabestaandenloket-afhankelijkheid uit deel 6, nu toegepast op volgorde in plaats van op publish-subscribe-abonnees.</p>
+<h2>Materiaal</h2>
+<ul>
+<li>De tijdlijn uit figuur 8-1 (drie berichten, twee verwerkers, verkeerde volgorde van aflevering) als openingsvisual.</li>
+<li>Flipover met de vier paren uit opdracht 8.2, voor een plenaire bespreking waarbij de groep eerst zelf stemt (commutatief/niet-commutatief) voordat de uitwerking wordt getoond — het stemresultaat bij situatie c is doorgaans verdeeld en dat is precies het leermoment.</li>
+</ul>
+<h2>Aansluiting op deel 9</h2>
+<p>Sluit af met de vraag die deel 9 opent: idempotentie (deel 7) en volgordeborging (dit deel) lossen samen veel op, maar wat gebeurt er als een bericht, ondanks alle zorgvuldigheid, gewoon niet te verwerken is — een structureel ongeldig bericht, of een bericht dat blijft mislukken na elke retry? Antwoord: dat is het onderwerp van deel 9, met het dead letter channel en het invalid message channel als sluitstuk van niveau 1's betrouwbaarheidsopbouw.</p>
+<p>Waarschuw alvast voor de valkuil van deel 9: deelnemers zullen geneigd zijn te denken dat "gewoon blijven retryen" een acceptabele strategie is voor elk mislukt bericht. Deel 9 legt uit waarom dat, zonder een grens, zelf weer een nieuw betrouwbaarheidsprobleem creëert.</p>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-07/reader.html">&larr; Deel 7 — Betrouwbaarheid I: garanties en idempotentie</a><a class="eip-prevnext next" href="../deel-09/reader.html">Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

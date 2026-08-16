@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 18 — Distributed transactions in async context: saga's en compenserende transacties — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 18 — Distributed transactions in async context: saga's en compenserende transacties</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 2 · deel 18 van 22</p>
+<hr>
+<p>Werk de opdrachten uit v&oacute;&oacute;rdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>Opdracht 18.1 — Waarom 2PC hier niet past</h2>
+<p>Leg uit, met kernzin 19 en het onderscheid uit 18.1, waarom two-phase commit (2PC) geen passende oplossing is voor het uitkeringsproces uit 18.0.</p>
+<hr>
+<h2>Opdracht 18.2 — Compenseren, geen terugdraaien</h2>
+<p>Voor elk van de volgende drie stappen uit het uitkeringsproces: ontwerp een compenserende actie (geen "terugdraai"-actie) voor het geval de fraudecontrole achteraf een probleem signaleert.</p>
+<p>a. KERN heeft de pensioendatum geregistreerd.</p>
+<p>b. De externe administrateur heeft het uitkeringsbedrag berekend en intern vastgelegd.</p>
+<p>c. De uitkeringsadministratie heeft de eerste betaling al verwerkt (in tegenstelling tot de hoofdcasus, waar dit nog niet was gebeurd — bedenk dit als uitbreiding).</p>
+<hr>
+<h2>Opdracht 18.3 — Georkestreerde of choreografische saga?</h2>
+<p>Meridiaan koos voor een georkestreerde saga voor de vier bindend-afhankelijke stappen van het uitkeringsproces. Leg uit waarom dit consistent is met de keuze uit deel 17, en bedenk een scenario waarin een choreografische saga toch de betere keuze zou zijn.</p>
+<hr>
+<h2>Opdracht 18.4 — De asymmetrie van compensatie</h2>
+<p>Een ontwikkelaar stelt voor om de voorlopige bevestiging aan de deelnemer pas te versturen nadat álle vijf stappen zijn afgerond, "dan hoeven we nooit te compenseren richting de deelnemer."</p>
+<p>a. Wat is het voordeel van dit voorstel?</p>
+<p>b. Wat is het nadeel, gegeven de bredere context van de cursus (denk aan deel 3)?</p>
+<hr>
+<h2>Opdracht 18.5 — Uit je eigen praktijk</h2>
+<p>Beschrijf een meerstaps proces uit je eigen werk (bij voorkeur hetzelfde als in opdracht 17.5) waarbij een latere stap soms een eerdere, al voltooide stap ongedaan zou moeten maken. Ontwerp voor minstens twee stappen een compenserende actie, en beoordeel of er stappen zijn waarvan het effect niet volledig compenseerbaar is (zoals de verzonden brief in de hoofdcasus).</p>
+<hr>
+<h2>Zelftoets deel 18</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Waarom werkt ACID-atomiciteit niet over onafhankelijke, asynchrone systemen heen?</li>
+<li>Wat is een saga, en hoe verschilt zijn aanpak fundamenteel van een klassieke rollback?</li>
+<li>Noem de twee vormen van saga-coördinatie en welke architectuurkeuze uit deel 17 ze elk weerspiegelen.</li>
+<li>Waarom is niet elk effect even goed compenseerbaar, en wat is de vuistregel om daarmee om te gaan?</li>
+<li>Waar ligt de grens tussen 2PC (API-cursus) en saga (deze cursus)?</li>
+<li>Waarom pleit de asymmetrie van compensatie ervoor om kritieke controles zo vroeg mogelijk in een keten te plaatsen?</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 18.1</h2>
+<p>2PC vereist dat alle betrokken systemen tijdens de hele transactieduur blokkerend wachten op een gecoördineerd commit-signaal. Bij het uitkeringsproces zijn vijf systemen betrokken, waarvan minstens één (de externe pensioenadministrateur) buiten Meridiaans directe beheer valt en historisch onbetrouwbaar is gebleken (deel 13). Blokkerend wachten op zo'n externe partij tijdens een lopende transactie zou precies het probleem van deel 1 herintroduceren: de hele keten erft de traagste, minst beschikbare schakel — nu vermenigvuldigd over vijf systemen in plaats van één koppeling.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de grens tussen 2PC (API-cursus) en saga (deze cursus) is niet arbitrair — hij volgt direct uit dezelfde analyse die deel 1 al maakte over wanneer synchroon wachten wel en niet houdbaar is, nu toegepast op transactieniveau.</p>
+<h2>Uitwerking 18.2</h2>
+<p>a. Geen verwijdering van de registratie, maar een nieuwe, aanvullende gebeurtenis: "uitkeringsproces gepauzeerd wegens fraudeonderzoek", die de pensioendatumregistratie laat staan (die blijft feitelijk correct — de deelnemer is en blijft gepensioneerd) maar het vervolgproces expliciet blokkeert.</p>
+<p>b. Een compenserende opdracht naar de administrateur: "trek de eerdere berekening in, markeer als niet-actief" — de berekening zelf blijft in de historie van de administrateur staan (voor auditdoeleinden), maar krijgt een status die aangeeft dat hij niet langer geldig is.</p>
+<p>c. Dit is het lastigste geval: geld is al uitbetaald. Een compenserende actie hier is geen simpele statuswijziging maar een nieuwe, actieve handeling: het starten van een terugvorderingsproces, met eigen communicatie naar de deelnemer, eigen juridische overwegingen, en mogelijk een aparte afweging of terugvordering in dit specifieke geval wenselijk is (bijvoorbeeld als de deelnemer te goeder trouw was). Dit laat zien dat "compenseren" bij een verder gevorderde stap aanzienlijk zwaarder kan zijn dan bij een vroege stap.</p>
+<p><strong>Wat je hier moet meenemen:</strong> hoe verder een saga is gevorderd voordat een compensatie nodig blijkt, hoe zwaarder en risicovoller de compenserende actie — dit pleit ervoor om, waar mogelijk, kritieke controles (zoals fraudecontrole) zo vroeg mogelijk in de keten te plaatsen, niet pas na onomkeerbare stappen zoals uitbetaling.</p>
+<h2>Uitwerking 18.3</h2>
+<p>Consistentie met deel 17: de vier stappen waren al georkestreerd vóórdat de saga-vraag zich voordeed (de fraudecontrole-mislukking kwam pas ná de keuze uit deel 17). Het toevoegen van compensatielogica aan een bestaande orkestrator is een natuurlijke uitbreiding — de orkestrator kende het proces al, en compensatielogica is in essentie "wat te doen bij een mislukking" toegevoegd aan wat hij al deed voor het reguliere pad.</p>
+<p>Een scenario waarin choreografische saga beter zou passen: een keten die zelf al choreografisch is opgezet (bijvoorbeeld de twee onafhankelijke, choreografische stappen uit deel 17 — communicatie naar werkgever, bevestigingsbrief), waar het toevoegen van een centrale saga-orkestrator juist een nieuwe, ongewenste centrale afhankelijkheid zou introduceren in een deel van het proces dat bewust laag gekoppeld was gehouden. Voor dat soort onafhankelijke, parallelle reacties zou elke stap zijn eigen compenserende reactie op een "geannuleerd"-event kunnen hebben, zonder centrale coördinatie.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze tussen georkestreerde en choreografische saga volgt, net als bij deel 17 zelf, uit de bestaande architectuurkeuze voor die specifieke stappen — het is geen nieuwe, onafhankelijke beslissing die los van deel 17 wordt genomen.</p>
+<h2>Uitwerking 18.4</h2>
+<p>a. Het voordeel is precies wat de ontwikkelaar zegt: als de deelnemer pas bericht krijgt nadat alles definitief is afgerond, is er nooit een voorlopige, mogelijk foutieve boodschap die achteraf gecorrigeerd moet worden — de asymmetrie uit 18.4 in de reader (een verzonden brief is niet terug te halen) wordt volledig vermeden voor deze specifieke stap.</p>
+<p>b. Het nadeel is een herhaling van de valkuil uit deel 3: als het hele proces (vijf stappen, mogelijk dagen duren door de externe administrateur) moet voltooien voordat de deelnemer ook maar enige terugkoppeling krijgt, ontstaat opnieuw het probleem dat deel 3 oploste met de asynchrone ontvangstbevestiging — de deelnemer zou dagenlang niets horen, wat voor een interactieve gebruiker onwenselijk is, ook al is het technisch "veiliger" voor Meridiaan.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het vermijden van compensatie door simpelweg later te communiceren, lost het compensatieprobleem op ten koste van een ander, eerder in de cursus al vastgesteld probleem (gebrek aan tijdige terugkoppeling) — er is geen gratis oplossing, alleen een verschuiving van welk probleem je accepteert. De aanpak uit de reader (voorlopige bevestiging mét expliciete taal over voorlopigheid) is een bewuste middenweg tussen deze twee uitersten.</p>
+<h2>Uitwerking 18.5</h2>
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers ontdekken vaak dat hun bestaande processen impliciet uitgaan van "dat gebeurt gewoon nooit" voor het scenario van een late mislukking, zonder ooit een compenserende actie te hebben ontworpen — tot het moment dat het scenario zich toch voordoet, zoals bij Meridiaan met de fraudecontrole.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Waar ACID atomiciteit garandeert door te wachten tot iedereen tegelijk kan committen, garandeert een saga niets vooraf — hij accepteert dat elke stap definitief is, en ontwerpt vooraf wat er gebeurt als een latere stap alsnog moet worden teruggedraaid.</li>
+<li>Omdat er geen mechanisme is dat meerdere onafhankelijke systemen, elk met eigen beheer en beschikbaarheid, in één ondeelbare handeling kan laten slagen of falen — protocollen die dit proberen (2PC) vereisen blokkerend wachten dat in gedistribueerde, asynchrone ketens onhoudbaar is.</li>
+<li>Een saga is een reeks lokale transacties waarbij elke stap, eenmaal voltooid, als definitief en zichtbaar wordt beschouwd. Bij een latere mislukking wordt niet teruggedraaid, maar wordt voor elke eerdere stap een compenserende actie uitgevoerd — een nieuw feit dat het effect corrigeert, in plaats van het oude feit te wissen.</li>
+<li>Georkestreerde saga (centrale coördinatie van compensaties, weerspiegelt orkestratie uit deel 17) en choreografische saga (elke stap kent zijn eigen compensatiereactie, weerspiegelt choreografie uit deel 17).</li>
+<li>Sommige effecten (zoals een verzonden brief) zijn niet terug te halen, alleen te corrigeren met een zichtbaar spoor van de fout. De vuistregel: ontwerp niet alleen de compenserende actie, maar ook de communicatie die de oorspronkelijke stap begeleidt — hoe voorlopiger gepresenteerd, hoe minder schadelijk een latere compensatie.</li>
+<li>Is er technische mogelijkheid én organisatorische wenselijkheid om alle betrokken systemen te laten blokkeren op een gezamenlijk commit-moment? Zo ja: 2PC. Zo nee (asynchrone, over organisatiegrenzen heen lopende ketens met onafhankelijke systemen): saga.</li>
+<li>Omdat compensatie zwaarder en risicovoller wordt naarmate een saga verder is gevorderd — een vroege stap compenseren is doorgaans eenvoudig (statuswijziging), een late stap (zoals een al uitbetaald bedrag) vergt een actieve, zwaardere handeling zoals terugvordering.</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-17/reader.html">&larr; Deel 17 — Orkestratie versus choreografie</a><a class="eip-prevnext next" href="../deel-19/reader.html">Deel 19 — Outbox-pattern en transactional messaging &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

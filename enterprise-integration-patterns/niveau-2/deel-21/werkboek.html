@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 21 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 2 · deel 21 van 22</p>
+<hr>
+<p>Werk de opdrachten uit v&oacute;&oacute;rdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>Opdracht 21.1 — Waarom deel 15 alleen niet volstond</h2>
+<p>Leg uit waarom de wire tap en message history uit deel 15, ondanks dat ze correct waren geïmplementeerd, het incident van 21.0 niet binnen uren oplosten.</p>
+<hr>
+<h2>Opdracht 21.2 — De drie oorzaken herkennen</h2>
+<p>Voor elk van de volgende symptomen: welke van de drie oorzaken uit 21.2 (inconsistente doorgifte, ontbrekende gestructureerde logging, gebroken boomstructuur bij vertakking) is waarschijnlijk de oorzaak?</p>
+<p>a. Een tracing-tool toont de eerste drie stappen van een proces correct gekoppeld, maar de vierde stap (een enrichment-aanroep) staat volledig los, met een eigen, ongerelateerde identifier.</p>
+<p>b. De trace-ID staat wel in elk bericht, maar om de reis van een specifiek bericht te reconstrueren moet iemand handmatig door duizenden regels vrije-tekstlogs zoeken.</p>
+<p>c. Een batch van tweehonderd afgesplitste berichten (deel 12) toont in het tracingsysteem tweehonderd losse, ongerelateerde trace-bomen in plaats van één boom met tweehonderd takken.</p>
+<hr>
+<h2>Opdracht 21.3 — Message history of distributed tracing?</h2>
+<p>Bepaal voor elk scenario welk instrument passender is, met het onderscheid uit 21.3.</p>
+<p>a. Een medewerker onderzoekt handmatig één specifiek bericht in het dead letter channel en wil onmiddellijk, zonder een ander systeem te hoeven raadplegen, weten welke stappen het al heeft doorlopen.</p>
+<p>b. Het integratieteam wil weten waarom een specifiek uitkeringsproces (vijf georkestreerde stappen, deel 17-18) in totaal negentig minuten duurde, en welke van de vijf stappen daarvan de meeste tijd in beslag nam.</p>
+<p>c. Het integratieteam wil, over de afgelopen maand, weten hoe vaak berichten van een specifiek mutatietype via de tijdelijke detour uit deel 15 zijn gerouteerd.</p>
+<hr>
+<h2>Opdracht 21.4 — De trace-ID-conventie ontwerpen</h2>
+<p>Ontwerp, voor het endpoint van de content enricher (deel 13, het personeelssysteem), de regel die voorkomt dat hij, zoals in het incident gebeurde, een nieuwe, eigen identifier genereert in plaats van de oorspronkelijke trace-ID door te geven.</p>
+<hr>
+<h2>Zelftoets deel 21</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Wat is het verschil tussen wire tap/message history (deel 15) en distributed tracing (dit deel)?</li>
+<li>Wat is een trace-ID en een span-ID, en hoe verhouden ze zich tot de correlatie-ID uit deel 2-3?</li>
+<li>Noem de drie oorzaken waardoor correlatie-ID's als ontwerpprincipe alleen niet voldoende zijn voor observability in productie.</li>
+<li>Wanneer is message history het geschiktere instrument, en wanneer distributed tracing?</li>
+<li>Wat is de organisatorische regel die Meridiaan invoerde om de eerste oorzaak (inconsistente doorgifte) te voorkomen?</li>
+<li>Blijft message history relevant naast distributed tracing, of vervangt het ene het andere? Licht toe.</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 21.1</h2>
+<p>De wire tap toonde per kanaal wát er gebeurde, en de message history toonde, per individueel bericht, welke stappen het had doorlopen. Geen van beide patronen legde echter automatisch de relatie tussen meerdere, van elkaar afgeleide berichten (bijvoorbeeld: de oorspronkelijke aanvraag, een enrichment-aanroep, en een compenserende actie) samen tot één verhaal — dat vergde nog steeds handmatig speurwerk, waarbij een mens de losse waarnemingen van zeven systemen bij elkaar moest zoeken en interpreteren. Deel 15 loste "kan ik zien wat er gebeurt" op; het loste niet op "worden losse waarnemingen automatisch tot één samenhangend verhaal".</p>
+<p><strong>Wat je hier moet meenemen:</strong> zichtbaarheid (deel 15) en samenhang (dit deel) zijn twee verschillende eigenschappen — een systeem kan volledig zichtbaar zijn (elke stap is ergens gelogd) en toch onbegrijpelijk blijven zonder een mechanisme dat de losse stappen aan elkaar knoopt.</p>
+<h2>Uitwerking 21.2</h2>
+<p>a. <strong>Inconsistente doorgifte</strong> — precies het scenario van de content enricher in 21.2, die een eigen, nieuwe identifier genereerde in plaats van de oorspronkelijke trace-ID door te geven.</p>
+<p>b. <strong>Ontbrekende gestructureerde logging</strong> — de trace-ID is aanwezig maar niet als apart, doorzoekbaar veld gelogd, waardoor hij alleen via handmatig parsen van vrije tekst te vinden is.</p>
+<p>c. <strong>Gebroken boomstructuur bij vertakking</strong> — de splitter (deel 12) heeft blijkbaar niet consistent een span-ID met verwijzing naar de ouder-span (de oorspronkelijke batch) meegegeven aan elk van de tweehonderd afgesplitste berichten, waardoor het tracingsysteem ze niet als familie kan herkennen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> elk van de drie oorzaken vraagt een andere correctie — a vraagt discipline bij het genereren van nieuwe aanroepen (nooit een nieuwe ID zonder reden), b vraagt een logging-conventie, c vraagt correcte toepassing van span-verwijzingen specifiek bij vertakkende patronen zoals de splitter.</p>
+<h2>Uitwerking 21.3</h2>
+<p>a. <strong>Message history.</strong> Zelfvoorzienend, direct beschikbaar zonder een centraal systeem te raadplegen — precies de oorspronkelijke reden voor dit patroon uit deel 15, die onveranderd geldig blijft.</p>
+<p>b. <strong>Distributed tracing.</strong> De expliciete boomstructuur met tijdsduren per span is precies ontworpen om "waarom duurde het zo lang, en waar precies" te beantwoorden — iets wat message history's simpele "wie, wanneer"-notatie niet gestructureerd genoeg biedt.</p>
+<p>c. <strong>Geen van beide alleen — een geaggregeerd overzicht gevoed door message history of tracing-data.</strong> Zoals in 21.3 vastgesteld: dit is een patroonherkenningsvraag over vele berichten heen, die geen van beide instrumenten in hun basisvorm direct beantwoordt, maar die wel gevoed kan worden door de onderliggende data die beide patronen verzamelen (bijvoorbeeld: een periodiek rapport dat message history-gegevens van vele berichten aggregeert).</p>
+<p><strong>Wat je hier moet meenemen:</strong> situatie c laat zien dat niet elke observability-vraag door één enkel patroon wordt beantwoord — sommige vragen (aggregatie over veel berichten) vereisen een extra laag bovenop de basispatronen, ook al levert diezelfde onderliggende data (die message history of tracing al verzamelt) het benodigde ruwe materiaal.</p>
+<h2>Uitwerking 21.4</h2>
+<p>De regel: elk endpoint dat een uitgaande aanroep of bericht genereert naar aanleiding van een binnenkomend bericht, geeft de trace-ID van dat binnenkomende bericht door aan elke afgeleide actie — inclusief enrichment-aanroepen, compenserende acties, en splitter-resultaten. Een nieuwe trace-ID wordt uitsluitend gegenereerd bij het ontstaan van een daadwerkelijk nieuwe, onafhankelijke aanvraag (bijvoorbeeld: de oorspronkelijke mutatie-indiening door het Werkgeversportaal), nooit bij een afgeleide actie binnen een bestaande keten.</p>
+<p>Praktisch: de content enricher moet, bij het opbouwen van zijn aanvraag naar het personeelssysteem, expliciet het trace-ID-veld uit het binnenkomende bericht overnemen in de header van de uitgaande aanvraag, in plaats van (zoals bij het incident) een nieuw, willekeurig gegenereerd ID te gebruiken voor die specifieke sub-aanroep.</p>
+<p><strong>Wat je hier moet meenemen:</strong> dit is dezelfde discipline als bij correlatie-ID's in deel 2-3, nu opgeschaald — de regel "geef door, genereer niet opnieuw tenzij het een echt nieuwe aanvraag is" is universeel toepasbaar op elk endpoint dat afgeleide acties genereert.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Correlatie koppelt een antwoord aan zijn vraag; distributed tracing koppelt een heel bos van afgeleide acties aan hun gemeenschappelijke oorsprong — hetzelfde onderliggende idee, opgeschaald van één paar naar een volledige boomstructuur.</li>
+<li>Wire tap en message history maken waarnemingen zichtbaar per kanaal of per individueel bericht; distributed tracing koppelt die losse waarnemingen automatisch tot één samenhangend verhaal over meerdere, van elkaar afgeleide berichten heen.</li>
+<li>Een trace-ID identificeert de oorspronkelijke aanvraag en wordt door de hele keten meegegeven; een span-ID identificeert een individuele stap binnen die keten, met een verwijzing naar de span die hem veroorzaakte. Dit is een uitbreiding van de correlatie-ID uit deel 2-3, die specifiek een command aan zijn antwoord koppelde.</li>
+<li>Niet elke component geeft de trace-ID consistent door (soms wordt een nieuwe gegenereerd); identifiers worden niet altijd als apart, gestructureerd veld gelogd; asynchrone vertakkingen (recipient list, splitter) breken de boomstructuur zonder consistente span-verwijzingen.</li>
+<li>Message history is geschikter voor het zelfvoorzienend beantwoorden van "wat gebeurde er met dit ene bericht" (bijvoorbeeld in het dead letter channel); distributed tracing is geschikter voor "waarom duurde dit hele proces zo lang, en waar precies".</li>
+<li>Elk endpoint dat een uitgaande aanroep of bericht genereert naar aanleiding van een binnenkomend bericht, moet de trace-ID doorgeven, en mag alleen een nieuwe genereren bij een daadwerkelijk nieuwe, onafhankelijke aanvraag.</li>
+<li>Beide blijven relevant, voor verschillende doeleinden — message history voor snelle, zelfvoorzienende diagnose van een individueel bericht zonder een centraal systeem te raadplegen; distributed tracing voor het begrijpen van samenhang en tijdsduur over een heel proces heen.</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-20/reader.html">&larr; Deel 20 — Contractbeheer voor asynchrone koppelingen</a><a class="eip-prevnext next" href="../deel-22/reader.html">Deel 22 — Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

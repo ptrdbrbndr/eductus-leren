@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 4 — Basisrouting: content-based router en message filter — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 4 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 4 — Basisrouting: content-based router en message filter</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 1 (fundament) · deel 4 van 10</p>
+<hr>
+<h2>4.0 Eén kanaal, drie soorten mutaties, één probleem</h2>
+<p>Het ontwerp uit deel 3 werkte voor de adreswijziging waarmee Caspar was begonnen. Twee weken later kwam de eerste uitbreiding: naast adreswijzigingen moest het mutatiekanaal ook dienstverbandmutaties en salariscorrecties dragen. Alle drie zijn command messages, allemaal bestemd voor KERN — dus volgens de regel uit deel 2 ("een kanaal draagt precies één soort bericht") leek dit in eerste instantie geen probleem: het zijn immers allemaal "mutaties".</p>
+<p>De eerste productie-week na de uitbreiding bewees het tegendeel. Salariscorrecties moesten, in tegenstelling tot de andere twee, eerst langs een extra validatiestap bij de financiële administratie voordat KERN ze mocht verwerken — een wettelijke eis die niet gold voor adreswijzigingen of dienstverbandmutaties. KERN begon salariscorrecties zonder die validatie te verwerken, wat drie keer tot een foutieve uitbetaling leidde voordat het werd opgemerkt.</p>
+<p>Het onderliggende probleem: "mutatie" bleek geen fijnmazig genoeg categorie te zijn. Binnen wat op het eerste gezicht één berichtsoort leek, school een verschil dat om een andere behandeling vroeg. Dit deel behandelt de twee eenvoudigste patronen om daarmee om te gaan: de <strong>content-based router</strong>, die een bericht op basis van zijn inhoud naar het juiste vervolgpad stuurt, en de <strong>message filter</strong>, die bepaalt welke berichten een kanaal überhaupt mogen bereiken.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-04/figuur-4-1-ongesorteerd-kanaal.svg" alt="Eén inkomend mutatiekanaal met drie berichttypen (adreswijziging, dienstverbandmutatie, salariscorrectie) die zonder onderscheid naar KERN stromen, met een rode markering bij de plek waar de salariscorrectie de ontbrekende validatiestap mist" loading="lazy"><figcaption>Figuur 4-1 — één inkomend mutatiekanaal met drie berichttypen (adreswijziging, dienstverbandmutatie, salariscorrectie) die zonder onderscheid naar KERN stromen, met een rode markering bij de plek waar de salariscorrectie de ontbrekende validatiestap mist</figcaption></figure>
+<hr>
+<h2>4.1 Twee manieren om een verschil te maken tussen berichten</h2>
+<p>Er zijn, ruwweg, twee manieren om ervoor te zorgen dat verschillende soorten berichten een verschillend vervolgpad krijgen, en het is belangrijk ze niet door elkaar te gebruiken:</p>
+<p><strong>Aparte kanalen per soort.</strong> De striktste oplossing: in plaats van één mutatiekanaal, drie kanalen (adreswijzigingen, dienstverbandmutaties, salariscorrecties), elk met een eigen contract en eigen ontvangers. Dit is meestal de voorkeursoplossing wanneer het onderscheid structureel is en blijvend — zoals hier het geval is, want de wettelijke validatie-eis voor salariscorrecties verdwijnt niet.</p>
+<p><strong>Eén kanaal met een router ervoor.</strong> Als het onderscheid te fijnmazig is om voor elke variant een apart kanaal te rechtvaardigen, of als de indeling nog kan veranderen, is een router die op inhoud beslist een pragmatischer keuze. De router zelf ontvangt van één binnenkomend kanaal, en verdeelt vervolgens naar meerdere uitgaande kanalen.</p>
+<p>Bij Meridiaan is uiteindelijk voor de eerste oplossing gekozen — drie kanalen — juist omdat het verschil wettelijk verankerd en niet incidenteel is. Maar de router bleek toch nodig, alleen op een andere plek: bij de binnenkomst vanuit het Werkgeversportaal weet de gebruikersinterface zelf al welk type mutatie het is, dus daar is geen router nodig. Wél bleek een router nodig te zijn tussen het bestaande, oudere Mutatieplatform-voorloper systeem en de nieuwe drie kanalen, omdat dat oudere systeem zelf geen onderscheid maakte en alles op één uitgaand kanaal plaatste. Dat is precies de situatie waarin een content-based router zijn waarde bewijst: niet als vervanging voor goed kanaalontwerp, maar als noodzakelijke schakel tussen een systeem dat het onderscheid niet kent en kanalen die het wel vereisen.</p>
+<blockquote>
+<p><strong>Kernzin 4 van de cursus: routeer op basis van wat het bericht ís, niet op basis van waar het toevallig vandaan komt — anders verplaats je het probleem alleen naar de router.</strong></p>
+</blockquote>
+<hr>
+<h2>4.2 De content-based router</h2>
+<p>Een <strong>content-based router</strong> ontvangt berichten van één inkomend kanaal en stuurt elk bericht, op basis van de inhoud (doorgaans een header-veld, zoals bepleit in deel 2), naar één van meerdere uitgaande kanalen.</p>
+<p>Drie ontwerpregels maken het verschil tussen een router die houdbaar is en een router die binnen een jaar een onderhoudslast wordt:</p>
+<p><strong>Routeer op header-velden, niet op de volledige payload.</strong> Als de router de payload moet parsen om te beslissen, is hij gedwongen elk berichtformaat te kennen dat langskomt — precies de koppeling die deel 2 wilde vermijden. Bij Meridiaan is daarom een header-veld <code>mutatietype</code> geïntroduceerd, expliciet bedoeld voor routeringsbeslissingen, los van de inhoudelijke velden in de payload.</p>
+<p><strong>Houd de routeringslogica declaratief, niet imperatief.</strong> Een router die uit een lange keten van if/else-statements bestaat, verbergt zijn eigen regels. Een tabel of configuratie ("mutatietype = salariscorrectie → salariscorrectiekanaal") is transparanter, makkelijker te auditen, en makkelijker uit te breiden zonder de router zelf te herbouwen.</p>
+<p><strong>Behandel een onbekend type expliciet, nooit stilzwijgend.</strong> Wat gebeurt er als een vierde mutatietype verschijnt dat de router niet kent? Het slechtste antwoord is: negeren, of naar een willekeurig kanaal doorsturen. Het juiste antwoord: naar een apart <strong>invalid message channel</strong> (uitgewerkt in deel 9), zodat het bericht zichtbaar blijft in plaats van stilletjes te verdwijnen of, erger, verkeerd te worden behandeld.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-04/figuur-4-2-content-based-router.svg" alt="De content-based router als ruit-symbool met drie uitgaande pijlen (adreswijziging, dienstverbandmutatie, salariscorrectie) en een vierde, gestippelde pijl naar het invalid message channel voor onbekende typen" loading="lazy"><figcaption>Figuur 4-2 — de content-based router als ruit-symbool met drie uitgaande pijlen (adreswijziging, dienstverbandmutatie, salariscorrectie) en een vierde, gestippelde pijl naar het invalid message channel voor onbekende typen</figcaption></figure>
+<p>Dit laatste punt is precies waar het incident bij Meridiaan ontstond, in omgekeerde vorm: er was helemaal geen router — alles ging klakkeloos naar hetzelfde eindpunt, wat feitelijk hetzelfde effect heeft als een router die alle onbekende (of, hier: alle) typen naar hetzelfde kanaal stuurt zonder onderscheid.</p>
+<hr>
+<h2>4.3 De message filter</h2>
+<p>Waar een router kiest tússen meerdere uitgaande kanalen, beslist een <strong>message filter</strong> of een bericht een kanaal überhaupt mag betreden. Een filter heeft precies twee uitkomsten: doorlaten, of niet — er is geen derde uitgaand kanaal zoals bij de router.</p>
+<p>Het onderscheid met een router is belangrijker dan het lijkt, en wordt in de praktijk vaak door elkaar gehaald. Een filter test bijvoorbeeld: "is dit een salariscorrectie boven de €5.000, die om die reden een extra handmatige goedkeuring vereist voordat hij het reguliere validatiekanaal mag betreden?" Ontvangt de filter een bericht dat niet aan die voorwaarde voldoet, dan gaat het simpelweg niet door — niet naar een alternatief kanaal, tenzij je de filter expliciet zo ontwerpt (in welk geval hij feitelijk een tweewegs-router wordt, en dat woord ook zou moeten heten).</p>
+<p><strong>Wanneer een filter, wanneer een router?</strong> Gebruik een filter wanneer de vraag is "hoort dit bericht hier wel of niet thuis" — een ja/nee-beslissing met precies één geldig vervolgpad bij "ja". Gebruik een router wanneer de vraag is "welke van meerdere geldige vervolgpaden hoort hierbij" — elke uitkomst is een legitieme bestemming, er is geen "afkeuring".</p>
+<p>Bij Meridiaan is een filter toegevoegd vóór het salariscorrectiekanaal: correcties onder €5.000 gaan direct door naar de reguliere validatie, correcties van €5.000 of meer worden tegengehouden en pas doorgelaten nadat een handmatige goedkeuring is geregistreerd (een apart mechanisme, geen onderdeel van dit deel). De filter zelf beslist niets inhoudelijks over de mutatie — hij beslist alleen of het bericht op dit moment het kanaal mag betreden.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-04/figuur-4-3-message-filter.svg" alt="De message filter als trechter-symbool: berichten onder €5.000 stromen door, berichten van €5.000 en hoger worden tegengehouden bij een wachtpunt met het label 'wacht op goedkeuring'" loading="lazy"><figcaption>Figuur 4-3 — de message filter als trechter-symbool: berichten onder €5.000 stromen door, berichten van €5.000 en hoger worden tegengehouden bij een wachtpunt met het label "wacht op goedkeuring"</figcaption></figure>
+<hr>
+<h2>4.4 Router en filter samen: de volgorde doet ertoe</h2>
+<p>Het incident van 4.0 en de oplossing eromheen laten zien dat router en filter vaak samen worden ingezet, en dat de volgorde waarin ze staan het gedrag bepaalt.</p>
+<p>Bij Meridiaan is de uiteindelijke keten: content-based router (verdeelt naar adreswijziging-, dienstverband- of salariscorrectiekanaal) → op het salariscorrectiekanaal specifiek een message filter (houdt bedragen boven €5.000 tegen tot goedkeuring). De router beslist eerst <em>wat voor soort</em> bericht dit is; de filter beslist daarna, alleen voor het salariscorrectiepad, <em>of</em> dit specifieke bericht op dit moment door mag.</p>
+<p>Zou de volgorde omgekeerd zijn — eerst filteren, dan routeren — dan zou de filter voorafgaand aan de routering al moeten weten dat het om een salariscorrectie gaat, wat betekent dat de filter zelf inhoudelijke kennis over berichttypen zou moeten bevatten. Dat maakt de filter minder herbruikbaar en vermengt twee verantwoordelijkheden (categoriseren en toelaten) die beter gescheiden blijven.</p>
+<blockquote>
+<p><strong>Vuistregel: routeer eerst naar het juiste pad, filter daarna binnen dat pad.</strong> Dit houdt elke component verantwoordelijk voor precies één beslissing.</p>
+</blockquote>
+<hr>
+<h2>Samenvatting van deel 4</h2>
+<ul>
+<li>Wanneer een verschil tussen berichten structureel en blijvend is, is een apart kanaal per soort vaak de voorkeursoplossing; een router is nodig waar systemen dat onderscheid zelf niet kunnen maken.</li>
+<li>Een content-based router verdeelt van één inkomend kanaal naar meerdere uitgaande kanalen op basis van inhoud — bij voorkeur op header-velden, declaratief, met expliciete afhandeling van onbekende typen.</li>
+<li>Een message filter heeft twee uitkomsten: doorlaten of niet. Hij beslist niet tússen meerdere geldige vervolgpaden, zoals een router dat doet.</li>
+<li>De vuistregel: routeer eerst naar het juiste pad, filter daarna binnen dat pad — dat houdt elke component verantwoordelijk voor precies één beslissing.</li>
+</ul>
+<h2>Vooruitblik</h2>
+<p>Deel 5 gaat over transformatie: zodra berichten via de juiste paden bij de juiste ontvangers aankomen, blijkt vaak dat die ontvangers niet allemaal hetzelfde formaat verwachten. De translator, de envelope wrapper en de normalizer lossen dat op — zonder dat elke zender elk ontvangerformaat hoeft te kennen.</p>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-03/reader.html">&larr; Deel 3 — Message Construction: command, event, document en request-reply</a><a class="eip-prevnext next" href="../deel-05/reader.html">Deel 5 — Basistransformatie: translator, envelope wrapper, normalizer &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

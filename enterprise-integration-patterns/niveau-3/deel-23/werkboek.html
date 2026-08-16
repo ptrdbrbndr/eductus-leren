@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 23 — Event-driven architectuur en event streaming fundamenten — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 23 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 23 — Event-driven architectuur en event streaming fundamenten</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 3 · deel 23 van 30</p>
+<hr>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest.</p>
+<hr>
+<h2>Opdracht 23.1 — Communicatiemiddel of bewijsmiddel?</h2>
+<p>Bepaal voor elk event of het primair als communicatiemiddel (niveau 1-2-stijl) of als bewijsmiddel (niveau 3-stijl) moet worden behandeld, en motiveer.</p>
+<p>a. "Dienstverbandmutatie verwerkt" — regulier, dagelijks verkeer.</p>
+<p>b. "Aanspraak ingevaren voor deelnemer 00482, per 1 januari 2027, op basis van rekenregels versie 3.2."</p>
+<p>c. "Batch salariscorrecties verwerkt, 200 van 200 geslaagd."</p>
+<hr>
+<h2>Opdracht 23.2 — Onveranderlijkheid toepassen</h2>
+<p>Een ontwikkelaar ontdekt een fout in een reeds gepubliceerd invaar-event: het rekenregel-versienummer staat verkeerd vermeld. Beschrijf, met kernzin 18 (deel 18) en de onveranderlijkheidseis van dit deel, de juiste correctieprocedure.</p>
+<hr>
+<h2>Opdracht 23.3 — De strengere contracteis</h2>
+<p>Leg uit waarom de contracteis uit 23.3 ("een oud event moet, jaren later, nog steeds correct interpreteerbaar zijn") strenger is dan de gewone achterwaartse compatibiliteit uit deel 20, en bedenk een concrete maatregel die dit waarborgt.</p>
+<hr>
+<h2>Zelftoets deel 23</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Wat is het verschil tussen event streaming in niveau 2 (deel 11) en in niveau 3?</li>
+<li>Noem de drie eigenschappen die in deze context van praktisch naar wettelijk kritisch worden.</li>
+<li>Hoe wordt een fout in een reeds gepubliceerd event gecorrigeerd, en waarom niet door aanpassing van het origineel?</li>
+<li>Waarom is de contracteis uit dit deel strenger dan die uit deel 20?</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 23.1</h2>
+<p>a. <strong>Communicatiemiddel.</strong> Regulier operationeel verkeer zonder wettelijke bewaarplicht in de zin van dit deel — de bewaartermijn uit deel 11 volstaat.</p>
+<p>b. <strong>Bewijsmiddel.</strong> Dit is precies het type event dat de Stelselovergang vereist: onomkeerbaar, met expliciete verwijzing naar de toegepaste rekenregels, potentieel jarenlang op te vragen bij een DNB-controle.</p>
+<p>c. <strong>Grensgeval, waarschijnlijk communicatiemiddel</strong> — tenzij een van de tweehonderd correcties zelf invaar-gerelateerd is, in welk geval die specifieke correctie (niet de aggregatiemelding) als bewijsmiddel moet worden behandeld.</p>
+<p><strong>Wat je hier moet meenemen:</strong> niet elk event in het landschap krijgt automatisch het zwaardere regime van dit deel — de vraag is of het event een wettelijk te verantwoorden feit vastlegt, niet of het toevallig "belangrijk" aanvoelt.</p>
+<h2>Uitwerking 23.2</h2>
+<p>Het oorspronkelijke event wordt niet gewijzigd of verwijderd — dat zou de onveranderlijkheidsgarantie doorbreken die het hele bewijsmodel draagt. In plaats daarvan wordt een nieuw, corrigerend event gepubliceerd dat expliciet verwijst naar het oorspronkelijke (bijvoorbeeld via een <code>corrigeert</code>-veld met het event-ID van het origineel), met de juiste waarde. Bij een latere reconstructie is dan zichtbaar: het oorspronkelijke, foutieve event, gevolgd door de correctie, met tijdstempels van beide — een volledig, eerlijk beeld van wat er is gebeurd, inclusief de fout zelf en het moment van correctie.</p>
+<p><strong>Wat je hier moet meenemen:</strong> dit is exact het saga-compensatieprincipe uit deel 18, nu toegepast op een enkel, gepubliceerd feit in plaats van op een hele processtap — de onderliggende regel ("voeg toe, wis nooit") is dezelfde regel, op een nieuw schaalniveau.</p>
+<h2>Uitwerking 23.3</h2>
+<p>Deel 20's achterwaartse compatibiliteit veronderstelt dat er, op het moment van een wijziging, actieve consumenten zijn die ermee moeten kunnen omgaan — de discipline (additief-eerst, overgangsperiode) is gericht op het niet breken van wat er <em>nu</em> draait. De eis van dit deel gaat verder: een event dat over tien jaar wordt opgevraagd voor een DNB-audit, moet dan nog steeds correct te interpreteren zijn, ook als geen enkele huidige consument het oorspronkelijke schema nog "kent" in actieve code.</p>
+<p>Een concrete maatregel: elk event draagt zijn eigen schemaversie expliciet in de header, en elke gebruikte schemaversie wordt, samen met het schema zelf, permanent gearchiveerd — niet alleen het huidige schema, maar elke versie die ooit is gebruikt, zodat een event van tien jaar geleden kan worden geïnterpreteerd met het schema dat op dát moment gold, onafhankelijk van wat er nu in productie draait.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "achterwaarts compatibel voor huidige consumenten" (deel 20) en "voor altijd correct interpreteerbaar, ook zonder actieve consumenten" (dit deel) zijn twee verschillende, opeenvolgende eisen — de tweede vraagt om permanente schema-archivering, niet alleen om zorgvuldige migratie.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Waar niveau 1 en 2 events gebruikten om systemen te laten samenwerken, gebruikt niveau 3 events om vast te leggen wat waar is — het verschil tussen communicatiemiddel en bewijsmiddel bepaalt elke ontwerpkeuze.</li>
+<li>In deel 11 was bewaring een praktische keuze voor operationeel gemak (laat aangesloten abonnees inhalen); in niveau 3 is bewaring een wettelijke verplichting, potentieel voor de rest van de deelnemersrelatie.</li>
+<li>Onveranderlijkheid, herleidbare volgorde, herspeelbaarheid.</li>
+<li>Door een nieuw, corrigerend event te publiceren dat naar het origineel verwijst — nooit door het origineel te wijzigen, om de onveranderlijkheidsgarantie die het bewijsmodel draagt niet te doorbreken.</li>
+<li>Omdat een event jaren later, zonder actieve consumenten die het oorspronkelijke schema nog kennen, nog steeds correct interpreteerbaar moet zijn — dit vraagt permanente archivering van elke schemaversie, niet alleen zorgvuldige migratie voor huidige consumenten.</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../../niveau-2/deel-22/reader.html">&larr; Deel 22 — Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</a><a class="eip-prevnext next" href="../deel-24/reader.html">Deel 24 — Event sourcing als drager &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

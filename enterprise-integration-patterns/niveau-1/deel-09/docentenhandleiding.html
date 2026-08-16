@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 9 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel</h1>
+<p>Docentenhandleiding · Ductus-cursus Enterprise Integration Patterns · niveau 1 · deel 9 van 10</p>
+<hr>
+<h2>Positie van dit deel</h2>
+<p>Deel 9 is het laatste inhoudelijke deel van niveau 1 vóór de examentraining, en het sluit alle voorgaande delen expliciet af rond één inzicht: elke garantie die niveau 1 tot nu toe heeft opgebouwd (idempotentie, volgordeborging, guaranteed delivery) is waardeloos als het falen ervan onopgemerkt blijft. Dit deel is daarom niet zomaar "nog een patroon", maar de sluitsteen van het hele niveau.</p>
+<p>De casus (214 onopgemerkte berichten) is bewust ontdekt "bij toeval" — dit benadrukt dat het probleem niet was dat iemand een fout maakte in de verwerking, maar dat er structureel geen mechanisme was om falen zichtbaar te maken. Houd deze framing vast door het hele deel: de nadruk ligt op zichtbaarheid en eigenaarschap, niet alleen op de technische mechaniek van de twee kanalen.</p>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kan de deelnemer:</p>
+<ol>
+<li>onderscheiden of een mislukking structureel ongeldig is (invalid message channel) of tijdelijk/onherstelbaar (dead letter channel);</li>
+<li>een retry-strategie ontwerpen die is afgestemd op de aard van de fout, in plaats van een vaste standaardwaarde te gebruiken;</li>
+<li>de vijf eigenschappen benoemen die beide kanalen houdbaar maken, en beoordelen welke daarvan een gegeven incident daadwerkelijk had voorkomen;</li>
+<li>uitleggen waarom replay pas veilig is dankzij idempotentie (deel 7) en volgordeborging (deel 8).</li>
+</ol>
+<h2>Tijdsindeling (één dagdeel, 3 uur 30 met twee pauzes)</h2>
+<table>
+<thead>
+<tr><th>Tijd</th><th>Onderdeel</th><th>Vorm</th></tr>
+</thead>
+<tbody>
+<tr><td>0:00–0:15</td><td>Terugblik deel 8, huiswerkbespreking</td><td>Kort rondje</td></tr>
+<tr><td>0:15–0:35</td><td>Het bericht dat nergens stond</td><td>Vertelling, slides 4–9</td></tr>
+<tr><td>0:35–1:00</td><td>Twee soorten mislukking</td><td>Slides 10–13, opdracht 9.1</td></tr>
+<tr><td>1:00–1:15</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>1:15–1:40</td><td>Het invalid message channel</td><td>Slides 14–17</td></tr>
+<tr><td>1:40–2:15</td><td>Het dead letter channel en retry-strategie</td><td>Slides 18–23, opdracht 9.2</td></tr>
+<tr><td>2:15–2:30</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>2:30–2:55</td><td>Wat had 9.0 voorkomen?</td><td>Opdracht 9.3 — kern van het dagdeel</td></tr>
+<tr><td>2:55–3:15</td><td>Replay veilig maken</td><td>Opdracht 9.4</td></tr>
+<tr><td>3:15–3:30</td><td>Afsluiting niveau 1, vooruitblik naar examentraining</td><td>Slide 29–30</td></tr>
+</tbody>
+</table>
+<p><strong>Huiswerk voor deel 10:</strong> herlees deel 1 tot en met 9 in eigen tempo, met bijzondere aandacht voor de negen kernzinnen. Deel 10 test integraal over het hele niveau.</p>
+<h2>Bij welke groep werkt dit hoe</h2>
+<p><strong>Ontwikkelaars die zelf al dead letter queues hebben geconfigureerd.</strong> Kennen de techniek maar hebben soms nooit het onderscheid met invalid message channel expliciet gemaakt — in de praktijk gooien veel implementaties beide soorten mislukking in dezelfde technische foutwachtrij. Gebruik hun ervaring om te vragen: hebben jullie ooit een structureel ongeldig bericht en een tijdelijke storing in dezelfde wachtrij zien staan, en wat deed dat met de opvolging?</p>
+<p><strong>Operations- of beheerachtergrond.</strong> Herkennen het monitoringvraagstuk (9.3, "wat had het incident voorkomen") het snelst en zullen willen doorpraten over alerting-drempels en escalatiepaden. Erken dat, maar houd vast dat de cursus toolneutraal blijft — specifieke alertingtechnologie hoort in de Toolbijlage.</p>
+<p><strong>Deelnemers die ook een risicomanagementcursus volgen.</strong> Zullen de parallel zien met "een risico dat niemand monitort is geen beheerst risico". Gebruik die parallel expliciet bij gemengde groepen: een dead letter channel zonder monitoring is functioneel hetzelfde als een risicoregister dat niemand leest.</p>
+<h2>Valkuilen bij de uitleg</h2>
+<p><strong>De twee kanalen als puur technische configuratie behandelen.</strong> Het is verleidelijk om dit deel te reduceren tot "stel een dead letter queue in bij je broker". De echte les zit in 9.4: garanties zijn zinloos zonder zichtbaarheid. Zorg dat de discussie over monitoring en eigenaarschap minstens evenveel tijd krijgt als de technische mechaniek van retries.</p>
+<p><strong>Opdracht 9.1 te snel afdoen als "voor de hand liggend".</strong> De situaties b en e zijn met opzet minder eenduidig dan a, c en d. Laat de groep zelf worstelen met de toetssteen ("zou een retry dit kunnen oplossen?") in plaats van meteen de uitwerking te tonen.</p>
+<p><strong>Retry-strategie als één-op-één technisch recept presenteren (bijvoorbeeld "altijd drie keer, exponentieel").</strong> Dit ondermijnt de kern van 9.2: het juiste aantal en de juiste tussenpozen hangen af van de aard van de fout. Laat opdracht 9.2 expliciet twee tegengestelde situaties naast elkaar zien om dit te benadrukken.</p>
+<h2>Discussievragen</h2>
+<p>Kies er twee, afhankelijk van de groep.</p>
+<ol>
+<li>Bestaat er bij jullie een technische foutwachtrij die niemand structureel monitort? Hoe zou je daarachter komen zonder dat het al een incident is geworden?</li>
+<li>Is er bij jullie onderscheid tussen "structureel ongeldig" en "tijdelijk mislukt", of belanden beide in dezelfde plek?</li>
+<li>Wat zou bij jullie het juiste retry-aantal zijn voor een koppeling met een kritieke externe partij, en is dat ooit bewust vastgesteld of is het een technologiedefault?</li>
+<li>Voor gemengde groepen: is "niemand monitort de foutwachtrij" een technisch probleem of een organisatorisch probleem? (Stuur naar: het is allebei — de techniek maakt monitoring mogelijk, maar zonder een aangewezen eigenaar gebeurt het toch niet, ongeacht hoe goed het kanaal technisch is ingericht.)</li>
+</ol>
+<h2>Antwoordmodel voor de moeilijkste bespreking (opdracht 9.3)</h2>
+<p>De meest voorkomende eerste reactie is dat alle vijf de eigenschappen "natuurlijk" hadden geholpen — het is verleidelijk om een lijst met goede praktijken te zien als gelijkwaardig belangrijk.</p>
+<p>Laat de groep het onderscheid zelf vinden door te vragen: <strong>stel dat jullie maar één van de vijf eigenschappen mochten invoeren — welke voorkomt het kernprobleem (drie maanden onopgemerkt) het meest direct, en welke lossen een ander, kleiner probleem op?</strong> Dit dwingt tot prioritering. De uitwerking laat zien dat monitoring plus eigenaarschap het kernprobleem direct raakt, terwijl reden-vastlegging en retry-strategie de kwáliteit van de foutafhandeling verbeteren zonder de onopgemerktheid zelf op te lossen.</p>
+<p>Dit is het scherpste punt van het hele deel: <strong>een technisch perfect ontworpen dead letter channel dat niemand bekijkt, is functioneel identiek aan geen dead letter channel.</strong></p>
+<h2>Materiaal</h2>
+<ul>
+<li>Het fictieve overzicht van 214 berichten (aantal per week, oplopende trend) als openingsvisual — laat zien dat het probleem geleidelijk groeide, niet in één keer ontstond.</li>
+<li>De beslisboom uit figuur 9-2 als flipover-oefening: laat deelnemers bij opdracht 9.1 zelf door de boom lopen voordat de uitwerking wordt getoond.</li>
+</ul>
+<h2>Aansluiting op deel 10</h2>
+<p>Sluit af met een korte terugblik op de negen kernzinnen van niveau 1 (deel 1 tot en met 9), en kondig aan dat deel 10 deze integraal test aan de hand van de volledige mutatieketen die stap voor stap door dit niveau is opgebouwd — van de eerste synchrone koppeling in deel 1 tot de foutafhandeling in dit deel.</p>
+<p>Waarschuw alvast voor de valkuil van deel 10: deelnemers die de negen delen als losse patronen hebben onthouden in plaats van als een samenhangend geheel, zullen merken dat de examenvragen juist de onderlinge samenhang toetsen (zoals in dit deel zelf al zichtbaar werd bij opdracht 9.4, waar foutafhandeling terugvalt op idempotentie en volgordeborging).</p>
+
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-08/reader.html">&larr; Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery</a><a class="eip-prevnext next" href="../deel-10/reader.html">Deel 10 — Examentraining en capstone: de verdediging &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

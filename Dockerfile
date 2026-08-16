@@ -9,6 +9,7 @@ COPY index.html /usr/share/nginx/html/
 COPY sap-*.html /usr/share/nginx/html/
 COPY courses.json /usr/share/nginx/html/
 COPY domain-driven-design/ /usr/share/nginx/html/domain-driven-design/
+COPY enterprise-integration-patterns/ /usr/share/nginx/html/enterprise-integration-patterns/
 COPY sap-voor-business-analysts/ /usr/share/nginx/html/sap-voor-business-analysts/
 
 EXPOSE 80

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 19 — Outbox-pattern en transactional messaging — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 19 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 19 — Outbox-pattern en transactional messaging</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 2 · deel 19 van 22</p>
+<hr>
+<p>Werk de opdrachten uit v&oacute;&oacute;rdat je de uitwerking leest. De uitwerkingen staan achterin.</p>
+<hr>
+<h2>DAGDEEL A</h2>
+
+<hr>
+<h2>Opdracht 19.1 — Beide volgordes falen</h2>
+<p>Beschrijf, voor beide volgordes uit 19.1 (eerst database dan bericht, eerst bericht dan database), een concreet faalscenario en wie daarvan de schade ondervindt (Meridiaan zelf, of een externe ontvanger).</p>
+<hr>
+<h2>Opdracht 19.2 — Herken de dual-write-valkuil</h2>
+<p>Bepaal voor elk van de volgende codebeschrijvingen of het de dual-write-valkuil bevat, en zo ja, welke volgorde (eerst database, eerst bericht) wordt gevolgd.</p>
+<p>a. <code>opslaan(mutatie); publiceerEvent(mutatie);</code></p>
+<p>b. <code>binnenTransactie { opslaan(mutatie); opslaan(outboxRegel); }</code> gevolgd door een aparte relay die de outbox-tabel uitleest.</p>
+<p>c. <code>publiceerEvent(mutatie); opslaan(mutatie);</code></p>
+<p>d. <code>binnenTransactie { opslaan(mutatie); publiceerEvent(mutatie); }</code> — beide binnen dezelfde codeblok-transactie, waarbij het publiceren een aanroep naar een extern messagingsysteem is.</p>
+<hr>
+<h2>Opdracht 19.3 — Outbox versus saga</h2>
+<p>Leg, met het onderscheid uit 19.3, uit waarom het outbox-pattern niet gebruikt kan worden om het probleem van deel 18 (coördinatie over vijf systemen bij het uitkeringsproces) rechtstreeks op te lossen.</p>
+<hr>
+<h2>DAGDEEL B</h2>
+
+<hr>
+<h2>Opdracht 19.4 — Transactional messaging aan de ontvangende kant</h2>
+<p>Een ontvanger bevestigt aan de broker dat een bericht is verwerkt zodra het bericht is binnengekomen, nog vóórdat de lokale verwerkingslogica is uitgevoerd. Beschrijf, met kernzin 21, wat er misgaat als de lokale verwerking vervolgens mislukt (bijvoorbeeld door een crash).</p>
+<hr>
+<h2>Opdracht 19.5 — Idempotentie in de outbox-relay</h2>
+<p>De outbox-relay uit 19.2 crasht na het publiceren van een bericht, maar vóór het markeren van de outbox-regel als verwerkt. Beschrijf wat er gebeurt bij een volgende poging, en welk niveau 1-patroon (deel 7) dit veilig houdt.</p>
+<hr>
+<h2>Opdracht 19.6 — Terug naar KERN</h2>
+<p>Beschrijf, in eigen woorden, hoe de herbouwde KERN-mutatieverwerking (19.6) het incident van 19.0 structureel onmogelijk maakt. Gebruik in je antwoord expliciet de woorden "atomair" en "outbox-regel".</p>
+<hr>
+<h2>Zelftoets deel 19</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is de dual-write-valkuil, en in welke twee volgordes kan hij zich voordoen?</li>
+<li>Wat is de kernzin over de dual-write-valkuil, in eigen woorden?</li>
+<li>Hoe lost het outbox-pattern dit op, en waarom werkt dat?</li>
+<li>Waarom is een outbox-relay zelf weer een at-least-once-mechanisme, en welk patroon houdt dat veilig?</li>
+<li>Wat is het verschil tussen het outbox-pattern en een saga (deel 18), en waarom zijn ze complementair in plaats van inwisselbaar?</li>
+<li>Wat is de kernzin over transactional messaging aan de ontvangende kant?</li>
+<li>Waarom is "binnen dezelfde transactie een aanroep naar een extern messagingsysteem plaatsen" géén geldige toepassing van het outbox-pattern?</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 19.1</h2>
+<p><strong>Eerst database, dan bericht:</strong> een crash na de databasewijziging maar vóór het versturen betekent dat KERN's eigen administratie de mutatie correct bevat, maar geen enkele externe ontvanger (Nabestaandenloket, audit-trail) er ooit van hoort — de schade wordt gedragen door de ontvangers, die een onvolledig beeld hebben zonder het te weten. Dit is precies het incident van 19.0.</p>
+<p><strong>Eerst bericht, dan database:</strong> een crash na het versturen maar vóór de databasewijziging betekent dat ontvangers al hebben gereageerd op een gebeurtenis die, in de bron zelf, nooit definitief is vastgelegd. Als de databasewijziging vervolgens definitief mislukt (bijvoorbeeld door een validatiefout die pas op databaseniveau wordt ontdekt), hebben ontvangers gehandeld op basis van iets dat feitelijk nooit is gebeurd — de schade wordt in dit geval gedragen door de bron zelf, die nu moet corrigeren richting ontvangers die al gereageerd hebben.</p>
+<p><strong>Wat je hier moet meenemen:</strong> geen van beide volgordes is "veiliger" dan de andere — ze verplaatsen alleen wie de gevolgen draagt van de inconsistentie, van de ontvangers (eerst database) naar de bron (eerst bericht). Het probleem zelf blijft in beide gevallen bestaan.</p>
+<h2>Uitwerking 19.2</h2>
+<p>a. <strong>Ja, dual-write-valkuil, eerst database.</strong> Precies het patroon dat bij KERN het incident van 19.0 veroorzaakte.</p>
+<p>b. <strong>Nee, dit is het outbox-pattern</strong>, correct toegepast — de tweede schrijfactie (outboxRegel) is onderdeel van dezelfde lokale transactie als de eerste, waarna een aparte relay verantwoordelijk is voor de daadwerkelijke, asynchrone publicatie.</p>
+<p>c. <strong>Ja, dual-write-valkuil, eerst bericht.</strong></p>
+<p>d. <strong>Ja, nog steeds een vorm van de valkuil, ondanks de schijn van veiligheid.</strong> Dit is een veelgemaakte denkfout: het "binnen dezelfde transactie" plaatsen van een aanroep naar een <em>extern</em> messagingsysteem (in tegenstelling tot een tweede lokale databaseschrijfactie zoals in b) biedt doorgaans geen echte atomaire garantie, omdat de externe messaging-infrastructuur niet deelneemt aan de lokale databasetransactie — een rollback van de lokale transactie kan het al verzonden bericht niet meer terugroepen, en een geslaagde lokale transactie garandeert niet dat de externe publicatie ook daadwerkelijk is aangekomen. Alleen wanneer beide schrijfacties <strong>lokaal, binnen dezelfde database</strong> plaatsvinden (zoals bij b, met de outbox-tabel), is er een echte atomaire garantie.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het woord "transactie" in de code garandeert niets als een van de twee handelingen buiten de lokale database plaatsvindt — situatie d is een subtiele valkuil die op het eerste gezicht op het outbox-pattern lijkt, maar het cruciale onderscheid (lokaal versus extern) mist.</p>
+<h2>Uitwerking 19.3</h2>
+<p>Het outbox-pattern lost een probleem op binnen de grenzen van één enkele lokale database, waar normale ACID-garanties al bestaan — het "forceert" niets, het maakt alleen gebruik van een garantie die er al is. Het uitkeringsproces uit deel 18 bevat vijf onafhankelijke systemen, elk met hun eigen lokale database; er bestaat geen enkele gedeelde, atomaire transactiegrens die alle vijf tegelijk omvat, en het outbox-pattern kan die grens niet creëren — het lost alleen het probleem op tússen een lokale databasewijziging en het versturen van één bericht, niet tussen meerdere, onafhankelijke systemen.</p>
+<p>Wat wél kan (en bij Meridiaan ook gebeurt, zie 19.3 in de reader): elke individuele stap binnen de saga gebruikt zelf het outbox-pattern, zodat die specifieke stap — bijvoorbeeld "KERN werkt zijn lokale status bij én publiceert een compenserend event" — intern betrouwbaar is. De saga zelf blijft verantwoordelijk voor de coördinatie tussen die stappen; het outbox-pattern maakt elke individuele stap binnen die coördinatie robuuster, maar vervangt de saga-coördinatie niet.</p>
+<p><strong>Wat je hier moet meenemen:</strong> outbox en saga zijn complementair, niet inwisselbaar — ze werken op verschillende schaalniveaus van hetzelfde onderliggende probleem (twee of meer dingen die samen moeten slagen), en het is een denkfout om te veronderstellen dat het ene het andere overbodig maakt.</p>
+<h2>Uitwerking 19.4</h2>
+<p>Omdat de bevestiging al is verstuurd vóórdat de lokale verwerking daadwerkelijk is voltooid, beschouwt de broker het bericht als succesvol afgeleverd en zal het — afhankelijk van de leveringsgarantie (deel 7) — niet opnieuw aanbieden. Als de lokale verwerking vervolgens mislukt (crash, fout), is het bericht wat de broker betreft "klaar", terwijl de daadwerkelijke, beoogde lokale effecten nooit hebben plaatsgevonden — een spiegelbeeld van de dual-write-valkuil, nu aan de ontvangende in plaats van de zendende kant.</p>
+<p>De juiste volgorde: bevestig aan de broker pas nadat, of als onderdeel van dezelfde lokale transactie als, de verwerking daadwerkelijk is afgerond. Bij een crash vóór die bevestiging zal de broker het bericht (bij at-least-once, zoals deel 7 aanbeveelt) opnieuw aanbieden, en de idempotentiemaatregelen uit deel 7 zorgen ervoor dat een eventuele gedeeltelijke eerdere verwerking geen dubbel effect heeft.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de discipline van dit deel geldt symmetrisch — niet alleen "verstuur pas nadat de lokale wijziging vaststaat" (outbox, zendende kant), maar ook "bevestig pas nadat de lokale verwerking vaststaat" (ontvangende kant). Beide zijn instanties van dezelfde onderliggende regel.</p>
+<h2>Uitwerking 19.5</h2>
+<p>Bij een volgende poging (door dezelfde relay na herstart, of door een tweede relay-instantie) wordt de outbox-regel, die nog steeds als "niet verwerkt" gemarkeerd staat, opnieuw opgepikt en opnieuw gepubliceerd — een klassiek at-least-once-scenario (deel 7), met hetzelfde duplicatierisico dat elk ander at-least-once-mechanisme kent. Het patroon dat dit veilig houdt is <strong>idempotentie</strong> (deel 7): het gepubliceerde bericht draagt een stabiel bericht-ID, afgeleid van de outbox-regel zelf (bijvoorbeeld de primaire sleutel van die regel), zodat een ontvanger die het bericht twee keer ontvangt, de tweede keer herkent als een duplicaat en niet dubbel verwerkt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het outbox-pattern lost de dual-write-valkuil op, maar introduceert zelf weer een nieuw at-least-once-scenario (bij de relay-publicatie) — precies zoals 19.5 in de reader stelt: het combineert bestaande technieken (lokale ACID, at-least-once plus idempotentie) in plaats van een nieuwe klasse problemen te introduceren. Wie het outbox-pattern bouwt zonder deze idempotentiestap, heeft het oorspronkelijke probleem (stille inconsistentie) vervangen door een nieuw probleem (mogelijke duplicatie) in plaats van het volledig op te lossen.</p>
+<h2>Uitwerking 19.6</h2>
+<p>In de herbouwde versie schrijft KERN, binnen één en dezelfde lokale databasetransactie, zowel de mutatie zelf als de bijbehorende outbox-regel weg. Omdat beide schrijfacties binnen dezelfde transactie vallen, zijn ze <strong>atomair</strong>: de database garandeert dat ze samen slagen of samen falen, er bestaat geen technisch venster meer waarin de één wel en de ander niet lukt. Als de transactie slaagt, staat de <strong>outbox-regel</strong> er gegarandeerd — de relay zal hem vroeg of laat vinden en publiceren. Als de transactie mislukt, wordt ook geen outbox-regel weggeschreven, en wordt er dus terecht nooit een event gepubliceerd voor een mutatie die feitelijk nooit heeft plaatsgevonden. De stille inconsistentie uit 19.0 (database bijgewerkt, event nooit verstuurd) kan in dit ontwerp per definitie niet meer optreden.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de oplossing zit niet in "beter opletten" of "extra foutafhandeling toevoegen" rond de oude, tweestaps aanpak — het probleem is structureel opgelost door de twee handelingen technisch tot één handeling te maken, binnen een grens waar atomaire garanties al van nature bestaan.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>De dual-write-valkuil ontstaat wanneer een lokale databasewijziging en het versturen van een bericht als twee, onafhankelijk kunnen falen, stappen worden uitgevoerd. Dit kan in de volgorde "eerst database, dan bericht" (stille inconsistentie bij ontvangers) of "eerst bericht, dan database" (ontvangers reageren op iets dat nooit definitief werd vastgelegd).</li>
+<li>Elke keer dat "wijzig de database" en "verstuur een bericht" als twee losse stappen worden geschreven, ontstaat een venster waarin de werkelijkheid van het systeem en de werkelijkheid die het communiceert, uit elkaar kunnen lopen.</li>
+<li>Door het bericht als regel binnen dezelfde lokale, atomaire databasetransactie weg te schrijven als de eigenlijke wijziging, in plaats van als aparte, volgende stap. Dit werkt omdat de normale ACID-garantie van de lokale database dan automatisch geldt voor beide schrijfacties samen.</li>
+<li>Omdat de relay kan crashen tussen het publiceren en het markeren-als-verwerkt van een outbox-regel, waardoor een volgende poging dezelfde regel opnieuw kan publiceren. Idempotentie (deel 7), met een bericht-ID afgeleid van de outbox-regel zelf, houdt dit veilig.</li>
+<li>Outbox lost het probleem op binnen één systeem met één lokale database; saga coördineert tussen meerdere, onafhankelijke systemen zonder gedeelde transactiegrens. Ze zijn complementair: outbox maakt elke individuele saga-stap intern betrouwbaar, terwijl saga de coördinatie tussen die stappen regelt.</li>
+<li>Transactional messaging geldt niet alleen bij het versturen van berichten — de bevestiging van ontvangst aan de broker mag nooit voorlopen op de daadwerkelijke, lokale verwerking van dat bericht.</li>
+<li>Omdat de externe messaging-infrastructuur niet deelneemt aan de lokale databasetransactie — een rollback van de lokale transactie kan een al verzonden extern bericht niet terugroepen, en een geslaagde lokale transactie garandeert niet dat de externe publicatie daadwerkelijk is aangekomen. Alleen twee lokale schrijfacties binnen dezelfde database bieden een echte atomaire garantie.</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-18/reader.html">&larr; Deel 18 — Distributed transactions in async context: saga's en compenserende transacties</a><a class="eip-prevnext next" href="../deel-20/reader.html">Deel 20 — Contractbeheer voor asynchrone koppelingen &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

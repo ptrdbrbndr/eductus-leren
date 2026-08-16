@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Deel 18 — Distributed transactions in async context: saga's en compenserende transacties — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 18 — Distributed transactions in async context: saga's en compenserende transacties</h1>
+<p>Docentenhandleiding · Ductus-cursus Enterprise Integration Patterns · niveau 2 · deel 18 van 22</p>
+<hr>
+<h2>Positie van dit deel</h2>
+<p>Deel 18 behandelt een van de conceptueel moeilijkste onderwerpen van de cursus: het loslaten van de intuïtie dat "iets misgaat, dus draaien we het terug" — een intuïtie die stevig verankerd zit bij iedereen met databaseachtergrond. De kern van het deel is de mentale omslag van "terugdraaien" naar "compenseren met een nieuw feit", uitgewerkt in 18.2 en versterkt door opdracht 18.2's derde situatie (een reeds uitbetaald bedrag), die laat zien dat compensatie soms aanzienlijk zwaarder is dan een eenvoudige statuswijziging.</p>
+<p>Dit deel bouwt expliciet voort op deel 17 (orkestratie/choreografie) — zorg dat die verbinding niet verloren gaat. Een saga is geen nieuw, los mechanisme, maar een specifieke toepassing van precies dat onderscheid op het probleem van terugdraaien. De afstemming met de API-cursus (18.5) is inhoudelijk belangrijk voor deelnemers die beide cursussen volgen, en verdient een expliciete, zorgvuldige behandeling om verwarring over "wanneer 2PC, wanneer saga" te voorkomen.</p>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kan de deelnemer:</p>
+<ol>
+<li>uitleggen waarom ACID-atomiciteit en 2PC niet werken over onafhankelijke, asynchrone systemen heen, met verwijzing naar deel 1;</li>
+<li>compenserende acties ontwerpen die nieuwe feiten toevoegen in plaats van oude feiten te wissen;</li>
+<li>de keuze tussen georkestreerde en choreografische saga verbinden aan de bestaande architectuurkeuze uit deel 17;</li>
+<li>de asymmetrie van compensatie herkennen en de communicatie rond vroege stappen daarop aanpassen;</li>
+<li>de grens tussen 2PC (API-cursus) en saga (deze cursus) correct toepassen.</li>
+</ol>
+<h2>Tijdsindeling (één dagdeel, 3 uur 30 met twee pauzes)</h2>
+<table>
+<thead>
+<tr><th>Tijd</th><th>Onderdeel</th><th>Vorm</th></tr>
+</thead>
+<tbody>
+<tr><td>0:00–0:15</td><td>Terugblik deel 17, huiswerkbespreking</td><td>Kort rondje langs opdracht 17.5</td></tr>
+<tr><td>0:15–0:35</td><td>De fraudecontrole die te laat kwam</td><td>Vertelling, slides 4–8</td></tr>
+<tr><td>0:35–1:00</td><td>Waarom ACID/2PC hier niet werken</td><td>Slides 9–13, opdracht 18.1</td></tr>
+<tr><td>1:00–1:15</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>1:15–1:50</td><td>Het saga-patroon: compenseren, niet terugdraaien</td><td>Slides 14–19, opdracht 18.2 — kern van het dagdeel</td></tr>
+<tr><td>1:50–2:15</td><td>Twee vormen van saga-coördinatie</td><td>Slides 20–23, opdracht 18.3</td></tr>
+<tr><td>2:15–2:30</td><td><strong>Pauze</strong></td><td></td></tr>
+<tr><td>2:30–2:55</td><td>De asymmetrie van compensatie</td><td>Slides 24–27, opdracht 18.4</td></tr>
+<tr><td>2:55–3:15</td><td>Afstemming met de API-cursus</td><td>Bespreking, met name voor deelnemers die beide cursussen volgen</td></tr>
+<tr><td>3:15–3:30</td><td>Eigen praktijk, huiswerk</td><td>Slide 31–32</td></tr>
+</tbody></table>
+<p><strong>Huiswerk voor deel 19:</strong> opdracht 18.5. Deel 19 (outbox-pattern, twee dagdelen) bouwt direct voort op de betrouwbaarheidsvraag die elke saga-stap in de praktijk vereist: hoe zorg je dat een lokale wijziging en het versturen van het bijbehorende bericht altijd samen slagen?</p>
+<h2>Bij welke groep werkt dit hoe</h2>
+<p><strong>Ontwikkelaars met sterke databaseachtergrond.</strong> Zullen de grootste weerstand voelen tegen het loslaten van rollback-denken. Besteed extra tijd aan opdracht 18.2, en benoem expliciet dat dit geen inferieure vervanging van ACID is, maar een ander soort garantie voor een fundamenteel ander soort probleem (gedistribueerde, onafhankelijke systemen versus één lokale database).</p>
+<p><strong>Deelnemers die ook de API-cursus volgen of hebben gevolgd.</strong> Hebben het meeste baat bij 18.5 (afstemming) en kunnen mogelijk zelf al vragen hebben over waar precies de grens ligt tussen wat ze in die cursus leerden en wat hier wordt behandeld. Nodig deze vragen actief uit — verwarring hierover vroeg signaleren is beter dan het later te laten vastroesten.</p>
+<p><strong>Compliance- of risicoachtergrond.</strong> Zullen opdracht 18.2c (terugvordering na uitbetaling) herkennen als een juridisch en reputationeel vraagstuk, niet alleen technisch. Bevestig dat expliciet — dit is precies waar techniek en business elkaar raken bij een saga, en een goede saga-ontwerper moet die dimensie meewegen, niet alleen de technische compensatiemechaniek.</p>
+<h2>Valkuilen bij de uitleg</h2>
+<p><strong>Saga presenteren als "beter" dan 2PC.</strong> Dit ondermijnt 18.5 volledig. Saga is geen upgrade van 2PC, het is een ander antwoord op een ander soort probleem — 2PC blijft binnen zijn eigen context (beheerste, synchrone omgeving) een geldige en soms de juiste keuze.</p>
+<p><strong>Compensatie te makkelijk voorstellen ("gewoon een tegenovergestelde actie doen").</strong> Opdracht 18.2c is bewust ingebouwd om te laten zien dat dit niet altijd zo eenvoudig is. Laat de groep zelf worstelen met het terugvorderingsscenario voordat je de uitwerking toont.</p>
+<p><strong>De asymmetrie van 18.4 als randnotitie behandelen.</strong> Dit is een van de meest praktisch waardevolle inzichten van het deel — de communicatiestrategie rond een vroege stap (expliciet "voorlopig" formuleren) is een concreet, direct toepasbaar advies dat verdient om met evenveel nadruk te worden gebracht als de compensatiemechaniek zelf.</p>
+<h2>Discussievragen</h2>
+<p>Kies er twee, afhankelijk van de groep.</p>
+<ol>
+<li>Is er bij jullie een meerstaps proces waarbij nooit is nagedacht over wat er gebeurt als een late stap mislukt nadat een vroege stap al onomkeerbare gevolgen had?</li>
+<li>Noem een stap bij jullie die, als hij gecompenseerd zou moeten worden, bijzonder zwaar of risicovol zou zijn (vergelijkbaar met de terugvordering in opdracht 18.2c). Zou het verplaatsen van een controle eerder in de keten dat risico verkleinen?</li>
+<li>Gebruiken jullie ergens taal die bewust "voorlopig" communiceert, om de impact van een latere compensatie te beperken? Of wordt vroege communicatie vaak als definitiever gepresenteerd dan hij eigenlijk is?</li>
+<li>Voor gemengde groepen (met name als beide de API-cursus en deze cursus zijn gevolgd): is er bij jullie een proces dat nu met 2PC of een vergelijkbaar protocol wordt afgehandeld, maar dat eigenlijk de kenmerken van een saga-situatie heeft (onafhankelijke, asynchrone systemen, één externe partij)?</li>
+</ol>
+<h2>Antwoordmodel voor de moeilijkste bespreking (opdracht 18.2c)</h2>
+<p>De meest voorkomende eerste reactie op "de uitkeringsadministratie heeft de eerste betaling al verwerkt" is een korte stilte, gevolgd door een voorstel als "gewoon het geld terugvragen".</p>
+<p>Laat de groep zelf de complicaties blootleggen door te vragen: <strong>wat als de deelnemer het geld al heeft uitgegeven, of te goeder trouw handelde? Is "gewoon terugvragen" dan nog steeds de juiste compenserende actie, en wie beslist dat?</strong> Dit onthult dat compensatie bij een verder gevorderde stap niet langer een puur technische kwestie is (stuur een tegenovergesteld bericht) maar een organisatorische en soms juridische beslissing wordt (starten van een terugvorderingsproces, met eigen afwegingen). Vraag door: wie in de organisatie zou deze beslissing moeten nemen — een systeem automatisch, of een mens die de specifieke situatie beoordeelt?</p>
+<p>Dit is het scherpste punt van het hele deel: <strong>hoe verder een saga vordert, hoe meer een "technische" compensatie overgaat in een businessbeslissing die menselijke afweging vereist — het saga-ontwerp moet daarom expliciet aangeven vanaf welke stap automatische compensatie ophoudt en menselijke tussenkomst begint.</strong></p>
+<h2>Materiaal</h2>
+<ul>
+<li>Het figuur 18-1/18-2-diagrammenpaar (doorgestreepte terugpijlen versus nieuwe, toevoegende compensatiepijlen) als centraal visueel contrast voor het hele dagdeel.</li>
+<li>Een korte samenvattingstabel (2PC versus saga: garantie, mechanisme, toepassingscontext) als flipover-referentie, bij voorkeur samen met de groep ingevuld tijdens de bespreking van 18.5.</li>
+</ul>
+<h2>Aansluiting op deel 19</h2>
+<p>Sluit af met de vraag die deel 19 opent: elke stap in een saga — of het nu een reguliere stap of een compenserende actie is — bestaat in de praktijk vaak uit twee handelingen die samen moeten slagen: een lokale databasewijziging (bijvoorbeeld "markeer als niet-actief") én het versturen van een bericht dat andere systemen daarover informeert. Wat gebeurt er als de databasewijziging lukt maar het versturen van het bericht mislukt, of andersom? Antwoord: dat is het onderwerp van deel 19 — het tweede tweedagdelen-deel van de cursus — met het outbox-pattern als oplossing.</p>
+<p>Waarschuw alvast voor de valkuil van deel 19: deelnemers zullen geneigd zijn te denken dat "gewoon eerst de database bijwerken, dan het bericht versturen" voldoende betrouwbaar is. Deel 19 laat zien waarom die twee stappen, apart uitgevoerd, altijd een raceconditie met een mogelijk inconsistente uitkomst introduceren.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-17/reader.html">&larr; Deel 17 — Orkestratie versus choreografie</a><a class="eip-prevnext next" href="../deel-19/reader.html">Deel 19 — Outbox-pattern en transactional messaging &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

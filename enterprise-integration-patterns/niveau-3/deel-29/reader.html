@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 29 — Auditability en verantwoording richting DNB/AFM vanuit messaging-logs — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 29 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 29 — Auditability en verantwoording richting DNB/AFM vanuit messaging-logs</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 3 (expert) · deel 29 van 30</p>
+<hr>
+<h2>29.0 De vraag van de toezichthouder</h2>
+<p>Bij een voorbereidende gesprek met DNB, ruim vóór de daadwerkelijke invaardatum, kreeg Caspar een vraag die alle voorgaande delen van niveau 3 in één keer op de proef stelde: <em>"Kunt u, voor een willekeurig gekozen deelnemer, aantonen — niet beweren, aantónen — welke gegevens golden op het moment van invaren, welke rekenregels zijn toegepast, wie of wat de beslissing heeft genomen, en dat er geen enkele wijziging is geweest tussen het moment van vaststelling en nu?"</em></p>
+<p>Dit is geen technische vraag in de gebruikelijke zin — het is een vraag naar <strong>verifieerbaar bewijs</strong>, en het onderscheid met "een systeem dat waarschijnlijk correct werkt" is precies waar dit deel om draait. Elke patroon uit niveau 1-3 heeft, tot nu toe, gediend om de keten technisch correct en betrouwbaar te laten functioneren. Dit deel behandelt de laatste stap: hoe die technische correctheid wordt <strong>omgezet in een document dat een toezichthouder, zonder enige technische achtergrond, kan beoordelen en accepteren als bewijs.</strong></p>
+<figure class="eip-figure"><img src="../../figuren/deel-29/figuur-29-1-vertaalslag-verantwoording.svg" alt="Een DNB-medewerker aan een tafel, met aan de ene kant een stapel technische logbestanden en trace-boomstructuren, aan de andere kant een leesbaar, gestructureerd verantwoordingsdocument — met een pijl die de vertaalslag tussen beide markeert." loading="lazy"><figcaption>Figuur 29-1 — Een DNB-medewerker aan een tafel, met aan de ene kant een stapel technische logbestanden en trace-boomstructuren, aan de andere kant een leesbaar, gestructureerd verantwoordingsdocument — met een pijl die de vertaalslag tussen beide markeert.</figcaption></figure>
+<hr>
+<h2>29.1 Drie verplichte documenten, drie soorten bewijs</h2>
+<p>De Stelselovergang vereist, zoals in de opzet van deze cursus vastgesteld, drie verplichte documenten bij DNB en AFM. Zonder in de precieze juridische inhoud te treden (die buiten de scope van deze technische cursus valt), is het voor een integratiearchitect essentieel te begrijpen welk type technisch bewijs elk document nodig heeft, omdat dat bepaalt welke patronen uit niveau 1-3 de basis vormen.</p>
+<p><strong>Een procesverantwoording</strong> — hoe is het invaarproces zelf ingericht, welke stappen doorloopt elke aanspraak, en welke waarborgen zijn er tegen fouten. Dit document leunt primair op de <strong>procesontwerpen</strong> uit deel 17, 18 en 25: de orkestratie-keuzes, de compensatiegrens, de georkestreerde, blokkerende datakwaliteitscontrole. Het is in essentie een beschrijving van het ontwerp zelf, ondersteund door bewijs dat het ontwerp ook daadwerkelijk zo is geïmplementeerd.</p>
+<p><strong>Een gegevenskwaliteitsverantwoording</strong> — hoe is gewaarborgd dat de brondata die aan elke invaarberekening ten grondslag ligt, betrouwbaar was. Dit document steunt op de <strong>datakwaliteitscontrole zelf</strong> (deel 25) en op de <strong>poison-message- en resilience-maatregelen</strong> (deel 26-27) die aantonen dat problematische data werd onderschept vóórdat ze de rekenkern kon beïnvloeden — niet als garantie dat er nooit een probleem was, maar als bewijs dat het systeem structureel ontworpen is om problemen te detecteren en te isoleren.</p>
+<p><strong>Een individuele reconstructie per deelnemer, op aanvraag</strong> — precies de vraag die DNB in 29.0 stelde. Dit document steunt rechtstreeks op de <strong>onveranderlijkheid en herleidbaarheid van event streaming</strong> (deel 23), de <strong>distributed tracing</strong> uit deel 21 (toegepast op wettelijke reconstructie, zoals deel 25 al aankondigde), en de <strong>schema-archivering</strong> uit deel 23 die garandeert dat een historisch event, ook jaren later, nog correct te interpreteren is.</p>
+<blockquote><p><strong>Kernzin 29 van de cursus: elk technisch patroon uit deze cursus is, in de context van de Stelselovergang, uiteindelijk gebouwd om één van drie soorten vragen te kunnen beantwoorden — hoe is het proces ingericht, hoe betrouwbaar was de data, en wat is er precies met deze ene deelnemer gebeurd. Een patroon dat geen van deze drie vragen dient, verdient heroverweging in deze context.</strong></p></blockquote>
+<hr>
+<h2>29.2 Van technisch bewijs naar leesbaar document</h2>
+<p>De reconstructie die DNB in 29.0 vroeg, bestaat technisch al — de trace-boomstructuur uit deel 21-25 bevat letterlijk elk gegeven dat nodig is. Het probleem is niet dat het bewijs ontbreekt, maar dat het in een vorm staat (technische logs, span-ID's, header-velden) die een niet-technische toezichthouder niet kan lezen.</p>
+<p>Bij Meridiaan is daarom een aparte <strong>verantwoordingslaag</strong> gebouwd die geen nieuwe gegevens verzamelt, maar uitsluitend de reeds bestaande, onveranderlijke event-geschiedenis van een deelnemer <strong>vertaalt naar leesbare taal</strong> — een chronologisch, in gewone-mensentaal geformuleerd verslag: "Op 14 maart 2027 om 09:14 uur is de aanspraak van deelnemer X vastgesteld op basis van brondata die op 10 maart 2027 was gevalideerd. De toegepaste rekenregels waren versie 3.2, vastgesteld op [datum]. De berekening is op 14 maart 2027 om 09:22 uur beoordeeld en goedgekeurd door [functie/systeem]. Er zijn geen correcties toegepast na deze datum."</p>
+<p>Deze vertaling is, technisch, opnieuw een instantie van een patroon dat al eerder in de cursus is behandeld: de <strong>translator</strong> (deel 5) en <strong>content enricher</strong> (deel 13), nu toegepast op de grens tussen technisch bewijs en menselijk leesbare verantwoording, in plaats van tussen twee systemen. Het cruciale verschil met eerdere toepassingen: deze vertaling moet zelf ook auditeerbaar zijn — als iemand betwijfelt of het leesbare document een correcte weergave is van de onderliggende, onveranderlijke events, moet dat rechtstreeks te verifiëren zijn, wat betekent dat elke zin in het leesbare document expliciet terug te herleiden moet zijn tot een specifiek, brongegeven, onveranderlijk event.</p>
+<hr>
+<h2>29.3 Wat er gebeurt als het bewijs een gat vertoont</h2>
+<p>Niet elk scenario is zo netjes als 29.0's voorbereidende gesprek. Het is de moeite waard expliciet te erkennen wat er gebeurt als, bij een reconstructiepoging, blijkt dat een schakel in de keten ontbreekt — bijvoorbeeld een event dat, door een fout die alle voorgaande delen probeerden te voorkomen, toch nooit is gepubliceerd (het incident van deel 19, dual-write-valkuil, in zijn ergste denkbare vorm).</p>
+<p>In dat geval is het cruciaal dat het <strong>gat zelf zichtbaar en erkend wordt</strong>, niet verhuld — een verantwoordingsdocument dat een gat probeert te verbergen (bijvoorbeeld door aan te nemen wat er waarschijnlijk is gebeurd, zonder dat expliciet te vermelden) is aanzienlijk schadelijker voor het vertrouwen van de toezichthouder dan een document dat eerlijk zegt: "voor deze specifieke periode ontbreekt directe bewijsvoering, om reden X, en de volgende aanvullende maatregel is genomen om dit te compenseren." Dit is dezelfde onderliggende discipline als bij het invalid message channel en dead letter channel uit deel 9: zichtbaarheid van een fout is altijd te verkiezen boven stille verdwijning, ook — juist — wanneer de stakes wettelijk zijn in plaats van louter operationeel.</p>
+<hr>
+<h2>Samenvatting van deel 29</h2>
+<ul>
+<li>De Stelselovergang vereist drie soorten verantwoordingsbewijs — procesontwerp, gegevenskwaliteit, individuele reconstructie — die elk leunen op een andere combinatie van eerder behandelde patronen.</li>
+<li>Het technische bewijs bestaat vaak al in de vorm van trace-boomstructuren en onveranderlijke events; de uitdaging is de vertaling naar een leesbaar, voor niet-technische toezichthouders begrijpelijk document.</li>
+<li>Deze vertaling is zelf een toepassing van de translator (deel 5), met de aanvullende eis dat elke zin in het leesbare document rechtstreeks herleidbaar moet zijn tot een specifiek, onderliggend event.</li>
+<li>Een gat in het bewijs moet zichtbaar en erkend worden, nooit verhuld — dezelfde discipline als deel 9's les over zichtbaarheid van fouten, nu toegepast op wettelijke verantwoording.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 30 sluit de cursus af met de masterproef: een boardsimulatie over twee dagdelen rond het scenario "de verdwenen bevestiging" — een asynchrone keten waarin een invaar-event wel verzonden maar nooit bevestigd wordt, vlak vóór de DNB-rapportagedeadline, waarbij alle negentien voorgaande delen samenkomen tot één verdedigbaar advies.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-28/reader.html">&larr; Deel 28 — Governance en lifecycle van een event backbone</a><a class="eip-prevnext next" href="../deel-30/reader.html">Deel 30 — Masterproef: de verdwenen bevestiging &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

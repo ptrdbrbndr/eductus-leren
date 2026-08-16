@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Deel 26 — Poison messages en retry-topologie op schaal — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 26 — Poison messages en retry-topologie op schaal</h1>
+<p>Werkboek · Ductus-cursus Enterprise Integration Patterns · niveau 3 · deel 26 van 30</p>
+<hr>
+<p>Werk de opdrachten uit vóórdat je de uitwerking leest.</p>
+<hr>
+<h2>Opdracht 26.1 — Poison message, of gewoon deel 9?</h2>
+<p>Bepaal voor elk scenario of het een structureel ongeldig bericht (invalid message channel), een tijdelijk mislukt bericht (dead letter channel), of een poison message betreft.</p>
+<p>a. Een bericht mist het verplichte veld <code>deelnemersnummer</code>.</p>
+<p>b. Een bericht veroorzaakt, bij elke verwerkingspoging, een oneindige lus in de rekenkern door een specifieke, zeldzame datacombinatie.</p>
+<p>c. Een bericht kan tijdelijk niet worden verwerkt omdat de externe administrateur onbereikbaar is.</p>
+<hr>
+<h2>Opdracht 26.2 — Retry-topologie ontwerpen</h2>
+<p>Ontwerp, voor de rekenkern, een retry-topologie die het incident van 26.0 voorkomt. Beschrijf minstens: hoe wordt een poison-patroon gedetecteerd, en wat gebeurt er zodra het gedetecteerd is?</p>
+<hr>
+<h2>Opdracht 26.3 — Het bredere signaal</h2>
+<p>Leg uit waarom een poison message in de invaarketen specifiek méér betekent dan in een gewone, niveau 1-achtige mutatieketen, gebruikmakend van deel 25.</p>
+<hr>
+<h2>Zelftoets deel 26</h2>
+<p>Beantwoord zonder terug te bladeren.</p>
+<ol>
+<li>Wat is een poison message, en waarin verschilt hij van de twee categorieën uit deel 9?</li>
+<li>Wat is de kernzin van dit deel, in eigen woorden?</li>
+<li>Noem de drie elementen van een houdbare retry-topologie op schaal.</li>
+<li>Waarom is isolatie per bericht belangrijker dan een lager retry-aantal alleen?</li>
+<li>Wat betekent een poison message in de invaarketen specifiek, naast het technische incident zelf?</li>
+</ol>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 26.1</h2>
+<p>a. <strong>Structureel ongeldig</strong> (deel 9) — geen retry lost een ontbrekend verplicht veld op.</p>
+<p>b. <strong>Poison message.</strong> Het bericht is op zichzelf geldig gevormd, maar de combinatie met de verwerkingslogica leidt structureel tot een schadelijk faalpatroon dat door herhaling niet verbetert, alleen meer capaciteit verbruikt.</p>
+<p>c. <strong>Tijdelijk mislukt</strong> (deel 9) — een latere poging kan wél slagen zodra de administrateur weer bereikbaar is.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het onderscheid tussen b en c is subtiel maar cruciaal — bij c helpt wachten en opnieuw proberen, bij b helpt dat principieel nooit, ongeacht hoe lang je wacht.</p>
+<h2>Uitwerking 26.2</h2>
+<p>Detectie: een expliciete, aparte verwerkingstime-out op de daadwerkelijke berekening (los van de berichtaflevering-time-out) — als de berekening langer duurt dan een ruim bemeten maximum, wordt dit als een poison-signaal beschouwd, niet als een gewone, tijdelijke vertraging.</p>
+<p>Actie: de verwerking wordt actief afgebroken, het bericht wordt direct (zonder verdere retry's binnen de rekenkern) naar een aparte quarantainewachtrij verplaatst, met hoge prioriteit voor menselijk onderzoek — hoger dan het gewone dead letter channel, omdat de aanwezigheid van een poison message in deze keten een signaal is dat de eerdere datakwaliteitscontrole (deel 25) mogelijk een gat heeft.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de kern van een goede retry-topologie is niet "meer of minder retries", maar een apart detectiemechanisme dat een poison-patroon herkent vóórdat het gewone retry-budget wordt uitgeput op een manier die toch nooit tot succes had kunnen leiden.</p>
+<h2>Uitwerking 26.3</h2>
+<p>In een gewone mutatieketen is een poison message een technisch incident dat geïsoleerd en later onderzocht wordt. In de invaarketen is de datakwaliteitscontrole (deel 25) een verplichte, blokkerende stap die specifiek bedoeld is om onbetrouwbare of problematische data vóór de rekenkern te onderscheppen. Als een poison message toch de rekenkern bereikt, betekent dit dat de datakwaliteitscontrole dit specifieke probleem niet heeft herkend — een signaal dat de validatiecriteria van die eerdere stap mogelijk onvolledig zijn, niet alleen een geïsoleerd technisch mankement in de rekenkern zelf.</p>
+<p><strong>Wat je hier moet meenemen:</strong> in een keten met een verplichte, voorafgaande validatiestap is elk incident dat die stap "doorglipt" een signaal over de kwaliteit van die validatiestap zelf, niet alleen een op zichzelf staand technisch probleem verderop in de keten.</p>
+<h2>Antwoorden zelftoets</h2>
+<ol>
+<li>Een poison message schaadt de verwerkende component zelf, structureel, ongeacht het aantal pogingen — hij is niet structureel ongeldig (schema klopt) en niet tijdelijk mislukt (een latere poging zou ook mislukken).</li>
+<li>Retries op een poison message zijn niet alleen nutteloos maar actief schadelijk — ze verbruiken capaciteit die andere, gezonde berichten nodig hebben, zonder ooit dichter bij een oplossing te komen.</li>
+<li>Isolatie per bericht (quarantaine, niet de hele wachtrij blokkeren), een verlaagd retry-budget voor snel-falende patronen, signalering naar bredere maatregelen bij herhaalde poison-patronen.</li>
+<li>Omdat zonder isolatie één poison message de hele wachtrij (of partitie) erachter blokkeert, ongeacht hoeveel keer het specifieke bericht opnieuw wordt geprobeerd — het probleem is niet het aantal pogingen maar het feit dat het probleembericht de doorstroom van andere berichten in de weg staat.</li>
+<li>Het is een signaal dat de eerdere, verplichte datakwaliteitscontrole (deel 25) een gat heeft — het probleem is niet alleen technisch (rekenkern), maar wijst ook op een tekortkoming in de voorafgaande validatiestap.</li>
+</ol>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-25/reader.html">&larr; Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit</a><a class="eip-prevnext next" href="../deel-27/reader.html">Deel 27 — Resilience patterns in ketens: circuit breaker, bulkhead, backpressure &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 17 — Orkestratie versus choreografie — Enterprise Integration Patterns — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../eip.css">
+</head>
+<body>
+<header class="eip-header">
+  <div class="eip-header-inner">
+    <a class="eip-brand" href="../../index.html">Enterprise Integration Patterns</a>
+    <nav class="eip-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 17 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="eip-main">
+<div class="eip-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="eip-article">
+<h1>Deel 17 — Orkestratie versus choreografie</h1>
+<p>Reader · Ductus-cursus Enterprise Integration Patterns · niveau 2 (professional) · deel 17 van 22</p>
+<hr>
+<h2>17.0 Wie besliste dat de uitkering mocht doorgaan?</h2>
+<p>Een deelnemersproces bij Meridiaan — het starten van een pensioenuitkering na pensionering — bleek, bij nader onderzoek naar aanleiding van een klacht, uit zes stappen te bestaan die over vijf verschillende systemen waren verspreid: KERN registreerde de pensioendatum, de externe administrateur berekende het uitkeringsbedrag, de risicomanagementafdeling voerde een fraudecontrole uit, de uitkeringsadministratie startte de daadwerkelijke betaling, het Werkgeversportaal informeerde de voormalige werkgever, en de communicatieafdeling verstuurde een bevestigingsbrief.</p>
+<p>Elke stap reageerde, via het mutatie-gebeurd-kanaal (deel 2, deel 6), op de gebeurtenis die de vorige stap produceerde: KERN publiceerde "pensioendatum geregistreerd", de administrateur luisterde daarop en publiceerde na berekening "uitkeringsbedrag vastgesteld", risicomanagement luisterde daarop, enzovoort — een keten van reacties op reacties, zonder één component die het geheel overzag.</p>
+<p>Toen de klacht binnenkwam — een deelnemer wiens uitkering vier weken te laat startte — kon niemand in één oogopslag zien waar in de keten van zes stappen de vertraging zat, wélke stap op wélke andere stap wachtte, of wat er zou moeten gebeuren als een stap werd overgeslagen. Elk team kende alleen zijn eigen stap; niemand kende het geheel. Dit is een ander probleem dan deel 15 behandelde: niet "waar is dit specifieke bericht", maar <strong>"wie is verantwoordelijk voor het feit dat dit hele proces correct doorloopt"</strong>.</p>
+<figure class="eip-figure"><img src="../../figuren/deel-17/figuur-17-1-estafette-zonder-coach.svg" alt="Zes stappen in een keten, elk met een pijl naar de volgende, zonder één centraal punt dat de keten als geheel overziet — vergelijk met een estafette zonder coach die het geheel volgt." loading="lazy"><figcaption>Figuur 17-1 — Zes stappen in een keten, elk met een pijl naar de volgende, zonder één centraal punt dat de keten als geheel overziet — vergelijk met een estafette zonder coach die het geheel volgt.</figcaption></figure>
+<hr>
+<h2>17.1 Choreografie: wat er al was, zonder dat iemand het zo noemde</h2>
+<p>Wat er bij Meridiaan al bestond, is een architectuurstijl die <strong>choreografie</strong> heet: elke component reageert zelfstandig op gebeurtenissen van andere componenten, zonder een centrale regisseur. Elke "danser" (component) kent zijn eigen bewegingen en reageert op signalen van anderen, maar niemand staat aan de zijlijn met het complete script.</p>
+<p>Dit is, zoals de naam al suggereert, direct verwant aan de publish-subscribe-architectuur uit deel 2 en 6, en aan de event backbone uit deel 11 — choreografie is in essentie wat er ontstaat wanneer je meerdere event-gedreven stappen simpelweg na elkaar laat reageren, zonder een aanvullende laag toe te voegen. De sterke punten van choreografie zijn precies de sterke punten van publish-subscribe: lage koppeling (elke component hoeft alleen te weten op welke gebeurtenissen hij reageert, niet wie er nog meer in de keten zit), en eenvoudige uitbreidbaarheid (een nieuwe stap toevoegen betekent alleen: abonneer op het juiste event, publiceer het volgende — geen bestaande componenten hoeven aangepast te worden).</p>
+<p>Het probleem dat 17.0 blootlegde, is echter ook inherent aan choreografie: <strong>er is geen enkele plek waar het geheel van het proces expliciet is vastgelegd.</strong> De volgorde van de zes stappen bestaat alleen impliciet, verspreid over zes losse abonnementsconfiguraties bij vijf teams — precies zoals de verborgen volgorde-aanname uit deel 6 (audit-trail die impliciet op het Nabestaandenloket wachtte) een risico bleek te zijn wanneer hij nergens was vastgelegd. Choreografie schaalt dit risico op: bij twee stappen is een impliciete afhankelijkheid nog te overzien; bij zes stappen, verspreid over vijf teams, is dat niet meer het geval.</p>
+<blockquote><p><strong>Kernzin 18 van de cursus: choreografie maakt elke individuele stap eenvoudig, ten koste van het overzicht over het geheel — de prijs wordt onzichtbaar totdat iemand moet uitleggen waarom het geheel niet werkt.</strong></p></blockquote>
+<hr>
+<h2>17.2 Orkestratie: één component die het script kent</h2>
+<p><strong>Orkestratie</strong> kiest de tegenovergestelde aanpak: één centrale component — de <strong>orkestrator</strong> — kent het volledige proces expliciet, en stuurt elke stap actief aan door commands te versturen naar de betrokken systemen, in plaats van dat elke stap zelfstandig op events reageert. De orkestrator is, in termen van deel 3, de partij die elke stap als een command-met-verwachte-reactie behandelt, en op basis van dat antwoord beslist wat de volgende stap is.</p>
+<p>Toegepast op het uitkeringsproces zou een orkestrator: een command "registreer pensioendatum" naar KERN sturen, wachten (asynchroon, non-blocking — deel 3) op bevestiging, dan een command "bereken uitkeringsbedrag" naar de externe administrateur sturen, enzovoort, met op elk moment één plek waar het complete proces, inclusief de huidige voortgang, expliciet zichtbaar is.</p>
+<p>Dit lost het probleem van 17.0 rechtstreeks op: bij een klacht over een vertraagde uitkering kan de orkestrator direct worden geraadpleegd (vergelijkbaar met de control bus uit deel 15) om te zien op welke stap het proces op dit moment wacht. Het brengt echter een eigen prijs met zich mee die het spiegelbeeld is van choreografie's zwakte:</p>
+<p><strong>De orkestrator wordt een centrale afhankelijkheid voor het hele proces</strong> — vergelijkbaar met de broker-afweging uit deel 11 (gedeelde infrastructuur, storing raakt potentieel alles), nu toegepast op procesniveau in plaats van transportniveau.</p>
+<p><strong>Elke wijziging aan het proces vergt een wijziging in de orkestrator</strong>, wat de lage koppeling van choreografie tenietdoet: een nieuwe stap toevoegen aan een georkestreerd proces betekent het aanpassen van de centrale orkestratielogica, niet simpelweg het abonneren op een bestaand event.</p>
+<blockquote><p><strong>Vuistregel: kies orkestratie wanneer het proces zelf, als geheel, een eigenaar en een expliciet te bewaken voortgang verdient; kies choreografie wanneer de stappen onafhankelijk moeten kunnen evolueren en geen enkele partij het geheel hoeft te "bezitten".</strong></p></blockquote>
+<figure class="eip-figure"><img src="../../figuren/deel-17/figuur-17-2-choreografie-versus-orkestratie.svg" alt="Twee diagrammen naast elkaar: choreografie als een ketting van pijlen zonder centrum, orkestratie als een ster met de orkestrator in het midden die elke stap aanstuurt en bevestiging terugkrijgt." loading="lazy"><figcaption>Figuur 17-2 — Twee diagrammen naast elkaar: choreografie als een ketting van pijlen zonder centrum, orkestratie als een ster met de orkestrator in het midden die elke stap aanstuurt en bevestiging terugkrijgt.</figcaption></figure>
+<hr>
+<h2>17.3 Geen zuivere keuze: het uitkeringsproces heronderzocht</h2>
+<p>Net als bij de architectuurstijlkeuze in deel 11 is de praktijk zelden zuiver. Bij Meridiaan is, na het incident van 17.0, niet gekozen voor volledige orkestratie van het hele uitkeringsproces, maar voor een gelaagde aanpak die de sterke punten van beide stijlen combineert:</p>
+<p><strong>Een orkestrator is geïntroduceerd voor de kern van het proces</strong> — de vijf stappen die strikt opeenvolgend en onderling afhankelijk zijn (pensioendatum → bedrag → fraudecontrole → betaling), met expliciete voortgangsbewaking en een directe koppeling naar de control bus voor statusopvragingen.</p>
+<p><strong>De laatste stap (communicatie naar de voormalige werkgever en de bevestigingsbrief) bleef choreografisch</strong> — deze twee acties zijn onderling onafhankelijk van elkaar (de een hoeft niet te wachten op de ander) en hebben geen invloed op de kern van het proces zelf; ze reageren simpelweg op het "uitkering gestart"-event, zoals ze altijd al deden, zonder dat de orkestrator ze expliciet hoeft aan te sturen.</p>
+<p>Deze keuze weerspiegelt een criterium dat verder reikt dan "hoeveel stappen zijn er": <strong>is er een bindende, onderling afhankelijke volgorde die bewaakt moet worden (orkestreer die), of zijn er onafhankelijke reacties op een afgerond feit (laat die choreografisch)?</strong> Bij Meridiaan bleken de eerste vier stappen strikt van elkaar afhankelijk (je kunt geen fraudecontrole doen zonder bedrag, geen betaling zonder goedgekeurde fraudecontrole), terwijl de laatste twee onafhankelijke, parallelle reacties op hetzelfde eindresultaat waren.</p>
+<hr>
+<h2>17.4 De relatie met eerdere delen</h2>
+<p>Deze keuze is geen nieuw, geïsoleerd concept — hij bouwt direct voort op onderscheidingen die de cursus al eerder maakte:</p>
+<p><strong>Orkestratie is verwant aan het recipient list-patroon uit deel 12</strong>, maar met een cruciaal verschil: een recipient list stuurt één bericht naar meerdere, onafhankelijke bestemmingen tegelijk (parallelle verspreiding), terwijl een orkestrator stappen doorgaans <strong>sequentieel</strong> aanstuurt, waarbij de uitkomst van de ene stap bepaalt of en hoe de volgende wordt gestart.</p>
+<p><strong>Choreografie is, zoals in 17.1 vastgesteld, in essentie meerdere event-gedreven stappen die simpelweg na elkaar reageren</strong> — geen nieuw mechanisme, maar een naam voor een specifiek gebruikspatroon van publish-subscribe (deel 2, deel 6) over meerdere stappen heen.</p>
+<p><strong>De keuze tussen beide is, net als de architectuurstijlkeuze in deel 11, een schaal- en eigenaarschapsvraag</strong>, geen technische beperking: dezelfde messaging-infrastructuur (deel 16) kan zowel choreografie als orkestratie faciliteren; het verschil zit in hoe de logica van "wat gebeurt er wanneer" wordt georganiseerd, niet in welke broker-technologie eronder ligt.</p>
+<hr>
+<h2>Samenvatting van deel 17</h2>
+<ul>
+<li>Choreografie laat elke component zelfstandig reageren op gebeurtenissen van andere componenten, zonder centrale regie — lage koppeling en eenvoudige uitbreidbaarheid, ten koste van het ontbreken van één plek waar het geheel van een proces expliciet is vastgelegd.</li>
+<li>Orkestratie introduceert een centrale orkestrator die het volledige proces expliciet kent en elke stap actief aanstuurt — expliciet overzicht en voortgangsbewaking, ten koste van een centrale afhankelijkheid en minder losse koppeling.</li>
+<li>De vuistregel: orkestreer processen met een bindende, onderling afhankelijke volgorde die bewaking verdient; laat onafhankelijke reacties op een afgerond feit choreografisch.</li>
+<li>In de praktijk combineren processen vaak beide, net als bij de architectuurstijlkeuze uit deel 11 — georkestreerde kernprocessen met choreografische, onafhankelijke uitlopers.</li>
+</ul>
+<hr>
+<h2>Vooruitblik</h2>
+<p>Deel 18 behandelt distributed transactions in asynchrone context: het saga-patroon en compenserende transacties — wat er gebeurt wanneer een georkestreerd of choreografisch proces halverwege moet worden teruggedraaid, met expliciete afstemming op het distributed-transactions-onderdeel van de API-cursus.</p>
+</article>
+<nav class="eip-partnav"><a class="eip-prevnext prev" href="../deel-16/reader.html">&larr; Deel 16 — Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen</a><a class="eip-prevnext next" href="../deel-18/reader.html">Deel 18 — Distributed transactions in async context: saga's en compenserende transacties &rarr;</a></nav>
+</main>
+<footer class="eip-footer">
+  <p>Ductus-cursusfamilie · Enterprise Integration Patterns · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
