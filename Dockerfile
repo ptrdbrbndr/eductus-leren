@@ -7,5 +7,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Alle site-bestanden
 COPY index.html /usr/share/nginx/html/
 COPY sap-*.html /usr/share/nginx/html/
+COPY courses.json /usr/share/nginx/html/
 
 EXPOSE 80
