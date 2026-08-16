@@ -19,6 +19,7 @@ COPY sap-voor-business-analysts/ /usr/share/nginx/html/sap-voor-business-analyst
 COPY businessanalyse/ /usr/share/nginx/html/businessanalyse/
 COPY testen-en-kwaliteitsborging/ /usr/share/nginx/html/testen-en-kwaliteitsborging/
 COPY informatiebeveiliging/ /usr/share/nginx/html/informatiebeveiliging/
+COPY requirementsmanagement/ /usr/share/nginx/html/requirementsmanagement/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
