@@ -17,6 +17,7 @@ COPY domain-driven-design/ /usr/share/nginx/html/domain-driven-design/
 COPY enterprise-integration-patterns/ /usr/share/nginx/html/enterprise-integration-patterns/
 COPY sap-voor-business-analysts/ /usr/share/nginx/html/sap-voor-business-analysts/
 COPY businessanalyse/ /usr/share/nginx/html/businessanalyse/
+COPY testen-en-kwaliteitsborging/ /usr/share/nginx/html/testen-en-kwaliteitsborging/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]

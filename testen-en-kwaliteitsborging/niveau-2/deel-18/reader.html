@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 18 — Testautomatisering II: in de pijplijn — Testen en Kwaliteitsborging — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tkb.css">
+</head>
+<body>
+<header class="tkb-header">
+  <div class="tkb-header-inner">
+    <a class="tkb-brand" href="../../index.html">Testen en Kwaliteitsborging</a>
+    <nav class="tkb-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="tkb-main">
+<div class="tkb-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="tkb-article">
+<h1>Deel 18 — Testautomatisering II: in de pijplijn</h1>
+<p>Reader · Ductus-cursus Testen en Kwaliteitsborging · niveau 2 (professional) · deel 18 van 30</p>
+<hr>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ol><li>testautomatisering integreren in een CI/CD-pijplijn met bewuste testselectie per fase;</li><li>het onderscheid tussen deploy en release toepassen als ontwerpprincipe voor risicobeheersing;</li><li>feature toggles inzetten en de testimplicaties ervan beoordelen;</li><li>testen in productie (canary, shadow) toepassen als aanvulling op, niet vervanging van, vooraf testen;</li><li>de pijplijn zelf als kwaliteitspoort beoordelen en verdedigen tegen druk om haar te omzeilen.</li></ol>
+<p>Studielast: één dagdeel klassikaal, circa drie uur zelfstudie.</p>
+<hr>
+<h2>1. Groen licht, veertig minuten later rood</h2>
+<p>De geautomatiseerde pijplijn van het portaalteam gaf op een vrijdagmiddag groen licht: alle 340 geautomatiseerde tests geslaagd, klaar voor deploy. Veertig minuten na de deploy meldde het kernintegratieteam een falende ketentest — niet omdat het portaalteam iets fout had gedaan, maar omdat de pijplijn van het portaalteam de ketentest (deel 16) niet had meegenomen: die liep apart, handmatig gepland, eens per twee weken.</p>
+<p>Groen licht van een pijplijn zegt alleen iets over wat er in die pijplijn zit. Dit is T8 (niveau 1) in een nieuwe gedaante: een groen scherm dat een besluit lijkt te ondersteunen, zonder dat iemand had vastgesteld wélke risico's het daadwerkelijk afdekte.</p>
+<blockquote><p><strong>Kernzin</strong> — Een groene pijplijn is een uitspraak over de tests die erin zitten, niet over de kwaliteit van het systeem. Verwar die twee, en de pijplijn wordt het nieuwe exitcriterium-dat-een-percentage-is.</p></blockquote>
+<hr>
+<h2>2. Testselectie per fase in de pijplijn</h2>
+<h3>2.1 Niet alles bij elke commit</h3>
+<p>Een pijplijn die bij elke wijziging alle 340 tests plus de volledige ketentest draait, wordt binnen de kortste keren te traag om bruikbaar te zijn. De oplossing is gefaseerde testselectie, gekoppeld aan de teststrategiematrix (deel 12):</p>
+<table><thead><tr><th>Fase</th><th>Wanneer</th><th>Wat draait</th><th>Doel</th></tr></thead><tbody><tr><td>Commit-fase</td><td>bij elke wijziging</td><td>snelle componenttests, statische analyse (niveau 1, deel 4)</td><td>direct feedback aan de ontwikkelaar</td></tr><tr><td>Integratiefase</td><td>bij samenvoeging naar de hoofdlijn</td><td>integratie- en contracttests (deel 16)</td><td>vroeg conflicten tussen teams vangen</td></tr><tr><td>Ketenfase</td><td>vóór een release</td><td>volledige ketentest, inclusief Vestara</td><td>het risico dat T7 herhaalt, expliciet afgedekt</td></tr><tr><td>Productiefase</td><td>na deploy</td><td>monitoring, canary-analyse (§4)</td><td>risico's die alleen onder echte belasting zichtbaar worden</td></tr></tbody></table>
+<figure class="tkb-figure"><img src="../../figuren/deel-18/figuur-18-1-pijplijn-trechter.svg" alt="De pijplijn als trechter: snel en smal bij elke commit, breder en trager naarmate het risico van een gemiste afwijking toeneemt." loading="lazy"><figcaption>Figuur 18-1 — De pijplijn als trechter: snel en smal bij elke commit, breder en trager naarmate het risico van een gemiste afwijking toeneemt.</figcaption></figure>
+<h3>2.2 Waarom dit geen compromis op kwaliteit is</h3>
+<p>Gefaseerde selectie is geen versoepeling maar een toepassing van precies dezelfde risicologica als deel 12: niet alles hoeft even vaak en even diep, mits de keuze bewust en gedocumenteerd is. Het probleem bij het portaalteam was niet dat de ketentest apart liep — dat kan een verantwoorde keuze zijn — maar dat niemand dat wist toen het groene licht werd gelezen als "alles is getest".</p>
+<hr>
+<h2>3. Deploy versus release</h2>
+<h3>3.1 Het onderscheid</h3>
+<p><strong>Deploy</strong> is het technisch uitrollen van nieuwe code naar een omgeving, inclusief productie. <strong>Release</strong> is het besluit om die code daadwerkelijk zichtbaar of actief te maken voor (een deel van) de gebruikers. Het scheiden van deze twee is een van de krachtigste risicobeheersingsprincipes in moderne delivery.</p>
+<h3>3.2 Waarom het scheiden risico verkleint</h3>
+<p>Wanneer deploy en release gelijktijdig gebeuren, is elke wijziging onmiddellijk voor alle gebruikers zichtbaar — een fout heeft direct volledige impact. Door ze te scheiden (met <strong>feature toggles</strong>, §3.3) kan code al in productie draaien, getest worden onder echte omstandigheden op beperkte schaal, zonder dat een fout meteen alle 210.000 deelnemers raakt.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-18/figuur-18-2-deploy-release-schakelaars.svg" alt="Deploy en release als twee aparte schakelaars: code kan gedeployed zijn en toch uitgeschakeld (niet released), of andersom nooit gedeployed maar wel &quot;aangekondigd&quot;." loading="lazy"><figcaption>Figuur 18-2 — Deploy en release als twee aparte schakelaars: code kan gedeployed zijn en toch uitgeschakeld (niet released), of andersom nooit gedeployed maar wel "aangekondigd".</figcaption></figure>
+<h3>3.3 Feature toggles</h3>
+<p>Een <strong>feature toggle</strong> is een schakelaar in de code die bepaalt of nieuwe functionaliteit actief is, onafhankelijk van deploy. Voor testen heeft dit twee gevolgen:</p>
+<ul><li><strong>Kans</strong>: nieuwe functionaliteit kan getest worden in productie-achtige omstandigheden vóór volledige release (§4).</li><li><strong>Risico</strong>: het aantal mogelijke toestandscombinaties groeit — een systeem met vijf toggles heeft potentieel 2⁵ combinaties van aan/uit, en de meeste teams testen slechts een klein deel daarvan. Dit is de terugkeer van de combinatorische explosie uit deel 13 (pairwise), nu toegepast op toggle-combinaties in plaats van functionele condities.</li></ul>
+<blockquote><p><strong>Kernzin</strong> — Elke toggle die je toevoegt, voegt een testdimensie toe die niemand vraagt te testen totdat twee toggles tegelijk een onverwachte combinatie blootleggen.</p></blockquote>
+<hr>
+<h2>4. Testen in productie</h2>
+<h3>4.1 Waarom dit geen vervanging is van vooraf testen</h3>
+<p>Niveau 1, deel 3 introduceerde shift-right als aanvulling, met de waarschuwing dat het geen excuus is om vooraf minder te testen bij hoog risico. Dit deel werkt dat uit met twee concrete technieken.</p>
+<h3>4.2 Canary-releases</h3>
+<p>Een <strong>canary-release</strong> rolt nieuwe functionaliteit eerst uit naar een klein, gecontroleerd deel van de gebruikers (bijvoorbeeld 2% van de werkgevers), met intensieve monitoring, vóórdat de volledige uitrol volgt. Een probleem raakt zo een beperkte groep in plaats van iedereen, en wordt — mits de monitoring goed is ingericht — snel opgemerkt.</p>
+<h3>4.3 Shadow-verwerking</h3>
+<p>Bij <strong>shadow-verwerking</strong> draait nieuwe functionaliteit parallel aan de bestaande, met dezelfde invoer, maar zonder dat het resultaat daadwerkelijk wordt gebruikt. De uitkomsten worden vergeleken: waar wijken oud en nieuw af, en is dat een verbetering of een fout? Dit is bijzonder waardevol voor een herbouwde berekening (zoals een deel van de mutatieverwerking) waar het orakelprobleem (niveau 1, deel 6) speelt: de oude, vertrouwde verwerking dient tijdelijk als vergelijkingsmateriaal voor de nieuwe.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-18/figuur-18-3-shadow-verwerking.svg" alt="Shadow-verwerking: dezelfde invoer naar oud en nieuw systeem tegelijk, resultaten vergeleken, alleen het oude resultaat telt." loading="lazy"><figcaption>Figuur 18-3 — Shadow-verwerking: dezelfde invoer naar oud en nieuw systeem tegelijk, resultaten vergeleken, alleen het oude resultaat telt.</figcaption></figure>
+<h3>4.4 De grens</h3>
+<p>Beide technieken vereisen dat een fout, als hij optreedt, beheersbaar en omkeerbaar blijft. Voor de invaarberekening in niveau 3 — eenmalig en grotendeels onomkeerbaar — is canary-releasen in de klassieke zin niet toepasbaar; shadow-verwerking (vergelijken zonder het resultaat te gebruiken) blijft daar wél waardevol, juist omdat er dan niets onomkeerbaars gebeurt.</p>
+<hr>
+<h2>5. De pijplijn als kwaliteitspoort</h2>
+<h3>5.1 De druk om te omzeilen</h3>
+<p>Onder tijdsdruk ontstaat vrijwel onvermijdelijk de vraag: kunnen we deze ene keer de pijplijn overslaan, of een falende test tijdelijk uitschakelen om te kunnen deployen? Dit is exact de druk die T8 (niveau 1) veroorzaakte, nu in technische vorm: een kwaliteitspoort die "deze ene keer" wordt omzeild, is een kwaliteitspoort die op den duur nooit meer iets tegenhoudt.</p>
+<h3>5.2 Wat een pijplijn moet kunnen weerstaan</h3>
+<ul><li><strong>Uitschakelen van individuele tests</strong> zonder geregistreerde reden en zonder een vervolgactie om ze te herstellen — vergelijk de discipline rond bevindingenbeheer (niveau 1, deel 8).</li><li><strong>"Even handmatig langs de pijplijn" deployen</strong> — ondermijnt elke garantie die de pijplijn zou moeten geven.</li></ul>
+<p>Consistent met niveau 1, deel 9: een kwaliteitspoort die nog nooit een deploy heeft tegengehouden, heeft waarschijnlijk nog nooit het juiste getoetst — of is zo vaak omzeild dat zij feitelijk niets meer betekent.</p>
+<hr>
+<h2>6. TMAP-lens</h2>
+<p><strong>Hoe heet dit daar.</strong> CI/CD-integratie valt in TMAP onder agile/DevOps-fit (deel 11), met een sterke nadruk op de pijplijn als gedeeld, teambreed instrument — niet als iets dat een aparte DevOps-rol beheert namens het team.</p>
+<p><strong>Waar het werkelijk anders is.</strong> TMAP benadrukt sterker de koppeling tussen pijplijnontwerp en VOICE: elke fase in de pijplijn zou een expliciete indicator moeten opleveren (deel 11), zodat "groen licht" nooit een geïsoleerd signaal is maar onderdeel van het bredere VOICE-beeld.</p>
+<hr>
+<h2>Kernbegrippen</h2>
+<p>CI/CD-pijplijn · gefaseerde testselectie · deploy versus release · feature toggle · toggle-combinatorische explosie · canary-release · shadow-verwerking · pijplijn als kwaliteitspoort</p>
+<h2>Samenvatting in vijf zinnen</h2>
+<ol><li>Een groene pijplijn is een uitspraak over de tests die erin zitten, niet over de kwaliteit van het systeem — verward, wordt zij het nieuwe T8.</li><li>Gefaseerde testselectie is een risicogebaseerde keuze, geen versoepeling — mits bewust en bekend bij iedereen die het groene licht leest.</li><li>Deploy en release scheiden verkleint risico: code kan getest worden onder echte omstandigheden zonder dat een fout meteen alle gebruikers raakt.</li><li>Testen in productie (canary, shadow) is een aanvulling op vooraf testen, nooit een vervanging, en vereist dat een fout beheersbaar en omkeerbaar blijft.</li><li>Een kwaliteitspoort die regelmatig wordt omzeild, is op den duur een kwaliteitspoort die niets meer tegenhoudt.</li></ol>
+</article>
+<nav class="tkb-partnav"><a class="tkb-prevnext prev" href="../deel-17/reader.html">&larr; Deel 17 — Testautomatisering I: ontwerp</a><a class="tkb-prevnext next" href="../deel-19/reader.html">Deel 19 — Niet-functioneel testen &rarr;</a></nav>
+</main>
+<footer class="tkb-footer">
+  <p>Ductus-cursusfamilie · Testen en Kwaliteitsborging · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

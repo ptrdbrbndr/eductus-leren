@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 17 — Testautomatisering I: ontwerp — Testen en Kwaliteitsborging — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tkb.css">
+</head>
+<body>
+<header class="tkb-header">
+  <div class="tkb-header-inner">
+    <a class="tkb-brand" href="../../index.html">Testen en Kwaliteitsborging</a>
+    <nav class="tkb-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 17 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="tkb-main">
+<div class="tkb-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="tkb-article">
+<h1>Deel 17 — Testautomatisering I: ontwerp</h1>
+<p>Reader · Ductus-cursus Testen en Kwaliteitsborging · niveau 2 (professional) · deel 17 van 30</p>
+<hr>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ol><li>een automatiseringsarchitectuur ontwerpen met duidelijke abstractielagen;</li><li>onderhoudbaarheid als expliciet ontwerpcriterium toepassen op een automatiseringsoplossing;</li><li>flakiness herkennen, diagnosticeren en behandelen als kwaliteitssignaal in plaats van ergernis;</li><li>de testpiramide toepassen én de gangbare kritiek erop beargumenteren;</li><li>bewust beargumenteren wat je wél en wat je bewust niet automatiseert.</li></ol>
+<p>Studielast: één dagdeel klassikaal, circa drie uur zelfstudie.</p>
+<hr>
+<h2>1. Achthonderd tests, niemand die ze nog begrijpt</h2>
+<p>Het portaalteam had, achttien maanden in het programma, achthonderd geautomatiseerde tests. Niemand kon meer met zekerheid zeggen wat een falende test betekende: een echte afwijking, een verouderd testscript, of een wijziging in het scherm die het testscript nooit had bijgewerkt. Jelle Bakker, nu automatiseringsverantwoordelijke, besteedde meer tijd aan het onderhouden van falende tests dan aan het schrijven van nieuwe.</p>
+<p>De oorzaak was niet gebrek aan inzet maar gebrek aan ontwerp: elke test was geschreven zoals het op dat moment het snelst ging, zonder gedeelde structuur. Een wijziging in de schermopmaak (niveau 1, deel 5-6: precies zo'n wijziging als in de casus) brak niet één test maar tientallen, omdat elke test zijn eigen manier had om het scherm te benaderen.</p>
+<blockquote><p><strong>Kernzin</strong> — Automatisering die snel is opgezet en nooit ontworpen, wordt niet een versnelling van het testwerk maar een tweede systeem dat net zo veel onderhoud vraagt als het eerste.</p></blockquote>
+<hr>
+<h2>2. Automatiseringsarchitectuur en abstractielagen</h2>
+<h3>2.1 Het probleem van directe koppeling</h3>
+<p>Een test die rechtstreeks een schermelement aanspreekt (bijvoorbeeld op basis van een exacte schermpositie of een technische identifier die bij elke wijziging verandert) is fragiel: elke cosmetische wijziging breekt de test, ook als het geteste gedrag niet is veranderd.</p>
+<h3>2.2 Lagen die dit voorkomen</h3>
+<ul><li><strong>Laag 1 — Testgevallen</strong>: de bedoeling, in mensentaal, losstaand van techniek ("dien een deeltijdwijziging in met ingangsdatum volgende maand").</li><li><strong>Laag 2 — Domeinacties</strong>: een tussenlaag die de bedoeling vertaalt naar herbruikbare acties ("vul deeltijdformulier in", "verzend formulier") zonder technische details.</li><li><strong>Laag 3 — Technische implementatie</strong>: de daadwerkelijke aanroepen naar het scherm of de API, die wél gevoelig zijn voor technische wijzigingen maar op één plek geconcentreerd.</li></ul>
+<figure class="tkb-figure"><img src="../../figuren/deel-17/figuur-17-1-drie-lagen-piramide.svg" alt="Drie lagen als piramide: testgevallen bovenaan (stabiel), technische implementatie onderaan (meest gevoelig voor wijziging, maar geïsoleerd)." loading="lazy"><figcaption>Figuur 17-1 — Drie lagen als piramide: testgevallen bovenaan (stabiel), technische implementatie onderaan (meest gevoelig voor wijziging, maar geïsoleerd).</figcaption></figure>
+<p>Wanneer het scherm wijzigt, hoeft alleen laag 3 te worden aangepast — de testgevallen in laag 1 blijven ongewijzigd leesbaar en geldig. Dit is dezelfde discipline als traceerbaarheid uit niveau 1, deel 2: een duidelijke, onderhouden verwijzing tussen niveaus voorkomt dat een wijziging ongemerkt een heel gebied breekt.</p>
+<h3>2.3 Testdata in automatisering</h3>
+<p>Automatisering vermenigvuldigt het testdata-vraagstuk uit deel 15: een test die elke nacht draait, heeft elke nacht consistente, voorspelbare testdata nodig. Een gedeelde, geversioneerde bronset (deel 15, §2.2) is hier geen luxe maar een randvoorwaarde — automatisering zonder beheerde testdata faalt willekeurig, wat direct tot flakiness leidt (§4).</p>
+<hr>
+<h2>3. Onderhoudbaarheid als ontwerpcriterium</h2>
+<h3>3.1 Waarom dit vanaf het begin moet, niet achteraf</h3>
+<p>Onderhoudbaarheid (een van de acht ISO 25010-kenmerken uit deel 12, hier toegepast op de automatisering zelf) is geen kenmerk dat je later toevoegt. Achthonderd ongestructureerde tests herstructureren kost vrijwel altijd meer dan van meet af aan met lagen (§2.2) te werken.</p>
+<h3>3.2 Concrete ontwerpprincipes</h3>
+<ul><li><strong>Eén testgeval, één verantwoordelijkheid</strong> — een test die tegelijk inloggen, navigeren én een deeltijdwijziging controleert, faalt bij drie verschillende oorzaken op dezelfde manier, en maakt diagnose traag.</li><li><strong>Herbruikbare domeinacties</strong> (§2.2, laag 2) in plaats van gekopieerde stappen in elke test.</li><li><strong>Expliciete, leesbare namen</strong> — een falende test genaamd "test_47" vertelt niets; "deeltijdwijziging_met_terugwerkende_kracht_binnen_24_maanden" vertelt onmiddellijk wat er stuk is.</li></ul>
+<hr>
+<h2>4. Flakiness als kwaliteitssignaal</h2>
+<h3>4.1 Wat het is</h3>
+<p>Een <strong>flaky test</strong> slaagt en faalt afwisselend, zonder dat er iets aan het geteste systeem is veranderd. De reflex is vaak: de test negeren, opnieuw draaien tot hij slaagt, of — erger — hem uitschakelen.</p>
+<h3>4.2 Waarom die reflex de fout herhaalt</h3>
+<p>Elke reflex hierboven behandelt het symptoom, niet de oorzaak — en herhaalt daarmee exact de denkfout achter T8 (niveau 1): een storend signaal wegdrukken in plaats van onderzoeken wat het zegt. Veelvoorkomende oorzaken van flakiness:</p>
+<ul><li><strong>Timing</strong> — de test controleert een resultaat vóórdat het systeem klaar is met verwerken (relevant bij asynchrone verwerking, zoals de nachtelijke batch uit niveau 1, T5).</li><li><strong>Gedeelde, niet-geïsoleerde testdata</strong> — twee tests die tegelijk dezelfde testdeelnemer wijzigen.</li><li><strong>Omgevingsinstabiliteit</strong> — de testomgeving zelf is niet representatief genoeg (deel 15) om consistent te draaien.</li></ul>
+<blockquote><p><strong>Kernzin</strong> — Een flaky test is zelden een slechte test. Vaker is hij een eerlijke test die een echte, onopgeloste onvoorspelbaarheid in het systeem of de omgeving blootlegt.</p></blockquote>
+<h3>4.3 De juiste omgang</h3>
+<p>Diagnosticeer de oorzaak vóór je een test herschrijft of uitschakelt — gebruik dezelfde discipline als bevindingenbeheer (niveau 1, deel 8): reproduceerbaar vastleggen wanneer de test faalt en onder welke omstandigheden, in plaats van hem simpelweg opnieuw te draaien tot hij "toevallig" slaagt.</p>
+<hr>
+<h2>5. De testpiramide en de kritiek erop</h2>
+<h3>5.1 Het klassieke model</h3>
+<p>De <strong>testpiramide</strong> adviseert veel snelle, geïsoleerde tests onderaan (componentniveau), minder integratietests in het midden, en weinig, trage end-to-end-tests bovenaan — vanuit de gedachte dat een fout het goedkoopst en snelst wordt gevonden op het laagste niveau waar hij zichtbaar is (vergelijk niveau 1, deel 3: elk testniveau heeft zijn eigen typische afwijkingen).</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-17/figuur-17-2-klassieke-testpiramide.svg" alt="De klassieke testpiramide: veel componenttests, middelmatig veel integratietests, weinig end-to-end-tests." loading="lazy"><figcaption>Figuur 17-2 — De klassieke testpiramide: veel componenttests, middelmatig veel integratietests, weinig end-to-end-tests.</figcaption></figure>
+<h3>5.2 De kritiek</h3>
+<p>De piramide veronderstelt dat componenttests de meeste risico's afdekken. Bij een keten als het Mutatieplatform, waar het grootste risico juist in de overdracht tussen systemen zit (T7, niveau 1; deel 16), kan een strikte piramide-toepassing leiden tot een schijnbaar solide automatiseringsportfolio dat precies het belangrijkste risico onderbelicht laat — de vorm van de piramide volgen zonder naar risico te kijken, is dezelfde fout als T2 (niveau 1, deel 7) in een nieuwe gedaante.</p>
+<h3>5.3 Een risicogebaseerde vorm in plaats van een vaste vorm</h3>
+<p>De teststrategiematrix (deel 12) bepaalt, niet een vast model, hoeveel automatisering op welk niveau verantwoord is. Voor het Mutatieplatform betekent dit een piramide die "breder" is in het midden (meer integratie- en contracttests, deel 16) dan het klassieke model adviseert — een bewuste, beargumenteerde afwijking, geen achteloze.</p>
+<hr>
+<h2>6. Wat je bewust niet automatiseert</h2>
+<p>Niet alles verdient automatisering. Een testgeval dat zelden verandert en zelden wordt uitgevoerd, kost mogelijk meer aan onderhoud dan het aan tijd bespaart. Exploratory testing (niveau 1, deel 6) blijft voor gebieden met een zwakke of snel veranderende testbasis vaak effectiever dan een fragiele automatisering die voortdurend wordt bijgewerkt. Dit besluit hoort, net als elk "bewust niet"-besluit (deel 12, §4), expliciet te worden genomen en verantwoord.</p>
+<hr>
+<h2>7. TMAP-lens</h2>
+<p><strong>Hoe heet dit daar.</strong> Automatiseringsontwerp valt in TMAP onder kwaliteitsengineering (deel 11), met een sterke nadruk op automatisering als continue investering die het hele team onderhoudt, niet als apart project van een automatiseerder.</p>
+<p><strong>Waar het werkelijk anders is.</strong> TMAP benadrukt sterker dat de testpiramide een hulpmiddel is, geen wet — en moedigt expliciet aan de vorm van de automatiseringsportfolio af te leiden uit VOICE en risico (deel 11 en 12), zoals dit deel ook betoogt, in plaats van een klassieke piramide-vorm klakkeloos te kopiëren.</p>
+<hr>
+<h2>Kernbegrippen</h2>
+<p>automatiseringsarchitectuur · abstractielagen (testgevallen, domeinacties, technische implementatie) · onderhoudbaarheid als ontwerpcriterium · flakiness · testpiramide · risicogebaseerde automatiseringsvorm · bewust niet automatiseren</p>
+<h2>Samenvatting in vijf zinnen</h2>
+<ol><li>Automatisering zonder ontwerp wordt een tweede systeem dat net zo veel onderhoud vraagt als het eerste.</li><li>Abstractielagen isoleren technische wijzigingen in de onderste laag, zodat testgevallen in mensentaal stabiel blijven.</li><li>Flakiness is zelden een slechte test — vaker een eerlijk signaal van een onopgeloste onvoorspelbaarheid, en verdient diagnose in plaats van onderdrukking.</li><li>De testpiramide is een nuttig vertrekpunt maar geen wet; bij een keten met risico in de overdracht kan een strikte toepassing precies het belangrijkste risico onderbelichten.</li><li>Niet alles verdient automatisering — dat besluit hoort, net als elk "bewust niet"-besluit, expliciet en verantwoord te worden genomen.</li></ol>
+</article>
+<nav class="tkb-partnav"><a class="tkb-prevnext prev" href="../deel-16/reader.html">&larr; Deel 16 — Keten- en integratietesten</a><a class="tkb-prevnext next" href="../deel-18/reader.html">Deel 18 — Testautomatisering II: in de pijplijn &rarr;</a></nav>
+</main>
+<footer class="tkb-footer">
+  <p>Ductus-cursusfamilie · Testen en Kwaliteitsborging · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 6 — White-box en ervaringsgebaseerd testen — Testen en Kwaliteitsborging — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tkb.css">
+</head>
+<body>
+<header class="tkb-header">
+  <div class="tkb-header-inner">
+    <a class="tkb-brand" href="../../index.html">Testen en Kwaliteitsborging</a>
+    <nav class="tkb-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 6 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="tkb-main">
+<div class="tkb-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="tkb-article">
+<h1>Deel 6 — White-box en ervaringsgebaseerd testen</h1>
+<p>Reader · Ductus-cursus Testen en Kwaliteitsborging · niveau 1 (fundament) · deel 6 van 30</p>
+<p><em>Dit deel sluit geen eigen bevinding uit T1–T8, maar levert het instrumentarium waarmee deel 7 (risicogebaseerd testen, sluit T2) de resterende testinspanning verdeelt.</em></p>
+<hr>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ol><li>het verschil tussen black-box- en white-boxtechnieken uitleggen vanuit het gebruikte perspectief;</li><li>statement- en decision(branch)dekking toepassen en berekenen;</li><li>uitleggen wat een dekkingspercentage wel en niet zegt over kwaliteit;</li><li>exploratory testing toepassen als gestructureerde, geen ongestructureerde, activiteit;</li><li>error guessing toepassen met behulp van een checklist van veelvoorkomende foutcategorieën;</li><li>de plaats van ervaringsgebaseerde technieken ten opzichte van black-box- en white-boxtechnieken beargumenteren;</li><li>een gefundeerde techniekkeuze maken voor een gegeven testsituatie.</li></ol>
+<p>Studielast: één dagdeel klassikaal, circa drie uur zelfstudie.</p>
+<hr>
+<h2>1. Honderd procent en toch fout</h2>
+<p>Bij de reconstructie na de storing liet Jelle Bakker de dekkingsrapportage van de unit tests voor de mutatieverwerkingsmodule zien: 94% statement-dekking. Een keurig getal, ruim boven de meeste interne normen. Iris vroeg door: welke van die statements maakten deel uit van de foutafhandeling rond een mislukte doorzending naar de kernadministratie?</p>
+<p>Het antwoord kostte Jelle een halfuur uitzoeken. De foutafhandelingscode bestond — er stond een <code>catch</code>-blok — maar geen enkele test riep het ooit daadwerkelijk aan. Het blok werd bij de dekkingsmeting meegeteld als "bereikt", omdat de regel er stond en ooit, ergens in een andere test, terloops werd gepasseerd tijdens het opzetten van een ander scenario. Nooit gericht getest. Nooit met een falende doorzending als uitgangspunt.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-06/figuur-6-1-catch-blok-gedekt.svg" alt="Het catch-blok, gemarkeerd als &quot;gedekt&quot; in het dekkingsrapport, met daarnaast de vraag: gedekt door welk scenario, met welke intentie?" loading="lazy"><figcaption>Figuur 6-1 — Het <code>catch</code>-blok, gemarkeerd als "gedekt" in het dekkingsrapport, met daarnaast de vraag: gedekt door welk scenario, met welke intentie?</figcaption></figure>
+<blockquote><p><strong>Kernzin</strong> — Een statement kan "bereikt" zijn zonder ooit gericht getest te zijn. Dekking meet aanraking, niet onderzoek.</p></blockquote>
+<p>Dit hoofdstuk behandelt white-boxtechnieken, die precies dit soort blinde vlekken zichtbaar maken — én hun grenzen, die dit voorbeeld eveneens illustreert.</p>
+<hr>
+<h2>2. Wat white-boxtechnieken zijn</h2>
+<p>Waar black-boxtechnieken (deel 5) vertrekken vanuit gedrag en eisen, vertrekken <strong>white-boxtechnieken</strong> vanuit de interne structuur: de code, de paden erdoorheen, de voorwaarden die bepalen welk pad wordt gevolgd.</p>
+<p>Dit is geen vervanging van black-boxtechnieken maar een aanvulling met een ander soort blinde vlek: black-box vindt "dit gedrag is nooit getoetst tegen de eis", white-box vindt "dit codepad is nooit doorlopen, ongeacht wat de eis zegt". Beide missen soms hetzelfde probleem vanuit een andere hoek, en soms vinden ze iets wat de ander niet kan zien.</p>
+<h3>2.1 Statementdekking</h3>
+<p>Het percentage regels code (statements) dat minstens één keer is uitgevoerd tijdens het testen.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-06/figuur-6-2-statementdekking-60.svg" alt="Een eenvoudig codefragment met vijf statements, waarvan er bij een gegeven testset drie zijn geraakt — 60% statementdekking." loading="lazy"><figcaption>Figuur 6-2 — Een eenvoudig codefragment met vijf statements, waarvan er bij een gegeven testset drie zijn geraakt — 60% statementdekking.</figcaption></figure>
+<h3>2.2 Beslissings-/takdekking (decision/branch coverage)</h3>
+<p>Het percentage mogelijke uitkomsten van elke beslissing (elke <code>if</code>, elke <code>switch</code>-tak, elke lusvoorwaarde) dat minstens één keer is doorlopen — dus zowel de ware als de onware uitkomst van elke conditie.</p>
+<p>Takdekking is een strenger criterium dan statementdekking: 100% takdekking impliceert altijd 100% statementdekking, maar niet omgekeerd. Een <code>if</code>-statement met alleen een "waar"-tak die ooit is getest, telt voor statementdekking als bereikt, ook als de "onwaar"-tak — vaak precies de foutafhandeling — nooit is doorlopen.</p>
+<table><thead><tr><th></th><th>Wat het meet</th><th>Wat het mist</th></tr></thead><tbody><tr><td>Statementdekking</td><td>is deze regel ooit uitgevoerd?</td><td>welke voorwaarde ernaartoe leidde</td></tr><tr><td>Beslissingsdekking</td><td>zijn beide uitkomsten van elke beslissing beproefd?</td><td>combinaties van meerdere voorwaarden tegelijk</td></tr></tbody></table>
+<figure class="tkb-figure"><img src="../../figuren/deel-06/figuur-6-3-if-statement-onwaar-tak.svg" alt="Hetzelfde codefragment met een if-statement: 100% statementdekking is haalbaar terwijl de &quot;onwaar&quot;-tak nooit wordt geraakt." loading="lazy"><figcaption>Figuur 6-3 — Hetzelfde codefragment met een <code>if</code>-statement: 100% statementdekking is haalbaar terwijl de "onwaar"-tak nooit wordt geraakt.</figcaption></figure>
+<h3>2.3 Wat een percentage wel en niet zegt</h3>
+<p>Een hoog dekkingspercentage toont aan dát code is uitgevoerd. Het toont niet aan dát de uitkomst is gecontroleerd tegen wat correct is — een test kan een pad doorlopen zonder een zinvolle bewering (assertion) over het resultaat te doen, en telt dan alsnog mee voor dekking. Dit is de exacte herhaling van principe 1 uit deel 1 (aanwezigheid, niet afwezigheid), nu toegepast op code in plaats van op systeemgedrag.</p>
+<blockquote><p><strong>Kernzin</strong> — 100% dekking bewijst dat elke regel is aangeraakt. Het bewijst niets over wat er gebeurde toen zij werd aangeraakt.</p></blockquote>
+<p>Dekking is daarom een <strong>noodzakelijke, niet-voldoende</strong> indicator: lage dekking wijst betrouwbaar op onderbeproefde code; hoge dekking garandeert geen kwaliteit. ↗ deel 17 (niveau 2) behandelt dekking in de context van testautomatisering en de verleiding om dekkingspercentages als doel op zich te gaan nastreven — precies de valkuil die T8 (deel 9) op systeemniveau al liet zien.</p>
+<hr>
+<h2>3. Ervaringsgebaseerde technieken</h2>
+<h3>3.1 Waarom ervaring een eigen categorie is</h3>
+<p>Naast black-box (gedrag) en white-box (structuur) bestaat een derde bron: de kennis en intuïtie van ervaren testers, gebruikers en domeindeskundigen over waar problemen zich waarschijnlijk voordoen. Dit is geen "gebrek aan systematiek" maar een aparte, waardevolle informatiebron — mits zij zelf ook gestructureerd wordt ingezet.</p>
+<h3>3.2 Exploratory testing</h3>
+<p><strong>Exploratory testing</strong> is gelijktijdig leren, testontwerp en testuitvoering: de tester verkent het systeem, vormt op basis van wat hij ziet nieuwe hypothesen, en test die direct. Dit is niet hetzelfde als "maar wat aanklooien" — het verschil zit in structuur:</p>
+<ul><li>een vooraf bepaalde <strong>charter</strong> (missie): waar richt deze verkenningssessie zich op, en waarom;</li><li>een vaste <strong>tijdsbox</strong>, meestal 60 tot 90 minuten;</li><li><strong>aantekeningen tijdens het verkennen</strong>, niet achteraf uit het geheugen gereconstrueerd;</li><li>een korte <strong>debrief</strong> na afloop: wat is gevonden, wat verdient een vervolgsessie.</li></ul>
+<p>Exploratory testing is bij uitstek geschikt wanneer de testbasis zwak of afwezig is (WGP 1.0, ↗ deel 3, §6), wanneer tijdsdruk hoog is en gerichte verkenning meer oplevert dan een uitgeschreven testset, of als aanvulling ná systematisch testen om te zien wat de systematiek gemist heeft.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-06/figuur-6-4-charter-sjabloon.svg" alt="Een charter-sjabloon: missie, tijdsbox, aandachtsgebieden, wat expliciet buiten scope valt." loading="lazy"><figcaption>Figuur 6-4 — Een charter-sjabloon: missie, tijdsbox, aandachtsgebieden, wat expliciet buiten scope valt.</figcaption></figure>
+<h3>3.3 Error guessing</h3>
+<p><strong>Error guessing</strong> is het gericht bedenken van testgevallen op basis van kennis over waar fouten typisch ontstaan: grensgevallen die ontwikkelaars over het hoofd zien, veelvoorkomende programmeerfouten, eerdere incidenten in vergelijkbare systemen. Effectiever wanneer het is gebaseerd op een checklist in plaats van pure improvisatie.</p>
+<p>Een uittreksel van een checklist, toegespitst op Meridiaan:</p>
+<ul><li>Wat gebeurt er bij een lege of ontbrekende waarde waar de eis die niet expliciet uitsluit?</li><li>Wat gebeurt er bij gelijktijdige mutaties op hetzelfde deelnemersnummer?</li><li>Wat gebeurt er bij een naam met een apostrof, koppelteken, spatie of diakritisch teken? (Precies bevinding T6, hier vanuit een andere techniek benaderd.)</li><li>Wat gebeurt er als een externe koppeling traag reageert of tijdelijk niet bereikbaar is?</li><li>Wat gebeurt er bij het maximum en het net-over-het-maximum van elk numeriek veld, ook als dat elders al met grenswaardeanalyse is getest — een tweede blik vanuit een andere vraag vindt soms iets anders?</li></ul>
+<h3>3.4 De relatie met de andere technieken</h3>
+<p>Ervaringsgebaseerde technieken zijn geen vervanging van black-box en white-box, maar een aanvulling die inspeelt op wat systematiek per definitie mist: de black-boxtechnieken uit deel 5 vinden wat je uit de testbasis kunt afleiden; white-box vindt wat er in de code staat; ervaringsgebaseerde technieken vinden wat er bij geen van beide expliciet vermeld staat maar wél gebeurt — de apostrof waar niemand aan dacht, de gelijktijdigheid die geen enkele eis benoemt.</p>
+<figure class="tkb-figure"><img src="../../figuren/deel-06/figuur-6-5-drie-cirkels-technieken.svg" alt="Drie overlappende cirkels — black-box, white-box, ervaringsgebaseerd — met in het midden het kleine gebied dat alle drie vinden, en de grotere gebieden die elk apart bijdragen." loading="lazy"><figcaption>Figuur 6-5 — Drie overlappende cirkels — black-box, white-box, ervaringsgebaseerd — met in het midden het kleine gebied dat alle drie vinden, en de grotere gebieden die elk apart bijdragen.</figcaption></figure>
+<hr>
+<h2>4. Techniekkeuze in samenhang</h2>
+<p>Met deel 5 en dit deel samen beschikt de tester over zes technieken. Geen enkele situatie vraagt om alle zes tegelijk in volle diepgang; de keuze volgt uit wat voorhanden is en wat er op het spel staat — het thema dat deel 7 volledig uitwerkt.</p>
+<table><thead><tr><th>Situatie</th><th>Meest passende techniek(en)</th></tr></thead><tbody><tr><td>Heldere eis, één veld</td><td>equivalentieklassen + grenswaarden</td></tr><tr><td>Meerdere condities bepalen samen het resultaat</td><td>beslissingstabel</td></tr><tr><td>Gedrag hangt af van eerdere gebeurtenissen</td><td>toestandsovergangen</td></tr><tr><td>Kritieke berekening, wil weten of foutafhandeling is beproefd</td><td>white-box (beslissingsdekking)</td></tr><tr><td>Zwakke of ontbrekende testbasis</td><td>exploratory testing</td></tr><tr><td>Bekende risicogebieden uit eerdere incidenten</td><td>error guessing</td></tr></tbody></table>
+<hr>
+<h2>5. TMAP-lens</h2>
+<p><strong>Hoe heet dit daar.</strong> White-boxtechnieken worden in TMAP behandeld onder dezelfde noemer als in ISTQB, met vergelijkbare dekkingscriteria. Ervaringsgebaseerd testen sluit sterk aan bij wat TMAP "op basis van kennis en ervaring" noemt, en krijgt in de TMAP-gedachte een structureel grotere rol dan in de klassieke ISTQB-opbouw: omdat kwaliteit een teamverantwoordelijkheid is, wordt van elk teamlid verwacht dat hij vanuit zijn eigen ervaring meedenkt over waar risico zit, niet alleen de tester.</p>
+<p><strong>Waar het werkelijk anders is.</strong> TMAP plaatst mutatietesten — het opzettelijk kleine, kunstmatige fouten in de code aanbrengen om te controleren of de testset ze opmerkt — dichter bij het hart van de aanpak dan de klassieke ISTQB-Foundationstof doet. Mutatietesten beantwoordt een vraag die dekking alleen niet kan beantwoorden: niet "is deze regel aangeraakt?" maar "zou mijn testset het merken als deze regel verkeerd was?" Dat sluit rechtstreeks aan bij de fout uit dit hoofdstuk — het <code>catch</code>-blok dat wél werd aangeraakt maar nooit gericht werd getest, zou door een mutatietest zijn blootgelegd, terwijl de dekkingsmeting het gewoon als "gedekt" bleef tonen. Deel 11 behandelt dit volledig.</p>
+<hr>
+<h2>6. Examenaansluiting</h2>
+<p>Dit deel dekt CTFL v4.0, hoofdstuk 4 (delen white-box en ervaringsgebaseerd): statement- en beslissingsdekking, exploratory testing, error guessing, checklist-gebaseerd testen. Overwegend K2 en K3.</p>
+<p>Veelgemaakte examenfouten:</p>
+<ol><li><strong>Statement- en beslissingsdekking verwisselen</strong>, of niet weten dat 100% beslissingsdekking altijd 100% statementdekking impliceert — niet andersom.</li><li><strong>Exploratory testing verwarren met ongestructureerd testen.</strong> Het examen toetst nadrukkelijk de structuurelementen: charter, tijdsbox, debrief.</li><li><strong>Denken dat white-box een vervanging is van black-box</strong> in plaats van een aanvulling met een ander perspectief.</li></ol>
+<p>Deze cursus bereidt voor op het examen en vervangt het officiële examenmateriaal niet.</p>
+<hr>
+<h2>7. Kruisverwijzingen</h2>
+<ul><li>↗ <strong>Software-architectuur</strong>: kwaliteitskenmerken als context voor welke code kritiek genoeg is om white-box te verdienen.</li><li>↗ <strong>OutSystems</strong>: dekkingsrapportage in een low-code omgeving, en de beperkingen daarvan.</li><li>↗ <strong>API-cursus</strong>: error guessing toegepast op koppelvlakken (timeouts, malformed payloads).</li></ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p>white-boxtechniek · statementdekking · beslissings-/takdekking · dekkingspercentage als noodzakelijke maar niet voldoende indicator · ervaringsgebaseerde techniek · exploratory testing · charter · tijdsbox · debrief · error guessing · mutatietesten (vooruitblik)</p>
+<h2>Samenvatting in vijf zinnen</h2>
+<ol><li>White-boxtechnieken vertrekken vanuit de interne structuur van de code, als aanvulling op de gedragsgerichte black-boxtechnieken uit deel 5.</li><li>Beslissingsdekking is strenger dan statementdekking, omdat zij ook de "onware" tak van elke beslissing vereist — vaak precies de foutafhandeling.</li><li>Een hoog dekkingspercentage bewijst dat code is aangeraakt, niet dat het resultaat ooit zinvol is gecontroleerd.</li><li>Exploratory testing is gestructureerd leren-en-testen tegelijk, met een charter, een tijdsbox en een debrief — geen ongestructureerd aanklooien.</li><li>Error guessing werkt het best met een checklist van bekende foutcategorieën, en vindt precies wat black-box en white-box structureel missen: wat nergens expliciet vermeld staat maar wél gebeurt.</li></ol>
+</article>
+<nav class="tkb-partnav"><a class="tkb-prevnext prev" href="../deel-05/reader.html">&larr; Deel 5 — Black-boxtechnieken</a><a class="tkb-prevnext next" href="../deel-07/reader.html">Deel 7 — Risicogebaseerd testen &rarr;</a></nav>
+</main>
+<footer class="tkb-footer">
+  <p>Ductus-cursusfamilie · Testen en Kwaliteitsborging · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
