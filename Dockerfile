@@ -18,6 +18,7 @@ COPY enterprise-integration-patterns/ /usr/share/nginx/html/enterprise-integrati
 COPY sap-voor-business-analysts/ /usr/share/nginx/html/sap-voor-business-analysts/
 COPY businessanalyse/ /usr/share/nginx/html/businessanalyse/
 COPY testen-en-kwaliteitsborging/ /usr/share/nginx/html/testen-en-kwaliteitsborging/
+COPY informatiebeveiliging/ /usr/share/nginx/html/informatiebeveiliging/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
