@@ -138,6 +138,37 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function formatSize(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+const DOWNLOAD_FILES = [
+  { file: 'reader.docx', label: 'Reader (.docx)' },
+  { file: 'werkboek.docx', label: 'Werkboek (.docx)' },
+  { file: 'docentenhandleiding.docx', label: 'Docentenhandleiding (.docx)' },
+  { file: 'slidedeck.pptx', label: 'Slidedeck (.pptx)' },
+];
+
+// Builds the "Dit deel downloaden" box for a deel-page. srcDir = source folder
+// on disk (to read file sizes), outDir = the folder this page is written to
+// (downloads are copied alongside the HTML, so hrefs are same-directory).
+function downloadBox(srcDir) {
+  const items = DOWNLOAD_FILES.map(d => {
+    const p = path.join(srcDir, d.file);
+    if (!fs.existsSync(p)) return '';
+    const size = formatSize(fs.statSync(p).size);
+    return `<li><a href="${d.file}">${d.label}</a><span class="ddd-download-size">${size}</span></li>`;
+  }).filter(Boolean).join('\n');
+  if (!items) return '';
+  return `<aside class="ddd-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  ${items}
+  </ul>
+</aside>`;
+}
+
 // ---------- 5. Build per-part metadata (title) ----------
 function firstH1(text) {
   const m = text.match(/^#\s+(.+)$/m);
@@ -216,7 +247,7 @@ function main() {
       const nextLink = next ? `<a class="ddd-prevnext next" href="../${next.dealDir}/reader.html">Deel ${next.num} — ${escapeHtml(next.title)} &rarr;</a>` : `<span></span>`;
 
       const navTop = `<div class="ddd-tabs">${tabs}</div>`;
-      const navBottom = `<nav class="ddd-partnav">${prevLink}${nextLink}</nav>`;
+      const navBottom = `${downloadBox(path.join(SRC, part.niveauDir, part.dealDir))}\n<nav class="ddd-partnav">${prevLink}${nextLink}</nav>`;
 
       const html = page({
         title,
@@ -276,6 +307,7 @@ function main() {
   <h1>Domain-Driven Design</h1>
   <p class="ddd-subtitle">Ductus-cursusfamilie · 3 niveaus · 30 delen · voorbereiding op de iSAQB Advanced Level-module Domain-Driven Design</p>
   ${introHtml}
+  <p class="ddd-downloads-note">Elk deel is ook te downloaden als Word- en PowerPoint-bestand (reader, werkboek, docentenhandleiding, slidedeck) — open een deel en gebruik het kader &ldquo;Dit deel downloaden&rdquo; onderaan de pagina.</p>
   ${levelBlocks}
 </main>
 <footer class="ddd-footer">
@@ -356,6 +388,16 @@ pre { background: #0D1B2A; color: #F5F4F0; padding: 1rem; border-radius: 6px; ov
 
 .ddd-footer { text-align: center; padding: 2rem 1rem; color: var(--sub); font-size: .85rem; }
 .ddd-footer a { color: var(--sub); }
+
+.ddd-download-box { margin-top: 2.5rem; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--amber); border-radius: 8px; padding: 1.2rem 1.6rem; }
+.ddd-download-box h2 { margin: 0 0 .8rem; font-size: 1.25rem; border-bottom: none; padding-bottom: 0; }
+.ddd-download-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.ddd-download-box li { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .5rem .7rem; border-radius: 6px; background: var(--bg); }
+.ddd-download-box a { text-decoration: none; font-weight: 600; color: var(--navy); }
+.ddd-download-box a:hover { color: var(--amber); }
+.ddd-download-size { font-size: .8rem; color: var(--sub); white-space: nowrap; }
+
+.ddd-downloads-note { margin-top: .6rem; font-size: .92rem; color: var(--sub); }
 
 .ddd-index .ddd-subtitle { color: var(--sub); font-size: 1.05rem; margin-bottom: 1.6rem; }
 .ddd-level { margin-top: 2.4rem; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.4rem 1.6rem; }
