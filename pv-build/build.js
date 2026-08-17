@@ -147,6 +147,36 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// "Dit deel downloaden"-kader — alleen bestanden die er al staan (build-docx.js/build-pptx.js
+// draaien vóór build.js), met echte bestandsgrootte. Zie risicomanagement voor het patroon.
+const DOWNLOAD_FILES = [
+  { file: 'reader.docx', label: 'Reader (.docx)' },
+  { file: 'werkboek.docx', label: 'Werkboek (.docx)' },
+  { file: 'docentenhandleiding.docx', label: 'Docentenhandleiding (.docx)' },
+  { file: 'slidedeck.pptx', label: 'Slidedeck (.pptx)' },
+];
+
+function formatSize(bytes) {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+function buildDownloadBox(outDir) {
+  const items = DOWNLOAD_FILES
+    .filter(d => fs.existsSync(path.join(outDir, d.file)))
+    .map(d => {
+      const size = formatSize(fs.statSync(path.join(outDir, d.file)).size);
+      return `<li><a href="${d.file}">${d.label}</a><span class="pv-download-size">${size}</span></li>`;
+    })
+    .join('\n');
+  if (!items) return '';
+  return `<aside class="pv-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  ${items}
+  </ul>
+</aside>`;
+}
+
 function firstH1(text) {
   const m = text.match(/^#\s+(.+)$/m);
   return m ? m[1].trim() : '';
@@ -202,7 +232,8 @@ function main() {
       const nextLink = next ? `<a class="pv-prevnext next" href="${nextHref}">${escapeHtml(next.title)} &rarr;</a>` : `<span></span>`;
 
       const navTop = `<div class="pv-tabs">${tabs}</div>`;
-      const navBottom = `<nav class="pv-partnav">${prevLink}${nextLink}</nav>`;
+      const downloadBox = buildDownloadBox(outDir);
+      const navBottom = `${downloadBox}<nav class="pv-partnav">${prevLink}${nextLink}</nav>`;
 
       const html = page({
         title,
@@ -218,7 +249,8 @@ function main() {
 
   // ---- index.html ----
   const introHtml = `<p>Deze Ductus-opleiding behandelt de Nederlandse pensioenverzekering in drie niveaus: het fundament (het pensioenstelsel, de pensioendriehoek, soorten pensioenovereenkomsten, verplichtstelling, de scheidslijn Wtp/niet-Wtp, overgangsrecht, risicodekkingen en de deelnemersreis), de professional-laag rond uitvoering en advies (het fiscale kader, producten en lifecycles, de uitkeringsfase, offerte en acceptatie, transitie in verzekerde regelingen, waardeoverdracht en invaren, communicatie en zorgplicht, data en mutatieprocessen, toezicht en geschillen) en het expert-niveau (pensioenrecht gevorderd, compensatie en evenwichtige belangenafweging, grensoverschrijdend pensioen en IORP II, DGA/ODV/derde pijler, productontwikkeling, actuariële grondslagen en solvabiliteit). Eén doorlopende casus loopt door alle dertig delen: Van Doorn Techniek, pensioenuitvoerder Meridiaan Pensioen, Bpf Techniek &amp; Installatie en Pensioenfonds Delta Chemie.</p>
-<p>Elk deel bestaat uit vier onderdelen: een <strong>reader</strong> (leestekst met de casus en het instrument van dat deel), een <strong>werkboek</strong> (opdrachten met uitwerkingen), een <strong>docentenhandleiding</strong> (voor wie het deel begeleidt) en een <strong>slidedeck</strong> (de presentatie bij het deel). Deel 15 (niveau 2) en deel 30 (niveau 3) zijn tweedaagse delen.</p>`;
+<p>Elk deel bestaat uit vier onderdelen: een <strong>reader</strong> (leestekst met de casus en het instrument van dat deel), een <strong>werkboek</strong> (opdrachten met uitwerkingen), een <strong>docentenhandleiding</strong> (voor wie het deel begeleidt) en een <strong>slidedeck</strong> (de presentatie bij het deel). Deel 15 (niveau 2) en deel 30 (niveau 3) zijn tweedaagse delen.</p>
+<p class="pv-downloads-note">Elk deel is ook te downloaden als Word- en PowerPoint-bestand (reader, werkboek, docentenhandleiding, slidedeck) — open een deel en gebruik het kader &ldquo;Dit deel downloaden&rdquo; onderaan de pagina.</p>`;
 
   const levelBlocks = NIVEAUS.map(lvl => {
     const items = allParts.filter(p => p.niveau === lvl.n).map(p =>
