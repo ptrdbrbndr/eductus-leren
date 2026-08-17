@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Event sourcing: fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 27 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 27 — Slidedeck</h1>
+<p><strong>Event sourcing: fundamenten</strong>
+Niveau 3, deel 5 van 8 (deel 27 van 30) | 30 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Event sourcing: fundamenten</h1>
+<h2>Niveau 3 — Deel 27</h2>
+<p><em>Een aanname die 26 delen lang nooit werd uitgesproken.</em></p>
+<hr>
+<h2>Slide 2 — Probeer dit</h2>
+<pre><code class="language-sql">UPDATE deelnemer SET achternaam = 'Jansen-Vermeer'
+WHERE deelnemer_id = 42;
+</code></pre>
+<h1>Vind nu de oude achternaam terug.</h1>
+<p><strong>Notities:</strong> laat het echt proberen. Het lukt niet.</p>
+<hr>
+<h2>Slide 3 — De aanname</h2>
+<h1>Een database bewaart de huidige</h1>
+<h1>stand van zaken. De rest wordt</h1>
+<h1>overschreven.</h1>
+<p>26 delen lang nooit hardop gezegd. Omdat het
+vanzelfsprekend leek.</p>
+<hr>
+<h2>Slide 4 — Opdracht 27.1</h2>
+<h1>De aanname zelf ervaren</h1>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 5 — Twee manieren</h2>
+<p><strong>State-based:</strong> de rij ís de waarheid, nu.</p>
+<p><strong>Event-based:</strong> de gebeurtenissen zijn de waarheid.
+De huidige stand wordt <strong>berekend</strong>.</p>
+<hr>
+<h2>Slide 6 — In één zin</h2>
+<h1>State-based bewaart wat waar is.</h1>
+<h1>Event-based bewaart wat er is</h1>
+<h1>gebeurd, en leidt daaruit af</h1>
+<h1>wat waar is.</h1>
+<hr>
+<h2>Slide 7 — Wat een event is</h2>
+<p>Een <strong>onveranderlijk feit</strong>. Verleden tijd. Nooit een wens.</p>
+<table>
+<thead>
+<tr>
+<th>Geen event</th>
+<th>Wel een event</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>“Wijzig het adres”</td>
+<td><code>AdresGewijzigd</code></td>
+</tr>
+<tr>
+<td>“Ken pensioen toe”</td>
+<td><code>PensioenToegekend</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 8 — Opdracht 27.2</h2>
+<h1>Events versus commando’s</h1>
+<p>Herschrijf vijf commando’s naar correcte events.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 9 — De event store</h2>
+<pre><code class="language-sql">CREATE TABLE events (
+    event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    aggregate_id uuid NOT NULL,
+    event_type text NOT NULL,
+    payload jsonb NOT NULL,
+    volgnummer integer NOT NULL,
+    occurred_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (aggregate_id, volgnummer)
+);
+</code></pre>
+<hr>
+<h2>Slide 10 — Herken je dit?</h2>
+<p><strong>Deel 12:</strong> insert-only tabellen hebben minder bloat
+<strong>Deel 15:</strong> hotspot oplossen door invoegen i.p.v. bijwerken
+<strong>Deel 16:</strong> partitioneren, <code>DROP TABLE</code> i.p.v. <code>DELETE</code></p>
+<h1>Dit deel legt de naam op wat</h1>
+<h1>je al kende.</h1>
+<hr>
+<h2>Slide 11 — De UNIQUE-constraint</h2>
+<p><code>UNIQUE (aggregate_id, volgnummer)</code></p>
+<p>Optimistische concurrency control (deel 7) —
+nu toegepast op events.</p>
+<hr>
+<h2>Slide 12 — Opdracht 27.3</h2>
+<h1>Een event store bouwen</h1>
+<p>Probeer een dubbel volgnummer. Kijk wat er gebeurt.</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 13 — Pauze</h2>
+<hr>
+<h2>Slide 14 — Aggregates en streams</h2>
+<p>Een <strong>aggregaat</strong>: de eenheid met consistentiegaranties
+(één deelnemer, één dienstverband).</p>
+<p>Een <strong>stream</strong>: de geordende reeks events van dat aggregaat.</p>
+<hr>
+<h2>Slide 15 — Co-locatie, opnieuw</h2>
+<p>Alle events van één aggregaat horen bij elkaar —
+precies het principe uit deel 24-25,
+nu toegepast op events i.p.v. shards.</p>
+<hr>
+<h2>Slide 16 — Opdracht 27.4</h2>
+<h1>Een stream bevragen</h1>
+<p>Bereken het huidige salaris. Bereken het salaris
+vóór een specifiek moment — tijdreizen.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 17 — Projecties</h2>
+<p>Niemand telt handmatig een hele stream op.</p>
+<pre><code class="language-sql">CREATE MATERIALIZED VIEW dienstverband_huidige_stand AS
+SELECT ... FROM events GROUP BY aggregate_id;
+</code></pre>
+<p>Exact het patroon uit deel 8. Nu over events.</p>
+<hr>
+<h2>Slide 18 — Opdracht 27.5</h2>
+<h1>Een projectie bouwen</h1>
+<p>Voeg een event toe. Bevraag de projectie —
+vóór en na REFRESH.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 19 — Het verschil dat je net zag</h2>
+<p><strong>Vóór REFRESH:</strong> de projectie loog niet — hij was gewoon nog niet bijgewerkt.</p>
+<h1>Dat is eventual consistency,</h1>
+<h1>tastbaar gemaakt.</h1>
+<hr>
+<h2>Slide 20 — Het contrast</h2>
+<p>Projectie kwijt? <strong>Herbouwen uit de events. Geen verlies.</strong></p>
+<p>Een gewone tabel kwijt, zonder back-up?
+<strong>Echt weg.</strong></p>
+<hr>
+<h2>Slide 21 — Wat je “gratis” krijgt</h2>
+<ul>
+<li>Volledige, <strong>inherente</strong> audit trail (geen pgaudit nodig, deel 20)</li>
+<li><strong>Tijdreizen</strong> — bereken de stand op elk moment</li>
+<li>Nieuwe inzichten achteraf, zonder verlies</li>
+<li>Correcties blijven zichtbaar náást de fout</li>
+</ul>
+<hr>
+<h2>Slide 22 — Wat het kost</h2>
+<ul>
+<li><strong>Eventual consistency</strong> — projecties lopen achter</li>
+<li>Meer ontwerpcomplexiteit — elke vraag vraagt een projectie</li>
+<li><strong>Event-schema-evolutie</strong> — oude events blijven oud</li>
+<li>Geen gratis globale queries zonder goede projectie</li>
+</ul>
+<hr>
+<h2>Slide 23 — CQRS</h2>
+<pre><code>Commando's → Event store (schrijven)
+                   │
+Query's ← Projecties (lezen)
+</code></pre>
+<p>Schrijf- en leeskant met fundamenteel andere eigenschappen —
+expliciet gescheiden.</p>
+<hr>
+<h2>Slide 24 — Opdracht 27.6</h2>
+<h1>CQRS herkennen</h1>
+<p>Wijs het commando-pad en het query-pad aan
+in je eigen opzet.</p>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 25 — De terugblik</h2>
+<table>
+<thead>
+<tr>
+<th>Deel</th>
+<th>Toen</th>
+<th>Nu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7</td>
+<td>Optimistisch vergrendelen</td>
+<td>UNIQUE-constraint</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Insert-only, minder bloat</td>
+<td>De event store zelf</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Hotspot: invoegen i.p.v. bijwerken</td>
+<td>Hoe events ontstaan</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Partitioneren + DROP TABLE</td>
+<td>Oude events opruimen</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Materialized views</td>
+<td>Projecties</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 26 — Geen toeval</h2>
+<h1>Event sourcing is minder een</h1>
+<h1>nieuw idee dan een naam voor</h1>
+<h1>een patroon dat je al kende.</h1>
+<hr>
+<h2>Slide 27 — Opdracht 27.7</h2>
+<h1>De terugblik toepassen</h1>
+<p>Leg vijf eerdere concepten in eigen woorden uit.</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 28 — Het raakvlak</h2>
+<p><strong>Het Locked Platform</strong> — FSM + CQRS + event sourcing
+als alternatief voor BPMN/CMMN-procesengines.</p>
+<p>Zelfde denken, toegepast op procesbesturing zelf.
+<em>(Een zijlijn — geen kernstof vandaag.)</em></p>
+<hr>
+<h2>Slide 29 — De toetsvraag</h2>
+<h1>Is de geschiedenis van hoe iets</h1>
+<h1>ontstond zelf waardevol —</h1>
+<h1>of volstaat de huidige stand?</h1>
+<p>Adres: meestal volstaat de stand.
+Aanspraakopbouw: de geschiedenis IS het punt.</p>
+<hr>
+<h2>Slide 30 — Opdracht 27.8, 27.9 &amp; volgende keer</h2>
+<p><strong>27.8</strong> Wel of niet event sourcing — vijf domeinen — <em>15 min</em></p>
+<p><strong>27.9</strong> Het architectuuradvies — specifieke keuze ·
+kosten net zo expliciet als baten · concreet risico ·
+een echte uitsluiting</p>
+<p><em>35 min, drietallen</em></p>
+<p><strong>Deel 28 — Event sourcing in de praktijk.</strong> Snapshotting, en het vraagstuk van vergetelheid in een onveranderlijke geschiedenis.</p>
+<hr>
+<p><em>Einde slidedeck deel 27.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">301 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">&larr; Deel 26 — Foreign data wrappers en federatie</a><a class="dbm-prevnext next" href="../deel-28-event-sourcing-in-de-praktijk/reader.html">Deel 28 — Event sourcing in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Event sourcing in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 28 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 28 — Event sourcing in de praktijk</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 6 van 8 (deel 28 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Van concept naar productie</li>
+<li>Command handlers: business logica toepassen op een stream</li>
+<li>Optimistic concurrency in de praktijk</li>
+<li>Snapshotting: waarom lange streams een probleem worden</li>
+<li>Een snapshot bouwen en gebruiken</li>
+<li>Projecties automatisch bijwerken</li>
+<li>LISTEN/NOTIFY als lichte trigger voor projecties</li>
+<li>Het vraagstuk: recht op vergetelheid in een onveranderlijke geschiedenis</li>
+<li>Crypto-shredding als oplossing</li>
+<li>Event-schema-evolutie: wanneer een event-type moet veranderen</li>
+<li>Testen van een event-sourced systeem</li>
+<li>Monitoring: wat je nu extra in de gaten houdt</li>
+<li>Meridiaans mutatieverwerking, end-to-end</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>een command handler bouwen die business regels toepast vóórdat een event wordt vastgelegd;</li>
+<li>optimistische concurrency correct afhandelen bij een conflicterend volgnummer;</li>
+<li>snapshotting toepassen om lange streams beheersbaar te houden;</li>
+<li>projecties automatisch laten bijwerken, inclusief de afweging tussen polling en <code>LISTEN</code>/<code>NOTIFY</code>;</li>
+<li>een oplossing ontwerpen voor het recht op vergetelheid binnen een onveranderlijke event store;</li>
+<li>event-schema-evolutie beheren zonder de geschiedenis te breken;</li>
+<li>een event-sourced systeem testen en monitoren;</li>
+<li>de volledige mutatieverwerking van Meridiaan als event-sourced systeem beschrijven.</li>
+</ul>
+<hr>
+<h2>2. Van concept naar productie</h2>
+<p>Deel 27 gaf je de concepten en de geruststelling dat je de bouwstenen al kende. Dit deel voegt precies de stukken toe die nodig zijn om van een demonstratie naar een werkend systeem te gaan:</p>
+<ul>
+<li><strong>Business logica</strong> die bepaalt of een event überhaupt geldig is (paragraaf 3-4).</li>
+<li><strong>Snapshotting</strong>, zodat een stream van tienduizenden events niet bij elke berekening helemaal opnieuw hoeft te worden doorlopen (paragraaf 5-6).</li>
+<li><strong>Geautomatiseerde projectie-updates</strong>, in plaats van een handmatige <code>REFRESH</code> (paragraaf 7-8).</li>
+<li><strong>Een antwoord op het recht op vergetelheid</strong> — het AVG-vraagstuk dat in deel 27 als openstaand probleem werd achtergelaten (paragraaf 9-10).</li>
+<li><strong>Schema-evolutie</strong>, testen en monitoring — de operationele volwassenheid die elk patroon in deze cursus uiteindelijk nodig heeft.</li>
+</ul>
+<hr>
+<h2>3. Command handlers: business logica toepassen op een stream</h2>
+<p>Een event mag niet zomaar worden toegevoegd — er moet eerst gecontroleerd worden of het <strong>geldig</strong> is, gegeven de huidige stand van het aggregaat. Dat is de taak van een <strong>command handler</strong>.</p>
+<pre><code class="language-sql">CREATE OR REPLACE FUNCTION verwerk_salariswijziging(
+    p_aggregate_id uuid, p_nieuw_salaris numeric, p_verwacht_volgnummer integer
+) RETURNS void AS $$
+DECLARE
+    v_huidig_salaris numeric;
+BEGIN
+    -- 1. Bereken de huidige stand (of lees uit een snapshot, deel 5-6)
+    SELECT (payload-&gt;&gt;'nieuw_salaris')::numeric INTO v_huidig_salaris
+    FROM events WHERE aggregate_id = p_aggregate_id AND event_type = 'SalarisGewijzigd'
+    ORDER BY volgnummer DESC LIMIT 1;
+
+    -- 2. Bedrijfsregel: een salariswijziging van meer dan 50% vereist goedkeuring
+    IF v_huidig_salaris IS NOT NULL
+       AND abs(p_nieuw_salaris - v_huidig_salaris) / v_huidig_salaris &gt; 0.5 THEN
+        RAISE EXCEPTION 'Salariswijziging van meer dan 50%% vereist goedkeuring';
+    END IF;
+
+    -- 3. Vastleggen, met het verwachte volgnummer (optimistic concurrency, §4)
+    INSERT INTO events (aggregate_id, event_type, payload, volgnummer)
+    VALUES (p_aggregate_id, 'SalarisGewijzigd',
+            jsonb_build_object('nieuw_salaris', p_nieuw_salaris),
+            p_verwacht_volgnummer);
+END;
+$$ LANGUAGE plpgsql;
+</code></pre>
+<p><strong>Dit is het punt waar het onderscheid tussen “commando” en “event” (deel 27, paragraaf 4) operationeel wordt.</strong> <code>verwerk_salariswijziging</code> is het commando — een verzoek dat kan <strong>falen</strong>. Het <code>SalarisGewijzigd</code>-event dat er (mogelijk) uit voortkomt, is een feit dat, eenmaal vastgelegd, niet meer ter discussie staat.</p>
+<p><strong>Waar plaats je de business logica — hier, in de database, of in de applicatielaag?</strong> Beide zijn gangbaar. In de database (zoals hierboven) profiteer je van transactionele garanties zonder een extra rondgang; in de applicatielaag heb je meer flexibiliteit in taal en testbaarheid. Dit is dezelfde afweging als bij <code>SECURITY DEFINER</code>-functies (deel 21): logica dicht bij de data geeft garanties, logica in de applicatie geeft flexibiliteit.</p>
+<hr>
+<h2>4. Optimistic concurrency in de praktijk</h2>
+<p>Uit deel 27: de <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint voorkomt dubbele volgnummers. In de praktijk moet de <strong>aanroepende code</strong> dat conflict afhandelen.</p>
+<pre><code class="language-sql">-- Als twee sessies tegelijk hetzelfde aggregaat wijzigen:
+-- Sessie A leest volgnummer 4, probeert 5 te schrijven — lukt.
+-- Sessie B leest ook volgnummer 4 (vóór A's schrijfactie), probeert ook 5 — faalt.
+</code></pre>
+<p><strong>Het patroon dat hierbij hoort, is bijna identiek aan de retry-logica uit deel 15, paragraaf 16</strong> (serialisatiefouten bij <code>SERIALIZABLE</code>):</p>
+<pre><code>poging = 0
+zolang poging &lt; 5:
+    volgnummer = lees_huidig_volgnummer(aggregate_id)
+    probeer:
+        voer command handler uit met verwacht_volgnummer = volgnummer + 1
+        klaar
+    bij unique_violation (SQLSTATE 23505):
+        poging = poging + 1
+        wacht kort (met spreiding, zoals deel 15)
+geef op met een duidelijke melding
+</code></pre>
+<p><strong>Waarom dit geen nieuw probleem is:</strong> het is exact hetzelfde patroon als bij een serialisatiefout — een botsing die correct wordt afgevangen in plaats van stilzwijgend fout te gaan, met retry als de aangewezen afhandeling. De cursus heeft je dit patroon al één keer grondig geleerd; vandaag pas je het toe op een nieuwe context.</p>
+<hr>
+<h2>5. Snapshotting: waarom lange streams een probleem worden</h2>
+<p>Een dienstverband van dertig jaar, met honderden salariswijzigingen, promoties en aanpassingen, genereert een stream met honderden events. Elke keer de huidige stand berekenen door <strong>alle</strong> events opnieuw af te spelen, wordt op een gegeven moment traag — een herkenbaar probleem: het is de “meet op schaal, niet op een speelgoedvoorbeeld”-les uit deel 12, nu toegepast op streams.</p>
+<p><strong>Snapshotting</strong>: periodiek de berekende stand <strong>zelf opslaan</strong>, zodat je bij de volgende berekening niet bij event 1 hoeft te beginnen, maar bij de laatste snapshot plus de events die daarna zijn toegevoegd.</p>
+<pre><code class="language-sql">CREATE TABLE snapshots (
+    aggregate_id uuid NOT NULL,
+    volgnummer   integer NOT NULL,
+    state        jsonb NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (aggregate_id, volgnummer)
+);
+</code></pre>
+<p><strong>Dit is hetzelfde idee als een materialized view (deel 8) of een BRIN-index (deel 14): een vooraf berekend, goedkoper te raadplegen tussenresultaat, met de bekende afruil tussen actualiteit en snelheid.</strong></p>
+<hr>
+<h2>6. Een snapshot bouwen en gebruiken</h2>
+<pre><code class="language-sql">-- Een snapshot maken op het huidige volgnummer
+INSERT INTO snapshots (aggregate_id, volgnummer, state)
+SELECT aggregate_id, max(volgnummer),
+       jsonb_build_object(
+           'huidig_salaris', (
+               SELECT payload-&gt;&gt;'nieuw_salaris' FROM events e2
+               WHERE e2.aggregate_id = e.aggregate_id AND event_type = 'SalarisGewijzigd'
+               ORDER BY volgnummer DESC LIMIT 1)
+       )
+FROM events e WHERE aggregate_id = '...'
+GROUP BY aggregate_id;
+
+-- De stand berekenen: snapshot plus de events erna
+SELECT s.state, array_agg(e.payload ORDER BY e.volgnummer) AS events_erna
+FROM snapshots s
+LEFT JOIN events e ON e.aggregate_id = s.aggregate_id AND e.volgnummer &gt; s.volgnummer
+WHERE s.aggregate_id = '...'
+GROUP BY s.state
+ORDER BY s.volgnummer DESC LIMIT 1;
+</code></pre>
+<p><strong>Wanneer een snapshot maken?</strong> Een gangbare vuistregel: elke N events (bijvoorbeeld elke 100), of periodiek (bijvoorbeeld nachtelijk voor actieve aggregaten) — vergelijkbaar met de checkpoint-cyclus uit deel 11: te vaak is overhead, te zelden betekent lange hersteltijden (hier: lange herberekeningstijden).</p>
+<p><strong>Snapshots zijn, net als projecties, volledig herbouwbaar</strong> — verlies of corrumpeer een snapshot, en je kunt hem opnieuw berekenen uit de events. De events blijven de enige, onvervangbare bron van waarheid; alles daarna afgeleid (projecties, snapshots) is comfort, geen noodzaak.</p>
+<hr>
+<h2>7. Projecties automatisch bijwerken</h2>
+<p>In deel 27 werkte je een materialized view handmatig bij met <code>REFRESH</code>. In productie wil je dat automatiseren.</p>
+<p><strong>Optie 1 — periodiek, met een geplande taak:</strong></p>
+<pre><code class="language-sql">-- Via pg_cron (deel 16, paragraaf 15) of een externe scheduler
+SELECT cron.schedule('ververs-projecties', '*/5 * * * *',
+    $$REFRESH MATERIALIZED VIEW CONCURRENTLY dienstverband_huidige_stand$$);
+</code></pre>
+<p><code>CONCURRENTLY</code> (deel 8, deel 14) voorkomt dat de materialized view tijdens de verversing ontoegankelijk is voor lezers — dezelfde reden dat je <code>CREATE INDEX CONCURRENTLY</code> verkiest boven de gewone variant.</p>
+<p><strong>Optie 2 — trigger-gebaseerd, direct na elk event:</strong></p>
+<pre><code class="language-sql">CREATE OR REPLACE FUNCTION update_projectie_na_event() RETURNS trigger AS $$
+BEGIN
+    -- Werk de projectie voor dit ene aggregaat bij (geen volledige REFRESH)
+    -- ... UPSERT-logica op een gewone (niet-materialized) projectietabel ...
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_projectie
+    AFTER INSERT ON events
+    FOR EACH ROW EXECUTE FUNCTION update_projectie_na_event();
+</code></pre>
+<p><strong>De afweging tussen de twee is opnieuw de klok-versus-actualiteit-afweging uit deel 8 en 18:</strong> periodiek is eenvoudiger en lichter, maar met een vertragingsvenster; trigger-gebaseerd is (bijna) synchroon, maar voegt overhead toe aan elke schrijfactie op de event store — vergelijkbaar met hoe een index (deel 14) elke <code>INSERT</code> iets duurder maakt in ruil voor snellere leesacties.</p>
+<hr>
+<h2>8. LISTEN/NOTIFY als lichte trigger voor projecties</h2>
+<p>Een tussenweg tussen “periodiek” en “synchroon binnen dezelfde transactie”: PostgreSQL’s ingebouwde publish-subscribe-mechanisme.</p>
+<pre><code class="language-sql">-- Bij het vastleggen van een event, ook een notificatie versturen
+CREATE OR REPLACE FUNCTION notify_nieuw_event() RETURNS trigger AS $$
+BEGIN
+    PERFORM pg_notify('nieuw_event', NEW.aggregate_id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_notify_event AFTER INSERT ON events
+    FOR EACH ROW EXECUTE FUNCTION notify_nieuw_event();
+</code></pre>
+<p>Een aparte projectie-bijwerkende dienst luistert (<code>LISTEN nieuw_event;</code>) en werkt, zodra een notificatie binnenkomt, <strong>buiten de oorspronkelijke transactie</strong> de relevante projectie bij — asynchroon, maar met minder vertraging dan een periodieke taak.</p>
+<p><strong>Herinner je deel 15 en 19: <code>LISTEN</code>/<code>NOTIFY</code> werkt niet betrouwbaar in transaction-pooling-modus (PgBouncer).</strong> Een dienst die op notificaties luistert, heeft een <strong>permanente, niet-gepoolde verbinding</strong> nodig — een detail dat gemakkelijk over het hoofd wordt gezien als je gewend bent dat alles door een pooler loopt (deel 19). Dit is precies het soort valkuil die je in deel 19 al leerde herkennen, nu in een nieuwe context.</p>
+<hr>
+<h2>9. Het vraagstuk: recht op vergetelheid in een onveranderlijke geschiedenis</h2>
+<p>Terug naar Sanne, en naar de belofte aan het eind van deel 27. Een deelnemer oefent zijn recht op vergetelheid uit (AVG) en wil dat zijn persoonsgegevens worden verwijderd. <strong>Bij een event store is dat principieel lastiger dan bij een gewone tabel.</strong></p>
+<pre><code class="language-sql">-- Bij een gewone tabel: triviaal
+DELETE FROM deelnemer WHERE deelnemer_id = 42;
+
+-- Bij een event store: de events bevatten het BSN, de naam, het adres —
+-- verspreid over tientallen events in de stream. Verwijderen zou de
+-- onveranderlijkheid schenden die het hele patroon draagt.
+</code></pre>
+<p><strong>Het spanningsveld, precies benoemd:</strong> event sourcing belooft een volledige, onveranderlijke geschiedenis — dat is de kern van zijn waarde (deel 27, paragraaf 8). De AVG vereist dat persoonsgegevens op verzoek daadwerkelijk verwijderd kunnen worden. Deze twee eisen lijken elkaar tegen te spreken.</p>
+<hr>
+<h2>10. Crypto-shredding als oplossing</h2>
+<p>De gangbare oplossing verzoent beide eisen door de vraag te herformuleren: <strong>je hoeft het event zelf niet te verwijderen — je moet het onleesbaar maken.</strong></p>
+<pre><code class="language-sql">-- Persoonsgegevens in de payload worden versleuteld met een sleutel
+-- die UNIEK is per deelnemer (niet per event, niet clusterbreed)
+CREATE TABLE deelnemer_sleutels (
+    deelnemer_id integer PRIMARY KEY,
+    sleutel      bytea NOT NULL   -- of een verwijzing naar extern sleutelbeheer, deel 21
+);
+
+-- Bij het vastleggen van een event: persoonsgegevens versleuteld opslaan
+INSERT INTO events (aggregate_id, event_type, payload, volgnummer)
+VALUES (42, 'AdresGewijzigd',
+        jsonb_build_object(
+            'straat_enc', pgp_sym_encrypt('Kerkstraat 12', (SELECT sleutel::text FROM deelnemer_sleutels WHERE deelnemer_id = 42))
+        ), 5);
+</code></pre>
+<p><strong>Het recht op vergetelheid wordt dan:</strong></p>
+<pre><code class="language-sql">-- Niet: events verwijderen (schendt onveranderlijkheid)
+-- Wel: de sleutel vernietigen
+DELETE FROM deelnemer_sleutels WHERE deelnemer_id = 42;
+</code></pre>
+<p><strong>Na het vernietigen van de sleutel zijn de versleutelde velden in alle historische events onherstelbaar onleesbaar</strong> — de gebeurtenis “er vond een adreswijziging plaats op deze datum” blijft bestaan (de structuur van de geschiedenis, nodig voor audit en analyse), maar de persoonsgegevens zelf (welk adres) zijn voorgoed ontoegankelijk. Dit heet <strong>crypto-shredding</strong>, en het is precies de toepassing van <code>pgcrypto</code> uit deel 21 op het specifieke probleem van dit deel.</p>
+<p><strong>Wat dit wel en niet oplost:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Crypto-shredding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Persoonsgegevens onleesbaar maken</td>
+<td>Ja, effectief onomkeerbaar</td>
+</tr>
+<tr>
+<td>De structuur van de geschiedenis (dat er een wijziging was) bewaren</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Volledig fysiek verwijderen van elk spoor</td>
+<td>Nee — de versleutelde bytes blijven fysiek aanwezig</td>
+</tr>
+<tr>
+<td>Werkt met back-ups (deel 17)</td>
+<td>Ja, mits de sleutel niet ook in de back-up van de sleuteltabel overleeft</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De laatste rij is een reëel aandachtspunt:</strong> als <code>deelnemer_sleutels</code> zelf in oudere back-ups staat, overleeft de sleutel daar mogelijk nog. Het bewaarbeleid voor back-ups (deel 17, paragraaf 15) moet daarom consistent zijn met deze aanpak — een back-up van de sleuteltabel die langer bewaard blijft dan de intentie van het verwijderingsverzoek, ondermijnt crypto-shredding net zoals een te lange back-upbewaartermijn in deel 17 al een spanningsveld opleverde met gewone verwijderingsverzoeken.</p>
+<p><strong>Ontwerpimplicatie: bepaal vooraf welke velden in een event-payload persoonsgegevens bevatten, en versleutel die specifiek</strong> — niet de hele payload (dat zou ook niet-persoonlijke, voor analyse waardevolle gegevens onnodig onleesbaar maken) en niet slechts een deel als het niet dekkend is (dan blijft er een lek).</p>
+<hr>
+<h2>11. Event-schema-evolutie: wanneer een event-type moet veranderen</h2>
+<p>Een <code>SalarisGewijzigd</code>-event kreeg ooit alleen <code>nieuw_salaris</code>. Een jaar later wil je ook <code>reden</code> vastleggen. De oude events in de store hebben dat veld niet en <strong>kunnen niet met terugwerkende kracht worden aangepast</strong> (onveranderlijkheid, deel 27).</p>
+<p><strong>Oplossing: expliciete versionering.</strong></p>
+<pre><code class="language-sql">-- Nieuwe events krijgen een versie-aanduiding
+{&quot;_version&quot;: 2, &quot;nieuw_salaris&quot;: 45000, &quot;reden&quot;: &quot;jaarlijkse verhoging&quot;}
+
+-- Oude events blijven zoals ze waren
+{&quot;_version&quot;: 1, &quot;nieuw_salaris&quot;: 42000}
+</code></pre>
+<p><strong>Projecties en command handlers moeten met beide versies kunnen omgaan</strong> — een <code>upcasting</code>-functie die een oud-formaat-event vertaalt naar het nieuwe formaat vóórdat de projectielogica erop wordt losgelaten:</p>
+<pre><code class="language-sql">CREATE FUNCTION upcast_salariswijziging(payload jsonb) RETURNS jsonb AS $$
+    SELECT CASE WHEN payload ? '_version' AND (payload-&gt;&gt;'_version')::int &gt;= 2
+           THEN payload
+           ELSE payload || jsonb_build_object('_version', 2, 'reden', 'onbekend (historisch)')
+           END;
+$$ LANGUAGE sql IMMUTABLE;
+</code></pre>
+<p><strong>Dit is vergelijkbaar met de kolomtype-migratie uit deel 22</strong>, maar dan voor de betekenis van een event in plaats van een kolom — en met een belangrijk verschil: bij een kolomtype-migratie kun je uiteindelijk de oude kolom verwijderen (contract); bij event-schema-evolutie blijven <strong>oude events voor altijd in hun oorspronkelijke vorm bestaan</strong>, en moet de toepassingslogica daarmee blijven leven, in principe voor de levensduur van het systeem.</p>
+<hr>
+<h2>12. Testen van een event-sourced systeem</h2>
+<p><strong>Het goede nieuws:</strong> event-sourced systemen zijn vaak <strong>makkelijker</strong> te testen dan state-based systemen, omdat elke test simpelweg is: <em>gegeven deze reeks events, en dit commando, verwacht ik dit nieuwe event (of deze foutmelding)</em>.</p>
+<pre><code>Test: &quot;Een salariswijziging van meer dan 50% zonder goedkeuring wordt geweigerd&quot;
+Gegeven: stream met [DienstverbandGestart, SalarisGewijzigd(40000)]
+Wanneer: verwerk_salariswijziging(nieuw_salaris=70000)
+Dan: verwacht een foutmelding, geen nieuw event
+</code></pre>
+<p>Dit is geen databasetest in de traditionele zin — het is een test van de <strong>command handler-logica</strong>, en omdat de events onveranderlijk en expliciet zijn, is de testopzet (gegeven-wanneer-dan) natuurlijk en herleidbaar.</p>
+<hr>
+<h2>13. Monitoring: wat je nu extra in de gaten houdt</h2>
+<p>Bovenop alles uit deel 20, komen er specifieke signalen bij:</p>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Waarom het ertoe doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Groei van de event store</td>
+<td>Analoog aan elke tabelgroei (deel 12), maar hier is <code>DELETE</code> principieel geen optie — alleen partitioneren en archiveren (deel 16)</td>
+</tr>
+<tr>
+<td>Projectie-lag (tijd sinds laatste <code>REFRESH</code>/update)</td>
+<td>Het eventual-consistency-venster uit deel 27, nu een meetbaar getal</td>
+</tr>
+<tr>
+<td>Aantal <code>unique_violation</code>-conflicten per aggregaat</td>
+<td>Hoog aantal duidt op een hotspot-aggregaat (deel 15) dat vaak gelijktijdig wordt gewijzigd</td>
+</tr>
+<tr>
+<td>Snapshot-leeftijd versus streamlengte</td>
+<td>Te oude snapshots betekenen trage herberekeningen</td>
+</tr>
+<tr>
+<td><code>LISTEN</code>/<code>NOTIFY</code>-achterstand (indien gebruikt)</td>
+<td>Een luisterende dienst die zelf traag is, wordt een verborgen bottleneck</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>14. Meridiaans mutatieverwerking, end-to-end</h2>
+<p>Een samenvattend beeld van hoe deel 27 en 28 samen op de bestaande casus worden toegepast:</p>
+<ol>
+<li><strong>Commando:</strong> het portaal (of de klantenservice) dient een mutatieverzoek in.</li>
+<li><strong>Command handler:</strong> controleert bedrijfsregels (bijvoorbeeld: is de deelnemer nog actief), en legt bij succes een <code>MutatieIngediend</code>-event vast, met optimistische concurrency op het dienstverband-aggregaat.</li>
+<li><strong>Verwerking:</strong> een achtergrondproces (vergelijkbaar met de <code>SKIP LOCKED</code>-wachtrij uit deel 15, nu toegepast op events in plaats van rijen) verwerkt het event en legt een <code>MutatieVerwerkt</code>-event vast.</li>
+<li><strong>Projectie:</strong> de “huidige stand van de deelnemer”-projectie wordt bijgewerkt, via <code>LISTEN</code>/<code>NOTIFY</code> (paragraaf 8) of een periodieke taak.</li>
+<li><strong>Persoonsgegevens:</strong> relevante velden in de payload zijn versleuteld per deelnemer (paragraaf 10), zodat een toekomstig verwijderingsverzoek mogelijk blijft.</li>
+<li><strong>Partitionering:</strong> de event store zelf is, net als <code>mutatie</code> in deel 16, gepartitioneerd op tijd — oude, buiten de bewaartermijn vallende partities kunnen verdwijnen zodra de bijbehorende sleutels (indien van toepassing) al zijn vernietigd.</li>
+</ol>
+<p><strong>Dit is geen ander systeem dan wat je in niveau 2 bouwde — het is dezelfde <code>mutatie</code>-verwerking, met de events als expliciet, eersteklas concept in plaats van een impliciete bijeffect van hoe de tabel toevallig was ingericht.</strong></p>
+<hr>
+<h2>15. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Business logica pas ná het vastleggen van een event controleren</td>
+<td>Ongeldige feiten in de geschiedenis</td>
+<td>Command handler valideert vóór het event bestaat</td>
+</tr>
+<tr>
+<td>Geen snapshotting bij lange streams</td>
+<td>Trage, groeiende herberekeningstijden</td>
+<td>Periodieke snapshots, herbouwbaar</td>
+</tr>
+<tr>
+<td><code>LISTEN</code>/<code>NOTIFY</code> via een gepoolde verbinding</td>
+<td>Werkt onbetrouwbaar of helemaal niet</td>
+<td>Permanente, niet-gepoolde verbinding voor de luisteraar</td>
+</tr>
+<tr>
+<td>Events verwijderen bij een verwijderingsverzoek</td>
+<td>Schendt onveranderlijkheid, breekt projecties die op volledigheid rekenen</td>
+<td>Crypto-shredding</td>
+</tr>
+<tr>
+<td>De hele payload versleutelen, ook niet-persoonlijke velden</td>
+<td>Onnodig verlies van voor analyse waardevolle, niet-gevoelige gegevens</td>
+<td>Selectief versleutelen, per veld</td>
+</tr>
+<tr>
+<td>Sleutels voor crypto-shredding zelf te lang bewaren in back-ups</td>
+<td>Het verwijderingsverzoek wordt via een oude back-up ondermijnd</td>
+<td>Sleutelbewaarbeleid consistent met deel 17</td>
+</tr>
+<tr>
+<td>Event-schema’s wijzigen zonder versionering</td>
+<td>Oude events kunnen niet meer correct worden geïnterpreteerd</td>
+<td>Expliciete <code>_version</code>, upcasting-functies</td>
+</tr>
+<tr>
+<td>Testen alsof het een gewone CRUD-applicatie is</td>
+<td>Mist de kracht van gegeven-wanneer-dan-tests op commando’s</td>
+<td>Testen op het niveau van commando’s en verwachte events</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>16. Kernbegrippen</h2>
+<p><strong>Command handler</strong> — logica die een commando valideert en, bij succes, een event vastlegt.
+<strong>Optimistic concurrency (in event sourcing)</strong> — het <code>volgnummer</code>-conflictmechanisme uit deel 27, hier met de bijbehorende retry-logica.
+<strong>Snapshot</strong> — een periodiek opgeslagen, herbouwbare tussenstand van een aggregaat.
+<strong><code>LISTEN</code>/<code>NOTIFY</code></strong> — PostgreSQL’s ingebouwde publish-subscribe-mechanisme, hier gebruikt om projecties bijna-synchroon bij te werken.
+<strong>Recht op vergetelheid</strong> — de AVG-eis dat persoonsgegevens op verzoek verwijderbaar moeten zijn.
+<strong>Crypto-shredding</strong> — persoonsgegevens onleesbaar maken door de bijbehorende versleutelingssleutel te vernietigen, in plaats van de gegevens zelf te verwijderen.
+<strong>Event-schema-evolutie</strong> — het beheren van veranderingen in het formaat van een event-type over tijd.
+<strong>Upcasting</strong> — het vertalen van een ouder event-formaat naar het nieuwste formaat vóór verwerking.</p>
+<hr>
+<p><em>Volgende deel: geo-distributie. Vandaag ging het over wát je vastlegt. Volgende keer keert de vraag terug naar waar — maar nu op de schaal van meerdere regio’s en landsgrenzen, met alles wat dat aan latency, dataresidentie en AVG-complicaties met zich meebrengt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">279 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-27-event-sourcing-fundamenten/reader.html">&larr; Deel 27 — Event sourcing: fundamenten</a><a class="dbm-prevnext next" href="../deel-29-geo-distributie/reader.html">Deel 29 — Geo-distributie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

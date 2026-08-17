@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Foreign data wrappers en federatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 26 — Foreign data wrappers en federatie</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 4 van 8 (deel 26 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Het gat dat deel 23 openliet</li>
+<li>Wat een foreign data wrapper is</li>
+<li>postgres_fdw opzetten</li>
+<li>Foreign tables gebruiken</li>
+<li>Wat wordt doorgeschoven: predicate en join pushdown</li>
+<li>Wat niet wordt doorgeschoven: de grenzen van pushdown</li>
+<li>EXPLAIN op een foreign table</li>
+<li>De federatieve rapportagelaag voor de Pensioenfederatie</li>
+<li>Materialized views bovenop foreign tables</li>
+<li>FDW versus logische replicatie versus Citus</li>
+<li>Rechten en credentials over een FDW-verbinding</li>
+<li>Schrijven via een foreign table</li>
+<li>Wanneer FDW de juiste keuze is, wanneer niet</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>uitleggen welk architectuurprobleem foreign data wrappers oplossen, in samenhang met deel 23;</li>
+<li><code>postgres_fdw</code> opzetten tussen twee zelfstandige databases;</li>
+<li>foreign tables aanmaken en bevragen, en het verschil met een lokale tabel benoemen;</li>
+<li>via <code>EXPLAIN</code> zien welk deel van een query wordt doorgeschoven naar de externe server en welk deel lokaal gebeurt;</li>
+<li>een federatieve rapportagelaag ontwerpen voor de Pensioenfederatie;</li>
+<li>FDW, logische replicatie en Citus tegen elkaar afwegen als drie manieren om meerdere databases te verbinden;</li>
+<li>beoordelen of schrijven via een foreign table verstandig is;</li>
+<li>de keuze voor FDW beargumenteren of afraden voor een gegeven scenario.</li>
+</ul>
+<hr>
+<h2>2. Het gat dat deel 23 openliet</h2>
+<p>In deel 23 werd de architectuurkeuze gemaakt: Meridiaan en Kompas op patroon 2 (schema per fonds), Baken op patroon 3 (eigen database). In deel 24 en 25 loste sharding een ander probleem op: horizontale capaciteit voor de kerngegevens van één, groot geheel.</p>
+<p><strong>Geen van beide loste de vraag op die in deel 23, paragraaf 10, expliciet openbleef: hoe bouwt de federatie een gezamenlijke rapportage als de gegevens over gescheiden databases (of zelfs servers) verspreid staan?</strong></p>
+<p>Logische replicatie (deel 18, 22) is één antwoord: kopieer de relevante gegevens naar een aparte rapportagedatabase. Dat werkt, maar introduceert vertraging (de kopie loopt per definitie achter) en een tweede plek waar dezelfde gegevens staan, met de bijbehorende beheerlast.</p>
+<p><strong>Dit deel behandelt het andere antwoord: query’s die rechtstreeks, live, over de grenzen van afzonderlijke databases heen gaan — zonder de data te dupliceren.</strong> Dat heet <strong>federatie</strong>, en het gereedschap ervoor in PostgreSQL is de <strong>foreign data wrapper</strong>.</p>
+<hr>
+<h2>3. Wat een foreign data wrapper is</h2>
+<p>Een foreign data wrapper (FDW) is een PostgreSQL-extensie die een externe gegevensbron laat <strong>verschijnen als een gewone tabel</strong> binnen een lokale database, zonder de gegevens fysiek te kopiëren.</p>
+<pre><code>Coördinerende database (federatie-rapportage)
+        │
+        │  ziet &quot;foreign tables&quot; die eruitzien als gewone tabellen
+        ▼
+   postgres_fdw
+        │
+   ┌────┼────┬────────┐
+   ▼    ▼    ▼         
+Meridiaan  Kompas  Baken
+(elk een eigen, zelfstandige database)
+</code></pre>
+<p><strong><code>postgres_fdw</code></strong> is de wrapper die specifiek een andere PostgreSQL-database als bron gebruikt — het meest voorkomende geval bij een architectuur die zelf al volledig uit PostgreSQL bestaat, zoals de Pensioenfederatie. Andere wrappers bestaan voor niet-PostgreSQL-bronnen (bijvoorbeeld <code>file_fdw</code> voor platte bestanden, of wrappers voor andere databasesystemen), maar die vallen buiten dit deel.</p>
+<p><strong>Het cruciale verschil met alles wat eerder in deze cursus over meerdere servers ging (replicatie in deel 18, sharding in deel 24-25):</strong> een foreign table bevraagt de externe server <strong>op het moment van de query</strong>, live. Er is geen kopie, geen vertraging door replicatie-lag (deel 18, paragraaf 6) — maar wel de kosten van een netwerkverbinding bij elke bevraging.</p>
+<hr>
+<h2>4. postgres_fdw opzetten</h2>
+<pre><code class="language-sql">-- Op de federatieve rapportagedatabase
+CREATE EXTENSION postgres_fdw;
+
+-- Een server-definitie per bron
+CREATE SERVER meridiaan_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'meridiaan-db-host', port '5432', dbname 'meridiaan');
+
+CREATE SERVER kompas_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'kompas-db-host', port '5432', dbname 'kompas');
+
+CREATE SERVER baken_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'baken-db-host', port '5432', dbname 'baken');
+
+-- Een user mapping: met welke identiteit wordt op de bron ingelogd
+CREATE USER MAPPING FOR federatie_rapportage
+    SERVER meridiaan_server
+    OPTIONS (user 'fdw_leesrol', password 'wachtwoord');
+</code></pre>
+<p><strong>De rol <code>fdw_leesrol</code> op elke bron-database</strong> verdient dezelfde aandacht als elke andere rol in deze cursus (deel 9, 21): minimale rechten, alleen leestoegang tot precies de tabellen die de federatie nodig heeft — niet een brede beheerdersrol “voor het gemak”.</p>
+<hr>
+<h2>5. Foreign tables gebruiken</h2>
+<pre><code class="language-sql">-- Handmatig, tabel voor tabel
+CREATE FOREIGN TABLE meridiaan_deelnemer (
+    deelnemer_id integer,
+    achternaam   text,
+    fonds_id     integer
+) SERVER meridiaan_server
+  OPTIONS (schema_name 'meridiaan_prod', table_name 'deelnemer');
+
+-- Of, sneller: importeer een heel schema in één keer
+IMPORT FOREIGN SCHEMA meridiaan_prod
+    LIMIT TO (deelnemer, dienstverband, premienota)
+    FROM SERVER meridiaan_server
+    INTO federatie_meridiaan;
+</code></pre>
+<p><strong><code>IMPORT FOREIGN SCHEMA</code></strong> is in de praktijk vrijwel altijd te verkiezen boven handmatig elke tabel opnieuw te definiëren — het leest de structuur rechtstreeks van de bron en voorkomt dat een handmatige definitie uit de pas loopt met een structuurwijziging op de bron (een vorm van drift die lijkt op het schema-drift-risico uit deel 23).</p>
+<p><strong>Eenmaal aangemaakt, gedraagt een foreign table zich grotendeels als een gewone tabel:</strong></p>
+<pre><code class="language-sql">SELECT * FROM federatie_meridiaan.deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<p>Deze query lijkt lokaal, maar PostgreSQL stuurt hem (of een deel ervan) naar de Meridiaan-server, ontvangt het resultaat, en presenteert het alsof het lokaal was opgehaald.</p>
+<hr>
+<h2>6. Wat wordt doorgeschoven: predicate en join pushdown</h2>
+<p>De reden dat FDW bruikbaar is en niet gewoon “alles ophalen en lokaal filteren”: PostgreSQL is slim genoeg om een deel van het werk <strong>naar de bron te verplaatsen</strong>.</p>
+<pre><code class="language-sql">SELECT * FROM federatie_meridiaan.deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<p><strong>Predicate pushdown:</strong> de <code>WHERE</code>-voorwaarde wordt meegestuurd naar Meridiaans server, die zelf filtert en alleen de relevante rij(en) teruggeeft — niet de hele tabel. Dit is vergelijkbaar met hoe een index in deel 8 werkt, maar dan over een netwerkverbinding.</p>
+<pre><code class="language-sql">SELECT d.achternaam, dv.werkgever_id
+FROM federatie_meridiaan.deelnemer d
+JOIN federatie_meridiaan.dienstverband dv USING (deelnemer_id)
+WHERE d.deelnemer_id = 42;
+</code></pre>
+<p><strong>Join pushdown:</strong> als beide tabellen van <strong>dezelfde</strong> foreign server komen, kan PostgreSQL soms de hele join naar die server verplaatsen — de bron voert de join zelf uit en stuurt alleen het eindresultaat terug, in plaats van twee aparte resultaten die lokaal moeten worden samengevoegd.</p>
+<p><strong>Aggregate pushdown</strong> (sinds recentere PostgreSQL-versies) laat zelfs een <code>count()</code> of <code>sum()</code> op de bron zelf uitvoeren, in plaats van alle rijen op te halen en lokaal te tellen.</p>
+<hr>
+<h2>7. Wat niet wordt doorgeschoven: de grenzen van pushdown</h2>
+<pre><code class="language-sql">-- Een join tussen TWEE VERSCHILLENDE foreign servers: geen pushdown mogelijk
+SELECT m.achternaam, k.achternaam
+FROM federatie_meridiaan.deelnemer m, federatie_kompas.deelnemer k
+WHERE m.achternaam = k.achternaam;
+</code></pre>
+<p><strong>Dit is het federatieve equivalent van een cross-shard-join uit deel 24-25.</strong> Meridiaan en Kompas zijn twee volledig gescheiden servers; geen van beide kan de join van de ander uitvoeren. PostgreSQL moet <strong>alle relevante rijen van beide bronnen ophalen</strong> en de join lokaal, op de coördinerende database, uitvoeren — met alle netwerk- en geheugenkosten die daarbij horen.</p>
+<p><strong>Andere grenzen:</strong></p>
+<ul>
+<li><strong>Lokale functies en complexe expressies</strong> in de <code>WHERE</code>-clausule worden vaak niet doorgeschoven, met hetzelfde soort gevolg als de functie-op-kolom-valkuil uit deel 8, 13 en 16 — de bron kan de voorwaarde niet zelf toepassen, dus haalt meer op dan nodig en filtert lokaal.</li>
+<li><strong>Sorteren en limiteren over meerdere bronnen</strong> (<code>ORDER BY ... LIMIT 10</code> over een federatieve <code>UNION</code> van Meridiaan, Kompas en Baken) kan niet worden doorgeschoven als geheel — elke bron moet zijn eigen top-N teruggeven, en de coördinator sorteert en beperkt daarna opnieuw.</li>
+<li><strong>Statistieken over de foreign table</strong> zijn beperkter dan bij een lokale tabel (deel 8, 13) — de planner kent de werkelijke verdeling van de bron minder goed, tenzij je <code>ANALYZE</code> expliciet op de foreign table uitvoert om een schatting te verzamelen.</li>
+</ul>
+<hr>
+<h2>8. EXPLAIN op een foreign table</h2>
+<pre><code class="language-sql">EXPLAIN SELECT * FROM federatie_meridiaan.deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<pre><code>Foreign Scan on deelnemer
+  Remote SQL: SELECT deelnemer_id, achternaam, fonds_id
+              FROM meridiaan_prod.deelnemer WHERE (deelnemer_id = 42)
+</code></pre>
+<p><strong><code>Remote SQL</code></strong> toont precies wat naar de bron wordt gestuurd — dit is het equivalent van <code>Task Count</code> in Citus (deel 25) en pruning in deel 16: een expliciet, controleerbaar signaal of je query het gunstige pad neemt.</p>
+<pre><code class="language-sql">EXPLAIN SELECT m.achternaam, k.achternaam
+FROM federatie_meridiaan.deelnemer m, federatie_kompas.deelnemer k
+WHERE m.achternaam = k.achternaam;
+</code></pre>
+<pre><code>Nested Loop
+  -&gt;  Foreign Scan on deelnemer m   -- haalt Meridiaans hele tabel op
+  -&gt;  Foreign Scan on deelnemer k   -- haalt Kompas' hele tabel op
+      (join gebeurt lokaal, na het ophalen)
+</code></pre>
+<p><strong>De discipline blijft ongewijzigd sinds deel 8: controleer met <code>EXPLAIN</code> of je aanname over wat er gebeurt, klopt — vertrouw niet op hoe een query eruitziet.</strong></p>
+<hr>
+<h2>9. De federatieve rapportagelaag voor de Pensioenfederatie</h2>
+<p>Het concrete antwoord op de vraag die in deel 23 openbleef:</p>
+<pre><code class="language-sql">CREATE VIEW federatie_rapportage.deelnemers_per_fonds AS
+SELECT 'Meridiaan' AS fonds, count(*) FROM federatie_meridiaan.deelnemer
+UNION ALL
+SELECT 'Kompas', count(*) FROM federatie_kompas.deelnemer
+UNION ALL
+SELECT 'Baken', count(*) FROM federatie_baken.deelnemer;
+</code></pre>
+<p>Elke deelquery in deze <code>UNION ALL</code> wordt naar de betreffende bron doorgeschoven (predicate/aggregate pushdown, paragraaf 6) — de coördinerende database voert alleen de laatste stap uit: de drie deelresultaten samenvoegen.</p>
+<p><strong>Governance blijft, zoals in deel 23, expliciet nodig:</strong> welke kolommen worden via de foreign tables ontsloten (geen BSN in de gezamenlijke rapportagelaag, dataminimalisatie uit deel 9/21), en wie mag de federatieve rapportagedatabase bevragen.</p>
+<hr>
+<h2>10. Materialized views bovenop foreign tables</h2>
+<p><strong>Het probleem met live federatie:</strong> elke keer dat iemand het dashboard opent, worden alle drie de bronnen live bevraagd — bij een zware aggregatie (Karins kwartaaloverzicht) kan dat traag zijn en onnodige belasting op de bronservers leggen, precies op het moment dat veel mensen tegelijk het dashboard willen zien.</p>
+<pre><code class="language-sql">CREATE MATERIALIZED VIEW federatie_rapportage.kwartaaloverzicht AS
+SELECT fonds, sector, sum(bedrag) AS totaal
+FROM (... federatieve query over alle drie de bronnen ...) x
+GROUP BY fonds, sector;
+
+REFRESH MATERIALIZED VIEW federatie_rapportage.kwartaaloverzicht;
+</code></pre>
+<p>Dit is exact het patroon uit deel 8, nu toegepast op federatieve in plaats van lokale gegevens: de dure, cross-server-aggregatie gebeurt <strong>eenmalig</strong> (bijvoorbeeld 's nachts), en interactieve raadplegingen lezen de al-berekende materialized view — snel, maar per definitie een moment achter de werkelijkheid, net als elke materialized view.</p>
+<p><strong>De afweging is dezelfde als in deel 8:</strong> hoe actueel moet het dashboard zijn? Voor een kwartaaloverzicht is een nachtelijke verversing ruim voldoende; voor een operationeel dashboard zou dat te traag kunnen zijn, wat dan weer richting logische replicatie (deel 18, met zijn eigen, kleinere vertraging) wijst.</p>
+<hr>
+<h2>11. FDW versus logische replicatie versus Citus</h2>
+<p>Drie manieren om meerdere databases met elkaar te laten samenwerken, elk met een ander profiel:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FDW</th>
+<th>Logische replicatie</th>
+<th>Citus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data gedupliceerd?</td>
+<td>Nee</td>
+<td>Ja</td>
+<td>Ja (over shards)</td>
+</tr>
+<tr>
+<td>Actualiteit</td>
+<td>Live (elke query)</td>
+<td>Vertraging (lag)</td>
+<td>Live (binnen het cluster)</td>
+</tr>
+<tr>
+<td>Geschikt voor</td>
+<td>Ad-hoc, incidentele cross-database-query’s</td>
+<td>Een continu bijgewerkte kopie voor rapportage</td>
+<td>Eén logisch, horizontaal geschaald geheel</td>
+</tr>
+<tr>
+<td>Schrijven mogelijk?</td>
+<td>Beperkt (paragraaf 13)</td>
+<td>Ja, op de bron; het doel is meestal read-only</td>
+<td>Ja, overal, met Citus’ coördinatie</td>
+</tr>
+<tr>
+<td>Beheerlast</td>
+<td>Laag (geen extra opslag)</td>
+<td>Middel (een tweede kopie onderhouden)</td>
+<td>Hoog (een volledig gedistribueerd systeem)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Voor de Pensioenfederatie:</strong> FDW past bij incidentele, ad-hoc federatieve vragen (“hoeveel deelnemers hebben Meridiaan en Kompas samen”) en bij de rapportagelaag uit paragraaf 9-10. Logische replicatie (zoals voorgesteld in deel 23, opdracht 23.7) past beter bij een continu, snel bijgewerkt dashboard. Citus (deel 24-25) lost een ander probleem op — horizontale capaciteit binnen één logisch geheel — en is voor de federatie als los-gekoppelde verzameling zelfstandige fondsen niet het juiste gereedschap; het past beter <strong>binnen</strong> één fonds als dat fonds zelf op een gegeven moment moet shardten.</p>
+<hr>
+<h2>12. Rechten en credentials over een FDW-verbinding</h2>
+<p><strong>De user mapping bevat een wachtwoord</strong> dat, net als elk ander wachtwoord in deze cursus (deel 9, 21), niet losjes behandeld mag worden.</p>
+<pre><code class="language-sql">-- Rechten op de user mapping zelf
+REVOKE ALL ON FOREIGN SERVER meridiaan_server FROM PUBLIC;
+GRANT USAGE ON FOREIGN SERVER meridiaan_server TO federatie_rapportage;
+</code></pre>
+<p><strong>Op de bron-database</strong> (Meridiaan, Kompas, Baken) hoort de <code>fdw_leesrol</code> een minimaal recht te krijgen — alleen <code>SELECT</code> op precies de kolommen die de federatieve rapportage nodig heeft, met dezelfde dataminimalisatie-discipline als bij elke andere rol (deel 9, 21). Een BSN-kolom hoort <strong>niet</strong> in de geïmporteerde foreign tables als de rapportagelaag die nooit nodig heeft.</p>
+<p><strong>SSL blijft van toepassing</strong> (deel 21): de verbinding tussen de coördinerende database en elke bron moet net zo goed versleuteld zijn als elke andere verbinding met persoonsgegevens.</p>
+<pre><code class="language-sql">CREATE SERVER meridiaan_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'meridiaan-db-host', port '5432', dbname 'meridiaan', sslmode 'verify-full');
+</code></pre>
+<hr>
+<h2>13. Schrijven via een foreign table</h2>
+<pre><code class="language-sql">INSERT INTO federatie_meridiaan.deelnemer (achternaam, fonds_id) VALUES ('Jansen', 1);
+</code></pre>
+<p><strong>Technisch mogelijk</strong>, maar met belangrijke beperkingen die het risicovol maken voor kritieke schrijfoperaties:</p>
+<ul>
+<li><strong>Geen transactionele garantie over meerdere foreign servers heen</strong> — een <code>INSERT</code> op Meridiaan en een op Kompas binnen dezelfde lokale transactie zijn niet atomair gekoppeld, hetzelfde probleem als cross-shard-transacties (deel 24, paragraaf 7), nu tussen volledig onafhankelijke databases.</li>
+<li><strong>Constraints en triggers op de bron gelden nog steeds</strong>, maar fouten daar zijn voor de schrijvende sessie soms lastiger te doorgronden dan bij een lokale schrijfactie.</li>
+<li><strong>Prestatie</strong>: elke schrijfactie via FDW kost een volledige netwerk-rondgang, trager dan een lokale <code>INSERT</code>.</li>
+</ul>
+<p><strong>De aanbeveling: gebruik FDW primair voor lezen.</strong> Voor schrijfoperaties die de grens van een database moeten oversteken, is een expliciet ontworpen patroon (een applicatie die zelf naar de juiste bron schrijft, of een berichtenwachtrij) meestal beter te doorgronden en te beheersen dan schrijven via een foreign table.</p>
+<hr>
+<h2>14. Wanneer FDW de juiste keuze is, wanneer niet</h2>
+<p><strong>FDW past goed bij:</strong> ad-hoc, incidentele cross-database-rapportage; een federatieve laag bovenop een architectuur die al uit patroon 2/3-gescheiden databases bestaat (deel 23); situaties waar duplicatie van gegevens (zoals bij logische replicatie) onwenselijk is, bijvoorbeeld om opslagkosten of AVG-redenen (minder plekken waar dezelfde persoonsgegevens staan, deel 9).</p>
+<p><strong>FDW past minder goed bij:</strong> frequente, prestatiekritieke query’s die continu dezelfde federatieve join uitvoeren (elke keer een nieuwe netwerk-rondgang is duur, in tegenstelling tot een lokale, gerepliceerde kopie); schrijfoperaties die transactionele garanties over de grenzen van databases heen vereisen; en query’s met veel cross-server-joins tussen <strong>verschillende</strong> bronnen (paragraaf 7 — geen pushdown, alles lokaal samenvoegen).</p>
+<blockquote>
+<p><strong>De vraag die je stelt vóór je FDW gebruikt: is dit een incidentele, leesgerichte behoefte die duplicatie niet rechtvaardigt? Zo ja, FDW. Is het een continue, snelle behoefte? Overweeg logische replicatie. Is het onderdeel van één logisch, horizontaal geschaald geheel? Dat is Citus, niet FDW.</strong></p>
+</blockquote>
+<hr>
+<h2>15. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Foreign tables handmatig definiëren in plaats van <code>IMPORT FOREIGN SCHEMA</code></td>
+<td>Drift tussen bron en foreign table-definitie</td>
+<td><code>IMPORT FOREIGN SCHEMA</code>, opnieuw uitvoeren na brondwijzigingen</td>
+</tr>
+<tr>
+<td>Aannemen dat elke join wordt doorgeschoven</td>
+<td>Trage query’s zonder duidelijke oorzaak</td>
+<td><code>EXPLAIN</code>, <code>Remote SQL</code> controleren</td>
+</tr>
+<tr>
+<td>Cross-server-joins tussen verschillende bronnen verwachten als lokaal</td>
+<td>Onderschatte kosten, alle data lokaal samengevoegd</td>
+<td>Beperken tot wat elke bron zelf kan filteren</td>
+</tr>
+<tr>
+<td>Een brede beheerdersrol gebruiken voor de user mapping</td>
+<td>Onnodig risico bij een gecompromitteerde federatieve laag</td>
+<td>Minimale, specifieke leesrol per bron</td>
+</tr>
+<tr>
+<td>Kritieke schrijfoperaties via foreign tables laten lopen</td>
+<td>Geen transactionele garantie over servers heen</td>
+<td>FDW primair voor lezen; schrijven expliciet ontwerpen</td>
+</tr>
+<tr>
+<td>FDW gebruiken voor een continu, snel dashboard</td>
+<td>Onnodige belasting op bronservers bij elke raadpleging</td>
+<td>Materialized view, of logische replicatie</td>
+</tr>
+<tr>
+<td>Geen SSL op de FDW-verbinding</td>
+<td>Onversleuteld verkeer met persoonsgegevens tussen databases</td>
+<td><code>sslmode</code> expliciet instellen, net als bij elke andere verbinding</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>16. Kernbegrippen</h2>
+<p><strong>Foreign data wrapper (FDW)</strong> — mechanisme dat een externe bron laat verschijnen als een lokale tabel.
+<strong><code>postgres_fdw</code></strong> — de wrapper specifiek voor een andere PostgreSQL-database als bron.
+<strong>Foreign server</strong> — de verbindingsdefinitie naar een externe bron.
+<strong>User mapping</strong> — de identiteit waarmee wordt ingelogd op de externe bron.
+<strong>Foreign table</strong> — de lokale representatie van een externe tabel.
+<strong><code>IMPORT FOREIGN SCHEMA</code></strong> — bulk-import van foreign table-definities vanaf de bron.
+<strong>Predicate/join/aggregate pushdown</strong> — het verplaatsen van filter-, join- of aggregatiewerk naar de bron.
+<strong>Federatie</strong> — het samenbrengen van gegevens uit meerdere, zelfstandige bronnen zonder duplicatie.
+<strong><code>Remote SQL</code></strong> — het deel van een <code>EXPLAIN</code>-plan dat toont wat naar de bron wordt gestuurd.</p>
+<hr>
+<p><em>Volgende deel: event sourcing-fundamenten. Tot nu toe ging niveau 3 over waar gegevens staan — verspreid over tenants, shards, of federatieve bronnen. Volgende keer verandert de vraag: niet waar, maar wát je eigenlijk bewaart — de huidige stand, of de volledige geschiedenis van hoe die stand is ontstaan.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">282 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-25-citus-in-de-praktijk/reader.html">&larr; Deel 25 — Citus in de praktijk</a><a class="dbm-prevnext next" href="../deel-27-event-sourcing-fundamenten/reader.html">Deel 27 — Event sourcing: fundamenten &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

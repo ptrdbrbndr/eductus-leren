@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Zero-downtime migraties en capstone — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 22 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 22 — Zero-downtime migraties en capstone</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 14 van 14 (deel 22 van 30) — laatste deel van niveau 2
+Aansluiting: EDB PostgreSQL Professional — synthese van alle domeinen</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom dit het sluitstuk is</li>
+<li>Het expand-contract-patroon</li>
+<li>Kolommen toevoegen en hernoemen zonder downtime</li>
+<li>Kolomtype wijzigen: de lastigste van allemaal</li>
+<li>Een tabel splitsen zonder downtime</li>
+<li>Dubbel schrijven: het patroon en zijn valkuilen</li>
+<li>Logische replicatie als migratiegereedschap, volledig uitgewerkt</li>
+<li>Backfill: oude rijen bijwerken zonder de tabel te blokkeren</li>
+<li>Het omschakelmoment</li>
+<li>Terugdraaien: het scenario dat je altijd voorbereidt</li>
+<li>Een migratiechecklist die alles samenbrengt</li>
+<li>De niveau-2 capstone: opzet en rollen</li>
+<li>De capstone-opdracht</li>
+<li>Beoordelingscriteria van de capstone</li>
+<li>Terugblik op niveau 2</li>
+<li>Vooruitblik op niveau 3</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>het expand-contract-patroon toepassen op elke structurele wijziging;</li>
+<li>een kolomtype wijzigen op een grote tabel zonder een lange exclusieve lock;</li>
+<li>een tabel splitsen met dubbel schrijven of logische replicatie, en de twee aanpakken tegen elkaar afwegen;</li>
+<li>een backfill uitvoeren die een grote tabel bijwerkt zonder productie te hinderen;</li>
+<li>een omschakelmoment voorbereiden en uitvoeren met een expliciet terugvalplan;</li>
+<li>een migratie beoordelen op basis van een volledige checklist die alle relevante delen van dit niveau samenbrengt;</li>
+<li>de kennis van niveau 2 toepassen in een samenhangende eindopdracht.</li>
+</ul>
+<hr>
+<h2>2. Waarom dit het sluitstuk is</h2>
+<p>Elke techniek in dit deel is al eerder aangeraakt, in stukjes:</p>
+<table>
+<thead>
+<tr>
+<th>Waar het eerder langskwam</th>
+<th>Wat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deel 15</td>
+<td><code>NOT VALID</code> + <code>VALIDATE CONSTRAINT</code>, <code>lock_timeout</code></td>
+</tr>
+<tr>
+<td>Deel 16</td>
+<td>Een nieuwe gepartitioneerde structuur bouwen naast de oude</td>
+</tr>
+<tr>
+<td>Deel 18</td>
+<td>Logische replicatie als route voor een tabelmigratie</td>
+</tr>
+<tr>
+<td>Deel 14</td>
+<td><code>CREATE INDEX CONCURRENTLY</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Vandaag worden die losse technieken één samenhangend repertoire: het patroon waarmee je élke structurele wijziging op een productiedatabase doorvoert zonder het portaal te raken.</strong> Dat is het laatste stuk vakmanschap dat dit niveau toevoegt, en het is meteen de generieke vorm van bijna elke specifieke migratie die je in de voorgaande delen bent tegengekomen.</p>
+<p><strong>Het tweede deel van dit dagdeel is de capstone</strong> — geen nieuwe stof, maar een opdracht die niveau 2 in zijn geheel test, op dezelfde manier als deel 10 dat deed voor niveau 1.</p>
+<hr>
+<h2>3. Het expand-contract-patroon</h2>
+<p>De kern van elke zero-downtime-migratie, in drie fasen:</p>
+<p><strong>Expand</strong> — voeg de nieuwe structuur toe, náást de oude. Beide bestaan tegelijk. Niets van de oude structuur wordt weggehaald.</p>
+<p><strong>Migrate</strong> — laat de applicatie (en/of achtergrondprocessen) geleidelijk overschakelen naar de nieuwe structuur, terwijl de oude nog bruikbaar blijft als terugvaloptie.</p>
+<p><strong>Contract</strong> — pas als iedereen definitief op de nieuwe structuur draait, verwijder je de oude.</p>
+<pre><code>Tijd →
+[oude structuur actief]
+       [nieuwe structuur toegevoegd — expand]
+              [beide in gebruik, geleidelijke overschakeling — migrate]
+                     [oude structuur verwijderd — contract]
+</code></pre>
+<p><strong>Waarom dit werkt waar een directe wijziging niet werkt:</strong> een directe <code>ALTER TABLE</code> die kolom en gedrag in één stap verandert, dwingt alle gebruikers (applicatiecode, andere transacties) om op hetzelfde moment met de nieuwe structuur om te gaan — en dat moment is precies waar de risico’s uit deel 15 (lockwachtrijen) zich concentreren. Expand-contract spreidt die overgang uit over tijd, met op elk moment een werkende toestand.</p>
+<p><strong>Dit patroon is niet nieuw voor je.</strong> Het <code>NOT VALID</code>/<code>VALIDATE</code>-patroon uit deel 15 is een miniatuurversie: expand (constraint toevoegen, niet afgedwongen), migrate (impliciet: nieuwe rijen voldoen al), contract (valideren, dan is de oude “misschien-ongeldige-rij”-toestand voorbij).</p>
+<hr>
+<h2>4. Kolommen toevoegen en hernoemen zonder downtime</h2>
+<p><strong>Een kolom toevoegen</strong> is sinds PostgreSQL 11 al licht, mits zonder volatiele default (deel 12, 15) — dit is al bijna “expand” in één stap.</p>
+<pre><code class="language-sql">ALTER TABLE dienstverband ADD COLUMN contracttype text;
+</code></pre>
+<p><strong>Een kolom hernoemen is gevaarlijker dan het lijkt</strong>, omdat elke query die de oude naam gebruikt, meteen breekt. Het expand-contract-patroon hiervoor:</p>
+<pre><code class="language-sql">-- Expand: nieuwe kolom naast de oude, gesynchroniseerd met een trigger
+ALTER TABLE dienstverband ADD COLUMN contract_type text;
+
+CREATE FUNCTION sync_contracttype() RETURNS trigger AS $$
+BEGIN
+    NEW.contract_type := NEW.contracttype;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_contracttype
+    BEFORE INSERT OR UPDATE ON dienstverband
+    FOR EACH ROW EXECUTE FUNCTION sync_contracttype();
+
+-- Backfill (paragraaf 9), dan:
+-- Migrate: applicatie stapt over op contract_type
+
+-- Contract: oude kolom en trigger weg
+DROP TRIGGER trg_sync_contracttype ON dienstverband;
+ALTER TABLE dienstverband DROP COLUMN contracttype;
+</code></pre>
+<p><strong>Alternatief, eenvoudiger maar met een korte onderbreking:</strong> een view die de oude naam aanbiedt bovenop de nieuwe kolom, zodat oude en nieuwe applicatiecode tegelijk kunnen werken zonder een trigger. Voor kolomhernoemingen is dit vaak de lichtere keuze; voor kolommen die ook geschreven moeten worden (niet alleen gelezen) is een trigger of <code>INSTEAD OF</code>-view-logica nodig.</p>
+<hr>
+<h2>5. Kolomtype wijzigen: de lastigste van allemaal</h2>
+<p>Uit deel 15: <code>ALTER TABLE ... ALTER COLUMN ... TYPE ...</code> neemt <code>ACCESS EXCLUSIVE</code> voor de <strong>volledige herschrijving</strong> van de tabel — bij 2,4 miljoen rijen in <code>mutatie</code> een lock van mogelijk minuten.</p>
+<p><strong>Het expand-contract-patroon hiervoor is het meest gevraagde migratiepatroon in de praktijk:</strong></p>
+<pre><code class="language-sql">-- Expand: nieuwe kolom met het nieuwe type
+ALTER TABLE mutatie ADD COLUMN deelnemer_id_nieuw bigint;
+
+-- Synchronisatie: elke nieuwe/gewijzigde rij vult beide
+CREATE FUNCTION sync_deelnemer_id() RETURNS trigger AS $$
+BEGIN
+    NEW.deelnemer_id_nieuw := NEW.deelnemer_id::bigint;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_deelnemer_id
+    BEFORE INSERT OR UPDATE ON mutatie
+    FOR EACH ROW EXECUTE FUNCTION sync_deelnemer_id();
+
+-- Backfill van bestaande rijen (paragraaf 9)
+
+-- Migrate: nieuwe index op de nieuwe kolom, applicatie leest/schrijft
+--          voorlopig nog via de oude kolomnaam totdat volledig overgeschakeld
+CREATE INDEX CONCURRENTLY ON mutatie (deelnemer_id_nieuw);
+
+-- Omschakelmoment (paragraaf 10): korte transactie
+BEGIN;
+ALTER TABLE mutatie DROP COLUMN deelnemer_id;
+ALTER TABLE mutatie RENAME COLUMN deelnemer_id_nieuw TO deelnemer_id;
+COMMIT;
+
+-- Contract: trigger en functie opruimen
+DROP TRIGGER trg_sync_deelnemer_id ON mutatie;
+DROP FUNCTION sync_deelnemer_id();
+</code></pre>
+<p><strong>Waarom dit werkt waar de directe route niet werkt:</strong> de dure operatie (de volledige backfill van bestaande rijen, paragraaf 9) gebeurt <strong>buiten</strong> een enkele lange transactie, in behapbare stukken, terwijl productie doorgaat. Het omschakelmoment zelf — het verwijderen van de oude kolom en hernoemen van de nieuwe — is een metadata-only-operatie en dus vrijwel instantaan, ook al “voelt” het als een grote wijziging.</p>
+<p><strong>De prijs:</strong> elke query die tussen expand en contract op de tabel draait, moet met de trigger-overhead leven, en het schema is tijdelijk lelijker (twee kolommen voor hetzelfde gegeven). Dat is de bewuste ruil voor het vermijden van een lange lock.</p>
+<hr>
+<h2>6. Een tabel splitsen zonder downtime</h2>
+<p>Een groeiende <code>koppelvlakbericht</code>-tabel (deel 14) moet gesplitst worden: de ruwe <code>jsonb</code>-inhoud blijft, maar veelgebruikte velden (<code>soort</code>, <code>deelnemer_id</code>) verhuizen naar eigen kolommen voor snellere query’s (de vraag die in deel 14, opdracht 14.4h, al openbleef).</p>
+<p><strong>Expand:</strong></p>
+<pre><code class="language-sql">ALTER TABLE koppelvlakbericht ADD COLUMN soort text;
+ALTER TABLE koppelvlakbericht ADD COLUMN deelnemer_id_ref integer;
+
+CREATE FUNCTION sync_kvb_velden() RETURNS trigger AS $$
+BEGIN
+    NEW.soort := NEW.inhoud -&gt;&gt; 'soort';
+    NEW.deelnemer_id_ref := (NEW.inhoud -&gt;&gt; 'deelnemer_id')::integer;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_kvb
+    BEFORE INSERT OR UPDATE ON koppelvlakbericht
+    FOR EACH ROW EXECUTE FUNCTION sync_kvb_velden();
+</code></pre>
+<p><strong>Migrate:</strong> backfill (paragraaf 9), dan indexen toevoegen op de nieuwe kolommen (<code>CREATE INDEX CONCURRENTLY</code>), dan rapportagequery’s geleidelijk laten overstappen van <code>inhoud -&gt;&gt; 'soort'</code> naar de kolom <code>soort</code>.</p>
+<p><strong>Contract:</strong> in dit geval <strong>geen</strong> — de <code>jsonb</code>-kolom blijft, want die bevat het volledige ruwe bericht dat om audit-redenen (deel 20) bewaard moet blijven. Dit is een terecht geval waarin expand-contract stopt bij expand-migrate: niet elke migratie hoeft te eindigen met het weghalen van de oude structuur.</p>
+<hr>
+<h2>7. Dubbel schrijven: het patroon en zijn valkuilen</h2>
+<p>Voor een migratie tussen twee <strong>volledig gescheiden</strong> tabellen (zoals de gepartitioneerde <code>mutatie</code>-structuur uit deel 16), is een trigger niet altijd praktisch. Het alternatief: de applicatie zelf schrijft naar beide tabellen.</p>
+<pre><code>Applicatie
+    │
+    ├──→ schrijft naar oude tabel
+    └──→ schrijft naar nieuwe tabel
+</code></pre>
+<p><strong>Vier valkuilen, in volgorde van hoe vaak ze voorkomen:</strong></p>
+<ol>
+<li><strong>Gedeeltelijke schrijffout.</strong> De schrijfactie naar de oude tabel lukt, die naar de nieuwe faalt (of andersom). Zonder een gezamenlijke transactie ontstaat inconsistentie. <strong>Oplossing:</strong> beide schrijfacties in dezelfde databasetransactie, niet als twee losse applicatiestappen.</li>
+<li><strong>Vergeten schrijfpaden.</strong> Een batchproces of een tweede applicatie-instantie die de tabel ook rechtstreeks bijwerkt, buiten de hoofdapplicatie om, en het dubbel-schrijven-patroon mist. <strong>Oplossing:</strong> een trigger op databaseniveau (paragraaf 4-6) is hiertegen robuuster dan applicatielogica, juist omdat hij alle schrijfpaden afvangt.</li>
+<li><strong>Race conditions tussen backfill en dubbel schrijven.</strong> Als de backfill (paragraaf 9) een rij bijwerkt terwijl de applicatie tegelijk diezelfde rij dubbel-schrijft, kan de volgorde van de twee schrijfacties de uiteindelijke waarde bepalen op een onvoorspelbare manier. <strong>Oplossing:</strong> backfill met een voorwaarde die alleen rijen raakt die de applicatie nog niet heeft aangeraakt (bijvoorbeeld op basis van een tijdstempel).</li>
+<li><strong>Vergeten dat lezen ook moet overschakelen.</strong> Dubbel schrijven lost het schrijven op; het zegt niets over welke tabel gelezen wordt. Zonder een expliciet omschakelmoment (paragraaf 10) blijft de applicatie voor altijd van de oude tabel lezen, en is de hele exercitie nutteloos geweest.</li>
+</ol>
+<p><strong>De les:</strong> dubbel schrijven op applicatieniveau is krachtig maar foutgevoelig. Waar een trigger (databaseniveau) kan, is die vaak de robuustere keuze — hij vangt automatisch alle schrijfpaden af, inclusief paden die de ontwikkelaar van de migratie niet kende.</p>
+<hr>
+<h2>8. Logische replicatie als migratiegereedschap, volledig uitgewerkt</h2>
+<p>Uit deel 18, nu de volledige toepassing voor de gepartitioneerde <code>mutatie</code>-migratie uit deel 16.</p>
+<pre><code class="language-sql">-- Op de bestaande (bron) tabel
+CREATE PUBLICATION mutatie_migratie_pub FOR TABLE mutatie;
+
+-- Op de nieuwe, gepartitioneerde structuur (kan zelfs een aparte database/server zijn)
+CREATE SUBSCRIPTION mutatie_migratie_sub
+    CONNECTION 'host=... dbname=meridiaan user=repl_logisch'
+    PUBLICATION mutatie_migratie_pub;
+</code></pre>
+<p><strong>Wat dit oplost dat triggers en dubbel schrijven niet even elegant doen:</strong> logische replicatie werkt <strong>op WAL-niveau</strong>, dus hij vangt automatisch elk schrijfpad af — geen risico op valkuil 2 uit paragraaf 7. De initiële synchronisatie (het equivalent van een backfill) gebeurt bovendien automatisch bij het aanmaken van het abonnement, met de bestaande data als startpunt.</p>
+<p><strong>Wat je zelf moet regelen (uit deel 18, paragraaf 11, herhaald met nadruk):</strong></p>
+<ul>
+<li><strong>Sequenties lopen niet automatisch mee</strong> — bij <code>mutatie_id</code> als <code>GENERATED ALWAYS AS IDENTITY</code> moet je na de omschakeling de sequentie op de nieuwe tabel handmatig op de juiste waarde zetten, anders ontstaan sleutelbotsingen zodra de nieuwe tabel zelfstandig verder gaat.</li>
+<li><strong>DDL wordt niet gerepliceerd</strong> — een structuurwijziging tijdens de migratieperiode moet je aan beide kanten handmatig doorvoeren, in de juiste volgorde.</li>
+<li><strong>De doeltabel moet een unieke sleutel of <code>REPLICA IDENTITY</code> hebben</strong> om <code>UPDATE</code>/<code>DELETE</code> te kunnen verwerken.</li>
+</ul>
+<p><strong>Wanneer logische replicatie de voorkeur heeft boven triggers/dubbel schrijven:</strong> bij een migratie naar een structureel andere tabel (andere kolomvolgorde, gepartitioneerd in plaats van niet, zelfs een andere server) — precies het geval uit deel 16. Bij een kleinere, lokale wijziging (een kolom erbij, een type wijzigen binnen dezelfde tabel) is een trigger vaak eenvoudiger op te zetten en makkelijker te overzien.</p>
+<hr>
+<h2>9. Backfill: oude rijen bijwerken zonder de tabel te blokkeren</h2>
+<p>De trigger (paragraaf 4-6) zorgt dat <strong>nieuwe</strong> rijen synchroon zijn. Bestaande rijen moeten nog worden bijgewerkt — de backfill.</p>
+<p><strong>De verkeerde manier:</strong></p>
+<pre><code class="language-sql">UPDATE mutatie SET deelnemer_id_nieuw = deelnemer_id::bigint;
+-- op 2,4 miljoen rijen: één enorme transactie, lang vastgehouden locks,
+-- een golf bloat (deel 12), en bij een fout halverwege alles terug naar af
+</code></pre>
+<p><strong>De juiste manier: in kleine batches, elk zijn eigen transactie:</strong></p>
+<pre><code class="language-sql">DO $$
+DECLARE
+    aangepast integer;
+BEGIN
+    LOOP
+        UPDATE mutatie
+        SET deelnemer_id_nieuw = deelnemer_id::bigint
+        WHERE mutatie_id IN (
+            SELECT mutatie_id FROM mutatie
+            WHERE deelnemer_id_nieuw IS NULL
+            LIMIT 5000
+        );
+        GET DIAGNOSTICS aangepast = ROW_COUNT;
+        EXIT WHEN aangepast = 0;
+        COMMIT;
+        PERFORM pg_sleep(0.1);  -- adempauze voor productieverkeer
+    END LOOP;
+END $$;
+</code></pre>
+<p><strong>Waarom dit beter is:</strong></p>
+<ul>
+<li>Elke batch is een korte transactie — de locks (deel 15) zijn kort en geven productieverkeer ruimte ertussen.</li>
+<li><code>pg_sleep</code> tussen batches voorkomt dat de backfill alle I/O-capaciteit opeist.</li>
+<li>Een fout halverwege verliest alleen de laatste batch, niet het hele werk.</li>
+<li>De voortgang is meetbaar (<code>pg_stat_progress_*</code> uit deel 20 dekt dit niet direct, maar een eigen tellerquery wel).</li>
+</ul>
+<p><strong>Timing:</strong> buiten de piek beginnen, met de mogelijkheid om te pauzeren als productiebelasting onverwacht oploopt — bouw een simpele controlemogelijkheid in (bijvoorbeeld een instelling die de lus laat stoppen) in plaats van een script dat niet te onderbreken is.</p>
+<hr>
+<h2>10. Het omschakelmoment</h2>
+<p>Het punt waarop de applicatie (of het schema zelf, zoals bij de kolomhernoeming) definitief overstapt van oud naar nieuw.</p>
+<p><strong>Kenmerken van een goed omschakelmoment:</strong></p>
+<ul>
+<li><strong>Kort.</strong> Bij voorkeur een enkele, snelle transactie of een enkele configuratiewijziging (bijvoorbeeld welke kolom de applicatie leest).</li>
+<li><strong>Met <code>lock_timeout</code></strong> (deel 15) als er alsnog een DDL-stap in zit.</li>
+<li><strong>Omkeerbaar</strong>, of met een duidelijk terugvalpad (paragraaf 11).</li>
+<li><strong>Buiten de piek</strong>, tenzij het zo kort is dat piek/dal er niet toe doet.</li>
+<li><strong>Aangekondigd en gemeten</strong> — net als de restore-test uit deel 17 en de failover-test uit deel 19: meet de werkelijke duur, vergelijk met de verwachting.</li>
+</ul>
+<p><strong>Voor een applicatiewijziging (welke kolom lezen/schrijven) in plaats van een schemawijziging:</strong> vaak beter via een feature flag of configuratiewaarde die je zonder herimplementatie kunt omzetten — dat is sneller terug te draaien dan een nieuwe applicatieversie uitrollen.</p>
+<hr>
+<h2>11. Terugdraaien: het scenario dat je altijd voorbereidt</h2>
+<p><strong>De discipline uit deel 17 (test je back-up) en deel 19 (test je failover) geldt hier evengoed: test niet alleen of de migratie lukt, maar of het terugdraaien ervan ook lukt.</strong></p>
+<p><strong>Voor elke fase van expand-contract, de terugvalvraag:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Terugval</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Expand</td>
+<td>Triviaal — verwijder de nieuwe, ongebruikte structuur</td>
+</tr>
+<tr>
+<td>Migrate</td>
+<td>Schakel de applicatie terug naar de oude structuur; de trigger houdt intussen beide gesynchroniseerd</td>
+</tr>
+<tr>
+<td><strong>Contract</strong></td>
+<td><strong>Het lastigste — de oude structuur is al weg</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dit is de reden dat <code>contract</code> de laatste stap is en pas gebeurt na een bewezen stabiele periode op de nieuwe structuur</strong> (dagen tot weken, niet uren) — niet omdat het “netjes” is om te wachten, maar omdat contract het enige punt is waarna terugdraaien niet meer triviaal is.</p>
+<p><strong>Een concreet terugvalplan voor de kolomtype-migratie uit paragraaf 5:</strong></p>
+<pre><code class="language-sql">-- Als er tijdens migrate iets misgaat, vóór contract:
+-- de applicatie leest gewoon weer van de oude kolom (die nog bestaat)
+-- - geen enkele databasewijziging nodig, alleen een applicatie-instelling
+</code></pre>
+<p><strong>Een concreet terugvalplan bij dubbel schrijven of logische replicatie (na contract):</strong> hier is terugdraaien geen databasewijziging maar een <strong>herstelactie</strong> — je bent aangewezen op de back-up- en PITR-technieken uit deel 17, wat precies aantoont waarom back-up en migratiediscipline geen aparte onderwerpen zijn maar één samenhangend geheel.</p>
+<hr>
+<h2>12. Een migratiechecklist die alles samenbrengt</h2>
+<p>De vragen die je bij elke structurele wijziging op productie doorloopt, met verwijzing naar waar je het leerde:</p>
+<ol>
+<li><strong>Past dit in expand-contract, of is het al licht genoeg (een korte <code>ACCESS EXCLUSIVE</code>) om direct te doen?</strong> (Deel 15)</li>
+<li><strong>Welke lock neemt elke stap, en hoe lang?</strong> (Deel 15, paragraaf 10)</li>
+<li><strong>Staat er <code>lock_timeout</code> op elke DDL-stap?</strong> (Deel 15)</li>
+<li><strong>Is de backfill in batches, met adempauzes?</strong> (Vandaag, paragraaf 9)</li>
+<li><strong>Zijn alle schrijfpaden gedekt</strong> — niet alleen de hoofdapplicatie, ook batchprocessen? (Vandaag, paragraaf 7)</li>
+<li><strong>Is er een concreet terugvalplan per fase, getest of ten minste doordacht?</strong> (Vandaag, paragraaf 11)</li>
+<li><strong>Is het omschakelmoment gemeten, niet alleen gepland?</strong> (Deel 17, 19 — dezelfde discipline)</li>
+<li><strong>Blijven indexen, RLS-policies (deel 21) en rechten kloppen op de nieuwe structuur?</strong></li>
+<li><strong>Is de bewaartermijn/AVG-impact opnieuw beoordeeld als er gegevens verhuizen?</strong> (Deel 9, 16, 17)</li>
+<li><strong>Is er een periode van “bewezen stabiel” gepland vóór contract?</strong></li>
+</ol>
+<p>Deze tien vragen zijn de praktische samenvatting van het hele niveau, toegepast op het meest voorkomende werk van een DBA: dingen veranderen zonder dat iemand het merkt.</p>
+<hr>
+<h2>13. De niveau-2 capstone: opzet en rollen</h2>
+<p>Zoals deel 10 niveau 1 afsloot, sluit een capstone niveau 2 af — nu niet met een presentatie voor vier rollen, maar met een <strong>doorlopende operationele oefening</strong>: je krijgt een reeks gebeurtenissen bij Meridiaan voorgeschoteld, verspreid over een gesimuleerde periode, en moet er telkens op reageren met de kennis van dit hele niveau.</p>
+<p><strong>De rollen blijven dezelfde bekenden:</strong> Karin (programmamanager), Tarik (architect), Ruud (beheerhoofd IT), Sanne (privacyfunctionaris) — nu niet als beoordelaars van een eindpresentatie, maar als <strong>inzenders van de gebeurtenissen</strong> die je moet afhandelen.</p>
+<hr>
+<h2>14. De capstone-opdracht</h2>
+<p>Een reeks van acht gebeurtenissen, die je na elkaar krijgt (in het werkboek volledig uitgewerkt). Voor elke gebeurtenis: diagnose, maatregel, en — waar relevant — een korte toelichting die je aan de afzender zou geven.</p>
+<p><strong>Voorbeeld van het soort gebeurtenis</strong> (de volledige acht staan in het werkboek):</p>
+<blockquote>
+<p><em>Ruud, 03:14 uur: “Het portaal reageert niet. Ik zie niks geks in de CPU-grafieken.”</em></p>
+</blockquote>
+<p>Je respons vereist: de juiste eerste diagnosestap (deel 20, paragraaf 16), de juiste vervolgvraag, en een voorstel — allemaal binnen de kennis die je in delen 11 t/m 21 hebt opgebouwd.</p>
+<p><strong>Het bijzondere aan deze vorm:</strong> in tegenstelling tot een losse opdracht per dagdeel, weet je bij de capstone niet vooraf welk deel van de stof een gebeurtenis raakt — precies zoals in een echte operationele rol. Dat is de eigenlijke toets: niet “kun je dit ene ding”, maar “herken je uit een vage melding welk stuk kennis je nodig hebt”.</p>
+<hr>
+<h2>15. Beoordelingscriteria van de capstone</h2>
+<p>Voor elke gebeurtenis:</p>
+<ul>
+<li><strong>Correcte eerste diagnosestap</strong> — begint de respons bij de juiste vraag (traag versus vergrendeld, structureel versus incidenteel)?</li>
+<li><strong>Gebruik van gemeten in plaats van aangenomen informatie</strong> — wordt er verwezen naar een concrete query of een concreet cijfer, of blijft het bij “dat zou kunnen komen door…”?</li>
+<li><strong>Herkenning van de grens van de maatregel</strong> — wordt expliciet benoemd wat de voorgestelde actie wél en niet oplost (de “wat dit niet oplost”-discipline die door het hele niveau loopt)?</li>
+<li><strong>Passende toon naar de afzender</strong> — is het antwoord aan Karin anders geformuleerd dan het antwoord aan Ruud, passend bij wat elk nodig heeft (vergelijk deel 13, opdracht 13.9)?</li>
+</ul>
+<p>Over de acht gebeurtenissen samen: <strong>raakt de reeks van jouw antwoorden minstens zes van de tien delen (11-21) aan?</strong> Als dat niet zo is, is er waarschijnlijk stof gemist in de voorbereiding.</p>
+<hr>
+<h2>16. Terugblik op niveau 2</h2>
+<p>Twaalf dagdelen, van “waarom is deze tabel groter dan de data erin” (deel 12) tot “hoe overtuig ik mezelf dat onze failover echt werkt” (deel 19). De rode draden die er doorheen liepen:</p>
+<ul>
+<li><strong>Meten in plaats van aannemen</strong> — bij elke maatregel de vraag “wat was het vóór en wat is het nu”, van kolomvolgorde (deel 12) tot RTO (deel 17, 19).</li>
+<li><strong>Wat een maatregel niet oplost</strong> — indexen (deel 14), partitionering (deel 16), replicatie (deel 18), HA (deel 19), monitoring (deel 20): elk krachtig gereedschap kreeg zijn eerlijke grens.</li>
+<li><strong>Bedrijfsbeslissingen blijven bedrijfsbeslissingen</strong> — bewaartermijnen (deel 16, 17), RPO/RTO (deel 17), wie toegang krijgt (deel 21): technisch werk voert uit, het besluit ligt elders.</li>
+<li><strong>Alles hangt samen</strong> — <code>mutatie</code> als rode draad door bijna elk deel, de terugkerende personages, en vandaag het besef dat elke afzonderlijke techniek een instantie is van hetzelfde onderliggende patroon: verander iets, zonder dat het merkbaar is voor wie er niet bij hoeft te zijn betrokken.</li>
+</ul>
+<hr>
+<h2>17. Vooruitblik op niveau 3</h2>
+<p>Niveau 3 (delen 23-30) gaat naar architectuurschaal: de Pensioenfederatie-casus met drie aangesloten fondsen, sharding met Citus, en een verdieping die raakt aan event sourcing — met een uitdrukkelijk raakvlak naar het Locked Platform-werk buiten deze cursus. Waar niveau 2 draaide om één server (en zijn replica’s) goed beheren, draait niveau 3 om systemen die uit meerdere, samenwerkende databases bestaan.</p>
+<p>De vaardigheden van vandaag — expand-contract, backfill in batches, het onderscheid tussen wat een techniek oplost en niet oplost — blijven onveranderd relevant; niveau 3 past ze toe op een schaal waar één server niet meer volstaat.</p>
+<hr>
+<p><em>Einde niveau 2. Twaalf dagdelen, van fysiek ontwerp tot hoge beschikbaarheid — met dank aan Karin, Tarik, Ruud en Sanne, die de hele reis hebben volgehouden.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">363 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">&larr; Deel 21 — Security-verdieping en NoSQL in perspectief</a><a class="dbm-prevnext next" href="../../niveau-3/deel-23-architectuur-voor-meerdere-fondsen/reader.html">Deel 23 — Architectuur voor meerdere fondsen &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

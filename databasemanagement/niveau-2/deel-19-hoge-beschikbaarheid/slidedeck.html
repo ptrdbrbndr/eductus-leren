@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Hoge beschikbaarheid — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 19 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 19 — Slidedeck</h1>
+<p><strong>Hoge beschikbaarheid</strong>
+Niveau 2, dagdelen 10 en 11 (deel 19 van 30) | 46 slides — twee dagdelen</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.
+Slides 1-22: dagdeel A. Slides 23-46: dagdeel B.</p>
+</blockquote>
+<hr>
+<hr>
+<h1>DAGDEEL A</h1>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Hoge beschikbaarheid</h1>
+<h2>Dagdeel A — Automatische failover</h2>
+<h3>Niveau 2 — Deel 19</h3>
+<hr>
+<h2>Slide 2 — Vier vragen die openbleven</h2>
+<p>Uit jullie eigen ontwerp, vorige keer:</p>
+<ol>
+<li>Wie merkt dat de primary uitviel?</li>
+<li>Wie beslist welke replica promoveert?</li>
+<li>Wie voorkomt split-brain?</li>
+<li>Wie vertelt de applicatie waar de nieuwe primary is?</li>
+</ol>
+<hr>
+<h2>Slide 3 — Bedenk een regel</h2>
+<p>Twee servers. Geen derde partij.</p>
+<p><em>“Als ik de ander niet meer zie, promoveer ik mezelf.”</em></p>
+<h1>Wanneer faalt deze regel?</h1>
+<p><strong>Notities:</strong> laat de zaal het scenario zelf construeren.</p>
+<hr>
+<h2>Slide 4 — Het gevaarlijke scenario</h2>
+<p>De verbinding <strong>tussen</strong> de twee servers is stuk.</p>
+<p>Beide zijn nog gewoon bereikbaar voor cliënten.</p>
+<h1>Beide promoveren zichzelf.</h1>
+<p><strong>Twee primaries. Split-brain.</strong></p>
+<hr>
+<h2>Slide 5 — Opdracht 19.1</h2>
+<h1>Het probleem zelf ervaren</h1>
+<p>Beredeneer het, zonder Patroni of etcd te noemen.</p>
+<p><em>10 min, drietallen</em></p>
+<hr>
+<h2>Slide 6 — De oplossing</h2>
+<h1>Eén node mag nooit alleen</h1>
+<h1>beslissen dat hij primary is.</h1>
+<p>Een <strong>meerderheid van onafhankelijke waarnemers</strong>
+moet het eens zijn.</p>
+<hr>
+<h2>Slide 7 — Quorum</h2>
+<pre><code>[Waarnemer 1]  [Waarnemer 2]  [Waarnemer 3]
+       └──────────────┼──────────────┘
+                 Meerderheid?
+</code></pre>
+<p>Met <strong>twee</strong> waarnemers: nooit eenduidig bij onenigheid.
+Met <strong>drie</strong>: altijd een meerderheid, ook bij één uitval.</p>
+<hr>
+<h2>Slide 8 — etcd</h2>
+<p>De waarnemers zijn <strong>geen PostgreSQL-servers</strong>.</p>
+<p>Een apart, lichtgewicht consensussysteem
+(Raft) dat weet wie primary mag zijn.</p>
+<hr>
+<h2>Slide 9 — Patroni</h2>
+<pre><code>Patroni+PG    Patroni+PG    Patroni+PG
+ (primary)     (replica)     (replica)
+     └─────────────┼─────────────┘
+              etcd (3 nodes)
+</code></pre>
+<p>Patroni <strong>gebruikt</strong> consensus. Hij ís het niet.</p>
+<hr>
+<h2>Slide 10 — Het mechanisme</h2>
+<ol>
+<li>Primary vernieuwt periodiek een <strong>leiderschapsslot</strong></li>
+<li>Valt hij uit → het slot <strong>verloopt</strong></li>
+<li>Replica’s strijden (via etcd) om het over te nemen</li>
+<li>Winnaar promoveert zichzelf</li>
+</ol>
+<hr>
+<h2>Slide 11 — De kernzin van vandaag</h2>
+<h1>Een primary die zijn slot niet kan</h1>
+<h1>vernieuwen, degradeert zichzelf actief.</h1>
+<p>Niet: “de anderen ontdekken dat hij weg is.”
+Wél: “hij trekt zelf de noodrem.”</p>
+<p><em>(Komt drie keer terug vandaag.)</em></p>
+<hr>
+<h2>Slide 12 — Opdracht 19.2</h2>
+<h1>Het cluster verkennen</h1>
+<pre><code class="language-bash">patronictl list
+curl http://node1:8008/primary
+</code></pre>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 13 — Pauze</h2>
+<hr>
+<h2>Slide 14 — Voorspel</h2>
+<p>Jullie stoppen zo de primary hard.</p>
+<h1>Hoeveel schrijfpogingen falen er,</h1>
+<h1>en hoe lang duurt dat venster?</h1>
+<p><strong>Notities:</strong> laat schattingen op het bord komen vóór het experiment.</p>
+<hr>
+<h2>Slide 15 — Opdracht 19.3</h2>
+<h1>Failover meemaken</h1>
+<p>Draai eerst een schrijflus. Stop dan de primary. <strong>Meet.</strong></p>
+<p><em>45 min, drietallen</em></p>
+<hr>
+<h2>Slide 16 — Vergelijk met ttl</h2>
+<pre><code>ttl: 30s
+</code></pre>
+<p>Het venster hoort in die orde van grootte te liggen.</p>
+<p><strong>Dat getal, niet een schatting, is je RTO voor dit scenario.</strong></p>
+<hr>
+<h2>Slide 17 — Fencing</h2>
+<p>Wat als de oude primary weer online komt?</p>
+<p>Hij ontdekt: een ander heeft het slot.</p>
+<h1>Hij degradeert zichzelf.</h1>
+<h1>Automatisch.</h1>
+<hr>
+<h2>Slide 18 — Het echte testscenario</h2>
+<p>Niet een crash — een <strong>netwerkisolatie</strong>.
+De oude primary blijft zelf gewoon draaien.</p>
+<h1>Is hij, in dat venster, nog bereikbaar</h1>
+<h1>voor een deel van de cliënten?</h1>
+<hr>
+<h2>Slide 19 — Opdracht 19.4</h2>
+<h1>Fencing zien werken</h1>
+<p>Isoleer de primary. Probeer er nog op te schrijven.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 20 — Switchover</h2>
+<p><strong>Gepland</strong>, niet gedwongen.</p>
+<pre><code class="language-bash">patronictl switchover
+</code></pre>
+<p>Geen wachttijd op een verlopen slot —
+de oude primary werkt actief mee. <strong>Geen dataverlies.</strong></p>
+<hr>
+<h2>Slide 21 — Opdracht 19.5</h2>
+<h1>Switchover</h1>
+<p>Vergelijk met je failovertijd.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 22 — Wat Patroni niet oplost</h2>
+<pre><code class="language-sql">DROP TABLE testtabel;   -- op de primary
+</code></pre>
+<h1>Check de replica’s.</h1>
+<p><strong>Notities:</strong> laat de zaal zelf zien dat hij overal weg is. Dan: 2 van de 3 etcd-nodes uitschakelen — primary blijft draaien, maar geen failover meer mogelijk. Bewust veilig, geen storing.</p>
+<hr>
+<hr>
+<h1>DAGDEEL B</h1>
+<hr>
+<h2>Slide 23 — Titel</h2>
+<h1>Hoge beschikbaarheid</h1>
+<h2>Dagdeel B — Pooling en het geheel testen</h2>
+<h3>Niveau 2 — Deel 19</h3>
+<hr>
+<h2>Slide 24 — De vraag die overbleef</h2>
+<p>Patroni weet <strong>welke server</strong> primary is.</p>
+<h1>Wie vertelt dat aan de applicatie?</h1>
+<p>Die heeft een vast adres.</p>
+<hr>
+<h2>Slide 25 — PgBouncer: drie poolmodi</h2>
+<table>
+<thead>
+<tr>
+<th>Modus</th>
+<th>Vrijgegeven</th>
+<th>Efficiëntie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session</code></td>
+<td>Bij sluiten client</td>
+<td>Laag</td>
+</tr>
+<tr>
+<td><strong><code>transaction</code></strong></td>
+<td>Na elke transactie</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td><code>statement</code></td>
+<td>Na elke opdracht</td>
+<td>Zeer hoog</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 26 — Opdracht 19.7</h2>
+<h1>PgBouncer opzetten</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 27 — Wat breekt in transaction-mode</h2>
+<p><code>SET</code> op sessieniveau
+<code>pg_advisory_lock</code> (sessie)
+Prepared statements over transacties heen
+<code>LISTEN</code>/<code>NOTIFY</code></p>
+<h1>Allemaal gebonden aan “de sessie” —</h1>
+<h1>die bestaat niet meer tussen transacties.</h1>
+<hr>
+<h2>Slide 28 — Herken je dit?</h2>
+<h1>Deel 15: <code>pg_advisory_xact_lock</code></h1>
+<h1>in plaats van de sessievariant.</h1>
+<p>Die keuze had toen al een reden.
+Vandaag zie je hem falen zonder de xact-versie.</p>
+<hr>
+<h2>Slide 29 — Opdracht 19.8</h2>
+<h1>Wat er breekt in transaction-pooling</h1>
+<p>Laat elke constructie <strong>echt</strong> falen.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 30 — Pauze</h2>
+<hr>
+<h2>Slide 31 — PgBouncer + Patroni</h2>
+<pre><code>Applicatie → PgBouncer → HAProxy (checkt /primary)
+                              │
+                      huidige primary-node
+</code></pre>
+<p>Na een failover: HAProxy merkt het, routeert opnieuw.</p>
+<h1>De applicatie hoeft niets te weten.</h1>
+<hr>
+<h2>Slide 32 — Opdracht 19.9</h2>
+<h1>PgBouncer en Patroni samen</h1>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 33 — Chaos</h2>
+<p>De enige manier om te weten of dit werkt:</p>
+<h1>Het express kapot maken.</h1>
+<p>Vier scenario’s, oplopende moeilijkheid.</p>
+<hr>
+<h2>Slide 34 — Scenario 1 &amp; 2</h2>
+<p><strong>1.</strong> Primary hard stoppen <em>(herhaling, nu met PgBouncer)</em>
+<strong>2.</strong> Eén etcd-node uitschakelen</p>
+<p><strong>Voorspel:</strong> geen effect op scenario 2. Klopt dat?</p>
+<hr>
+<h2>Slide 35 — Scenario 3</h2>
+<p>Twee van de drie etcd-nodes uit.</p>
+<h1>Primary blijft draaien.</h1>
+<h1>Failover: onmogelijk.</h1>
+<p>Bewust veilig aftakelen — geen storing.</p>
+<hr>
+<h2>Slide 36 — Scenario 4: het scherpste</h2>
+<p>De primary <strong>geïsoleerd van het netwerk</strong>,
+maar zelf nog volledig draaiend.</p>
+<h1>Meet het venster waarin hij nog</h1>
+<h1>schrijfopdrachten zou kunnen accepteren.</h1>
+<hr>
+<h2>Slide 37 — Waarom dit hét scenario is</h2>
+<p>Het onderscheidt een HA-opstelling
+die er goed <strong>uitziet</strong> op een architectuurplaat</p>
+<h1>van een die daadwerkelijk <strong>getest</strong> is.</h1>
+<hr>
+<h2>Slide 38 — Opdracht 19.10</h2>
+<h1>Chaos</h1>
+<p>Voorspel eerst. Voer dan uit. Vier scenario’s.</p>
+<p><em>45 min, drietallen</em></p>
+<hr>
+<h2>Slide 39 — RTO ontleden</h2>
+<ol>
+<li>Detectietijd</li>
+<li>Beslistijd</li>
+<li>Promotietijd</li>
+<li>Routeringstijd</li>
+<li><strong>Totaal — gemeten, niet geschat</strong></li>
+</ol>
+<hr>
+<h2>Slide 40 — Opdracht 19.11</h2>
+<h1>RTO in de praktijk meten</h1>
+<p>Vergelijk met je doelstelling uit deel 17.</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 41 — De eerlijke vraag</h2>
+<h1>Was de investering in dit hele deel</h1>
+<h1>gerechtvaardigd — op basis van</h1>
+<h1>je eigen gemeten getal?</h1>
+<p><strong>Het is een legitiem antwoord als het antwoord “nee” is.</strong></p>
+<hr>
+<h2>Slide 42 — De volledige keten</h2>
+<pre><code>RPO/RTO (deel 17, bedrijfsbeslissing)
+    ↓
+Back-up ── vangnet voor fouten in de tijd
+    ↓
+Replicatie (deel 18) ── sync/async per RPO
+    ↓
+Consensus + failover (19a) ── voor RTO
+    ↓
+Pooling + routering (19b) ── applicatie weet van niets
+</code></pre>
+<hr>
+<h2>Slide 43 — Geen van deze vervangt een andere</h2>
+<p>Perfecte Patroni-opstelling + geen back-up =
+nog steeds kwetsbaar voor één verkeerde <code>DROP TABLE</code>.</p>
+<p>Perfecte back-ups + geen replicatie =
+RTO in uren, niet seconden.</p>
+<hr>
+<h2>Slide 44 — Opdracht 19.12</h2>
+<h1>Het HA-ontwerp</h1>
+<p>Architectuur met faalgebieden · <strong>gemeten</strong> RTO ·
+poolconfiguratie per werklast · <strong>expliciet: wat dit niet oplost</strong></p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 45 — Niet vergeten</h2>
+<h1>Punt 5 van je ontwerp:</h1>
+<p>Dit beschermt tegen het uitvallen van een machine.
+<strong>Niet</strong> tegen een verkeerde <code>DROP TABLE</code>.</p>
+<p>Dat blijft back-up. Altijd.</p>
+<hr>
+<h2>Slide 46 — Volgende keer</h2>
+<h1>Deel 20 — Monitoring</h1>
+<h3><em>(zelfstandig leesbaar)</em></h3>
+<p>Jullie hebben nu een systeem dat zichzelf herstelt —
+en jullie weten precies hoe snel, want jullie hebben gemeten.</p>
+<p>Volgende keer: zodat iemand het <strong>ziet gebeuren</strong>
+vóórdat een gebruiker het meldt.</p>
+<p><strong>Bewaar je lijst van “dingen om te monitoren” uit deel 11-19.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 19.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">402 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-18-replicatie/reader.html">&larr; Deel 18 — Replicatie</a><a class="dbm-prevnext next" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">Deel 20 — Monitoring, logging en pgaudit &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

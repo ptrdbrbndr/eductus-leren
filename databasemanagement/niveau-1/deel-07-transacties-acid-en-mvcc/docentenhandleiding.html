@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Transacties, ACID en MVCC — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 7 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 7 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 7: Transacties, ACID en MVCC</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Vandaag sluit de cirkel met deel 1. Vijf van de zes problemen van de schil zijn opgelost; de lost update is de laatste, en het is de lastigste — omdat hij alleen optreedt onder gelijktijdige belasting en dus zelden op een testomgeving.</p>
+<p>Twee inzichten die deelnemers moeten meenemen:</p>
+<ol>
+<li><strong>ACID beschermt niet vanzelf tegen een lost update.</strong> De I garandeert dat sessies elkaar niet in een halve toestand zien, niet dat ze elkaars werk niet overschrijven. Deelnemers verwachten van wel, en die verwachting moet je actief breken.</li>
+<li><strong>Transactiegrenzen zijn een ontwerpvraag.</strong> Waar <code>BEGIN</code> en <code>COMMIT</code> staan, bepaalt of je systeem onder belasting werkt. Dat is geen technisch detail maar een keuze met bedrijfsgevolgen.</li>
+</ol>
+<p><strong>Werkvorm:</strong> dit dagdeel is bijna volledig experimenteel. Deelnemers werken de hele middag met twee psql-vensters naast elkaar. Wie dat niet werkend krijgt, mist alles.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 7; oefeningschema uit deel 6 nog aanwezig.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Controleer vooraf dat iedereen twee sessies kan openen.</strong> Op sommige laptops is dat met een grafische client lastiger dan met twee terminalvensters. Regel dit vóór aanvang; het is het enige echte struikelblok van vandaag.</li>
+<li>Bereid je eigen scherm voor met twee psql-vensters náást elkaar, groot geprojecteerd. Alle demonstraties van vandaag zijn tweezijdig; een enkel venster werkt niet.</li>
+<li>Overweeg gekleurde achtergronden per venster (<code>\set PROMPT1</code>) zodat de zaal ziet welke sessie waar is. Dit klinkt triviaal en scheelt in de praktijk veel verwarring.</li>
+<li>Het werkboek bevat een terugvalscript voor wie het oefeningschema kwijt is.</li>
+</ul>
+<p><strong>Zaalopstelling:</strong> tweetallen, want de meeste opdrachten zijn tweezijdig. Eén persoon per sessie werkt beter dan één persoon met twee vensters — het gesprek tussen de twee is didactisch waardevol.</p>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:10</td>
+<td>Terugblik: het laatste openstaande probleem uit deel 1</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:10-0:30</td>
+<td>Transacties, BEGIN/COMMIT/ROLLBACK, savepoints (§3-5) + <strong>opdracht 7.1</strong></td>
+<td>Demo + zelfstandig</td>
+</tr>
+<tr>
+<td>0:30-0:45</td>
+<td>ACID concreet (§6) + <strong>opdracht 7.2</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>0:45-1:15</td>
+<td>De vier anomalieën + isolatieniveaus (§7-8) + <strong>opdracht 7.3</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-1:50</td>
+<td>MVCC (§9-10) + <strong>opdracht 7.4</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>1:50-2:20</td>
+<td><strong>De lost update (§15) + opdracht 7.5</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:20-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:45</td>
+<td>Locks en deadlocks (§11-14) + <strong>opdracht 7.6</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:45-3:00</td>
+<td>SKIP LOCKED (§13) + <strong>opdracht 7.7</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>3:00-3:15</td>
+<td>VACUUM (§17) + <strong>opdracht 7.8</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>3:15-3:25</td>
+<td>Transactiegrenzen in applicaties (§18-19)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:25-4:00</td>
+<td><strong>Opdracht 7.9</strong> — transactieontwerp</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> kort opdracht 7.6 (deadlock) in tot een demonstratie op het grote scherm, en laat 7.8 als huiswerk. Kort <strong>nooit</strong> paragraaf 15 / opdracht 7.5 in — dat is waarvoor dit dagdeel bestaat — en ook niet opdracht 7.9.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Zet de zes problemen van deel 1 weer op het bord en streep aan wat er is opgelost. Vraag welk probleem overblijft. Iemand noemt de twee collega’s in het Excel-bestand.</p>
+<p>Kondig dan aan wat er vandaag gaat gebeuren:</p>
+<blockquote>
+<p><em>“Vanmiddag gaan jullie dat probleem reproduceren in een echte database — met constraints, foreign keys en ACID. En het gebeurt gewoon.”</em></p>
+</blockquote>
+<p>Die aankondiging maakt de zaal nieuwsgierig, want vrijwel iedereen denkt dat een database dit vanzelf oplost.</p>
+<h3>4.2 Transacties en de aborted-toestand (0:10)</h3>
+<p>De aborted-toestand is verwarrend bij eerste kennismaking. Demonstreer hem live en zeg meteen dat de sessie niet kapot is. Deelnemers die dit voor het eerst tegenkomen tijdens een opdracht, verliezen anders vijf minuten aan verwarring.</p>
+<p>Savepoints kort houden: één demonstratie, en de waarschuwing dat duizenden savepoints een prestatieprobleem zijn.</p>
+<h3>4.3 ACID concreet (0:30)</h3>
+<p>Het punt dat je hier moet maken is de <strong>C</strong>:</p>
+<blockquote>
+<p><em>“Atomiciteit, isolatie en duurzaamheid regelt de database. Consistentie zijn de regels die jullie in deel 6 hebben vastgelegd. Een database zonder constraints is nog steeds volledig ACID — hij bewaakt alleen niets.”</em></p>
+</blockquote>
+<p>Zeg erbij dat dit een nuttige zin is als een leverancier claimt dat zijn product “ACID compliant” is. Deelnemers herkennen die verkooptaal.</p>
+<h3>4.4 De anomalieën (0:45)</h3>
+<p><strong>Laat ze reproduceren in plaats van uitleggen.</strong> Opdracht 7.3 is opgebouwd zodat deelnemers eerst het verschijnsel zien en er daarna een naam bij krijgen.</p>
+<p>Twee dingen om plenair te benadrukken:</p>
+<ul>
+<li><strong>Dirty read lukt niet</strong> (7.3e). Dat is geen mislukte opdracht maar het antwoord: PostgreSQL kent read uncommitted niet. Deelnemers die dit niet doorhebben, denken dat ze iets fout doen.</li>
+<li><strong>PostgreSQL is strenger dan de standaard</strong> bij repeatable read. Noem dit expliciet als examenstof en als iets waar mensen uit een andere DBMS-wereld op struikelen.</li>
+</ul>
+<p>Bij de keuze van isolatieniveaus: waarschuw tegen <code>serializable</code> als standaardkeuze. Vraag altijd: <em>“wie schrijft de retry-logica?”</em> Dat is de vraag die het gesprek eerlijk maakt.</p>
+<h3>4.5 MVCC (1:30)</h3>
+<p><code>xmin</code> en <code>xmax</code> opvragen is een klein hoogtepunt — deelnemers vinden het bevredigend om het mechanisme letterlijk te zien. Laat het ze zelf doen.</p>
+<p>Opdracht 7.4e (waarom de tabel verdubbelt bij een grote <code>UPDATE</code>) is de belangrijkste van dit blok. Vraag daarna:</p>
+<blockquote>
+<p><em>“Wat betekent dat voor een <code>UPDATE</code> op alle acht miljoen rijen van jullie productietabel, op dinsdagmiddag?”</em></p>
+</blockquote>
+<p>Dat verbindt MVCC met een praktijkbeslissing en bereidt niveau 2 voor.</p>
+<h3>4.6 De lost update (1:50)</h3>
+<p><strong>Het kwartier waar dit dagdeel om draait.</strong> Doe het eerst zelf op het grote scherm, stap voor stap, en laat de zaal hardop de eindwaarde voorspellen vóór de laatste <code>COMMIT</code>. Een deel van de zaal verwacht een foutmelding.</p>
+<p>Als de 2.000 euro verdwenen is, laat je een stilte vallen en zeg je:</p>
+<blockquote>
+<p><em>“Constraints, foreign keys, ACID — allemaal aan. En het gebeurt gewoon.”</em></p>
+</blockquote>
+<p>Laat ze het daarna zelf reproduceren; het effect is sterker als ze het met eigen handen doen.</p>
+<p>Bij de oplossingen: behandel alle drie, maar besteed de meeste tijd aan <strong>oplossing 1</strong> (rekenen in de <code>UPDATE</code>). Het is de eenvoudigste, wordt het minst gebruikt, en lost verrassend veel praktijkgevallen op. Veel applicaties lezen een waarde op, rekenen in code en schrijven terug, terwijl één <code>UPDATE … SET x = x + n</code> het probleem laat verdampen.</p>
+<p>Opdracht 7.5f (Karins vraag) is een goede plenaire afsluiting. Laat één tweetal voorlezen. Het antwoord dat het beste werkt, is dat de database niet kan weten dat die twee wijzigingen bij elkaar horen.</p>
+<h3>4.7 Deadlocks (2:30)</h3>
+<p>Kort en demonstratief. Het inhoudelijke punt is niet de deadlock zelf — die lost de database op — maar de maatregel: <strong>rijen in vaste volgorde benaderen.</strong> Laat opdracht 7.6d uitvoeren zodat ze zien dat de deadlock dan verdwijnt.</p>
+<p>Vraag of iemand een deadlock in de eigen organisatie heeft meegemaakt. Er is meestal iemand, en het verhaal is beter dan jouw uitleg.</p>
+<h3>4.8 SKIP LOCKED (2:45)</h3>
+<p>Deze wordt vaak overgeslagen in cursussen en is juist direct toepasbaar. Verbind hem expliciet met de casus: Meridiaan wil de mutatieverwerking parallelliseren, en dit is hoe je dat doet zonder een eigen “in behandeling”-vlag.</p>
+<p>Opdracht 7.7e is het sterkste argument: bij een crash vallen de locks vanzelf weg, terwijl een zelfgebouwde vlag blijft staan en handmatig opgeruimd moet worden. Deelnemers met ervaring herkennen dat probleem onmiddellijk.</p>
+<h3>4.9 VACUUM (3:00)</h3>
+<p>Herhaal de waarschuwing uit deel 2, nu met de volledige uitleg over XID-wraparound. Wees stellig:</p>
+<blockquote>
+<p><em>“Dit is de bekendste manier om een PostgreSQL-productieomgeving stil te leggen. En het begint altijd met hetzelfde redelijke argument: autovacuum kost te veel I/O.”</em></p>
+</blockquote>
+<p><code>VACUUM FULL</code> expliciet afraden als routine. De afstelling van autovacuum hoort in niveau 2; ga daar niet in mee als iemand ernaar vraagt, anders verlies je het laatste half uur.</p>
+<h3>4.10 Opdracht 7.9 (3:25)</h3>
+<p>De opbrengst van de dag. Loop rond en stuur op casus <strong>B</strong> — dat is de fout die in de praktijk het vaakst gemaakt wordt. Groepen die een transactie om de gebruikersinteractie zetten, moeten de vraag krijgen: <em>“hoe lang doet een deelnemer over dat formulier, en wat staat er al die tijd open?”</em></p>
+<p>Casus <strong>C</strong> is de interessantste discussie: één transactie van twintig minuten (atomair maar schadelijk) tegenover partijen (veilig maar met hervattingslogica). Beide zijn verdedigbaar; wat telt is dat de afruil benoemd wordt.</p>
+<p>Sluit plenair af met casus <strong>D</strong>, want dat is de enige waar een strenger isolatieniveau nodig is — en het is opnieuw het “drie afdelingen, drie aantallen”-probleem uit deel 1, nu met een derde oorzaak.</p>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Waarom is read committed de standaard en niet iets strengers?”</strong>
+Omdat het voor de meeste werklasten het beste evenwicht geeft tussen correctheid en doorvoer, en omdat strengere niveaus serialisatiefouten opleveren die de applicatie moet afhandelen. Een strengere standaard zou betekenen dat elke eenvoudige applicatie retry-logica nodig heeft.</p>
+<p><strong>“Kan ik het isolatieniveau voor de hele database instellen?”</strong>
+Ja, met <code>default_transaction_isolation</code> in <code>postgresql.conf</code>. Doe het niet zonder goede reden: je verandert dan het gedrag van álle applicaties, inclusief de applicaties die daar geen foutafhandeling voor hebben.</p>
+<p><strong>“Hoe lang mag een transactie duren?”</strong>
+Geen absoluut antwoord, wel een richting: seconden voor interactieve handelingen, minuten voor batchwerk, en alles boven een uur is een signaal dat er iets mis is met het ontwerp. In niveau 2 zie je <code>idle_in_transaction_session_timeout</code>, waarmee je een bovengrens kunt afdwingen.</p>
+<p><strong>“Wij gebruiken een ORM. Regelt die dit niet?”</strong>
+Gedeeltelijk. De meeste ORM’s bieden optimistisch vergrendelen met een versiekolom, en dat werkt goed — mits het aan staat en de applicatie de conflictfout afhandelt. Wat een ORM niet voor je doet: de transactiegrenzen goed leggen. Dat blijft een ontwerpbeslissing, en het is de fout die het vaakst uit ORM-gebruik voortkomt (een transactie die per HTTP-verzoek openstaat).</p>
+<p><strong>“Is MVCC uniek voor PostgreSQL?”</strong>
+Nee, andere systemen hebben het ook, maar met een andere implementatie: die bewaren oude versies vaak in een aparte structuur in plaats van in de tabel zelf. Gevolg: daar geen bloat en geen vacuum, maar wel andere problemen. Het is een andere afruil, niet een betere.</p>
+<p><strong>“Wat gebeurt er als de stroom uitvalt midden in een transactie?”</strong>
+Dat is deel 2: WAL en crashherstel. Wat gecommit was komt terug, wat nog liep verdwijnt volledig. Goede gelegenheid om die stof terug te halen.</p>
+<p><strong>“Waarom krijg ik soms een serialisatiefout terwijl ik niets doe met serializable?”</strong>
+Onder repeatable read kan dat ook, bij een <code>UPDATE</code> op een rij die sinds je momentopname is gewijzigd. Zie opdracht 7.5e.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voorspelt de uitkomst van 7.5 correct vóór de demo</td>
+<td>Sterk begrip van isolatie</td>
+</tr>
+<tr>
+<td>Verwacht dat de database de lost update voorkomt</td>
+<td>Normaal; corrigeren, want het is de kernmisvatting</td>
+</tr>
+<tr>
+<td>Zet bij 7.9B geen transactie om de interactie</td>
+<td>Heeft §18 begrepen</td>
+</tr>
+<tr>
+<td>Kiest overal <code>serializable</code> “voor de zekerheid”</td>
+<td>Doorvragen naar retry-logica</td>
+</tr>
+<tr>
+<td>Benoemt bij 7.9C de afruil expliciet</td>
+<td>Klaar voor niveau 2</td>
+</tr>
+<tr>
+<td>Vraagt uit zichzelf naar <code>lock_timeout</code> bij migraties</td>
+<td>Uitzonderlijk; verwijs naar niveau 2 deel 22</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 8</h2>
+<p>Brug: <em>“Jullie database is nu correct, ook als er honderd mensen tegelijk in werken. Volgende keer maken we hem snel — en dan blijkt dat ‘traag’ bijna nooit betekent wat mensen denken.”</em></p>
+<p>Geef mee: <em>iedereen die in deel 4 een query had die langer duurde dan verwacht, neemt hem mee.</em> Die query’s zijn het beste demomateriaal voor <code>EXPLAIN</code>.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 7.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">511 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-06-ddl-datatypen-en-constraints/reader.html">&larr; Deel 6 — DDL, datatypen en constraints</a><a class="dbm-prevnext next" href="../deel-08-indexen-en-views/reader.html">Deel 8 — Indexen en views &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

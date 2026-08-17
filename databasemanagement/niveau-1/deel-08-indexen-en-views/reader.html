@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Indexen en views — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 8 — Indexen en views</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 8 van 10
+Aansluiting: EDB PostgreSQL Associate — domeinen “Performance” en “Database objects”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>“Traag” betekent zelden wat mensen denken</li>
+<li>Hoe een B-tree-index werkt</li>
+<li>EXPLAIN lezen</li>
+<li>EXPLAIN ANALYZE</li>
+<li>De scantypen</li>
+<li>Wanneer een sequentiële scan juist goed is</li>
+<li>Joinalgoritmen</li>
+<li>Een index aanmaken</li>
+<li>Samengestelde indexen: de kolomvolgorde</li>
+<li>Partiële indexen</li>
+<li>Expressie-indexen</li>
+<li>Covering indexen met INCLUDE</li>
+<li>De andere indextypen</li>
+<li>Wat een index kost</li>
+<li>Wanneer een index niet gebruikt wordt</li>
+<li>Ongebruikte indexen opsporen</li>
+<li>Meten in plaats van geloven</li>
+<li>Views</li>
+<li>Materialized views</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>een queryplan lezen en de belangrijkste knopen benoemen;</li>
+<li>het verschil tussen <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code> toepassen en de getallen interpreteren;</li>
+<li>de scantypen herkennen en uitleggen wanneer elk passend is;</li>
+<li>beargumenteren waarom een sequentiële scan soms de beste keuze is;</li>
+<li>indexen aanmaken, inclusief samengestelde, partiële en expressie-indexen;</li>
+<li>de juiste kolomvolgorde in een samengestelde index bepalen;</li>
+<li>de kosten van een index benoemen en ongebruikte indexen opsporen;</li>
+<li>verklaren waarom een index niet gebruikt wordt en dat oplossen;</li>
+<li>views en materialized views inzetten en het verschil motiveren.</li>
+</ul>
+<p><strong>De houding die dit deel moet opleveren:</strong> meten in plaats van geloven. Prestatiefolklore is in dit vakgebied hardnekkig, en vrijwel elke bewering die iemand niet zelf met <code>EXPLAIN ANALYZE</code> heeft gecontroleerd, is een gerucht.</p>
+<hr>
+<h2>2. “Traag” betekent zelden wat mensen denken</h2>
+<p>Ruud belt: <em>“de database is traag.”</em> Dat kan van alles betekenen:</p>
+<ul>
+<li>één query is traag;</li>
+<li>alle query’s zijn traag;</li>
+<li>het is traag sinds vanochtend;</li>
+<li>het is traag sinds de laatste release;</li>
+<li>het is traag voor één gebruiker.</li>
+</ul>
+<p>Die vijf hebben verschillende oorzaken en verschillende oplossingen. <strong>De eerste vraag is nooit “welke index moet erbij” maar “wat precies is er traag, en sinds wanneer”.</strong></p>
+<p>Vier oorzaken, in volgorde van hoe vaak ze voorkomen:</p>
+<ol>
+<li><strong>Een ontbrekende index</strong>, waardoor een query die tien rijen nodig heeft, er acht miljoen leest.</li>
+<li><strong>Verouderde statistieken</strong>, waardoor de planner een verkeerd plan kiest (deel 2: autovacuum).</li>
+<li><strong>Een query die meer opvraagt dan nodig</strong> — <code>SELECT *</code>, een vergeten filter, fan-out uit deel 4.</li>
+<li><strong>Vergrendeling</strong> — de query wacht, hij rekent niet (deel 7: <code>pg_stat_activity</code>).</li>
+</ol>
+<p>Alleen bij nummer 1 helpt een index. Bij nummer 4 helpt hij niets, en dat is precies het geval waarin mensen er het vaakst een toevoegen.</p>
+<hr>
+<h2>3. Hoe een B-tree-index werkt</h2>
+<p>De standaardindex in PostgreSQL is een <strong>B-tree</strong>: een gebalanceerde boom waarin de waarden gesorteerd staan.</p>
+<p>Zoeken werkt zoals in een telefoonboek: je slaat het in het midden open, kijkt of je te ver bent, en halveert. Bij acht miljoen rijen heb je zo ongeveer drieëntwintig stappen nodig in plaats van acht miljoen.</p>
+<p>Elk blad van de boom bevat de waarde plus een verwijzing (<code>ctid</code>) naar de fysieke plek van de rij in de tabel. De index kent dus de <em>waarde</em>, niet de hele rij — vandaar dat de database na het doorzoeken van de index meestal ook nog de tabel moet raadplegen.</p>
+<p><strong>Waar een B-tree goed in is:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Bewerking</th>
+<th>Bruikbaar?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>=</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>&lt;</code>, <code>&gt;</code>, <code>BETWEEN</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>IN (…)</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>ORDER BY</code> op dezelfde kolommen</td>
+<td>Ja — de index is al gesorteerd</td>
+</tr>
+<tr>
+<td><code>LIKE 'abc%'</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>LIKE '%abc'</code></td>
+<td><strong>Nee</strong> — geen begin om op te zoeken</td>
+</tr>
+<tr>
+<td><code>IS NULL</code></td>
+<td>Ja</td>
+</tr>
+</tbody>
+</table>
+<p>Dat <code>ORDER BY</code> uit een index kan komen, is belangrijker dan het lijkt: het scheelt een sorteerslag, en bij <code>ORDER BY … LIMIT 10</code> kan de database stoppen na tien rijen in plaats van alles te sorteren.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-8-1.png" alt="B-tree met wortel, tussenknopen en bladeren, met de verwijzing naar de tabelrij" loading="lazy"><figcaption>Figuur 8-1 — B-tree met wortel, tussenknopen en bladeren, met de verwijzing naar de tabelrij</figcaption></figure>
+<hr>
+<h2>4. EXPLAIN lezen</h2>
+<pre><code class="language-sql">EXPLAIN SELECT * FROM deelnemer WHERE achternaam = 'Jansen';
+</code></pre>
+<pre><code>Seq Scan on deelnemer  (cost=0.00..205.00 rows=320 width=97)
+  Filter: (achternaam = 'Jansen'::text)
+</code></pre>
+<p>Wat er staat:</p>
+<ul>
+<li><strong><code>Seq Scan</code></strong> — het gekozen scantype: de hele tabel wordt gelezen.</li>
+<li><strong><code>cost=0.00..205.00</code></strong> — geschatte kosten: opstartkosten…totale kosten. De eenheid is willekeurig (relatief aan het lezen van één pagina) en niet in seconden. Alleen de verhouding telt.</li>
+<li><strong><code>rows=320</code></strong> — het geschatte aantal rijen.</li>
+<li><strong><code>width=97</code></strong> — de geschatte gemiddelde rijbreedte in bytes.</li>
+<li><strong><code>Filter</code></strong> — de voorwaarde die per rij wordt toegepast.</li>
+</ul>
+<p><strong><code>EXPLAIN</code> voert de query niet uit.</strong> Het toont alleen wat de planner van plan is. Dat is veilig en snel, ook bij een <code>UPDATE</code> of <code>DELETE</code>.</p>
+<p>Plannen lees je <strong>van binnen naar buiten en van onder naar boven</strong>: de diepst ingesprongen knopen draaien het eerst en leveren hun rijen aan de knoop erboven.</p>
+<hr>
+<h2>5. EXPLAIN ANALYZE</h2>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM deelnemer WHERE achternaam = 'Jansen';
+</code></pre>
+<pre><code>Seq Scan on deelnemer  (cost=0.00..205.00 rows=320 width=97)
+                       (actual time=0.021..1.842 rows=298 loops=1)
+  Filter: (achternaam = 'Jansen'::text)
+  Rows Removed by Filter: 7702
+  Buffers: shared hit=105
+Planning Time: 0.104 ms
+Execution Time: 1.903 ms
+</code></pre>
+<p>Nu staat er naast de schatting ook de werkelijkheid:</p>
+<ul>
+<li><strong><code>actual time=0.021..1.842</code></strong> — echte milliseconden: tot de eerste rij … tot de laatste.</li>
+<li><strong><code>rows=298</code></strong> — het werkelijke aantal.</li>
+<li><strong><code>loops=1</code></strong> — hoe vaak deze knoop is uitgevoerd. <strong>Let op: <code>actual time</code> en <code>rows</code> zijn per loop.</strong> Staat er <code>loops=1000</code>, vermenigvuldig dan.</li>
+<li><strong><code>Rows Removed by Filter</code></strong> — hoeveel rijen zijn gelezen en weggegooid. Een hoog getal hier is het duidelijkste signaal van een ontbrekende index.</li>
+<li><strong><code>Buffers: shared hit=105</code></strong> — pagina’s uit de bufferpool (deel 2). <code>read</code> in plaats van <code>hit</code> betekent dat ze van schijf kwamen.</li>
+</ul>
+<p><strong>Het belangrijkste dat je in een plan zoekt: het verschil tussen <code>rows=</code> (geschat) en <code>actual rows=</code>.</strong> Wijken die een factor tien of meer af, dan kloppen de statistieken niet en is elk plan dat daarop gebouwd is verdacht. Dat is het moment voor <code>ANALYZE</code> (deel 2, deel 7).</p>
+<blockquote>
+<p><strong>Waarschuwing:</strong> <code>EXPLAIN ANALYZE</code> <strong>voert de query uit</strong>. Op een <code>UPDATE</code> of <code>DELETE</code> betekent dat: de wijziging vindt echt plaats. Wil je een schrijvende query analyseren, zet hem dan in een transactie en draai terug — precies waar deel 7 voor is:</p>
+<pre><code class="language-sql">BEGIN;
+EXPLAIN ANALYZE UPDATE …;
+ROLLBACK;
+</code></pre>
+</blockquote>
+<hr>
+<h2>6. De scantypen</h2>
+<p><strong><code>Seq Scan</code></strong> — de hele tabel van begin tot eind. Goedkoop per rij, duur in totaal. Optimaal als je een groot deel van de tabel nodig hebt, of als de tabel klein is.</p>
+<p><strong><code>Index Scan</code></strong> — zoek in de index, haal per treffer de rij uit de tabel. Optimaal bij weinig treffers. Bij veel treffers wordt het willekeurige heen-en-weer springen duurder dan gewoon alles lezen.</p>
+<p><strong><code>Index Only Scan</code></strong> — de index bevat alle gevraagde kolommen, dus de tabel hoeft niet geraadpleegd te worden. Het snelst wat er is. Vereist wel dat de zichtbaarheidskaart actueel is — en die wordt door vacuum bijgewerkt, wat opnieuw laat zien hoe alles samenhangt.</p>
+<p><strong><code>Bitmap Heap Scan</code></strong> (met <code>Bitmap Index Scan</code> eronder) — een tussenvorm: eerst worden alle treffers in de index verzameld in een bitmap, dan wordt de tabel één keer in fysieke volgorde doorlopen. Efficiënt bij een middelgroot aantal treffers, en de manier waarop PostgreSQL meerdere indexen op één tabel kan combineren.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-8-2.png" alt="De vier scantypen op één as van &quot;aantal treffers&quot;, met het omslagpunt tussen index en sequentieel" loading="lazy"><figcaption>Figuur 8-2 — De vier scantypen op één as van &quot;aantal treffers&quot;, met het omslagpunt tussen index en sequentieel</figcaption></figure>
+<hr>
+<h2>7. Wanneer een sequentiële scan juist goed is</h2>
+<p>Dit is de belangrijkste correctie van dit deel, want deelnemers zien <code>Seq Scan</code> en denken meteen “fout”.</p>
+<p>Een sequentiële scan is de <strong>beste</strong> keuze wanneer:</p>
+<ul>
+<li><strong>de tabel klein is.</strong> Op 250 werkgevers is de hele tabel enkele pagina’s groot; een index raadplegen kost meer dan gewoon alles lezen.</li>
+<li><strong>je een groot deel van de rijen nodig hebt.</strong> Boven ruwweg 5 tot 10 procent van de tabel is sequentieel lezen sneller, omdat schijven (ook SSD’s) beter zijn in achter elkaar lezen dan in springen.</li>
+<li><strong>je toch alles nodig hebt</strong>, zoals bij een <code>sum()</code> over de hele tabel.</li>
+</ul>
+<p>De planner weet dit en rekent het uit. Zie je een <code>Seq Scan</code> waar je een index verwacht, dan is de vraag niet “hoe dwing ik een index af” maar <strong>“waarom denkt de planner dat dit goedkoper is, en heeft hij gelijk?”</strong> Meestal heeft hij gelijk. Als hij ongelijk heeft, zijn de statistieken verouderd.</p>
+<p>Op de casusdatabase met 8.000 deelnemers zul je vaak sequentiële scans zien, ook waar een index bestaat. Dat is correct gedrag en geen tekortkoming van je index.</p>
+<hr>
+<h2>8. Joinalgoritmen</h2>
+<p>Drie manieren om een join uit te voeren; de planner kiest.</p>
+<p><strong><code>Nested Loop</code></strong> — voor elke rij links, zoek de bijpassende rijen rechts. Goed als links weinig rijen heeft en rechts een index. Slecht als beide groot zijn: het aantal bewerkingen is dan het product.</p>
+<p><strong><code>Hash Join</code></strong> — bouw een hashtabel van de kleinste kant, loop de andere kant door. Goed bij grote verzamelingen zonder bruikbare index. Vereist geheugen (<code>work_mem</code>, deel 2) — past de hashtabel er niet in, dan gaat het naar schijf en zie je <code>Batches: 4</code> of hoger in het plan. Dat is een signaal.</p>
+<p><strong><code>Merge Join</code></strong> — beide kanten gesorteerd doorlopen. Goed als beide al gesorteerd zijn, bijvoorbeeld doordat er een index op de joinkolom ligt.</p>
+<p>Je kiest deze niet zelf. Je leest ze om te begrijpen wat er gebeurt — en om te herkennen wanneer een <code>Nested Loop</code> met <code>loops=8000</code> de oorzaak van je probleem is.</p>
+<hr>
+<h2>9. Een index aanmaken</h2>
+<pre><code class="language-sql">CREATE INDEX deelnemer_achternaam_idx ON deelnemer (achternaam);
+</code></pre>
+<p>Naamgeving volgens de conventie uit deel 6: <code>&lt;tabel&gt;_&lt;kolom(men)&gt;_idx</code>.</p>
+<p><strong>Automatisch aangemaakt</strong> worden indexen voor <code>PRIMARY KEY</code> en <code>UNIQUE</code>. <strong>Niet</strong> automatisch: de verwijzende kolom van een foreign key — de valkuil uit deel 6, en de reden dat het casusscript ze expliciet aanmaakt.</p>
+<p><strong><code>CREATE INDEX</code> neemt een lock</strong> die schrijvers blokkeert (deel 7). Op productie gebruik je daarom:</p>
+<pre><code class="language-sql">CREATE INDEX CONCURRENTLY deelnemer_achternaam_idx ON deelnemer (achternaam);
+</code></pre>
+<p>Dat blokkeert geen schrijvers, maar duurt langer, kan niet in een transactie (uitzondering op deel 6, paragraaf 21), en kan mislukken — dan blijft er een ongeldige index achter die je moet opruimen. Controleer na afloop met <code>\d</code>.</p>
+<hr>
+<h2>10. Samengestelde indexen: de kolomvolgorde</h2>
+<pre><code class="language-sql">CREATE INDEX premienota_wg_periode_idx
+    ON premienota (werkgever_id, periode_jaar, periode_maand);
+</code></pre>
+<p>Een samengestelde index is bruikbaar voor een <strong>voorvoegsel</strong> van zijn kolommen:</p>
+<table>
+<thead>
+<tr>
+<th>Query filtert op</th>
+<th>Index bruikbaar?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>werkgever_id</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>werkgever_id</code> + <code>periode_jaar</code></td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>alle drie</td>
+<td>Ja, volledig</td>
+</tr>
+<tr>
+<td>alleen <code>periode_jaar</code></td>
+<td><strong>Nee</strong> (of hoogstens als volledige indexscan)</td>
+</tr>
+</tbody>
+</table>
+<p>Vandaar de vuistregel: <strong>zet de kolom waarop je altijd filtert vooraan, en de gelijkheidsvoorwaarden vóór de bereikvoorwaarden.</strong></p>
+<pre><code class="language-sql">WHERE werkgever_id = 42 AND periode_jaar &gt;= 2024
+</code></pre>
+<p>Index op <code>(werkgever_id, periode_jaar)</code> — gelijkheid eerst. Andersom werkt ook maar is minder efficiënt, omdat de index na een bereikvoorwaarde niet meer selectief verder kan zoeken.</p>
+<p><strong>Eén samengestelde index is vaak beter dan drie losse.</strong> Drie losse indexen kunnen door de bitmapmethode gecombineerd worden, maar dat is duurder dan één index die het in één keer afhandelt — en het kost drie keer zoveel onderhoud bij elke schrijfbewerking.</p>
+<hr>
+<h2>11. Partiële indexen</h2>
+<p>Een index over een deel van de tabel:</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_open_idx
+    ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>In de casus is circa 12 procent van de mutaties onverwerkt. Deze index is dus ongeveer een achtste van de omvang van een volledige index, wordt alleen bijgewerkt als een rij aan de voorwaarde voldoet, en is precies wat de verwerkingsquery uit deel 7 nodig heeft.</p>
+<p><strong>Wanneer partiële indexen sterk zijn:</strong> als je query’s structureel maar een klein deel van de tabel raken — openstaande zaken, actieve rijen, het lopende jaar. De voorwaarde in de index moet dan wel overeenkomen met wat er in de <code>WHERE</code> van je query staat, anders kan de planner hem niet gebruiken.</p>
+<p>Uit deel 6 kennen we ook de gedeeltelijk unieke index — dezelfde techniek, ander doel:</p>
+<pre><code class="language-sql">CREATE UNIQUE INDEX deelnemer_actief_bsn_uniek
+    ON deelnemer (bsn) WHERE einddatum_deelname IS NULL;
+</code></pre>
+<hr>
+<h2>12. Expressie-indexen</h2>
+<p>Een index op een berekening in plaats van op een kolom:</p>
+<pre><code class="language-sql">CREATE INDEX deelnemer_achternaam_lower_idx ON deelnemer (lower(achternaam));
+</code></pre>
+<p>Nu kan deze query de index gebruiken:</p>
+<pre><code class="language-sql">SELECT * FROM deelnemer WHERE lower(achternaam) = 'jansen';
+</code></pre>
+<p><strong>Dit lost de klassieke fout op:</strong> zodra je een functie op een kolom loslaat in de <code>WHERE</code>, kan een gewone index niet meer gebruikt worden.</p>
+<pre><code class="language-sql">-- Geen index mogelijk op geboortedatum
+WHERE extract(year FROM geboortedatum) = 1960
+
+-- Wel index mogelijk
+WHERE geboortedatum &gt;= DATE '1960-01-01' AND geboortedatum &lt; DATE '1961-01-01'
+</code></pre>
+<p>Dat was precies de opmerking bij de uitwerking van opdracht 3.3c. Nu weet je waarom.</p>
+<p><strong>Vuistregel: herschrijf de query als dat kan, en maak pas een expressie-index als het niet kan.</strong> De herschrijving is gratis; de index kost onderhoud.</p>
+<hr>
+<h2>13. Covering indexen met INCLUDE</h2>
+<pre><code class="language-sql">CREATE INDEX dienstverband_deelnemer_incl_idx
+    ON dienstverband (deelnemer_id) INCLUDE (jaarsalaris);
+</code></pre>
+<p>De kolommen achter <code>INCLUDE</code> staan wel in de index maar zijn niet doorzoekbaar. Het nut: een query die alleen <code>deelnemer_id</code> en <code>jaarsalaris</code> nodig heeft, kan volledig uit de index worden beantwoord — een <code>Index Only Scan</code>, zonder de tabel aan te raken.</p>
+<p>Kosten: de index wordt groter. Doe dit alleen voor query’s die er aantoonbaar veel baat bij hebben.</p>
+<hr>
+<h2>14. De andere indextypen</h2>
+<p>B-tree dekt vrijwel alles. De andere typen bestaan voor gevallen waar B-tree niet werkt:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Voor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GIN</strong></td>
+<td>Zoeken <em>binnen</em> een waarde: <code>jsonb</code>, arrays, tekstzoeken</td>
+</tr>
+<tr>
+<td><strong>GiST</strong></td>
+<td>Geometrie, bereiken, en de exclusion constraint uit deel 6</td>
+</tr>
+<tr>
+<td><strong>BRIN</strong></td>
+<td>Zeer grote tabellen waarvan de fysieke volgorde overeenkomt met de waarde (tijdreeksen)</td>
+</tr>
+<tr>
+<td><strong>Hash</strong></td>
+<td>Alleen <code>=</code>; zelden nuttig, want B-tree kan dat ook</td>
+</tr>
+</tbody>
+</table>
+<p>Je hebt GiST al gebruikt zonder het te weten: <code>EXCLUDE USING gist</code> in deel 6 bouwt een GiST-index. Volledige behandeling in niveau 2, deel 14.</p>
+<hr>
+<h2>15. Wat een index kost</h2>
+<p>Indexen zijn niet gratis, en dat is de reden dat “voor de zekerheid een index erbij” een slecht idee is.</p>
+<ol>
+<li><strong>Schijfruimte.</strong> Een index op een tekstkolom kan tientallen procenten van de tabelomvang zijn.</li>
+<li><strong>Schrijfsnelheid.</strong> Elke <code>INSERT</code>, <code>UPDATE</code> en <code>DELETE</code> moet elke betrokken index bijwerken. Tien indexen betekent tien keer extra werk per rij.</li>
+<li><strong>Onderhoud.</strong> Indexen krijgen ook bloat (deel 7) en moeten meegenomen worden in vacuum.</li>
+<li><strong>Plannerwerk.</strong> Meer indexen betekent meer mogelijkheden om te overwegen. Marginaal, maar niet nul.</li>
+</ol>
+<p><strong>De afweging:</strong> een index die één query per dag versnelt en duizend schrijfbewerkingen per uur vertraagt, is een verlies. Meet beide kanten.</p>
+<hr>
+<h2>16. Wanneer een index niet gebruikt wordt</h2>
+<p>Een veelgestelde vraag met zeven mogelijke antwoorden. Loop ze in deze volgorde af:</p>
+<ol>
+<li><strong>De tabel is te klein.</strong> Sequentieel is gewoon goedkoper. Geen probleem.</li>
+<li><strong>De query raakt te veel rijen.</strong> Boven ruwweg 5-10 procent kiest de planner terecht sequentieel.</li>
+<li><strong>Er staat een functie om de kolom.</strong> <code>WHERE lower(naam) = …</code> op een index op <code>naam</code>. Zie paragraaf 12.</li>
+<li><strong>Typemismatch.</strong> Een <code>text</code>-kolom vergelijken met een getal, of <code>varchar</code> met <code>text</code> in een join met verschillende collaties, kan de index onbruikbaar maken. Let op impliciete casts in het plan.</li>
+<li><strong>Verouderde statistieken.</strong> De planner schat verkeerd. Draai <code>ANALYZE</code> en kijk opnieuw.</li>
+<li><strong>De kolomvolgorde in een samengestelde index.</strong> Je filtert op de tweede kolom (paragraaf 10).</li>
+<li><strong><code>LIKE '%iets'</code></strong> — geen voorvoegsel om op te zoeken. Hier heb je een GIN-index met trigrammen voor nodig (niveau 2).</li>
+</ol>
+<p>Voor het onderzoek kun je de planner tijdelijk sturen:</p>
+<pre><code class="language-sql">SET enable_seqscan = off;
+EXPLAIN ANALYZE SELECT …;
+RESET enable_seqscan;
+</code></pre>
+<p><strong>Dit is een diagnosemiddel, geen oplossing.</strong> Het dwingt de planner de indexvariant te overwegen, zodat je de kosten kunt vergelijken. Is de indexvariant werkelijk sneller, dan is er iets mis met de statistieken of het kostenmodel — en dát los je op. Zet dit nooit in productiecode.</p>
+<hr>
+<h2>17. Ongebruikte indexen opsporen</h2>
+<pre><code class="language-sql">SELECT schemaname, relname AS tabel, indexrelname AS index,
+       idx_scan AS keer_gebruikt,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS grootte
+FROM pg_stat_user_indexes
+ORDER BY idx_scan, pg_relation_size(indexrelid) DESC;
+</code></pre>
+<p><code>idx_scan = 0</code> betekent: deze index is sinds het laatste opnieuw instellen van de statistieken nooit gebruikt. Grote indexen met nul gebruik zijn pure kosten.</p>
+<p><strong>Drie voorbehouden voordat je gaat verwijderen:</strong></p>
+<ul>
+<li>de teller loopt sinds de laatste herstart of statistiekreset — kijk over een voldoende lange periode;</li>
+<li>een index voor de jaarafsluiting wordt elf maanden per jaar niet gebruikt en is toch nodig;</li>
+<li>een index die een <code>UNIQUE</code>-constraint afdwingt, is niet zomaar overbodig, ook al wordt hij nooit voor zoeken gebruikt.</li>
+</ul>
+<hr>
+<h2>18. Meten in plaats van geloven</h2>
+<p>De houding die dit deel wil overbrengen, in één werkwijze:</p>
+<ol>
+<li><strong>Stel vast wat traag is.</strong> Eén query, of alles? Sinds wanneer?</li>
+<li><strong>Draai <code>EXPLAIN (ANALYZE, BUFFERS)</code></strong> en noteer de uitvoeringstijd.</li>
+<li><strong>Zoek de knoop met de meeste tijd</strong> — meestal die met veel <code>Rows Removed by Filter</code> of een hoge <code>loops</code>.</li>
+<li><strong>Controleer schatting tegen werkelijkheid.</strong> Wijken ze sterk af, draai dan eerst <code>ANALYZE</code>.</li>
+<li><strong>Verander één ding.</strong></li>
+<li><strong>Meet opnieuw</strong> en vergelijk met de genoteerde tijd.</li>
+</ol>
+<p>Stap 5 is waar het meestal misgaat: mensen voegen drie indexen tegelijk toe, zien verbetering, en weten niet welke het deed. Daarna blijven alle drie staan.</p>
+<p><strong>Prestatiefolklore om te wantrouwen</strong> (allemaal onjuist of achterhaald in PostgreSQL):</p>
+<ul>
+<li>“<code>count(1)</code> is sneller dan <code>count(*)</code>” — identiek.</li>
+<li>“<code>IN</code> is trager dan <code>OR</code>” — worden naar hetzelfde herschreven.</li>
+<li>“Meer indexen is beter” — zie paragraaf 15.</li>
+<li>“CTE’s zijn altijd traag” — niet meer sinds versie 12 (deel 4).</li>
+<li>“<code>SELECT *</code> maakt niets uit” — het maakt een <code>Index Only Scan</code> onmogelijk.</li>
+</ul>
+<hr>
+<h2>19. Views</h2>
+<p>Een view is een opgeslagen query met een naam:</p>
+<pre><code class="language-sql">CREATE VIEW actieve_deelnemer AS
+SELECT deelnemer_id, voorletters, tussenvoegsel, achternaam, geboortedatum
+FROM deelnemer
+WHERE einddatum_deelname IS NULL;
+
+SELECT count(*) FROM actieve_deelnemer;
+</code></pre>
+<p>De view slaat <strong>geen gegevens</strong> op. Bij elke bevraging wordt de onderliggende query uitgevoerd — dat is de rewriter-fase uit deel 2.</p>
+<p>Waarvoor views nuttig zijn:</p>
+<ul>
+<li><strong>Een complexe query hergebruiken</strong> in plaats van hem op vijf plekken te kopiëren.</li>
+<li><strong>Begrippen vastleggen.</strong> Wat “actieve deelnemer” betekent, staat dan op één plek — en dat is precies wat er bij Meridiaan ontbrak toen drie afdelingen drie aantallen rapporteerden.</li>
+<li><strong>Toegang beperken.</strong> Rechten geven op een view in plaats van op de tabel, zodat gevoelige kolommen buiten beeld blijven. Dat werken we uit in deel 9.</li>
+</ul>
+<p>Een view is bijwerkbaar als hij eenvoudig genoeg is (één tabel, geen aggregatie). Bij ingewikkelder views kan het met een <code>INSTEAD OF</code>-trigger, wat in niveau 2 aan bod komt.</p>
+<p><strong>Waarschuwing:</strong> views op views op views. Elke laag is leesbaar op zichzelf, en het geheel is na drie lagen ondoorgrondelijk — vooral omdat het queryplan dan alle lagen tegelijk toont. Twee lagen is meestal het maximum dat je later nog kunt onderhouden.</p>
+<hr>
+<h2>20. Materialized views</h2>
+<pre><code class="language-sql">CREATE MATERIALIZED VIEW betaalprestatie_per_sector AS
+SELECT w.sector,
+       count(*)                                          AS aantal_notas,
+       count(*) FILTER (WHERE p.betaaldatum IS NULL)      AS onbetaald,
+       round(100.0 * count(*) FILTER (WHERE p.betaaldatum IS NOT NULL
+                                        AND p.betaaldatum &lt;= p.vervaldatum)
+             / count(*), 1)                              AS pct_op_tijd
+FROM premienota p
+JOIN werkgever w USING (werkgever_id)
+GROUP BY w.sector;
+
+CREATE UNIQUE INDEX ON betaalprestatie_per_sector (sector);
+</code></pre>
+<p>Een materialized view <strong>slaat het resultaat wél op</strong>. Bevragen is dus snel, maar de gegevens zijn zo oud als de laatste verversing:</p>
+<pre><code class="language-sql">REFRESH MATERIALIZED VIEW betaalprestatie_per_sector;                 -- lockt lezers
+REFRESH MATERIALIZED VIEW CONCURRENTLY betaalprestatie_per_sector;    -- lockt niet
+</code></pre>
+<p><code>CONCURRENTLY</code> vereist een unieke index op de view — vandaar de regel hierboven.</p>
+<p>Dit is de nette vorm van denormalisatie uit deel 5, opdracht 5.5e: expliciet afgeleid, met een ingebouwd verversmechanisme. Wat je er zelf bij moet regelen: <strong>hoe oud de gegevens mogen zijn, en wat er gebeurt als de verversing faalt.</strong> Een materialized view die stilletjes drie weken niet is ververst, ziet er precies hetzelfde uit als een actuele.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>View</th>
+<th>Materialized view</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Slaat op</td>
+<td>Nee</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Altijd actueel</td>
+<td>Ja</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Snel bij complexe berekening</td>
+<td>Nee</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Onderhoud</td>
+<td>Geen</td>
+<td>Verversing bewaken</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>21. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Oplossing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Index toevoegen zonder te meten</td>
+<td>Kosten zonder baten</td>
+<td><code>EXPLAIN ANALYZE</code> vóór en ná</td>
+</tr>
+<tr>
+<td><code>Seq Scan</code> als fout zien</td>
+<td>Onnodige indexen</td>
+<td>Kijk naar tabelgrootte en selectiviteit</td>
+</tr>
+<tr>
+<td>Functie om de kolom in <code>WHERE</code></td>
+<td>Index onbruikbaar</td>
+<td>Query herschrijven of expressie-index</td>
+</tr>
+<tr>
+<td>Drie losse indexen waar één samengestelde hoort</td>
+<td>Duurder, trager schrijven</td>
+<td>Eén index, juiste kolomvolgorde</td>
+</tr>
+<tr>
+<td><code>enable_seqscan = off</code> in productie</td>
+<td>Slechte plannen elders</td>
+<td>Alleen als diagnosemiddel</td>
+</tr>
+<tr>
+<td>Meerdere wijzigingen tegelijk</td>
+<td>Je weet niet wat werkte</td>
+<td>Eén ding per keer</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code> op een <code>UPDATE</code> in productie</td>
+<td>De wijziging vindt echt plaats</td>
+<td><code>BEGIN</code> … <code>ROLLBACK</code></td>
+</tr>
+<tr>
+<td>Materialized view zonder bewaakte verversing</td>
+<td>Verouderde cijfers die er actueel uitzien</td>
+<td>Verversing monitoren</td>
+</tr>
+<tr>
+<td>Views op views op views</td>
+<td>Onleesbaar plan, onvindbare fouten</td>
+<td>Maximaal twee lagen</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>22. Aansluiting op de certificering</h2>
+<p>Voor de Associate-certificering paraat:</p>
+<ul>
+<li>de scantypen en wanneer elk gekozen wordt;</li>
+<li>het verschil tussen <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code>;</li>
+<li>de betekenis van <code>cost</code>, <code>rows</code>, <code>actual time</code>, <code>loops</code> en <code>Rows Removed by Filter</code>;</li>
+<li>welke indexen automatisch ontstaan en welke niet (foreign keys!);</li>
+<li>samengestelde indexen en de voorvoegselregel;</li>
+<li>partiële en expressie-indexen;</li>
+<li><code>CREATE INDEX CONCURRENTLY</code> en de beperkingen ervan;</li>
+<li>het verschil tussen een view en een materialized view.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>23. Kernbegrippen</h2>
+<p><strong>B-tree</strong> — de standaardindexstructuur; gesorteerd en gebalanceerd.
+<strong>Selectiviteit</strong> — welk deel van de tabel aan een voorwaarde voldoet.
+<strong>Seq Scan / Index Scan / Index Only Scan / Bitmap Heap Scan</strong> — de vier scantypen.
+<strong>Nested Loop / Hash Join / Merge Join</strong> — de drie joinalgoritmen.
+<strong>Samengestelde index</strong> — index over meerdere kolommen; bruikbaar voor een voorvoegsel.
+<strong>Partiële index</strong> — index over een deelverzameling van de rijen.
+<strong>Expressie-index</strong> — index op een berekening.
+<strong>Covering index</strong> — index die alle gevraagde kolommen bevat (<code>INCLUDE</code>).
+<strong>View</strong> — opgeslagen query, geen opgeslagen gegevens.
+<strong>Materialized view</strong> — opgeslagen resultaat, met verversing.</p>
+<hr>
+<p><em>Volgende deel: rollen, rechten en security. Dan is het laatste van de zes problemen uit deel 1 opgelost — de stagiair die bij de burgerservicenummers kon.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">432 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-07-transacties-acid-en-mvcc/reader.html">&larr; Deel 7 — Transacties, ACID en MVCC</a><a class="dbm-prevnext next" href="../deel-09-rollen-rechten-en-security/reader.html">Deel 9 — Rollen, rechten en security &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

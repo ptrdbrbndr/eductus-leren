@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Event sourcing: fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 27 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 27 — Event sourcing: fundamenten</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 5 van 8 (deel 27 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Een aanname die nooit hardop werd gezegd</li>
+<li>State-based versus event-based</li>
+<li>Wat een event is</li>
+<li>De event store: alleen toevoegen, nooit wijzigen</li>
+<li>Aggregates en streams</li>
+<li>Projecties: van events naar een bruikbare stand</li>
+<li>Wat je “gratis” krijgt</li>
+<li>Wat het kost: eventual consistency</li>
+<li>CQRS: het natuurlijke companion-patroon</li>
+<li>Terugblik: waar deze cursus al naar event sourcing wees</li>
+<li>Het raakvlak met het Locked Platform</li>
+<li>Wanneer event sourcing wél, wanneer niet</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>het onderscheid tussen state-based en event-based opslag uitleggen;</li>
+<li>de kernbegrippen event, event store, aggregate, stream en projectie definiëren en op elkaar betrekken;</li>
+<li>benoemen wat event sourcing “gratis” oplevert ten opzichte van traditionele opslag, en wat het kost;</li>
+<li>CQRS als companion-patroon plaatsen naast event sourcing;</li>
+<li>terugvinden waar deze cursus, zonder het te benoemen, al naar event-sourcing-achtige patronen wees;</li>
+<li>beoordelen of event sourcing voor een gegeven domein de juiste keuze is.</li>
+</ul>
+<hr>
+<h2>2. Een aanname die nooit hardop werd gezegd</h2>
+<p>Zesentwintig delen lang, van deel 1 tot deel 26, is er één aanname geweest die nooit is uitgesproken omdat hij zo vanzelfsprekend leek: <strong>een database bewaart de huidige stand van zaken.</strong></p>
+<pre><code class="language-sql">UPDATE deelnemer SET achternaam = 'Jansen-Vermeer' WHERE deelnemer_id = 42;
+</code></pre>
+<p>Na deze opdracht is de oude achternaam <strong>weg</strong>. Niet meteen fysiek (deel 7, 12: MVCC bewaart de oude rijversie totdat vacuum hem opruimt), maar logisch: er is geen manier meer om via een gewone <code>SELECT</code> te achterhalen wat de achternaam vóór deze wijziging was, tenzij je expliciet een aparte historietabel had bijgehouden.</p>
+<p><strong>Dit deel stelt die aanname zelf ter discussie.</strong> Niet omdat hij fout is — voor het overgrote deel van wat je in deze cursus hebt gebouwd, is “de huidige stand bewaren en de rest overschrijven” precies de juiste keuze. Maar er is een alternatief, en voor bepaalde domeinen — waaronder delen van een pensioenadministratie — is dat alternatief soms de sterkere keuze.</p>
+<hr>
+<h2>3. State-based versus event-based</h2>
+<p><strong>State-based</strong> (wat je tot nu toe deed): de database bewaart de huidige toestand. Een wijziging overschrijft de vorige waarde.</p>
+<pre><code class="language-sql">-- state-based: de rij IS de waarheid, op dit moment
+UPDATE aanspraak SET opgebouwd_bedrag = 45000 WHERE aanspraak_id = 7;
+</code></pre>
+<p><strong>Event-based (event sourcing):</strong> de database bewaart <strong>elke gebeurtenis die ooit heeft plaatsgevonden</strong>, in volgorde, onveranderlijk. De huidige toestand is niet iets dat wordt bewaard — het is iets dat wordt <strong>berekend</strong> door alle events voor een gegeven aggregaat op volgorde toe te passen.</p>
+<pre><code class="language-sql">-- event-based: de gebeurtenissen zijn de waarheid; het bedrag is een afgeleide
+INSERT INTO events (aggregate_id, event_type, payload, occurred_at) VALUES
+    (7, 'AanspraakOpgebouwd', '{&quot;bedrag&quot;: 40000}', '2024-01-15'),
+    (7, 'AanspraakOpgebouwd', '{&quot;bedrag&quot;: 5000}',  '2024-06-01');
+-- de huidige stand (45000) volgt uit het optellen van beide events
+</code></pre>
+<p><strong>Het fundamentele verschil, in één zin:</strong> state-based bewaart <em>wat waar is</em>; event-based bewaart <em>wat er is gebeurd</em>, en leidt daaruit af wat waar is.</p>
+<hr>
+<h2>4. Wat een event is</h2>
+<p>Een event is een <strong>onveranderlijk feit</strong> over iets dat is gebeurd — geschreven in de verleden tijd, nooit in de tegenwoordige of gebiedende wijs.</p>
+<table>
+<thead>
+<tr>
+<th>Geen event (een commando/wens)</th>
+<th>Wel een event (een feit)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>“Wijzig het adres”</td>
+<td><code>AdresGewijzigd</code></td>
+</tr>
+<tr>
+<td>“Verwerk deze mutatie”</td>
+<td><code>MutatieVerwerkt</code></td>
+</tr>
+<tr>
+<td>“Ken pensioen toe”</td>
+<td><code>PensioenToegekend</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Een event heeft altijd:</strong></p>
+<ul>
+<li>een <strong>aggregaat-identiteit</strong> (op welk ding heeft dit betrekking — een deelnemer, een dienstverband);</li>
+<li>een <strong>type</strong> (<code>AdresGewijzigd</code>, <code>PremieOntvangen</code>, …);</li>
+<li>een <strong>payload</strong> (de gegevens die bij dit specifieke feit horen);</li>
+<li>een <strong>tijdstip</strong> waarop het is vastgelegd;</li>
+<li>een <strong>volgnummer</strong> binnen zijn aggregaat (paragraaf 6), zodat de volgorde van toepassing eenduidig is.</li>
+</ul>
+<p><strong>Een event wordt nooit gewijzigd of verwijderd.</strong> Een correctie is zelf weer een nieuw event (<code>AdresGecorrigeerd</code>), niet een aanpassing van het oorspronkelijke <code>AdresGewijzigd</code>-event. Dit is een streng, bewust ontwerpprincipe — en het is exact de reden dat een event store van nature <strong>append-only</strong> is, een eigenschap die je in deel 12 en 15 al hebt leren waarderen om heel andere redenen.</p>
+<hr>
+<h2>5. De event store: alleen toevoegen, nooit wijzigen</h2>
+<pre><code class="language-sql">CREATE TABLE events (
+    event_id      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    aggregate_id  uuid NOT NULL,
+    aggregate_type text NOT NULL,
+    event_type    text NOT NULL,
+    payload       jsonb NOT NULL,
+    volgnummer    integer NOT NULL,
+    occurred_at   timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (aggregate_id, volgnummer)
+);
+</code></pre>
+<p><strong>Herken je dit patroon?</strong> Uit deel 12, paragraaf 3: het onderzoek naar <code>mutatie</code> toonde al dat een tabel die alleen <code>INSERT</code> doet en nooit <code>UPDATE</code>, structureel minder bloat opbouwt. Uit deel 15, paragraaf 18: de oplossing voor het tellerrij-hotspot-probleem was “invoegen in plaats van bijwerken”. Uit deel 16, paragraaf 17: de aanbeveling om oude gebeurtenissen te partitioneren en met <code>DROP TABLE</code> te verwijderen in plaats van een <code>DELETE</code>.</p>
+<p><strong>Dit deel legt de naam op wat je in die eerdere delen al herkende als patroon: een append-only gebeurtenistabel is de kern van event sourcing.</strong> De cursus heeft je stap voor stap, zonder het te benoemen, klaargestoomd voor dit idee.</p>
+<p>De <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint is geen toeval — het is het mechanisme voor <strong>optimistische concurrency control</strong> (een idee dat je al kende uit deel 7, paragraaf over optimistisch vergrendelen): een schrijvende partij leest het huidige volgnummer, probeert het volgende event toe te voegen met <code>volgnummer + 1</code>, en als een andere partij intussen al een event met dat volgnummer heeft toegevoegd, faalt de constraint — een botsing wordt netjes afgevangen in plaats van stilzwijgend overschreven.</p>
+<hr>
+<h2>6. Aggregates en streams</h2>
+<p>Een <strong>aggregaat</strong> is de eenheid waarop events betrekking hebben en waarvoor consistentie gegarandeerd moet zijn — bij Meridiaan bijvoorbeeld één deelnemer, of één dienstverband.</p>
+<p>Een <strong>stream</strong> is de volledige, geordende reeks events voor één aggregaat:</p>
+<pre><code class="language-sql">SELECT event_type, payload, occurred_at
+FROM events
+WHERE aggregate_id = '...' AND aggregate_type = 'dienstverband'
+ORDER BY volgnummer;
+</code></pre>
+<pre><code>1. DienstverbandGestart      {werkgever_id: 12, datum: '2020-03-01'}
+2. SalarisGewijzigd          {nieuw_salaris: 42000}
+3. DeeltijdPercentageGewijzigd {percentage: 80}
+4. DienstverbandBeëindigd    {datum: '2024-06-30', reden: 'ontslag'}
+</code></pre>
+<p><strong>Dit is de directe implementatie van het co-locatie-principe uit deel 24-25</strong>, nu toegepast op events in plaats van sharding: alle events van één aggregaat horen logisch (en, bij een gesharde opzet, idealiter ook fysiek) bij elkaar, want vrijwel elke bewerking — een nieuw event toevoegen, de huidige stand berekenen — werkt binnen precies één stream.</p>
+<hr>
+<h2>7. Projecties: van events naar een bruikbare stand</h2>
+<p>Niemand wil voor elke vraag “wat is het huidige salaris van deze deelnemer” door een hele stream van events lopen en ze handmatig optellen. <strong>Een projectie</strong> is een afgeleide, leesbare weergave, opgebouwd door de events toe te passen.</p>
+<pre><code class="language-sql">-- Een projectie: de huidige stand, herberekend uit de stream
+CREATE MATERIALIZED VIEW dienstverband_huidige_stand AS
+SELECT
+    aggregate_id AS dienstverband_id,
+    (SELECT payload-&gt;&gt;'werkgever_id' FROM events e2
+     WHERE e2.aggregate_id = e.aggregate_id AND event_type = 'DienstverbandGestart') AS werkgever_id,
+    (SELECT payload-&gt;&gt;'nieuw_salaris' FROM events e2
+     WHERE e2.aggregate_id = e.aggregate_id AND event_type = 'SalarisGewijzigd'
+     ORDER BY volgnummer DESC LIMIT 1) AS huidig_salaris
+FROM events e
+GROUP BY aggregate_id;
+</code></pre>
+<p><strong>Dit is exact het materialized-view-patroon uit deel 8, en het federatieve equivalent uit deel 26 — nu toegepast op events.</strong> De projectie is een afgeleide, herbouwbare weergave; de events zijn de bron van waarheid. Verlies of corrumpeer de projectie, en je kunt hem <strong>volledig opnieuw opbouwen</strong> door de events opnieuw af te spelen (<strong>replay</strong>) — een eigenschap die een traditionele, state-based tabel niet heeft: als je daar de huidige waarde kwijtraakt zonder back-up, ben je hem écht kwijt.</p>
+<p><strong>Er kunnen meerdere projecties naast elkaar bestaan</strong> uit dezelfde events — een projectie voor het portaal (huidige stand), een andere voor een historisch overzicht (stand op elk gewenst moment), een derde voor een rapportage (aggregaties over alle deelnemers). Dit is een fundamenteel andere flexibiliteit dan een traditionele tabel, waar je vooraf moet beslissen welke vraag je makkelijk kunt beantwoorden.</p>
+<hr>
+<h2>8. Wat je “gratis” krijgt</h2>
+<p><strong>Volledige, inherente audit trail.</strong> In deel 20 was <code>pgaudit</code> het antwoord op Sannes vraag uit deel 9: wie heeft wat ingezien of gewijzigd. Bij event sourcing is de vraag “wat is er ooit gewijzigd, en door wie” niet iets dat je met een aparte extensie moet <strong>toevoegen</strong> — het is inherent aan hoe de gegevens zijn opgeslagen. De events <strong>zijn</strong> het auditlog.</p>
+<p><strong>Tijdreizen.</strong> “Wat was het opgebouwde pensioen van deze deelnemer op 1 januari 2023?” is bij state-based opslag alleen te beantwoorden als je toevallig een back-up (deel 17) van precies dat moment hebt, of een aparte historietabel bijhield. Bij event sourcing: speel alle events tot die datum af, en je hebt het antwoord — een berekening, geen zoekactie in een archief.</p>
+<pre><code class="language-sql">-- Tijdreizen: de stand op een specifiek moment, berekend uit events tot dan
+SELECT ... FROM events
+WHERE aggregate_id = '...' AND occurred_at &lt;= '2023-01-01'
+ORDER BY volgnummer;
+</code></pre>
+<p><strong>Nieuwe inzichten achteraf, zonder gegevensverlies.</strong> Een projectie die je vandaag nog niet had bedacht, kan morgen alsnog gebouwd worden — de ruwe events zijn er nog, ongeacht welke vragen je in het verleden wel of niet stelde. Bij state-based opslag is informatie die je destijds overschreef, onherroepelijk weg.</p>
+<p><strong>Natuurlijke correctheid bij correcties.</strong> Een foutieve mutatie wordt niet “rechtgezet” door de oorspronkelijke rij te overschrijven (waardoor het spoor van de fout zelf verdwijnt) maar door een corrigerend event toe te voegen — de fout én de correctie blijven allebei zichtbaar in de geschiedenis, wat voor een pensioenadministratie met wettelijke bewaar- en verantwoordingsplicht een reëel voordeel is.</p>
+<hr>
+<h2>9. Wat het kost: eventual consistency</h2>
+<p>De eerlijke tegenkant, zoals bij elk krachtig patroon in deze cursus.</p>
+<p><strong>Projecties lopen per definitie achter op de events.</strong> Tenzij je een projectie synchroon met elk event bijwerkt (mogelijk, maar dan verlies je een deel van de flexibiliteit en snelheid van het patroon), is er een venster waarin een net toegevoegd event nog niet in de projectie is verwerkt — <strong>eventual consistency</strong>: het systeem convergeert naar de juiste stand, maar niet noodzakelijk onmiddellijk.</p>
+<p><strong>Dit is dezelfde afweging als replicatievertraging uit deel 18</strong>, nu binnen één systeem in plaats van tussen primary en replica: hoe snel moet een lezer de laatste schrijfactie zien, en welke vertraging is acceptabel?</p>
+<p><strong>Complexiteit van het datamodel.</strong> Elke vraag die je wilt beantwoorden, vereist nadenken over welke projectie die vraag kan beantwoorden — in tegenstelling tot een traditionele tabel waar je in beginsel elke vraag met een <code>SELECT</code> en misschien een index kunt stellen. Dit is een reëel ontwerp- en onderhoudsoverhead.</p>
+<p><strong>Event-schema-evolutie.</strong> Wat gebeurt er als het formaat van een event-type moet veranderen (een nieuw verplicht veld, een hernoemde eigenschap)? Oude events in de store hebben het oude formaat en kunnen niet met terugwerkende kracht worden aangepast (events zijn onveranderlijk, paragraaf 4) — projecties en toepassingslogica moeten met meerdere versies van hetzelfde event-type kunnen omgaan. Dit is een vergelijkbaar vraagstuk als de kolomtype-migratie uit deel 22, maar dan voor de betekenis van een event in plaats van een kolom.</p>
+<p><strong>Geen gratis globale queries.</strong> “Alle deelnemers met een pensioen boven X” is bij state-based opslag een simpele <code>WHERE</code>-clausule op een projectie; zonder een goede projectie is dit bij pure events een dure operatie die door talloze streams moet lopen.</p>
+<hr>
+<h2>10. CQRS: het natuurlijke companion-patroon</h2>
+<p><strong>Command Query Responsibility Segregation (CQRS)</strong> is het architectuurpatroon dat vaak samen met event sourcing wordt toegepast, al zijn de twee technisch onafhankelijk van elkaar.</p>
+<p><strong>Het idee:</strong> scheid het pad voor <strong>schrijven</strong> (commando’s — “wijzig het salaris”, die tot events leiden) volledig van het pad voor <strong>lezen</strong> (query’s — die een projectie raadplegen). De twee kanten kunnen zelfs volledig verschillende technologie of infrastructuur gebruiken.</p>
+<pre><code>Commando's                              Query's
+    │                                       │
+    ▼                                       ▼
+Command handler                        Query handler
+    │                                       │
+    ▼                                       │
+Event store (schrijven, append-only)        │
+    │                                       │
+    └──── events voeden projecties ─────────┘
+                                             │
+                                    Projecties (lezen)
+</code></pre>
+<p><strong>Waarom dit natuurlijk samengaat met event sourcing:</strong> de schrijfkant (events toevoegen) en de leeskant (projecties raadplegen) hebben al fundamenteel verschillende eigenschappen — de een is append-only en transactioneel precies, de ander is afgeleid en mag eventual consistent zijn. CQRS maakt dat onderscheid expliciet in de architectuur in plaats van het te verbergen.</p>
+<p><strong>Dit hoeft niet extreem te zijn.</strong> CQRS kan zo eenvoudig zijn als “schrijf naar de event store, lees uit een materialized view” (paragraaf 7) — je hoeft er geen aparte technologie-stack voor te bouwen om het principe toe te passen.</p>
+<hr>
+<h2>11. Terugblik: waar deze cursus al naar event sourcing wees</h2>
+<p>Een overzicht, expliciet gemaakt, van signalen die door de hele cursus liepen zonder ooit “event sourcing” te heten:</p>
+<table>
+<thead>
+<tr>
+<th>Waar</th>
+<th>Wat er toen werd gezegd</th>
+<th>Hoe het hier terugkomt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deel 7</td>
+<td>Optimistisch vergrendelen met een versiekolom</td>
+<td>De <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint</td>
+</tr>
+<tr>
+<td>Deel 12</td>
+<td><code>mutatie</code> als insert-only tabel heeft minder bloat</td>
+<td>De event store is per ontwerp insert-only</td>
+</tr>
+<tr>
+<td>Deel 15</td>
+<td>Hotspot oplossen door invoegen i.p.v. bijwerken</td>
+<td>De kern van hoe events worden vastgelegd</td>
+</tr>
+<tr>
+<td>Deel 16</td>
+<td>Partitioneren en <code>DROP TABLE</code> in plaats van <code>DELETE</code></td>
+<td>Oude event-partities kunnen net zo verdwijnen</td>
+</tr>
+<tr>
+<td>Deel 8</td>
+<td>Materialized views voor dure aggregaties</td>
+<td>Projecties zijn materialized views over events</td>
+</tr>
+<tr>
+<td>Deel 20</td>
+<td><code>pgaudit</code> voor herleidbaarheid</td>
+<td>Event sourcing heeft herleidbaarheid ingebouwd</td>
+</tr>
+<tr>
+<td>Deel 18</td>
+<td>Replicatievertraging als afweging</td>
+<td>Eventual consistency van projecties</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dit is geen toeval.</strong> De ontwerpers van deze cursus (en van veel productiesystemen) komen bij event sourcing uit omdat de bouwstenen — append-only tabellen, optimistische concurrency, materialized views, partitionering — al bekend en vertrouwd zijn. Event sourcing is minder een compleet nieuw idee dan een <strong>naam voor een patroon dat je onderdelen ervan al kende.</strong></p>
+<hr>
+<h2>12. Het raakvlak met het Locked Platform</h2>
+<p>Wie in de bredere Ductus-praktijk werkt, kan dit patroon herkennen uit het <strong>Locked Platform</strong> — een eigen, data-centrisch en event-driven platform dat FSM (finite state machines), CQRS en event sourcing combineert als alternatief voor traditionele BPMN/CMMN-procesengines.</p>
+<p><strong>Het raakvlak, kort en zonder in productdetails te treden:</strong> waar dit deel event sourcing behandelt als architectuurpatroon binnen een PostgreSQL-database, past het Locked Platform hetzelfde soort denken toe op procesbesturing zelf — een proces (of een dienstverband, of een aanvraag) heeft een expliciete toestand die verandert door events, in plaats van impliciet verscholen te zitten in de combinatie van kolomwaarden in een traditionele tabel.</p>
+<p><strong>Voor deze cursus is dit een zijlijn, geen kernstof</strong> — de connectie is de moeite waard om te noemen omdat het laat zien dat het patroon van vandaag niet geïsoleerd staat, maar aansluit bij bredere ontwikkelingen in procesgeoriënteerde architectuur.</p>
+<hr>
+<h2>13. Wanneer event sourcing wél, wanneer niet</h2>
+<p>Dezelfde discipline als bij elk krachtig patroon in deze cursus.</p>
+<p><strong>Event sourcing past goed bij:</strong> domeinen met een sterke audit- en verantwoordingsplicht (een pensioenadministratie is een schoolvoorbeeld — elke wijziging in een aanspraak moet herleidbaar zijn, soms decennia later); domeinen waar “wat was de stand op moment X” een legitieme, terugkerende vraag is; domeinen waar de business zelf al in termen van gebeurtenissen denkt (een aanvraag, een claim, een dienstverband dat een levenscyclus van duidelijke stappen doorloopt).</p>
+<p><strong>Event sourcing past minder goed bij:</strong> eenvoudige CRUD-domeinen zonder audit- of tijdreis-behoefte (een tabel met sectorcodes heeft hier niets aan); teams zonder ervaring met de bijkomende complexiteit (projectiebeheer, eventual consistency, schema-evolutie); systemen waar elke lezing absoluut, synchroon actueel moet zijn zonder enige tolerantie voor vertraging.</p>
+<blockquote>
+<p><strong>De vraag die je stelt: is de geschiedenis van hoe iets is ontstaan zelf waardevol, of volstaat de huidige stand? Bij Meridiaans deelnemersadres: de huidige stand volstaat meestal. Bij Meridiaans pensioenaanspraken, waar elke wijziging jarenlang verantwoord moet kunnen worden: de geschiedenis is het punt.</strong></p>
+</blockquote>
+<p><strong>Voor de Pensioenfederatie, concreet:</strong> niet het hele systeem event-sourced maken — dat zou de eenvoudige delen (sectorcodes, contactgegevens) onnodig compliceren. Wel serieus overwegen voor de <strong>mutatie- en aanspraakverwerking specifiek</strong>, waar de cursus toch al insert-only werkte (deel 7, 12, 15) en waar de audit- en tijdreis-eisen het sterkst zijn.</p>
+<hr>
+<h2>14. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Events als “commando’s” formuleren (<code>WijzigAdres</code> in plaats van <code>AdresGewijzigd</code>)</td>
+<td>Verwarring tussen wens en feit</td>
+<td>Altijd verleden tijd, altijd een voltooid feit</td>
+</tr>
+<tr>
+<td>Events achteraf wijzigen bij een fout</td>
+<td>Geschiedenis wordt onbetrouwbaar</td>
+<td>Een corrigerend event toevoegen</td>
+</tr>
+<tr>
+<td>Elke vraag proberen te beantwoorden met de ruwe events, zonder projectie</td>
+<td>Trage, complexe query’s</td>
+<td>Een projectie ontwerpen per belangrijke leesvraag</td>
+</tr>
+<tr>
+<td>Event sourcing toepassen op het hele systeem</td>
+<td>Onnodige complexiteit voor eenvoudige domeinen</td>
+<td>Selectief, waar audit/tijdreis er echt toe doen</td>
+</tr>
+<tr>
+<td>Geen rekening houden met eventual consistency in de gebruikersinterface</td>
+<td>Gebruikers zien een net ingevoerde wijziging niet meteen, zonder uitleg</td>
+<td>Communiceren dat er kort vertraging kan zijn, of synchroon projecteren waar dat nodig is</td>
+</tr>
+<tr>
+<td>Event-schema’s wijzigen zonder versiebeheer</td>
+<td>Oude events kunnen niet meer correct worden geïnterpreteerd</td>
+<td>Expliciete versionering, projecties die met meerdere versies omgaan</td>
+</tr>
+<tr>
+<td>Denken dat event sourcing automatisch AVG-compliance oplost</td>
+<td>Persoonsgegevens in onveranderlijke events zijn juist lastiger te “vergeten”</td>
+<td>Expliciet ontwerp voor het recht op vergetelheid (deel 28)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>15. Kernbegrippen</h2>
+<p><strong>State-based opslag</strong> — de database bewaart de huidige toestand, overschrijft bij wijziging.
+<strong>Event-based opslag (event sourcing)</strong> — de database bewaart alle gebeurtenissen; de toestand wordt berekend.
+<strong>Event</strong> — een onveranderlijk feit over iets dat is gebeurd, in de verleden tijd.
+<strong>Event store</strong> — de append-only tabel/opslag voor events.
+<strong>Aggregaat</strong> — de eenheid waarop events betrekking hebben en waarvoor consistentie geldt.
+<strong>Stream</strong> — de geordende reeks events voor één aggregaat.
+<strong>Projectie</strong> — een afgeleide, leesbare weergave opgebouwd uit events.
+<strong>Replay</strong> — het opnieuw afspelen van events om een projectie (opnieuw) op te bouwen.
+<strong>Eventual consistency</strong> — de garantie dat een projectie uiteindelijk, maar niet per se onmiddellijk, de juiste stand toont.
+<strong>CQRS</strong> — het scheiden van schrijf- (commando) en leespaden (query) in de architectuur.</p>
+<hr>
+<p><em>Volgende deel: event sourcing in de praktijk. Vandaag de concepten, met de erkenning dat je de bouwstenen al kende. Volgende keer bouw je een werkende event store voor Meridiaans mutatieverwerking, inclusief projecties, snapshotting, en het lastige vraagstuk van het recht op vergetelheid in een onveranderlijke geschiedenis.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">301 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">&larr; Deel 26 — Foreign data wrappers en federatie</a><a class="dbm-prevnext next" href="../deel-28-event-sourcing-in-de-praktijk/reader.html">Deel 28 — Event sourcing in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

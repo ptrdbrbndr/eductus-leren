@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Zero-downtime migraties en capstone — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 22 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 22 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 22: Zero-downtime migraties en capstone</strong>
+Werkboek met opdrachten, volledige uitwerkingen, en de niveau-2 capstone</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\timing on
+CREATE SCHEMA IF NOT EXISTS oefening22;
+</code></pre>
+<p>Dit werkboek heeft twee delen: eerst de migratieopdrachten (21.1 t/m 21.6-stijl, hier genummerd 22.1-22.6), dan de capstone die het dagdeel en het niveau afsluit.</p>
+<p>Tijdsindicatie: <strong>migratieopdrachten circa 90 minuten, capstone circa 90 minuten.</strong></p>
+<hr>
+<hr>
+<h1>DEEL A — Migratiepatronen</h1>
+<h2>Opdracht 22.1 — Een kolom hernoemen (15 min, tweetallen)</h2>
+<p>a) Maak een testtabel met een kolom <code>oud_veld</code>.
+b) Voer het expand-contract-patroon uit paragraaf 4 uit: nieuwe kolom, trigger, backfill (klein genoeg om in één keer te doen op deze testtabel), en tot slot contract.
+c) Test tussentijds (na expand, vóór contract) dat een <code>INSERT</code> op de oude kolomnaam automatisch de nieuwe kolom vult.
+d) Wat zou je gedaan hebben als je in plaats daarvan een view-gebaseerde aanpak had gekozen? Noem één voordeel en één nadeel ten opzichte van de trigger.</p>
+<hr>
+<h2>Opdracht 22.2 — Kolomtype wijzigen zonder lange lock (25 min, drietallen)</h2>
+<p>a) Maak een tabel met 500.000 rijen en een kolom van het verkeerde type (bijvoorbeeld <code>integer</code> waar <code>bigint</code> gewenst is).
+b) Meet hoe lang een directe <code>ALTER COLUMN ... TYPE bigint</code> zou duren (doe dit op een kopie, niet je hoofdtabel, en observeer de locksoort met een tweede sessie die probeert te lezen).
+c) Voer nu het volledige expand-contract-patroon uit paragraaf 5 uit: nieuwe kolom, trigger, backfill in batches (gebruik het patroon uit paragraaf 9), index, omschakelmoment.
+d) Meet de duur van het omschakelmoment zelf (de korte transactie met drop/rename). Vergelijk met b).
+e) Hield een tweede sessie die tijdens de backfill las, normale reactietijden? Test het.</p>
+<hr>
+<h2>Opdracht 22.3 — Backfill in batches (15 min, tweetallen)</h2>
+<p>a) Implementeer het batch-backfill-patroon uit paragraaf 9 op een tabel van 300.000 rijen.
+b) Meet de totale duur en vergelijk met een enkele grote <code>UPDATE</code>.
+c) Verlaag de batchgrootte naar 500 en verhoog de <code>pg_sleep</code> naar 0.5s. Wat gebeurt er met de totale duur? Wat gebeurt er met de belasting die gelijktijdig productieverkeer zou ervaren?
+d) Bouw een eenvoudige manier in om de backfill te pauzeren (bijvoorbeeld een controle op een instellingstabel) en test dat.</p>
+<hr>
+<h2>Opdracht 22.4 — Dubbel schrijven en zijn valkuilen (15 min, drietallen)</h2>
+<p>a) Simuleer valkuil 1 uit paragraaf 7 (gedeeltelijke schrijffout): schrijf naar twee tabellen in twee <strong>losse</strong> transacties en laat de tweede bewust falen (bijvoorbeeld met een constraint-schending). Wat is de resulterende inconsistentie?
+b) Herhaal binnen <strong>één</strong> transactie. Wat verandert er bij een fout?
+c) Simuleer valkuil 2 (vergeten schrijfpad): voeg een rij rechtstreeks toe aan de oude tabel, buiten je “applicatielogica” om (simuleer een batchproces). Blijft de nieuwe tabel gesynchroniseerd?
+d) Zou een trigger-gebaseerde aanpak (in plaats van applicatielogica) valkuil c) hebben voorkomen? Verklaar waarom.</p>
+<hr>
+<h2>Opdracht 22.5 — Terugvalplannen (15 min, drietallen)</h2>
+<p>Voor elk van deze drie migraties: beschrijf het terugvalplan per fase (expand, migrate, contract).</p>
+<p>a) Een kolom hernoemen (opdracht 22.1).
+b) Een kolomtype wijzigen (opdracht 22.2).
+c) Een migratie via logische replicatie naar een gepartitioneerde structuur (deel 16, deel 18).</p>
+<p>d) Bij welke van de drie is het terugvalplan na “contract” het lastigst, en waarom?</p>
+<hr>
+<h2>Opdracht 22.6 — De migratiechecklist toepassen (10 min, individueel)</h2>
+<p>Neem de checklist uit paragraaf 12 van de reader en loop hem langs voor een migratie naar keuze uit een eerder deel (bijvoorbeeld de niveau-2-migratie van <code>mutatie</code> naar een gepartitioneerde structuur, deel 16). Welke van de tien vragen waren in dat eerdere deel al (impliciet) beantwoord, en welke had je toen over het hoofd gezien?</p>
+<hr>
+<hr>
+<h1>UITWERKINGEN — DEEL A</h1>
+<h2>Uitwerking 22.1</h2>
+<p>b) en c) Na de trigger: een <code>INSERT</code> met alleen <code>oud_veld</code> ingevuld, vult via de trigger automatisch <code>nieuw_veld</code>. Controleer met een <code>SELECT</code> direct na de invoeging.</p>
+<p>d) <strong>View-voordeel:</strong> geen trigger-overhead op elke schrijfactie, en minder code om te onderhouden. <strong>View-nadeel:</strong> een view die zowel oude als nieuwe naam moet aanbieden voor zowel lezen als schrijven, vereist <code>INSTEAD OF</code>-triggers op de view zelf voor schrijfacties — per saldo vaak niet eenvoudiger dan een trigger direct op de tabel. Views zijn sterker wanneer alleen <strong>lezen</strong> via de oude naam moet blijven werken.</p>
+<hr>
+<h2>Uitwerking 22.2</h2>
+<p>b) Een directe <code>ALTER COLUMN TYPE</code> op 500.000 rijen kost typisch enkele seconden tot langer, afhankelijk van hardware — en gedurende die tijd toont een tweede sessie die probeert te lezen, een <strong>hangende</strong> query: <code>ACCESS EXCLUSIVE</code> blokkeert zelfs <code>SELECT</code>.</p>
+<p>c) en d) Het omschakelmoment (drop oude kolom + rename) is een metadata-only-operatie: <strong>milliseconden</strong>, ongeacht het aantal rijen — een orde-van-grootte-verschil met b).</p>
+<p>e) Tijdens de backfill (met adempauzes tussen batches) blijft een gelijktijdige leessessie <strong>normaal reageren</strong> — dit is precies het punt van het patroon: de dure operatie wordt in kleine stukken opgedeeld die elk kort genoeg zijn om andere sessies niet te hinderen.</p>
+<hr>
+<h2>Uitwerking 22.3</h2>
+<p>b) Batch-backfill duurt in totaal <strong>langer in kloktijd</strong> dan een enkele grote <code>UPDATE</code> (door de overhead van meerdere transacties en de bewuste pauzes), maar hindert productieverkeer <strong>veel minder</strong> gedurende die tijd. Dit is een expliciete ruil: totale doorlooptijd tegen impact op gelijktijdig verkeer.</p>
+<p>c) Kleinere batches met langere pauzes: de totale duur van de backfill neemt toe, maar de belasting per moment neemt af — nuttig als de backfill naast actief productieverkeer moet draaien in plaats van in een rustig venster.</p>
+<p>d) Bijvoorbeeld een simpele vlag in een configuratietabel die de <code>LOOP</code> bij elke iteratie controleert en stopt (of wacht) als de vlag “pauzeer” aangeeft — een minimale ingreep die tijdens een onverwachte piekbelasting handmatig kan worden geactiveerd zonder het script af te breken.</p>
+<hr>
+<h2>Uitwerking 22.4</h2>
+<p>a) Met twee losse transacties en een falende tweede: de eerste tabel heeft de nieuwe rij, de tweede niet. <strong>De twee tabellen zijn nu inconsistent</strong>, en niets in het systeem weet dat automatisch.</p>
+<p>b) Binnen één transactie: als de tweede schrijfactie faalt, rolt de <strong>hele</strong> transactie terug — ook de eerste schrijfactie. Beide tabellen blijven consistent (beide zonder de nieuwe rij), wat veel veiliger is dan gedeeltelijke inconsistentie.</p>
+<p>c) <strong>Nee</strong>, de nieuwe tabel blijft <strong>niet</strong> gesynchroniseerd — het rechtstreekse batchproces ging buiten de “applicatielogica” om die het dubbel schrijven zou moeten verzorgen.</p>
+<p>d) <strong>Ja.</strong> Een trigger draait op <strong>elke</strong> schrijfactie op de tabel, ongeacht via welk pad die binnenkomt (applicatie, batchproces, handmatige <code>psql</code>-sessie) — hij zit op databaseniveau en kan niet worden “vergeten” door een tweede schrijfpad, in tegenstelling tot applicatielogica die per schrijfpad opnieuw geïmplementeerd zou moeten worden.</p>
+<hr>
+<h2>Uitwerking 22.5</h2>
+<p>a) <strong>Expand:</strong> verwijder de nieuwe kolom en de trigger — triviaal, niets was nog in gebruik. <strong>Migrate:</strong> zet de applicatie terug naar de oude kolomnaam; de trigger zorgt dat beide gesynchroniseerd blijven totdat je opnieuw probeert. <strong>Contract:</strong> de oude kolom is al weg — terugdraaien vereist een nieuwe migratie in omgekeerde richting, of herstel uit back-up als de gegevens anders niet meer te reconstrueren zijn.</p>
+<p>b) Zelfde patroon: <strong>expand/migrate</strong> triviaal tot eenvoudig omkeerbaar; <strong>contract</strong> (na het omschakelmoment dat de oude kolom verwijdert) vereist dezelfde omgekeerde migratie of back-up-herstel.</p>
+<p>c) Bij logische replicatie naar een structureel andere (gepartitioneerde) tabel: <strong>migrate</strong> is relatief veilig terug te draaien (schakel de applicatie terug naar de oude tabel, het abonnement blijft intussen bijwerken). <strong>Na contract</strong> (de oude tabel is afgebroken of het abonnement is losgekoppeld) is terugdraaien het lastigst van de drie, omdat de nieuwe structuur inmiddels zelfstandig verder is gegaan (nieuwe sequentiewaarden, mogelijk eigen wijzigingen) — een eenvoudige “terugzetten” bestaat niet meer, en dit valt terug op de PITR-technieken uit deel 17.</p>
+<p>d) <strong>c) is het lastigst</strong>, om de reden hierboven: bij a) en b) is de oude structuur een simpele, ongewijzigde kolom die (voor korte tijd na contract) mogelijk nog te reconstrueren is uit WAL/back-up; bij c) is de nieuwe structuur na contract een zelfstandig, divergerend systeem geworden.</p>
+<hr>
+<h2>Uitwerking 22.6</h2>
+<p>Vrije opdracht — de kern van het antwoord is dat vragen 1-3 (lock, timeout) in deel 16 al impliciet aan bod kwamen via het <code>CREATE TABLE</code>/<code>INSERT</code>-patroon, maar vraag 5 (alle schrijfpaden) en vraag 9 (AVG-herbeoordeling bij verhuizing van gegevens) vaak over het hoofd worden gezien bij een eerste doorloop van een migratie — precies waarom deze checklist als geheel waardevol is: hij dwingt tot een tweede blik op wat een eerste ontwerp mist.</p>
+<hr>
+<hr>
+<h1>DEEL B — De niveau-2 capstone</h1>
+<h2>Inleiding voor de deelnemer</h2>
+<p>Acht gebeurtenissen, elk van een van de vier bekende personages bij Meridiaan. Behandel ze in volgorde. Voor elke gebeurtenis: schrijf (1) je eerste diagnosestap met de exacte query of actie, (2) wat je daaruit verwacht te leren, (3) de vervolgmaatregel, en (4) een kort antwoord aan de afzender in hun eigen toon.</p>
+<p><strong>Je krijgt geen hints over welk deel van de stof een gebeurtenis raakt.</strong> Dat is opzet.</p>
+<hr>
+<h3>Gebeurtenis 1 — Ruud, 03:14 uur</h3>
+<p><em>“Het portaal reageert niet. Ik zie niks geks in de CPU-grafieken.”</em></p>
+<hr>
+<h3>Gebeurtenis 2 — Karin, maandagochtend</h3>
+<p><em>“Ons kwartaaloverzicht van vanochtend klopt niet — de deeltotalen per sector tellen niet op tot het totaal dat we vorige week al hadden. Kan de data gewijzigd zijn terwijl het rapport liep?”</em></p>
+<hr>
+<h3>Gebeurtenis 3 — Sanne, per e-mail</h3>
+<p><em>“Voor de jaarlijkse AVG-audit: kun je aantonen dat back-ups ouder dan onze bewaartermijn ook echt niet meer worden gebruikt of teruggezet?”</em></p>
+<hr>
+<h3>Gebeurtenis 4 — Tarik, in een ontwerpoverleg</h3>
+<p><em>“We overwegen een nieuwe microservice die losstaat van de hoofddatabase, puur voor het loggen van portaalklikken — miljoenen events per dag, nooit individueel bevraagd, wel maandelijks geaggregeerd. Wat vind je?”</em></p>
+<hr>
+<h3>Gebeurtenis 5 — Ruud, dinsdagmiddag</h3>
+<p><em>“Sinds gisteren duurt onze nachtelijke premienotarun twee keer zo lang. Niemand heeft iets aan de query’s veranderd, zeggen ze.”</em></p>
+<hr>
+<h3>Gebeurtenis 6 — Karin, per Slack</h3>
+<p><em>“Werkgevers klagen dat ze soms elkaars gegevens even in het portaal zien flitsen voordat de juiste data laadt. Kan dat?”</em></p>
+<hr>
+<h3>Gebeurtenis 7 — Tarik, in hetzelfde overleg als gebeurtenis 4</h3>
+<p><em>“We willen <code>mutatie_id</code> van <code>integer</code> naar <code>bigint</code> omzetten voordat we tegen de limiet aanlopen. Hoe pakken we dat aan zonder downtime?”</em></p>
+<hr>
+<h3>Gebeurtenis 8 — Ruud, na een geplande failover-test</h3>
+<p><em>“De failover werkte, maar het duurde volgens mij langer dan verwacht. Kun je dat objectief vaststellen?”</em></p>
+<hr>
+<hr>
+<h1>UITWERKINGEN — CAPSTONE</h1>
+<h2>Gebeurtenis 1 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> <code>pg_stat_activity</code>, specifiek <code>wait_event_type</code>. “Reageert niet” met normale CPU is het klassieke profiel van een lockwachtrij (deel 15), niet van trage query’s.</p>
+<p><strong>Verwacht te leren:</strong> of er sessies zijn met <code>wait_event_type = 'Lock'</code>, en wie de wortel van de blokkade is via <code>pg_blocking_pids()</code>.</p>
+<p><strong>Vervolgmaatregel:</strong> de blokkerende sessie identificeren (vaak een vergeten <code>idle in transaction</code> of een DDL-opdracht zonder <code>lock_timeout</code> die in de wachtrij is beland); <code>pg_cancel_backend</code> of, bij <code>idle in transaction</code>, <code>pg_terminate_backend</code>.</p>
+<p><strong>Antwoord aan Ruud:</strong> <em>“Het is geen prestatieprobleem — er staat een sessie die een lock vasthoudt en alles erachter blokkeert de wachtrij in (deel 15). Ik heb de blokkerende sessie gevonden en beëindigd; het portaal reageert weer. Voor de langere termijn: we zetten <code>lock_timeout</code> verplicht op alle DDL, zodat dit niet meer kan gebeuren.”</em></p>
+<p><strong>Raakt deel:</strong> 15 (primair), 20 (het protocol dat de eerste stap bepaalde).</p>
+<hr>
+<h2>Gebeurtenis 2 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> vaststellen onder welk isolatieniveau het rapport draait (deel 15, paragraaf 14). Als het <code>READ COMMITTED</code> was in plaats van <code>REPEATABLE READ</code>, verklaart dat een inconsistent beeld tussen verschillende deelquery’s binnen hetzelfde rapport.</p>
+<p><strong>Verwacht te leren:</strong> of er tijdens het rapport daadwerkelijk schrijfacties plaatsvonden op de betrokken tabellen (te controleren via <code>pg_stat_statements</code>/logs rond het tijdstip).</p>
+<p><strong>Vervolgmaatregel:</strong> het rapport herschrijven om binnen één <code>REPEATABLE READ</code>-transactie te draaien, zodat alle deelquery’s dezelfde momentopname zien.</p>
+<p><strong>Antwoord aan Karin:</strong> <em>“Het rapport las verschillende delen van de data op verschillende momenten, terwijl er tussendoor mutaties werden verwerkt — dus de deeltotalen en het totaal zagen niet exact dezelfde data. Ik zet het rapport om naar een transactie die een vaste momentopname gebruikt (herhaalbaar lezen); dan telt het altijd consistent op, ongeacht wat er tegelijk gebeurt.”</em></p>
+<p><strong>Raakt deel:</strong> 15 (isolatieniveaus), 13 (rapportagequery’s).</p>
+<hr>
+<h2>Gebeurtenis 3 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> het bewaarbeleid uit deel 17 controleren — is <code>retention_keep_table</code>/de vervalinstelling in <code>pgBackRest</code> zo ingesteld dat oude back-ups daadwerkelijk automatisch verdwijnen, en is dat verifieerbaar (logs van de opruimtaak)?</p>
+<p><strong>Verwacht te leren:</strong> of er een gedocumenteerd, automatisch proces is (geen handmatige “iemand ruimt weleens op”), en of er bewijs is (logregels, een lijst van huidige back-ups tegenover het bewaarschema) dat het werkt.</p>
+<p><strong>Vervolgmaatregel:</strong> als het proces bestaat maar niet aantoonbaar is, een periodieke controlequery/rapportage toevoegen die het bewaarschema tegen de werkelijke back-uplijst afzet.</p>
+<p><strong>Antwoord aan Sanne:</strong> <em>“Ons bewaarschema (deel 17) verwijdert back-ups automatisch na [x] volgens een geautomatiseerd proces. Ik voeg een maandelijkse controle toe die aantoont dat de daadwerkelijke back-uplijst nooit ouder is dan de ingestelde termijn, zodat we dit voor de audit kunnen aantonen in plaats van alleen beweren.”</em></p>
+<p><strong>Raakt deel:</strong> 17 (bewaarbeleid), 9 (AVG-grondbeginselen), 20 (aantoonbaarheid/audit).</p>
+<hr>
+<h2>Gebeurtenis 4 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> geen databasequery hier — dit is een ontwerpvraag. Toets tegen het toegangspatroon-criterium uit deel 21, paragraaf 14: is er een specifiek patroon (hoog schrijfvolume, nooit individueel bevraagd, wel geaggregeerd) dat een gespecialiseerde structuur rechtvaardigt?</p>
+<p><strong>Verwacht te leren:</strong> het werkelijke volume en de gewenste retentie, om te bepalen of PostgreSQL met partitionering (deel 16) en eventueel BRIN (deel 14) al volstaat, vóórdat een tweede systeem wordt geïntroduceerd.</p>
+<p><strong>Vervolgmaatregel:</strong> voorstellen eerst met een gepartitioneerde PostgreSQL-tabel te beginnen (bekende technologie, geen extra operationele last), met een concrete drempel waarboven een wide-column-oplossing wordt heroverwogen.</p>
+<p><strong>Antwoord aan Tarik:</strong> <em>“Dit patroon — hoog volume, zelden individueel bevraagd, wel geaggregeerd — is precies waar we in deel 21 het onderscheid tussen ‘nieuw systeem nodig’ en ‘PostgreSQL volstaat nog’ bespraken. Ik stel voor te beginnen met een gepartitioneerde tabel plus BRIN-indexen; die combinatie is voor tijdreeksdata op deze schaal vaak al voldoende, en we voorkomen een tweede systeem totdat we een gemeten reden hebben.”</em></p>
+<p><strong>Raakt deel:</strong> 21 (NoSQL-afweging), 16 (partitionering), 14 (BRIN).</p>
+<hr>
+<h2>Gebeurtenis 5 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> <code>pg_stat_statements</code> voor de premienotarun-query’s, gesorteerd op <code>total_exec_time</code>, vergeleken met de situatie vóór de vertraging (als er een snapshot bestaat, deel 20) — en <code>pg_stat_user_tables</code> voor bloat op de betrokken tabellen (deel 12).</p>
+<p><strong>Verwacht te leren:</strong> of de rijschatting is omgeslagen (verouderde statistieken, deel 8/13) of dat er structurele bloat is opgebouwd, bijvoorbeeld door een recent gewijzigde autovacuum-instelling of een lang lopende transactie die vacuum heeft belemmerd (deel 7, 12).</p>
+<p><strong>Vervolgmaatregel:</strong> afhankelijk van de bevinding — <code>ANALYZE</code> op de betrokken tabellen, of een gerichte <code>VACUUM</code>/<code>pg_repack</code> als bloat de oorzaak is.</p>
+<p><strong>Antwoord aan Ruud:</strong> <em>“Niemand hoefde de query’s te wijzigen — de oorzaak zit waarschijnlijk in de data zelf: [bloat/verouderde statistieken, afhankelijk van bevinding]. Ik heb dat rechtgezet en de looptijd is weer normaal. Ik zet hier ook een monitoringalarm op (deel 20) zodat we dit voortaan eerder zien.”</em></p>
+<p><strong>Raakt deel:</strong> 12 (bloat), 8/13 (statistieken en plannen), 20 (monitoring).</p>
+<hr>
+<h2>Gebeurtenis 6 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> de RLS-policy op de betrokken tabel controleren (deel 21) — met name of de policy een sessie-instelling gebruikt die correct per verbinding wordt gezet, of dat er een raceconditie is tussen het zetten van <code>app.werkgever_id</code> en het eerste gebruik ervan (bijvoorbeeld bij connection pooling, deel 19: een sessie-instelling die aan de verkeerde poolverbinding blijft hangen).</p>
+<p><strong>Verwacht te leren:</strong> of de applicatie <code>SET</code> (sessieniveau) gebruikt in plaats van <code>SET LOCAL</code> (transactieniveau) in combinatie met transaction-pooling (deel 15, 19) — precies de valkuil die daar werd behandeld.</p>
+<p><strong>Vervolgmaatregel:</strong> <code>SET LOCAL</code> binnen een expliciete transactie in plaats van een losse <code>SET</code>, zodat de instelling nooit naar een andere pool-client kan lekken.</p>
+<p><strong>Antwoord aan Karin:</strong> <em>“Dat is een echt en ernstig signaal — het duidt op een raceconditie in hoe we bepalen welke werkgever bij een sessie hoort, waarschijnlijk door onze connection pooler (deel 19). Ik verander de instelling naar een vorm die nooit tussen gebruikers kan lekken (SET LOCAL binnen een transactie) en we draaien een gerichte test om te bevestigen dat het niet meer voorkomt vóórdat we dit als opgelost afsluiten.”</em></p>
+<p><strong>Raakt deel:</strong> 21 (RLS), 19 (pooling), 15 (SET LOCAL — oorspronkelijke introductie van het patroon).</p>
+<p><em>Dit is de meest ernstige gebeurtenis van de acht — een mogelijke datalek tussen tenants — en verdient in de nabespreking extra aandacht.</em></p>
+<hr>
+<h2>Gebeurtenis 7 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> geen query, maar het herkennen dat dit precies het expand-contract-patroon uit dit dagdeel vraagt (paragraaf 5).</p>
+<p><strong>Verwacht te leren:</strong> niet van toepassing — dit is toepassen, niet diagnosticeren.</p>
+<p><strong>Vervolgmaatregel:</strong> het volledige patroon uit paragraaf 5 voorstellen: nieuwe kolom, synchronisatietrigger, batch-backfill (paragraaf 9), index, kort omschakelmoment met <code>lock_timeout</code>, en pas na een bewezen stabiele periode de oude kolom verwijderen.</p>
+<p><strong>Antwoord aan Tarik:</strong> <em>“Dit is het klassieke geval uit deel 22: een directe typewijziging zou de hele tabel onder een exclusieve lock herschrijven — bij onze omvang minuten waarin niemand <code>mutatie</code> kan gebruiken. We doen het in stappen: nieuwe kolom naast de oude, een trigger die ze synchroon houdt, de bestaande rijen in kleine batches bijwerken zonder productie te hinderen, en dan een omschakelmoment van milliseconden. Ik lever een tijdlijn met een concrete duur per stap.”</em></p>
+<p><strong>Raakt deel:</strong> 22 (primair), 15 (lock_timeout, ACCESS EXCLUSIVE), 12 (fysieke herschrijving).</p>
+<hr>
+<h2>Gebeurtenis 8 — modelantwoord</h2>
+<p><strong>Eerste diagnosestap:</strong> het RTO-meetprotocol uit deel 19, paragraaf 19 — detectietijd, beslistijd, promotietijd, routeringstijd, elk apart, uit de Patroni-logs en <code>patronictl history</code> (of vergelijkbare loginformatie) van de test.</p>
+<p><strong>Verwacht te leren:</strong> een exact, opgesplitst getal per fase in plaats van een indruk — vaak blijkt dat één specifieke fase (bijvoorbeeld routeringstijd via HAProxy’s controle-interval) de langste bijdrage levert, wat een gerichte verbetering mogelijk maakt in plaats van een vage “het moet sneller”.</p>
+<p><strong>Vervolgmaatregel:</strong> afhankelijk van welke fase domineert — een kortere <code>ttl</code> (met het risico van meer valse failovers als afruil), of een korter controle-interval in de routeringslaag.</p>
+<p><strong>Antwoord aan Ruud:</strong> <em>“Ik heb de test ontleed in de vier fasen uit deel 19: detectie [x]s, beslissing [y]s, promotie [z]s, routering [w]s — totaal [x+y+z+w]s. De routeringstap bleek de langste; dat is de eerst aan te pakken schakel. Ik vergelijk dit getal ook met onze RTO-doelstelling uit deel 17 om te bepalen of verdere investering hier de moeite waard is.”</em></p>
+<p><strong>Raakt deel:</strong> 19 (primair), 17 (RTO-vergelijking).</p>
+<hr>
+<h2>Nabespreking van de capstone</h2>
+<p><strong>Dekking:</strong> deze acht gebeurtenissen raken samen negen van de tien inhoudelijke delen van niveau 2 (11 raakt indirect mee via configuratie-achtergrond bij meerdere gebeurtenissen). Een deelnemer wiens antwoorden slechts drie of vier delen raken, heeft waarschijnlijk stof gemist of te snel naar een standaardantwoord gegrepen zonder de specifieke aanwijzingen in elke melding te lezen.</p>
+<p><strong>Het scherpste leermoment zit in gebeurtenis 6</strong>, die op het eerste gezicht een kleine applicatieklacht lijkt maar bij goede diagnose een datalek tussen tenants blijkt — precies het soort melding waarbij de vaardigheid om van een vage klacht naar de juiste kennis te navigeren (in plaats van een pasklaar antwoord te herkennen) het verschil maakt.</p>
+<p><strong>Bij het nabespreken in de groep:</strong> vraag per gebeurtenis welk deel de groep als eerste vermoedde, en of dat vermoeden klopte. Foute eerste vermoedens die tijdens de diagnose zelf gecorrigeerd worden, zijn een sterker signaal van beheersing dan een toevallig meteen juist vermoeden.</p>
+<hr>
+<p><em>Einde werkboek deel 22 en van niveau 2.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">363 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">&larr; Deel 21 — Security-verdieping en NoSQL in perspectief</a><a class="dbm-prevnext next" href="../../niveau-3/deel-23-architectuur-voor-meerdere-fondsen/reader.html">Deel 23 — Architectuur voor meerdere fondsen &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

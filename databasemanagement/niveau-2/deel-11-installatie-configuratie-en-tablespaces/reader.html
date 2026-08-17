@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Installatie, configuratie en tablespaces — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 11 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 11 — Installatie, configuratie en tablespaces</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 1 van 12 (deel 11 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Installation &amp; configuration”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Welkom in niveau 2</li>
+<li>De casus: Open Pensioen fase 2</li>
+<li>Van laptop naar server</li>
+<li>Initialiseren: initdb, locale en encoding</li>
+<li>Het configuratiesysteem</li>
+<li>Welke wijzigingen vereisen wat</li>
+<li>Geheugen: de vier parameters die ertoe doen</li>
+<li>Checkpoints en WAL</li>
+<li>Autovacuum: de instellingen die je moet kennen</li>
+<li>Verbindingen en waarom je max_connections niet verhoogt</li>
+<li>De planner vertellen hoe je hardware eruitziet</li>
+<li>Logging</li>
+<li>Tablespaces</li>
+<li>Configuratie als code</li>
+<li>Meten of het werkt</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>een PostgreSQL-cluster initialiseren met de juiste locale, encoding en collatie;</li>
+<li>het configuratiesysteem toepassen: <code>postgresql.conf</code>, <code>ALTER SYSTEM</code>, en instellingen per database, rol en sessie;</li>
+<li>per parameter zeggen of een wijziging een herstart, een herlaadactie of niets vereist;</li>
+<li>de vier geheugensparameters onderbouwd instellen voor een gegeven machine;</li>
+<li>de checkpointinstellingen afstemmen op de schrijfbelasting;</li>
+<li>autovacuum afstellen voor een tabel die sneller groeit dan de standaardwaarden aankunnen;</li>
+<li>uitleggen waarom <code>max_connections</code> verhogen zelden de oplossing is;</li>
+<li>de planner-kostenparameters afstemmen op de onderliggende opslag;</li>
+<li>tablespaces aanmaken en beargumenteren wanneer je ze nodig hebt (en wanneer niet);</li>
+<li>een configuratie reproduceerbaar vastleggen in plaats van hem met de hand aan te passen.</li>
+</ul>
+<hr>
+<h2>2. Welkom in niveau 2</h2>
+<p>In niveau 1 heb je een datalaag ontworpen en gebouwd op je eigen machine, met 8.000 deelnemers.</p>
+<p>Niveau 2 gaat over wat er gebeurt als die datalaag naar productie moet: 340.000 deelnemers, 2,4 miljoen mutaties, een portaal dat 24 uur per dag beschikbaar moet zijn, en een beheerteam van vier mensen dat er 's nachts niet wakker van mag liggen.</p>
+<p><strong>Wat er verandert in je manier van werken:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Niveau 1</th>
+<th>Niveau 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Werkt het?</td>
+<td>Werkt het onder belasting, over jaren?</td>
+</tr>
+<tr>
+<td>Op mijn machine</td>
+<td>Op een server die ik deel</td>
+</tr>
+<tr>
+<td>Als het misgaat: opnieuw laden</td>
+<td>Als het misgaat: herstellen, en aantonen wat er weg is</td>
+</tr>
+<tr>
+<td>Ik ben de enige gebruiker</td>
+<td>Er zijn honderd sessies tegelijk</td>
+</tr>
+<tr>
+<td>Standaardinstellingen</td>
+<td>Instellingen die ik kan verantwoorden</td>
+</tr>
+</tbody>
+</table>
+<p>Dat laatste is de kern van dit dagdeel. PostgreSQL start met instellingen die <strong>op elke machine moeten kunnen starten</strong> — dus met bescheiden waarden. Ze zijn niet fout; ze zijn conservatief. Jouw werk is ze afstemmen op deze machine en deze werklast, en die afstemming kunnen uitleggen.</p>
+<p><strong>Waarschuwing die het hele niveau kleurt:</strong> internetadvies over PostgreSQL-instellingen is vaak verouderd, geschreven voor draaiende schijven, of overgenomen van een systeem met een andere werklast. Elke waarde die je overneemt zonder te weten waaróm, is een gok. Meten blijft de norm uit deel 8.</p>
+<hr>
+<h2>3. De casus: Open Pensioen fase 2</h2>
+<p>De datalaag uit niveau 1 is goedgekeurd. Fase 2 is begonnen en de uitgangssituatie is veranderd:</p>
+<ul>
+<li>De <strong>volledige administratie</strong> is overgezet: 340.000 deelnemers, 4.100 werkgevers, 2,4 miljoen mutaties over vier jaar.</li>
+<li>Het <strong>deelnemersportaal</strong> gaat live: naar verwachting 3.000 gelijktijdige bezoekers in de piek, elke dinsdagavond na de UPO-verzending.</li>
+<li>De <strong>verwerking van mutaties</strong> draait continu in vier parallelle processen (deel 7, <code>SKIP LOCKED</code>).</li>
+<li>De <strong>rapportage</strong> draait tijdens kantooruren, over dezelfde database.</li>
+<li>Er is één <strong>fysieke server</strong> met 32 GB geheugen, 8 cores en SSD-opslag. Voor de acceptatieomgeving is er een kleinere machine.</li>
+</ul>
+<p>Ruud, het beheerhoofd uit deel 1, heeft dit gekregen en één vraag: <em>“welke instellingen zet ik waarop, en waarom?”</em></p>
+<p>Dat is jouw werk vandaag. En Ruuds tweede vraag — <em>“hoe weet ik dat het geholpen heeft?”</em> — is minstens zo belangrijk.</p>
+<hr>
+<h2>4. Van laptop naar server</h2>
+<p>Vier dingen die op een server anders zijn dan op je eigen machine:</p>
+<p><strong>Er zijn andere gebruikers.</strong> Instellingen die jij verandert, raken iedereen. Een <code>work_mem</code> die jouw rapportagequery sneller maakt, kan het portaal onderuithalen.</p>
+<p><strong>De machine doet meer dan PostgreSQL.</strong> Of juist niet — en dat verschil bepaalt hoeveel geheugen je mag claimen. Een gedeelde server met een applicatieserver erop verdraagt geen 25% <code>shared_buffers</code> plus een royale <code>work_mem</code>.</p>
+<p><strong>Herstarten is duur.</strong> Op je laptop is het drie seconden; op productie is het een gepland moment met aankondiging. Dat maakt het onderscheid tussen parameters die een herstart vereisen en parameters die dat niet doen tot een praktische zorg.</p>
+<p><strong>Wijzigingen moeten reproduceerbaar zijn.</strong> Wat je met de hand in een bestand typt, is over een jaar niet meer te herleiden — en op de acceptatieomgeving staat het anders. Zie paragraaf 15.</p>
+<hr>
+<h2>5. Initialiseren: initdb, locale en encoding</h2>
+<p>Een cluster ontstaat met <code>initdb</code>, dat het datadirectory aanmaakt (deel 2). De meeste installatiepakketten doen dit voor je, en dat is precies waarom de keuzes die daarbij gemaakt worden vaak niemands bewuste beslissing zijn.</p>
+<pre><code class="language-bash">initdb -D /var/lib/postgresql/data \
+       --encoding=UTF8 \
+       --locale=nl_NL.UTF-8 \
+       --data-checksums
+</code></pre>
+<p><strong>Drie keuzes die je later niet meer kunt wijzigen zonder de database opnieuw op te bouwen:</strong></p>
+<p><strong>Encoding.</strong> Neem <code>UTF8</code>. Er is geen goede reden voor iets anders, en een verkeerde keuze ontdek je pas bij de eerste naam met een accent.</p>
+<p><strong>Locale en collatie.</strong> Bepaalt de sorteervolgorde van tekst (deel 3, paragraaf 7). <code>nl_NL.UTF-8</code> sorteert zoals een Nederlandse lezer verwacht; <code>C</code> sorteert op bytewaarde en is aanzienlijk sneller. Voor Meridiaan, waar sorteervolgorde in brievenruns zichtbaar is, is de Nederlandse collatie het waard.</p>
+<blockquote>
+<p><strong>Let op bij collaties:</strong> een wijziging in de onderliggende systeembibliotheek kan de sorteervolgorde veranderen, en dan kloppen bestaande indexen op tekstkolommen niet meer. Dat is een echt probleem bij OS-upgrades. Wie dat wil vermijden, kan <code>ICU</code> als collatieprovider gebruiken, wat versievastheid geeft. Overweeg dit bij het opzetten, niet achteraf.</p>
+</blockquote>
+<p><strong>Data checksums.</strong> Met <code>--data-checksums</code> controleert PostgreSQL bij elke leesbewerking of een pagina beschadigd is. Kosten: enkele procenten prestatie. Baten: je ontdekt stille schijfcorruptie voordat hij in je back-ups zit. <strong>Zet dit aan.</strong> Voor een pensioenuitvoerder is dat geen afweging.</p>
+<hr>
+<h2>6. Het configuratiesysteem</h2>
+<p>Instellingen komen uit meerdere bronnen, en de laatste wint:</p>
+<pre><code>1. Ingebouwde standaardwaarde
+2. postgresql.conf
+3. postgresql.auto.conf          (geschreven door ALTER SYSTEM)
+4. Opstartparameters van de server
+5. Per database:  ALTER DATABASE ... SET
+6. Per rol:       ALTER ROLE ... SET
+7. Per sessie:    SET
+8. Per transactie: SET LOCAL
+</code></pre>
+<p><strong><code>postgresql.conf</code></strong> is het hoofdbestand, bedoeld om beheerd te worden.</p>
+<p><strong><code>ALTER SYSTEM</code></strong> schrijft naar <code>postgresql.auto.conf</code>:</p>
+<pre><code class="language-sql">ALTER SYSTEM SET work_mem = '32MB';
+SELECT pg_reload_conf();
+</code></pre>
+<p>Prettig omdat het vanuit SQL kan, lastig omdat het buiten je configuratiebeheer om gaat: iemand kan een waarde zetten die niet in je versiebeheerde <code>postgresql.conf</code> staat, en dan wijkt productie af van wat het configuratiebestand zegt. Terugdraaien:</p>
+<pre><code class="language-sql">ALTER SYSTEM RESET work_mem;
+</code></pre>
+<p><strong>Per rol en per database</strong> is het gereedschap dat het vaakst over het hoofd wordt gezien. Bij Meridiaan is dit precies de oplossing voor het <code>work_mem</code>-dilemma:</p>
+<pre><code class="language-sql">ALTER ROLE rapportage SET work_mem = '256MB';
+ALTER ROLE portaal_app SET work_mem = '8MB';
+</code></pre>
+<p>De rapportagequery’s krijgen ruimte om te sorteren zonder dat drieduizend portaalsessies elk 256 MB kunnen claimen. Dit is de belangrijkste instellingstruc van dit dagdeel.</p>
+<p><strong>Nakijken waar een waarde vandaan komt:</strong></p>
+<pre><code class="language-sql">SELECT name, setting, unit, source, sourcefile, sourceline
+FROM pg_settings
+WHERE name = 'work_mem';
+</code></pre>
+<p>De kolom <code>source</code> vertelt of het een standaardwaarde is, uit een bestand komt, of per sessie is gezet. Dat is de eerste query bij “waarom staat die waarde zo?”.</p>
+<hr>
+<h2>7. Welke wijzigingen vereisen wat</h2>
+<pre><code class="language-sql">SELECT name, setting, context FROM pg_settings WHERE name IN
+  ('shared_buffers','work_mem','max_connections','wal_level','log_min_duration_statement');
+</code></pre>
+<p>De kolom <code>context</code> geeft het antwoord:</p>
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>internal</code></td>
+<td>Vaststaand; alleen met een nieuwe <code>initdb</code></td>
+</tr>
+<tr>
+<td><code>postmaster</code></td>
+<td><strong>Herstart nodig</strong></td>
+</tr>
+<tr>
+<td><code>sighup</code></td>
+<td>Herladen is genoeg (<code>pg_reload_conf()</code>)</td>
+</tr>
+<tr>
+<td><code>superuser</code></td>
+<td>Per sessie te zetten door een superuser</td>
+</tr>
+<tr>
+<td><code>user</code></td>
+<td>Per sessie te zetten door iedereen</td>
+</tr>
+</tbody>
+</table>
+<p>De parameters die een <strong>herstart</strong> vereisen en die je dus in één onderhoudsvenster wilt afhandelen: <code>shared_buffers</code>, <code>max_connections</code>, <code>wal_level</code>, <code>max_wal_senders</code>, <code>shared_preload_libraries</code>.</p>
+<p>Dat laatste is de reden dat je bij het opzetten al nadenkt over extensies als <code>pg_stat_statements</code> en <code>pgaudit</code>: die moeten vooraf geladen worden, en ze erbij zetten kost een herstart.</p>
+<p><strong>Praktische regel:</strong> als je een nieuwe server inricht, zet <code>shared_preload_libraries = 'pg_stat_statements'</code> er meteen bij. De kosten zijn verwaarloosbaar en je hebt hem in deel 13 en 20 nodig.</p>
+<hr>
+<h2>8. Geheugen: de vier parameters die ertoe doen</h2>
+<h3>shared_buffers</h3>
+<p>De gedeelde bufferpool (deel 2). Vuistregel: <strong>25% van het RAM</strong>, met een bovengrens rond 8 tot 16 GB.</p>
+<p>Waarom niet meer? Omdat PostgreSQL bewust óók op de cache van het besturingssysteem leunt. Een pagina die in beide caches staat, kost twee keer geheugen — <em>double buffering</em>. Boven een bepaalde waarde win je niets meer en verlies je OS-cache.</p>
+<p>Voor de Meridiaan-server (32 GB): <strong>8 GB</strong>.</p>
+<h3>work_mem</h3>
+<p>Geheugen per sorteer- of hashbewerking, <strong>per bewerking en per verbinding</strong> (deel 2). Dit is de gevaarlijkste parameter in PostgreSQL, omdat hij vermenigvuldigt.</p>
+<p>Een query met drie sorteringen en twee hash joins kan vijf keer <code>work_mem</code> gebruiken. Bij honderd gelijktijdige sessies is dat vijfhonderd keer je ingestelde waarde.</p>
+<p>De ruwe rekensom:</p>
+<pre><code>beschikbaar RAM − shared_buffers − OS-behoefte
+──────────────────────────────────────────────  = veilige work_mem
+   verwacht aantal gelijktijdige bewerkingen
+</code></pre>
+<p>Voor Meridiaan met 32 GB, 8 GB <code>shared_buffers</code> en piekbelasting: een basiswaarde van <strong>8 tot 16 MB</strong>, met de rolgebonden verhoging voor rapportage uit paragraaf 6.</p>
+<p><strong>Hoe je weet dat hij te laag staat:</strong> in <code>EXPLAIN (ANALYZE, BUFFERS)</code> verschijnt <code>Sort Method: external merge Disk: 24680kB</code>. De sortering ging naar schijf. Zie deel 13.</p>
+<h3>maintenance_work_mem</h3>
+<p>Voor <code>VACUUM</code>, <code>CREATE INDEX</code> en <code>ALTER TABLE</code>. Deze mag ruim: er zijn er zelden veel tegelijk. <strong>512 MB tot 1 GB</strong> op deze machine. Een index bouwen op 2,4 miljoen mutaties gaat merkbaar sneller.</p>
+<p>Let op <code>autovacuum_work_mem</code>: staat die op −1, dan gebruiken autovacuum-processen <code>maintenance_work_mem</code> — en er kunnen er meerdere tegelijk draaien. Zet hem apart als je <code>maintenance_work_mem</code> hoog hebt gezet.</p>
+<h3>effective_cache_size</h3>
+<p><strong>Dit is geen geheugentoewijzing.</strong> Het is een schatting die je aan de planner geeft: hoeveel gegevens er waarschijnlijk in de cache staan (die van PostgreSQL plus die van het OS). Een hogere waarde maakt indexscans aantrekkelijker.</p>
+<p>Vuistregel: <strong>50 tot 75% van het RAM</strong>. Voor Meridiaan: <strong>24 GB</strong>. Het kost niets en het beïnvloedt de planner rechtstreeks — een van de goedkoopste verbeteringen die er zijn.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-11-1.png" alt="De vier geheugensparameters op een 32 GB-machine, met wat gedeeld is en wat vermenigvuldigt" loading="lazy"><figcaption>Figuur 11-1 — De vier geheugensparameters op een 32 GB-machine, met wat gedeeld is en wat vermenigvuldigt</figcaption></figure>
+<hr>
+<h2>9. Checkpoints en WAL</h2>
+<p>Uit deel 2: een checkpoint schrijft alle vuile pagina’s naar de gegevensbestanden, zodat de WAL vóór dat punt niet meer nodig is voor crashherstel.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Doet</th>
+<th>Richtwaarde</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checkpoint_timeout</code></td>
+<td>Maximale tijd tussen checkpoints</td>
+<td>15 min (standaard 5)</td>
+</tr>
+<tr>
+<td><code>max_wal_size</code></td>
+<td>Hoeveel WAL er mag ophopen voor een checkpoint afgedwongen wordt</td>
+<td>4-8 GB (standaard 1)</td>
+</tr>
+<tr>
+<td><code>checkpoint_completion_target</code></td>
+<td>Over welk deel van het interval het schrijven wordt uitgesmeerd</td>
+<td>0.9</td>
+</tr>
+<tr>
+<td><code>wal_compression</code></td>
+<td>WAL-records comprimeren</td>
+<td><code>on</code> bij veel schrijven</td>
+</tr>
+<tr>
+<td><code>wal_buffers</code></td>
+<td>Buffer voor WAL-records</td>
+<td>−1 (afgeleid) is prima</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De afruil:</strong> vaker checkpointen betekent constante schrijf-I/O en een korte hersteltijd na een crash. Minder vaak checkpointen betekent rustiger I/O en een langere hersteltijd.</p>
+<p>De standaardwaarden zijn voor de meeste productiesystemen te krap. Het signaal dat je ze moet verhogen:</p>
+<pre><code class="language-sql">SELECT checkpoints_timed, checkpoints_req FROM pg_stat_bgwriter;
+</code></pre>
+<p>Is <code>checkpoints_req</code> (afgedwongen door <code>max_wal_size</code>) een aanzienlijk deel van het totaal, dan checkpoint je te vaak op verzoek in plaats van op tijd. Verhoog <code>max_wal_size</code>.</p>
+<p>Zet ook aan:</p>
+<pre><code>log_checkpoints = on
+</code></pre>
+<p>Dan staat er in de log hoe lang elk checkpoint duurde en hoeveel buffers hij schreef. Zonder dat gok je.</p>
+<hr>
+<h2>10. Autovacuum: de instellingen die je moet kennen</h2>
+<p>Uit deel 7: autovacuum ruimt dode rijversies op en houdt de statistieken bij. Laat het aan staan — dat is de regel. Maar de standaardwaarden zijn afgestemd op kleine tabellen.</p>
+<p>De drempel waarop een tabel wordt opgeruimd:</p>
+<pre><code>drempel = autovacuum_vacuum_threshold
+        + autovacuum_vacuum_scale_factor × aantal rijen
+</code></pre>
+<p>Standaard: 50 + 0,2 × rijen. Op <code>mutatie</code> met 2,4 miljoen rijen betekent dat: pas na <strong>bijna 480.000 wijzigingen</strong> wordt er opgeruimd. Tot die tijd groeit de tabel en verouderen de statistieken.</p>
+<p>Voor grote, schrijfintensieve tabellen stel je dat per tabel bij:</p>
+<pre><code class="language-sql">ALTER TABLE mutatie SET (
+    autovacuum_vacuum_scale_factor  = 0.02,
+    autovacuum_analyze_scale_factor = 0.01,
+    autovacuum_vacuum_cost_delay    = 2
+);
+</code></pre>
+<p><strong>Per tabel, niet globaal.</strong> Een globale verlaging laat autovacuum over álle tabellen vaker lopen, ook waar dat niets oplevert.</p>
+<p>Twee andere parameters die ertoe doen op een productieserver:</p>
+<ul>
+<li><strong><code>autovacuum_max_workers</code></strong> (standaard 3). Op een database met veel grote tabellen te weinig; 5 tot 6 is gebruikelijk.</li>
+<li><strong><code>autovacuum_vacuum_cost_limit</code></strong> bepaalt hoe hard autovacuum mag werken. De standaard is bewust bescheiden. Op moderne SSD’s mag hij fors omhoog — en dat is meestal het antwoord op “autovacuum komt er niet doorheen”.</li>
+</ul>
+<p>Volgen of het werkt:</p>
+<pre><code class="language-sql">SELECT relname, n_live_tup, n_dead_tup,
+       round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 1) AS pct_dood,
+       last_autovacuum, last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC;
+</code></pre>
+<p>Een tabel met een hoog percentage dode rijen en een <code>last_autovacuum</code> van weken geleden is je eerste bevinding.</p>
+<hr>
+<h2>11. Verbindingen en waarom je max_connections niet verhoogt</h2>
+<p>Uit deel 2: elke verbinding is een besturingssysteemproces. Uit deel 8: meer is niet beter.</p>
+<p><code>max_connections</code> is een <strong>bovengrens</strong>, geen capaciteit. Verhogen ervan lost een verbindingsprobleem niet op — het verplaatst het van “kan niet verbinden” naar “alles is traag”.</p>
+<p>De praktische grens ligt rond <strong>twee tot vier keer het aantal cores</strong> aan <em>gelijktijdig actieve</em> backends. Op acht cores dus ergens tussen 16 en 32 actieve query’s. Daarboven daalt de doorvoer door contentie en door de vermenigvuldiging van <code>work_mem</code>.</p>
+<p>Het portaal van Meridiaan met 3.000 gelijktijdige bezoekers heeft dus <strong>geen</strong> 3.000 databaseverbindingen nodig, en mag ze ook niet openen. Het antwoord is <strong>PgBouncer</strong> (deel 19), met <code>max_connections</code> op iets als 200 en een pool die daar ruim onder blijft.</p>
+<p>Meten hoeveel er werkelijk actief zijn:</p>
+<pre><code class="language-sql">SELECT state, count(*) FROM pg_stat_activity
+WHERE backend_type = 'client backend' GROUP BY state;
+</code></pre>
+<p>Zie je veel <code>idle in transaction</code> (deel 7), dan is dat het probleem — en dat los je op in de applicatie, niet met een hogere <code>max_connections</code>.</p>
+<p>Zet daarbij:</p>
+<pre><code>idle_in_transaction_session_timeout = '10min'
+statement_timeout = 0                 -- globaal uit; per rol instellen
+</code></pre>
+<p>De eerste beëindigt sessies die een transactie open laten staan. De tweede zet je bewust <strong>niet</strong> globaal, maar per rol: een rapportagequery van drie minuten is normaal, een portaalquery van drie minuten niet.</p>
+<pre><code class="language-sql">ALTER ROLE portaal_app SET statement_timeout = '10s';
+ALTER ROLE rapportage  SET statement_timeout = '15min';
+</code></pre>
+<hr>
+<h2>12. De planner vertellen hoe je hardware eruitziet</h2>
+<p>De planner rekent met kosten (deel 8). Die kosten zijn afgestemd op hardware uit een ander tijdperk.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Standaard</th>
+<th>Op SSD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>random_page_cost</code></td>
+<td>4.0</td>
+<td><strong>1.1</strong></td>
+</tr>
+<tr>
+<td><code>seq_page_cost</code></td>
+<td>1.0</td>
+<td>1.0</td>
+</tr>
+<tr>
+<td><code>effective_io_concurrency</code></td>
+<td>1</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p><code>random_page_cost = 4.0</code> zegt: willekeurig lezen is vier keer zo duur als achter elkaar lezen. Op een draaiende schijf klopte dat. Op een SSD is het verschil veel kleiner, en de standaardwaarde maakt de planner onnodig terughoudend met indexscans.</p>
+<p><strong>Dit is vaak de goedkoopste prestatieverbetering op een moderne server</strong>: één parameter, geen herstart, en indexen worden ineens gebruikt waar ze eerst genegeerd werden.</p>
+<p>Doe het wel bewust: verlagen tot 1.0 of daaronder maakt de planner juist te enthousiast over indexen. Begin bij 1.1 en meet (deel 13).</p>
+<hr>
+<h2>13. Logging</h2>
+<p>De standaardlogging is te karig voor productie. Wat je minimaal aanzet:</p>
+<pre><code>logging_collector = on
+log_destination = 'csvlog'
+log_line_prefix = '%m [%p] %q%u@%d '
+log_min_duration_statement = 1000      -- query's boven 1 seconde
+log_checkpoints = on
+log_lock_waits = on
+log_temp_files = 0                     -- alles wat naar schijf spilt
+log_autovacuum_min_duration = 0
+</code></pre>
+<p>Drie daarvan verdienen toelichting:</p>
+<p><strong><code>log_lock_waits</code></strong> logt sessies die langer dan <code>deadlock_timeout</code> op een lock wachten. Dat is precies het gereedschap voor het probleem uit deel 7 dat je anders niet ziet.</p>
+<p><strong><code>log_temp_files = 0</code></strong> logt elk tijdelijk bestand. Dat is je signaal dat <code>work_mem</code> te laag staat — je ziet welke query’s naar schijf sorteren zonder er zelf <code>EXPLAIN</code> op te hoeven draaien.</p>
+<p><strong><code>log_min_duration_statement</code></strong> niet op 0 zetten in productie: dat logt alles, inclusief persoonsgegevens in <code>WHERE</code>-clausules (deel 9).</p>
+<hr>
+<h2>14. Tablespaces</h2>
+<p>Een tablespace is een alternatieve opslaglocatie voor databaseobjecten.</p>
+<pre><code class="language-sql">CREATE TABLESPACE archief LOCATION '/mnt/langzaam/pgdata';
+CREATE TABLE mutatie_historie (...) TABLESPACE archief;
+ALTER TABLE oude_tabel SET TABLESPACE archief;   -- verplaatst, met lock
+ALTER DATABASE meridiaan SET TABLESPACE ...;      -- alleen als niemand verbonden is
+</code></pre>
+<p><strong>Wanneer ze nuttig zijn:</strong></p>
+<ul>
+<li>Verschillende opslagsoorten: hete tabellen op snelle NVMe, archief op goedkopere opslag.</li>
+<li>Een schijf die vol dreigt te lopen, zonder de hele database te verplaatsen.</li>
+<li>Indexen apart van gegevens op fysiek gescheiden opslag — al is dat argument met moderne opslag veel zwakker geworden dan het was.</li>
+</ul>
+<p><strong>Waarom je ze vaak níét nodig hebt:</strong> met één opslagvolume voegen tablespaces alleen beheercomplexiteit toe. Ze compliceren bovendien back-ups: een filesystem-back-up moet alle tablespaces meenemen, en vergeet je er één, dan is je herstel onvolledig — wat je pas ontdekt op het slechtst denkbare moment.</p>
+<p><strong>Advies voor Meridiaan:</strong> geen tablespaces bij aanvang. Introduceer ze wanneer er een concrete aanleiding is, en documenteer die aanleiding.</p>
+<hr>
+<h2>15. Configuratie als code</h2>
+<p>Wat je met de hand in <code>postgresql.conf</code> typt, is over een jaar niet herleidbaar, en op acceptatie staat het anders. Dat verschil is de oorzaak van “op acceptatie werkte het wel”.</p>
+<p>Wat je minimaal doet:</p>
+<ol>
+<li><strong><code>postgresql.conf</code> in versiebeheer</strong>, met commentaar per gewijzigde waarde: wat, waarom, en wanneer.</li>
+<li><strong>Alleen afwijkingen vastleggen</strong>, niet het hele bestand met alle standaardwaarden — dan zie je in één oogopslag wat er anders is dan standaard.</li>
+<li><strong><code>ALTER SYSTEM</code> spaarzaam.</strong> Prettig voor een snelle correctie; leg de wijziging daarna alsnog vast in je beheerde bestand en draai hem terug met <code>ALTER SYSTEM RESET</code>.</li>
+<li><strong>Acceptatie afgeleid van productie</strong>, met alleen de geheugensparameters geschaald. Als acceptatie een andere <code>random_page_cost</code> heeft dan productie, kloppen je queryplannen daar niet.</li>
+</ol>
+<p>Wat er in productie afwijkt van je beheerde bestand, vind je zo:</p>
+<pre><code class="language-sql">SELECT name, setting, source, sourcefile
+FROM pg_settings
+WHERE source NOT IN ('default', 'override')
+ORDER BY name;
+</code></pre>
+<p>Draai deze query bij elke overname van een omgeving.</p>
+<hr>
+<h2>16. Meten of het werkt</h2>
+<p>Ruuds tweede vraag. Verander nooit een parameter zonder een voor- en nameting.</p>
+<table>
+<thead>
+<tr>
+<th>Wat je meet</th>
+<th>Waarmee</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cache-effectiviteit</td>
+<td><code>pg_stat_database</code>: <code>blks_hit</code> tegenover <code>blks_read</code></td>
+</tr>
+<tr>
+<td>Checkpointgedrag</td>
+<td><code>pg_stat_bgwriter</code>, plus <code>log_checkpoints</code></td>
+</tr>
+<tr>
+<td>Sorteringen naar schijf</td>
+<td><code>log_temp_files</code>, of <code>EXPLAIN (ANALYZE, BUFFERS)</code></td>
+</tr>
+<tr>
+<td>Vacuumachterstand</td>
+<td><code>pg_stat_user_tables</code>: <code>n_dead_tup</code>, <code>last_autovacuum</code></td>
+</tr>
+<tr>
+<td>Verbindingsdruk</td>
+<td><code>pg_stat_activity</code> per <code>state</code></td>
+</tr>
+<tr>
+<td>Trage query’s</td>
+<td><code>pg_stat_statements</code> (deel 13)</td>
+</tr>
+</tbody>
+</table>
+<p>De cachetrefkans:</p>
+<pre><code class="language-sql">SELECT datname,
+       round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) AS cache_pct
+FROM pg_stat_database WHERE datname = 'meridiaan';
+</code></pre>
+<p>Boven 99% is gebruikelijk voor een OLTP-werklast. Structureel lager betekent dat de werkset niet in het geheugen past — en dan is <code>shared_buffers</code> verhogen zinvoller dan aan de planner sleutelen.</p>
+<p><strong>Reset je metingen voordat je begint</strong>, anders meet je maanden geschiedenis:</p>
+<pre><code class="language-sql">SELECT pg_stat_reset();
+</code></pre>
+<hr>
+<h2>17. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instellingen overnemen van een blog</td>
+<td>Waarden die niet bij deze werklast passen</td>
+<td>Redeneren vanuit de machine, dan meten</td>
+</tr>
+<tr>
+<td><code>shared_buffers</code> op 80% van het RAM</td>
+<td>Double buffering; minder OS-cache</td>
+<td>25%, met bovengrens</td>
+</tr>
+<tr>
+<td><code>work_mem</code> globaal hoog</td>
+<td>Geheugen op bij piekbelasting</td>
+<td>Basiswaarde laag, per rol verhogen</td>
+</tr>
+<tr>
+<td><code>max_connections</code> verhogen bij traagheid</td>
+<td>Nog trager</td>
+<td>Pooling, en zoeken naar <code>idle in transaction</code></td>
+</tr>
+<tr>
+<td><code>random_page_cost</code> op 4.0 laten op SSD</td>
+<td>Indexen worden genegeerd</td>
+<td>1.1, daarna meten</td>
+</tr>
+<tr>
+<td>Autovacuum globaal agressiever</td>
+<td>Onnodige I/O overal</td>
+<td>Per tabel bijstellen</td>
+</tr>
+<tr>
+<td>Tablespaces “voor de zekerheid”</td>
+<td>Beheercomplexiteit, back-uprisico</td>
+<td>Pas bij een concrete aanleiding</td>
+</tr>
+<tr>
+<td><code>log_min_duration_statement = 0</code></td>
+<td>Persoonsgegevens in de log</td>
+<td>1000, en pgaudit voor auditing</td>
+</tr>
+<tr>
+<td>Meerdere parameters tegelijk wijzigen</td>
+<td>Je weet niet wat werkte</td>
+<td>Eén per keer, met meting</td>
+</tr>
+<tr>
+<td>Acceptatie anders ingesteld dan productie</td>
+<td>Queryplannen wijken af</td>
+<td>Zelfde waarden, alleen geheugen geschaald</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>18. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>de configuratiebronnen en hun voorrang;</li>
+<li>de <code>context</code>-waarden in <code>pg_settings</code> en wat elk vereist;</li>
+<li><code>shared_buffers</code>, <code>work_mem</code>, <code>maintenance_work_mem</code> en <code>effective_cache_size</code> — inclusief welke gedeeld zijn en welke vermenigvuldigen;</li>
+<li>de checkpointparameters en hun afruil;</li>
+<li>de autovacuum-drempelformule en instelling per tabel;</li>
+<li><code>random_page_cost</code> en <code>effective_io_concurrency</code> in relatie tot opslag;</li>
+<li>tablespaces aanmaken, gebruiken en hun gevolgen voor back-up;</li>
+<li>de rol van <code>initdb</code>-keuzes die achteraf niet te wijzigen zijn.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal. Versiegebonden waarden en paden: Toolbijlage.</p>
+<hr>
+<h2>19. Kernbegrippen</h2>
+<p><strong><code>initdb</code></strong> — initialiseert een cluster; bepaalt encoding, locale en checksums.
+<strong>Collatie</strong> — regels voor sorteervolgorde van tekst; wijziging kan indexen ongeldig maken.
+<strong><code>postgresql.auto.conf</code></strong> — bestand waarin <code>ALTER SYSTEM</code> schrijft.
+<strong><code>context</code></strong> — geeft aan of een parameter een herstart, een herlaadactie of niets vereist.
+<strong>Double buffering</strong> — dezelfde pagina in zowel de PostgreSQL-buffer als de OS-cache.
+<strong><code>effective_cache_size</code></strong> — schatting voor de planner, geen toewijzing.
+<strong>Checkpoint</strong> — moment waarop vuile pagina’s naar de gegevensbestanden gaan.
+<strong>Scale factor</strong> — deel van de tabel dat gewijzigd moet zijn voordat autovacuum start.
+<strong><code>random_page_cost</code></strong> — kostenverhouding tussen willekeurig en sequentieel lezen.
+<strong>Tablespace</strong> — alternatieve opslaglocatie voor databaseobjecten.</p>
+<hr>
+<p><em>Volgende deel: fysiek ontwerp — pagina’s, TOAST, fill factor en bloat. Je hebt de server nu ingesteld; volgende keer kijk je naar hoe de gegevens er fysiek in liggen, en waarom een tabel groter kan zijn dan de gegevens die erin staan.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">64 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">412 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../../niveau-1/deel-10-capstone-de-meridiaan-datalaag/opdrachtdocument.html">&larr; Deel 10 — Capstone: de Meridiaan-datalaag</a><a class="dbm-prevnext next" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

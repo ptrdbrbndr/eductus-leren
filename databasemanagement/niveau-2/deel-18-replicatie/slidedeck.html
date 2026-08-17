@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Replicatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 18 — Slidedeck</h1>
+<p><strong>Replicatie</strong>
+Niveau 2, dagdeel 9 (deel 18 van 30) | 34 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Replicatie</h1>
+<h2>Niveau 2 — Deel 18</h2>
+<p><em>Jullie kunnen nu herstellen na een fout. Vandaag: een tweede kopie die continu meeloopt.</em></p>
+<hr>
+<h2>Slide 2 — De vraag</h2>
+<p>Iemand doet <code>DELETE FROM deelnemer;</code> zonder <code>WHERE</code>.</p>
+<p>Jullie hebben een prima werkende replica.</p>
+<h1>Helpt die?</h1>
+<p><strong>Notities:</strong> laat de zaal nadenken.</p>
+<hr>
+<h2>Slide 3 — Nee.</h2>
+<p>De <code>DELETE</code> <strong>repliceert gewoon mee</strong> — binnen seconden.</p>
+<h1>Nu heb je twee kapotte databases</h1>
+<h1>in plaats van één.</h1>
+<hr>
+<h2>Slide 4 — De vuistregel</h2>
+<h1>Back-up beschermt tegen fouten</h1>
+<h1>in de tijd.</h1>
+<h1>Replicatie beschermt tegen het</h1>
+<h1>uitvallen van een machine.</h1>
+<p>Je hebt allebei nodig. Ze lossen niet elkaars probleem op.</p>
+<hr>
+<h2>Slide 5 — Opdracht 18.1</h2>
+<h1>Back-up of replicatie?</h1>
+<p>Vijf situaties.</p>
+<p><em>10 min</em></p>
+<hr>
+<h2>Slide 6 — Streaming replicatie</h2>
+<pre><code>Primary                    Replica
+  WAL geschreven  ──stream──→  WAL ontvangen → toegepast
+</code></pre>
+<p>Een <strong>byte-voor-byte</strong> kopie, met een kleine vertraging.
+Read-only, per definitie.</p>
+<hr>
+<h2>Slide 7 — Opzetten</h2>
+<pre><code class="language-bash">pg_basebackup -D … -h primary_host -U repl_rol -R -X stream
+</code></pre>
+<p><code>-R</code> schrijft <code>primary_conninfo</code> en <code>standby.signal</code>.</p>
+<h1>Vergelijkbaar met deel 17 —</h1>
+<h1>alleen stopt hij nooit met volgen.</h1>
+<hr>
+<h2>Slide 8 — Controleren</h2>
+<pre><code class="language-sql">-- op de primary
+SELECT client_addr, state, replay_lag FROM pg_stat_replication;
+
+-- op de replica
+SELECT pg_is_in_recovery();   -- true
+</code></pre>
+<hr>
+<h2>Slide 9 — Opdracht 18.2</h2>
+<h1>Een replica opzetten</h1>
+<p><em>25 min, tweetallen</em></p>
+<hr>
+<h2>Slide 10 — Synchroon of asynchroon</h2>
+<p><strong>Asynchroon</strong> — de primary bevestigt zonder te wachten
+<strong>Synchroon</strong> — de primary wacht op de replica</p>
+<pre><code class="language-sql">synchronous_standby_names = 'FIRST 1 (replica1)';
+</code></pre>
+<hr>
+<h2>Slide 11 — Probeer dit</h2>
+<p>Zet synchrone replicatie aan. <strong>Stop de replica.</strong>
+Doe een <code>INSERT</code> op de primary.</p>
+<h1>Wat gebeurt er?</h1>
+<p><strong>Notities:</strong> laat het hangen, letterlijk. Geen foutmelding — stilte.</p>
+<hr>
+<h2>Slide 12 — De primary wacht.</h2>
+<p>Op een replica die niet meer antwoordt.</p>
+<h1>Synchroon zonder terugvalplan =</h1>
+<h1>beschikbaarheid van de primary</h1>
+<h1>hangt af van de replica.</h1>
+<hr>
+<h2>Slide 13 — Koppel terug aan RPO</h2>
+<table>
+<thead>
+<tr>
+<th>Meridiaan</th>
+<th>RPO</th>
+<th>Synchroon nodig?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mutaties</td>
+<td>5 min</td>
+<td><strong>Nee</strong> — lag is milliseconden</td>
+</tr>
+<tr>
+<td>(Hypothetisch) financiële afschrijving</td>
+<td>0</td>
+<td>Ja, met kworum</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 14 — Opdracht 18.3</h2>
+<h1>Synchroon versus asynchroon</h1>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 15 — Pauze</h2>
+<hr>
+<h2>Slide 16 — Drie soorten vertraging</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Betekent</th>
+<th>Oorzaak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>write_lag</code></td>
+<td>Tot ontvangen</td>
+<td>Netwerk</td>
+</tr>
+<tr>
+<td><code>flush_lag</code></td>
+<td>Tot weggeschreven</td>
+<td>Trage schijf</td>
+</tr>
+<tr>
+<td><strong><code>replay_lag</code></strong></td>
+<td>Tot <strong>toegepast</strong></td>
+<td>CPU/IO op de replica</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 17 — Niet alleen een prestatiegetal</h2>
+<h1>Een oplopende replay_lag is een</h1>
+<h1>RPO-schending die op dit moment</h1>
+<h1>aan het gebeuren is.</h1>
+<p>Valt de primary nu uit, verlies je precies
+zoveel als de lag nu aangeeft.</p>
+<hr>
+<h2>Slide 18 — Opdracht 18.4</h2>
+<h1>Vertraging meten en veroorzaken</h1>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 19 — Replicatieslots</h2>
+<pre><code class="language-sql">SELECT pg_create_physical_replication_slot('replica1_slot');
+</code></pre>
+<p>Voorkomt dat de primary WAL opruimt
+die een replica nog nodig heeft.</p>
+<hr>
+<h2>Slide 20 — De prijs</h2>
+<p>Een slot van een <strong>verdwenen</strong> replica:
+de primary houdt WAL <strong>onbeperkt</strong> vast.</p>
+<h1>Zelfde eindresultaat als een falend</h1>
+<h1>archive_command (deel 17) —</h1>
+<h1>nu via een ander mechanisme.</h1>
+<hr>
+<h2>Slide 21 — Opdracht 18.5</h2>
+<h1>Replicatieslots</h1>
+<p>Stop de replica. Kijk wat er met <code>pg_wal/</code> gebeurt.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 22 — Hot standby</h2>
+<pre><code>hot_standby = on
+</code></pre>
+<p>Een replica kan <strong>gelijktijdig lezen bedienen</strong>.</p>
+<h1>Karins rapportage. Hier hoort hij te draaien.</h1>
+<hr>
+<h2>Slide 23 — Precies waar deel 11 al naar wees</h2>
+<p>Rolgebonden <code>work_mem</code> scheidde werklasten <strong>binnen</strong> één server.</p>
+<h1>Dit is dezelfde gedachte —</h1>
+<h1>nu fysiek gescheiden op een andere machine.</h1>
+<hr>
+<h2>Slide 24 — Opdracht 18.6</h2>
+<h1>Lezen op de replica</h1>
+<p>Let op wat er met <code>idx_scan</code> op de <strong>primary</strong> gebeurt.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 25 — De valkuil</h2>
+<p>Een index die alleen op de <strong>replica</strong> gebruikt wordt,
+telt niet mee in <code>pg_stat_user_indexes</code> van de <strong>primary</strong>.</p>
+<h1>Ongebruikte-index-onderzoek?</h1>
+<h1>Op élke server apart.</h1>
+<hr>
+<h2>Slide 26 — Het replicatieconflict</h2>
+<p>Primary ruimt een rij op die een replica-query nog nodig heeft.</p>
+<pre><code>ERROR: canceling statement due to conflict with recovery
+</code></pre>
+<hr>
+<h2>Slide 27 — Opdracht 18.7</h2>
+<h1>Een replicatieconflict veroorzaken</h1>
+<p>Eerst zónder <code>hot_standby_feedback</code>. Dan mét.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 28 — De knop heeft een prijs</h2>
+<p><code>hot_standby_feedback = on</code>:
+query’s op de replica worden nooit afgebroken.</p>
+<h1>Maar dat kan bloat veroorzaken</h1>
+<h1>op de primary. (Deel 7, 12.)</h1>
+<p>Geen gratis oplossing.</p>
+<hr>
+<h2>Slide 29 — Logische replicatie</h2>
+<p>Niet bytes — <strong>rijwijzigingen</strong>.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Fysiek</th>
+<th>Logisch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tussen versies</td>
+<td>Nee</td>
+<td><strong>Ja</strong></td>
+</tr>
+<tr>
+<td>Selectieve tabellen</td>
+<td>Nee</td>
+<td><strong>Ja</strong></td>
+</tr>
+<tr>
+<td>Doel blijft schrijfbaar</td>
+<td>Nee</td>
+<td><strong>Ja</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 30 — Drie toepassingen</h2>
+<ul>
+<li><strong>Zero-downtime migratie</strong> (deel 16, eindelijk het gereedschap)</li>
+<li><strong>Selectief naar BI</strong> — zonder <code>deelnemer</code>/BSN (privacy, deel 9)</li>
+<li><strong>Cross-versie upgrade</strong></li>
+</ul>
+<hr>
+<h2>Slide 31 — Promotie</h2>
+<pre><code class="language-sql">SELECT pg_promote();
+</code></pre>
+<p>De replica wordt een zelfstandige, schrijfbare primary.</p>
+<h1>Wat regelt dit NIET automatisch?</h1>
+<hr>
+<h2>Slide 32 — Drie dingen</h2>
+<ul>
+<li>De oude primary <strong>weet het niet</strong> — blijft gewoon draaien</li>
+<li>Andere replica’s volgen nog de <strong>oude</strong> primary</li>
+<li><strong>Split-brain</strong>: twee primaries, divergerende data</li>
+</ul>
+<hr>
+<h2>Slide 33 — Opdracht 18.8 &amp; 18.9</h2>
+<p><strong>18.8</strong> Promotie, inclusief het split-brain-gedachte-experiment — <em>15 min</em></p>
+<p><strong>18.9</strong> Het replicatieontwerp — inclusief expliciet <strong>wat dit niet regelt</strong></p>
+<p><em>40 min, drietallen</em></p>
+<hr>
+<h2>Slide 34 — Volgende keer</h2>
+<h1>Deel 19 — Hoge beschikbaarheid</h1>
+<h3><em>(twee dagdelen)</em></h3>
+<p>Wie beslist dat de primary uitgevallen is?
+Wie promoveert welke replica?
+Hoe voorkomen we split-brain?</p>
+<p>Dat vraagt een <strong>derde partij</strong> — een consensusmechanisme.</p>
+<p><strong>Bewaar je replicatieontwerp uit 18.9.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 18.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">338 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-17-back-up-en-herstel/reader.html">&larr; Deel 17 — Back-up en herstel</a><a class="dbm-prevnext next" href="../deel-19-hoge-beschikbaarheid/reader.html">Deel 19 — Hoge beschikbaarheid &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

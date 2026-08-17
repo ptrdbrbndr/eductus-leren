@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Geavanceerde indexering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 14 — Slidedeck</h1>
+<p><strong>Geavanceerde indexering</strong>
+Niveau 2, dagdeel 4 (deel 14 van 30) | 40 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Geavanceerde indexering</h1>
+<h2>Niveau 2 — Deel 14</h2>
+<p><em>Vorige keer was het antwoord steeds een B-tree.</em></p>
+<hr>
+<h2>Slide 2 — Probeer deze vier</h2>
+<pre><code class="language-sql">-- a: welke berichten bevatten deze sleutel?
+WHERE inhoud @&gt; '{&quot;soort&quot;:&quot;adreswijziging&quot;}'
+
+-- b: wie heet ongeveer &quot;Janssen&quot;?
+WHERE achternaam ILIKE '%anss%'
+
+-- c: welke mutaties vielen in maart?
+WHERE aangemeld_op &gt;= '2024-03-01' AND … &lt; '2024-04-01'
+
+-- d: welke adresperioden overlappen?
+</code></pre>
+<hr>
+<h2>Slide 3 — De vraag</h2>
+<p>Vier keer een sequentiële scan.</p>
+<h1>Voor welke van deze vier kán een</h1>
+<h1>B-tree principieel niets betekenen?</h1>
+<p><strong>Notities:</strong> drie van de vier. c) kán wel — dat is de brug naar BRIN vanmiddag.</p>
+<hr>
+<h2>Slide 4 — Opdracht 14.1</h2>
+<h1>Vier vragen die B-tree niet aankan</h1>
+<p><em>10 min</em></p>
+<hr>
+<h2>Slide 5 — Zes types</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Voor</th>
+<th>Omvang</th>
+<th>Schrijfkosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>B-tree</strong></td>
+<td>Gelijkheid, bereik, sortering</td>
+<td>Middel</td>
+<td>Laag</td>
+</tr>
+<tr>
+<td><strong>GIN</strong></td>
+<td>Zoeken <em>binnen</em> een waarde</td>
+<td>Groot</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td><strong>GiST</strong></td>
+<td>Bereiken, uitsluiting, fuzzy</td>
+<td>Middel</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td>SP-GiST</td>
+<td>Niet-gebalanceerde structuren</td>
+<td>Klein</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td><strong>BRIN</strong></td>
+<td>Groot + hoge correlatie</td>
+<td><strong>Minuscuul</strong></td>
+<td><strong>Zeer laag</strong></td>
+</tr>
+<tr>
+<td>Hash</td>
+<td>Alleen gelijkheid</td>
+<td>Klein</td>
+<td>Laag</td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-14-1.png" alt="Figuur 14-1" loading="lazy"><figcaption>Figuur 14-1</figcaption></figure>
+<hr>
+<h2>Slide 6 — Twee dingen vooraf</h2>
+<p><strong>GIN en BRIN staan aan de uiteinden.</strong>
+Duur en krachtig ↔ bijna gratis en voorwaardelijk.</p>
+<h1>Dit zijn specialisaties, geen upgrade.</h1>
+<p><em>(Net als de datastore-categorieën in deel 1.)</em></p>
+<hr>
+<h2>Slide 7 — B-tree: sorteervolgorde</h2>
+<pre><code class="language-sql">CREATE INDEX ON premienota
+    (werkgever_id, periode_jaar DESC, periode_maand DESC);
+</code></pre>
+<p>Met de juiste richting: index aflopen, na 1 rij stoppen.
+Met de verkeerde: alles sorteren.</p>
+<p>⚠ Bij <strong>gemengde</strong> richtingen kan PostgreSQL niet achterstevoren lezen.</p>
+<hr>
+<h2>Slide 8 — B-tree: INCLUDE, herzien</h2>
+<pre><code class="language-sql">CREATE INDEX ON mutatie (deelnemer_id) INCLUDE (aangemeld_op);
+</code></pre>
+<p>Doel: <code>Index Only Scan</code>.</p>
+<h1>Maar: <code>Heap Fetches</code> hoog?</h1>
+<h1>Dan levert het niets op.</h1>
+<p><code>INCLUDE</code> op een tabel die zelden gevacuümd wordt, is verspilling. <em>(Deel 12.)</em></p>
+<hr>
+<h2>Slide 9 — Opdracht 14.2</h2>
+<h1>B-tree verfijnen</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 10 — Partiële index, op schaal</h2>
+<pre><code class="language-sql">CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;
+</code></pre>
+<ul>
+<li>Klein: 12% in plaats van alles</li>
+<li><strong>Groeit niet mee met de historie</strong></li>
+<li>Lagere schrijfkosten</li>
+</ul>
+<p>Na 5 jaar: volledige index 250 MB, deze nog steeds 6 MB.</p>
+<hr>
+<h2>Slide 11 — De valkuil</h2>
+<pre><code class="language-sql">-- index:  WHERE verwerkt_op IS NULL
+-- query:  WHERE verwerkt_op &gt; now() - INTERVAL '1 day'
+</code></pre>
+<h1>De index wordt niet gebruikt.</h1>
+<p>De planner doet geen logisch redeneerwerk over bereiken.
+De voorwaarde moet <strong>matchen</strong>.</p>
+<hr>
+<h2>Slide 12 — Opdracht 14.3</h2>
+<h1>Partiële index op productieschaal</h1>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 13 — Pauze</h2>
+<hr>
+<h2>Slide 14 — GIN</h2>
+<p>Een B-tree indexeert de <strong>hele waarde</strong>.
+GIN indexeert de <strong>onderdelen</strong>.</p>
+<p>Sleutels in een <code>jsonb</code> · elementen van een array · woorden in tekst</p>
+<p>Zoals de index achter in een boek.</p>
+<hr>
+<h2>Slide 15 — jsonb met GIN</h2>
+<pre><code class="language-sql">CREATE INDEX ON koppelvlakbericht USING gin (inhoud);
+
+WHERE inhoud @&gt; '{&quot;soort&quot;:&quot;adreswijziging&quot;}'   -- werkt
+WHERE inhoud ? 'bsn'                            -- werkt
+</code></pre>
+<pre><code class="language-sql">WHERE inhoud -&gt;&gt; 'soort' = 'adreswijziging'     -- werkt NIET
+</code></pre>
+<hr>
+<h2>Slide 16 — Het onderscheid</h2>
+<h1>GIN voor <em>“bevat deze structuur”</em>.</h1>
+<h1>B-tree op een expressie voor</h1>
+<h1><em>“deze sleutel heeft deze waarde”</em>.</h1>
+<pre><code class="language-sql">CREATE INDEX ON koppelvlakbericht ((inhoud -&gt;&gt; 'soort'));
+</code></pre>
+<hr>
+<h2>Slide 17 — Wat GIN kost</h2>
+<p><strong>Schrijven.</strong> Eén rij invoegen = één bijwerking per onderdeel.
+Een <code>jsonb</code> met 50 sleutels → 50 bijwerkingen.</p>
+<p><strong>Ruimte.</strong> Vaak een aanzienlijk deel van de tabelomvang.</p>
+<p><code>jsonb_path_ops</code> is kleiner — alleen containment.</p>
+<hr>
+<h2>Slide 18 — Opdracht 14.4</h2>
+<h1>GIN op jsonb</h1>
+<p>⚠ <strong>Meet ook de schrijfkant</strong> (onderdeel g).
+Dat is het cijfer dat je indexplan verandert.</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 19 — Het probleem van LIKE ‘%…%’</h2>
+<p>De klantenservice zoekt op een deel van een naam.</p>
+<p>Geen voorvoegsel → geen B-tree.</p>
+<pre><code class="language-sql">CREATE EXTENSION pg_trgm;
+CREATE INDEX ON deelnemer USING gin (achternaam gin_trgm_ops);
+</code></pre>
+<hr>
+<h2>Slide 20 — Trigrammen</h2>
+<p>“Janssen” →
+<code>  j</code> · <code> ja</code> · <code>jan</code> · <code>ans</code> · <code>nss</code> · <code>sse</code> · <code>sen</code> · <code>en </code></p>
+<p>De zoekopdracht wordt op dezelfde manier opgedeeld.</p>
+<hr>
+<h2>Slide 21 — En dan dit</h2>
+<pre><code class="language-sql">SELECT achternaam, similarity(achternaam, 'Jansenn') AS score
+FROM deelnemer WHERE achternaam % 'Jansenn'
+ORDER BY score DESC LIMIT 10;
+</code></pre>
+<p><strong>Notities:</strong> plenair draaien. Janssen komt bovenaan.</p>
+<hr>
+<h2>Slide 22 — Een ander soort winst</h2>
+<p>Alles vandaag maakt query’s <strong>sneller</strong>.</p>
+<h1>Dit maakt iets mogelijk</h1>
+<h1>dat eerst niet kon.</h1>
+<p>Een naam die telefonisch verkeerd is opgenomen,
+wordt alsnog gevonden.</p>
+<hr>
+<h2>Slide 23 — De rem</h2>
+<p>Trigram-indexen zijn <strong>groot</strong> — vaak groter dan de kolom.</p>
+<p>Op vier tekstkolommen van <code>deelnemer</code>:
+een veelvoud van de tabel aan index.</p>
+<h1>Alleen waar men werkelijk zo zoekt.</h1>
+<hr>
+<h2>Slide 24 — Opdracht 14.5</h2>
+<h1>Zoeken op naam met pg_trgm</h1>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 25 — Pauze</h2>
+<hr>
+<h2>Slide 26 — GiST</h2>
+<p>Waar je het al bent tegengekomen — deel 6:</p>
+<pre><code class="language-sql">CONSTRAINT adres_geen_overlap
+    EXCLUDE USING gist (deelnemer_id WITH =, geldigheid WITH &amp;&amp;)
+</code></pre>
+<p>Een bereik is niet lineair te ordenen.
+B-tree kan “overlapt met” niet beantwoorden.</p>
+<p><strong>Bonus:</strong> diezelfde index versnelt je peildatumquery’s.</p>
+<hr>
+<h2>Slide 27 — BRIN</h2>
+<p>Slaat per groep van 128 pagina’s alleen
+het <strong>minimum en maximum</strong> op.</p>
+<pre><code class="language-sql">CREATE INDEX ON mutatie USING brin (aangemeld_op);
+</code></pre>
+<p>Op 600 MB tabel:</p>
+<h1>tientallen kilobytes.</h1>
+<hr>
+<h2>Slide 28 — Tegenover een B-tree</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Omvang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-tree op <code>aangemeld_op</code></td>
+<td>~50 MB</td>
+</tr>
+<tr>
+<td>BRIN op <code>aangemeld_op</code></td>
+<td>~40 kB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verhouding: ongeveer 1000 : 1.</strong></p>
+<hr>
+<h2>Slide 29 — Maar</h2>
+<p><strong>Notities:</strong> laat de zaal beide meten voordat je verder klikt.</p>
+<h1>De B-tree is sneller.</h1>
+<p>BRIN <strong>sluit blokken uit</strong>. Hij wijst geen rijen aan.</p>
+<p>De winst zit in ruimte en schrijfkosten. Niet in leessnelheid.</p>
+<hr>
+<h2>Slide 30 — De strikte voorwaarde</h2>
+<pre><code class="language-sql">SELECT attname, correlation FROM pg_stats WHERE tablename='mutatie';
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kolom</th>
+<th>Correlatie</th>
+<th>BRIN?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mutatie_id</code></td>
+<td>~1,0</td>
+<td>Uitstekend</td>
+</tr>
+<tr>
+<td><code>aangemeld_op</code></td>
+<td>hoog</td>
+<td>Goed</td>
+</tr>
+<tr>
+<td><code>deelnemer_id</code></td>
+<td>laag</td>
+<td><strong>Waardeloos</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>Dit is de betaling van deel 12.</em></p>
+<hr>
+<h2>Slide 31 — Niet suboptimaal</h2>
+<h1>BRIN op een ongecorreleerde kolom</h1>
+<h1>is waardeloos.</h1>
+<p>Elke blokgroep bevat het hele waardebereik
+→ er wordt niets uitgesloten
+→ je leest de hele tabel <strong>én</strong> raadpleegt een index.</p>
+<hr>
+<h2>Slide 32 — Opdracht 14.6</h2>
+<h1>BRIN</h1>
+<p>Inclusief: bij welke tabelomvang stap je over?
+Onderbouw met cijfers.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 33 — Indexen bouwen op productie</h2>
+<pre><code class="language-sql">CREATE INDEX CONCURRENTLY … ;
+</code></pre>
+<ul>
+<li>Duurt langer (tabel wordt twee keer doorlopen)</li>
+<li><strong>Kan niet in een transactie</strong> (uitzondering op deel 6)</li>
+<li><strong>Kan mislukken</strong> → ongeldige index</li>
+</ul>
+<hr>
+<h2>Slide 34 — De stille fout</h2>
+<p>Een ongeldige index:
+bestaat · wordt bij elke schrijfactie onderhouden · wordt <strong>nooit gebruikt</strong></p>
+<pre><code class="language-sql">SELECT c.relname FROM pg_index i
+JOIN pg_class c ON c.oid=i.indexrelid WHERE NOT i.indisvalid;
+</code></pre>
+<h1>Controleer dit altijd na CONCURRENTLY.</h1>
+<hr>
+<h2>Slide 35 — Het invoerpatroon</h2>
+<ol>
+<li><code>CONCURRENTLY</code>, buiten de piek</li>
+<li><code>indisvalid</code> controleren</li>
+<li><code>EXPLAIN</code>: wordt hij gebruikt?</li>
+<li>Query opnieuw meten</li>
+<li><strong>Na een week: <code>idx_scan</code> controleren</strong></li>
+</ol>
+<p>Stap 5 slaat vrijwel iedereen over —
+en het is de enige die vaststelt of het de kosten waard was.</p>
+<hr>
+<h2>Slide 36 — Opdracht 14.7</h2>
+<h1>Indexhygiëne</h1>
+<p>Ongebruikt · dubbel · ongeldig</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 37 — En nu het tegendeel</h2>
+<p>Vier meldingen:</p>
+<p><strong>A.</strong> <em>“Vanmorgen 40 seconden, nu 200 ms. Data onveranderd.”</em>
+<strong>B.</strong> <em>“80.000 rijen terug, gebruiker ziet er 25.”</em>
+<strong>C.</strong> <em>“Query van 2 ms staat bovenaan op totale tijd.”</em>
+<strong>D.</strong> <em>“Import twee keer zo traag sinds drie nieuwe indexen.”</em></p>
+<h1>Bij welke helpt een index?</h1>
+<hr>
+<h2>Slide 38 — Bij geen enkele</h2>
+<p><strong>A</strong> — plan slaat om, of vergrendeling
+<strong>B</strong> — te veel rijen; pagineren
+<strong>C</strong> — te vaak aangeroepen; applicatie
+<strong>D</strong> — het probleem <strong>is</strong> de index</p>
+<h1>Stel eerst de diagnose (deel 13).</h1>
+<h1>Alleen bij “ontbrekende index” is een index het antwoord.</h1>
+<hr>
+<h2>Slide 39 — Opdracht 14.9</h2>
+<h1>Het indexplan</h1>
+<p>Per index: type · winst <strong>gemeten</strong> · kosten <strong>inclusief schrijfkant</strong>
+Minimaal één niet-B-tree, met verantwoording
+Eén verzoek dat je <strong>afwijst</strong>
+Invoerplan met stap 5</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 40 — Volgende keer</h2>
+<h1>Deel 15 — Concurrency en locking</h1>
+<h3><em>(twee dagdelen)</em></h3>
+<p>Jullie database is nu snel.</p>
+<p>Volgende keer: honderdvijftig sessies die tegelijk
+hetzelfde willen. En dan blijkt snelheid niet het probleem —
+de query’s zijn snel, ze staan op elkaar te wachten.</p>
+<p><strong>Bewaar je indexplan.</strong> De locks van <code>CREATE INDEX</code> komen terug.</p>
+<hr>
+<p><em>Einde slidedeck deel 14.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">66 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">429 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">&larr; Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner</a><a class="dbm-prevnext next" href="../deel-15-concurrency-en-locking/reader.html">Deel 15 — Concurrency en locking &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

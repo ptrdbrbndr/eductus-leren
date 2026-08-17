@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Sharding-fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 24 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 24 — Sharding-fundamenten</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 2 van 8 (deel 24 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom partitionering ooit niet meer volstaat</li>
+<li>Verticaal versus horizontaal schalen</li>
+<li>Wat sharding precies is</li>
+<li>De shardsleutel: de belangrijkste keuze van dit deel</li>
+<li>Wat je verliest: cross-shard-joins</li>
+<li>Wat je verliest: cross-shard-transacties</li>
+<li>Wat je verliest: globale uniciteit</li>
+<li>Referentiedata: de uitzondering die je overal nodig hebt</li>
+<li>Rebalancing: shards herverdelen zonder alles stil te leggen</li>
+<li>Consistente hashing versus bereik-gebaseerde sharding</li>
+<li>Sharding en de rest van niveau 2, samengevat</li>
+<li>Wanneer je NIET moet shardenen</li>
+<li>Een sharding-ontwerp voor de Pensioenfederatie, conceptueel</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>uitleggen waarom en wanneer partitionering (deel 16) niet meer volstaat;</li>
+<li>het verschil tussen verticaal en horizontaal schalen toepassen op een concreet scenario;</li>
+<li>een shardsleutel kiezen en de gevolgen van een slechte keuze benoemen;</li>
+<li>de vier klassieke verliezen van sharding (cross-shard-joins, transacties, uniciteit, eenvoud) uitleggen;</li>
+<li>referentiedata correct behandelen in een gesharde omgeving;</li>
+<li>rebalancing conceptueel beschrijven en de risico’s ervan benoemen;</li>
+<li>bereik-gebaseerde en hash-gebaseerde sharding tegen elkaar afwegen;</li>
+<li>beoordelen of sharding voor een gegeven situatie de juiste keuze is.</li>
+</ul>
+<hr>
+<h2>2. Waarom partitionering ooit niet meer volstaat</h2>
+<p>Deel 16 loste een echt probleem op: een tabel die te groot en te log wordt voor comfortabel onderhoud, opgeknipt in partities die elk <strong>binnen dezelfde server</strong> blijven. Autovacuum werkt per partitie, oude data verdwijnt met <code>DROP TABLE</code>, query’s met de juiste voorwaarde raken maar één partitie.</p>
+<p><strong>Wat partitionering niet oplost: de totale capaciteit van één machine.</strong> Alle partities delen nog steeds dezelfde CPU, hetzelfde geheugen, dezelfde schijf, dezelfde WAL. Als de <strong>gecombineerde</strong> belasting van alle partities samen de capaciteit van die ene machine overschrijdt, helpt een fijnere partitie-indeling niet meer — je verplaatst het probleem niet, je maakt het alleen overzichtelijker terwijl het even groot blijft.</p>
+<p><strong>Bij de Pensioenfederatie is dit geen abstract scenario.</strong> Stel dat de federatie op termijn tientallen fondsen bedient in plaats van drie, elk met hun eigen <code>mutatie</code>-tabel die op de manier van deel 16 is gepartitioneerd. Op een gegeven moment overschrijdt de <strong>som</strong> van alle fondsen samen wat één server, hoe goed geconfigureerd ook (deel 11), kan verwerken. Dat is het moment waarop je van verticaal naar horizontaal schalen moet — het onderwerp van vandaag.</p>
+<hr>
+<h2>3. Verticaal versus horizontaal schalen</h2>
+<p><strong>Verticaal schalen</strong> — een grotere machine. Meer CPU, meer geheugen, snellere schijven. Dit is wat je in niveau 2 impliciet deed: elke optimalisatie (indexen, <code>work_mem</code>, bloatbeheersing) haalde meer uit dezelfde machine, en de aanbeveling bij capaciteitsgebrek was steeds “een zwaardere server”.</p>
+<p><strong>Horizontaal schalen</strong> — meer machines, die samen de belasting dragen. Elke machine draagt een deel van de data en een deel van de belasting.</p>
+<p><strong>De grens van verticaal schalen</strong> is niet alleen technisch (er is een plafond aan wat één machine aankan) maar ook economisch: de kosten van steeds grotere machines stijgen niet lineair — een machine met twee keer zoveel geheugen kost vaak meer dan twee keer zoveel, en op een gegeven moment bestaat de gewenste machine simpelweg niet.</p>
+<p><strong>De prijs van horizontaal schalen</strong> is dat je opgeeft wat één machine gratis geeft: alle data op één plek, met alle garanties van ACID (deel 7) die daarbij horen. Dat is de kern van dit deel — sharding is geen gratis extra capaciteit, het is een ruil.</p>
+<hr>
+<h2>4. Wat sharding precies is</h2>
+<p><strong>Sharding</strong> is horizontaal schalen toegepast op een database: dezelfde tabel wordt <strong>verdeeld over meerdere, onafhankelijke database-servers</strong> (shards), elk verantwoordelijk voor een deel van de rijen.</p>
+<pre><code>mutatie-tabel, gesplitst over drie shards:
+
+Shard 1 (server A)     Shard 2 (server B)     Shard 3 (server C)
+deelnemer_id-hash A     deelnemer_id-hash B     deelnemer_id-hash C
+</code></pre>
+<p><strong>Het cruciale verschil met partitionering uit deel 16:</strong> partities leven op <strong>dezelfde server</strong>, delen dezelfde resources, en worden door één PostgreSQL-instantie beheerd. Shards leven op <strong>verschillende servers</strong>, hebben elk hun eigen resources, en worden gecoördineerd door een aparte laag (in deel 25: Citus) die weet welke shard welke rijen bevat.</p>
+<p><strong>Sharding en partitionering zijn complementair, niet concurrerend.</strong> Een shard is zelf vaak weer gepartitioneerd volgens de technieken uit deel 16 — de twee technieken werken op verschillende niveaus van hetzelfde probleem: partitionering binnen een server, sharding tussen servers.</p>
+<hr>
+<h2>5. De shardsleutel: de belangrijkste keuze van dit deel</h2>
+<p>De kolom waarop je verdeelt, bepaalt vrijwel alles wat volgt — vergelijkbaar met hoe de partitiesleutel in deel 16 de bruikbaarheid van pruning bepaalde, maar met veel grotere gevolgen bij een verkeerde keuze.</p>
+<p><strong>Wat een goede shardsleutel kenmerkt:</strong></p>
+<ul>
+<li><strong>Hoge cardinaliteit</strong> — genoeg verschillende waarden om evenredig te verdelen. <code>fonds_id</code> met drie waarden is te grof voor fijne verdeling over veel shards; <code>deelnemer_id</code> met honderdduizenden waarden is fijnmaziger.</li>
+<li><strong>Gelijkmatige verdeling</strong> — geen “hotspot”-waarde die een onevenredig deel van de data of het verkeer trekt. Als Baken (met zijn hoge mutatievolume) een shardsleutel zou delen met de andere fondsen op een manier die zijn data ongelijk laat groeien, ontstaat een scheve verdeling.</li>
+<li><strong>Aansluiting bij het toegangspatroon</strong> — de meeste query’s zouden idealiter <strong>binnen</strong> één shard moeten kunnen worden beantwoord (co-locatie). Een query die informatie van veel shards tegelijk nodig heeft, is inherent duurder (paragraaf 6).</li>
+</ul>
+<p><strong>Voor de Pensioenfederatie is <code>fonds_id</code> een voor de hand liggende eerste gedachte, maar problematisch:</strong> met slechts drie fondsen kun je nooit verder verdelen dan drie shards, en de scheve verdeling (Baken heeft een ander profiel dan Meridiaan/Kompas) zou de shards ongelijk belasten.</p>
+<p><strong>Een betere kandidaat: <code>deelnemer_id</code></strong> (of, specifieker, een combinatie die zowel fonds als deelnemer omvat). Elke deelnemer hoort bij precies één fonds (deel 23, paragraaf 10) en bijna alle operationele query’s (een deelnemer opzoeken, zijn mutaties tonen, zijn dienstverbanden) draaien om één deelnemer — precies het toegangspatroon dat co-locatie mogelijk maakt.</p>
+<p><strong>De les, net als bij partitiesleutels in deel 16: kies op basis van het werkelijke toegangspatroon, met <code>pg_stat_statements</code>-achtig bewijs (deel 13) waar mogelijk, niet op basis van wat conceptueel het netstaat.</strong></p>
+<hr>
+<h2>6. Wat je verliest: cross-shard-joins</h2>
+<p>Binnen één server kan PostgreSQL elke join uitvoeren zonder dat je erover na hoeft te denken (deel 4, 8). Zodra twee tabellen op verschillende shards kunnen staan, verandert dat fundamenteel.</p>
+<pre><code class="language-sql">-- Als deelnemer en mutatie op dezelfde shard staan (co-locatie): snel
+SELECT * FROM deelnemer d JOIN mutatie m USING (deelnemer_id)
+WHERE d.deelnemer_id = 42;
+
+-- Als ze op verschillende shards kunnen staan: de coördinerende laag
+-- moet gegevens van meerdere servers ophalen en zelf samenvoegen
+SELECT w.naam, count(*) FROM werkgever w
+JOIN dienstverband dv USING (werkgever_id)
+GROUP BY w.naam;
+-- als werkgever en dienstverband niet co-located zijn: een
+-- distributed join, aanzienlijk duurder dan binnen één server
+</code></pre>
+<p><strong>Co-locatie is het ontwerpprincipe dat dit verzacht:</strong> als je gerelateerde tabellen zo shardt dat rijen die vaak samen worden bevraagd, altijd op dezelfde shard belanden (bijvoorbeeld: <code>mutatie</code> en <code>dienstverband</code> beide op <code>deelnemer_id</code> shardt, ook al heeft <code>mutatie</code> zelf geen directe <code>deelnemer_id</code>-kolom als shardsleutel-kandidaat leek), blijven de meeste joins lokaal aan één shard.</p>
+<p><strong>Wat co-locatie niet oplost:</strong> rapportagequery’s die inherent over de hele dataset heen gaan (Karins kwartaaloverzicht, nu over alle fondsen heen in plaats van één). Die blijven een <strong>distributed query</strong>, met de kosten die daarbij horen — vergelijkbaar met, maar duurder dan, een query die alle partities van een gepartitioneerde tabel moet doorzoeken (deel 16, paragraaf 8).</p>
+<hr>
+<h2>7. Wat je verliest: cross-shard-transacties</h2>
+<p>Binnen één server garandeert PostgreSQL ACID (deel 7) voor elke transactie, ongeacht hoeveel tabellen of rijen die raakt. Zodra een transactie rijen op <strong>verschillende shards</strong> moet wijzigen, is die garantie niet meer gratis.</p>
+<p><strong>Het klassieke probleem:</strong> een waardeoverdracht tussen twee deelnemers die (door een ongelukkige shardsleutelkeuze) op verschillende shards staan. Bedrag af bij de ene, bij bij de andere — als de ene shard slaagt en de andere faalt (netwerkstoring, servercrash), is er geen enkele lokale transactie die dat garandeert.</p>
+<p><strong>Oplossingen, met hun kosten:</strong></p>
+<ul>
+<li><strong>Two-phase commit (2PC)</strong> — een coördinatieprotocol dat garandeert dat alle betrokken shards ofwel allemaal committen ofwel allemaal terugdraaien. Correct, maar traag (elke transactie vereist meerdere rondes netwerkverkeer) en kwetsbaar voor een coördinator die zelf uitvalt tijdens het proces.</li>
+<li><strong>Saga-patroon</strong> — een reeks lokale transacties, elk met een gedefinieerde compensatie-actie als een latere stap faalt. Sneller dan 2PC, maar het systeem is tussentijds zichtbaar inconsistent (de ene shard heeft al gecommit, de andere nog niet) — een afwijking van de klassieke ACID-garantie die expliciet geaccepteerd moet worden.</li>
+<li><strong>Ontwerp het probleem weg</strong> — de sterkste oplossing: kies de shardsleutel zo dat transacties die atomair moeten zijn, altijd binnen één shard blijven (co-locatie, opnieuw). Een waardeoverdracht binnen hetzelfde fonds hoeft nooit cross-shard te zijn als beide deelnemers volgens dezelfde sleutel op dezelfde shard staan.</li>
+</ul>
+<p><strong>De volgorde van voorkeur:</strong> eerst proberen te ontwerpen zodat het probleem niet ontstaat; pas als dat structureel niet kan, een saga of 2PC overwegen — met het volle besef van de complexiteit die daarbij komt.</p>
+<hr>
+<h2>8. Wat je verliest: globale uniciteit</h2>
+<p>Uit deel 16, paragraaf 4: een primaire sleutel op een gepartitioneerde tabel moet de partitiesleutel bevatten, omdat PostgreSQL uniciteit alleen per partitie kan afdwingen. <strong>Bij sharding is dat probleem groter: uniciteit kan alleen per shard worden afgedwongen, niet over shards heen, tenzij je er expliciet iets voor doet.</strong></p>
+<pre><code class="language-sql">-- Op één server: triviaal
+mutatie_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+
+-- Over shards heen: elke shard genereert zijn eigen reeks,
+-- en zonder maatregelen kunnen twee shards dezelfde waarde produceren
+</code></pre>
+<p><strong>Oplossingen:</strong></p>
+<ul>
+<li><strong>Sequenties met een offset per shard</strong> — shard 1 genereert 1, 4, 7, …; shard 2 genereert 2, 5, 8, …; enzovoort. Eenvoudig, maar het aantal shards moet vooraf min of meer vaststaan.</li>
+<li><strong>UUID’s</strong> — praktisch gegarandeerd uniek zonder coördinatie tussen shards nodig te hebben. De prijs: groter dan een <code>bigint</code> (deel 6, 12: meer opslag, tragere indexen), en zonder de handige sorteer-op-invoegvolgorde-eigenschap die een oplopende <code>bigint</code> gratis geeft (relevant voor BRIN, deel 14, en voor correlatie).</li>
+<li><strong>Een centrale ID-generator</strong> — een aparte, snelle dienst die unieke ID’s uitgeeft aan alle shards. Correct, maar introduceert een nieuw, centraal onderdeel dat zelf weer beschikbaar moet blijven (een echo van de HA-vraag uit deel 19, nu voor een ID-generator in plaats van de database zelf).</li>
+</ul>
+<p><strong>Voor de Pensioenfederatie:</strong> UUID’s zijn vaak de pragmatische keuze voor nieuwe, gesharde tabellen, met het bewustzijn van de prijs die daarbij hoort — precies zoals in deel 14 een BRIN-index zijn eigen prijs had (trager lezen) tegenover zijn winst (minuscule omvang).</p>
+<hr>
+<h2>9. Referentiedata: de uitzondering die je overal nodig hebt</h2>
+<p>Sommige tabellen zijn klein, veranderen zelden, en worden door <strong>elke</strong> shard nodig — bijvoorbeeld een tabel met sectorcodes, of de lijst van aangesloten fondsen zelf. Deze consequent op één shard zetten zou van elke query naar die tabel een cross-shard-query maken (paragraaf 6), voor iets dat helemaal niet groot genoeg is om te shardten.</p>
+<p><strong>De oplossing: referentietabellen (reference tables)</strong> — een volledige kopie van deze kleine tabel op <strong>elke</strong> shard, gesynchroniseerd bij elke wijziging. Elke shard kan dan lokaal joinen tegen deze tabel zonder cross-shard-verkeer, ten koste van (verwaarloosbare) opslagredundantie en een iets duurdere schrijfactie bij een wijziging (die naar alle shards moet).</p>
+<p><strong>Bij de Pensioenfederatie:</strong> de tabel <code>fonds</code> zelf (drie tot enkele tientallen rijen, zelden gewijzigd) is de schoolvoorbeeld-kandidaat voor een referentietabel. Sectorcodes, valutacodes, en vergelijkbare kleine naslagtabellen eveneens.</p>
+<p><strong>De vuistregel:</strong> klein en zelden gewijzigd → referentietabel. Groot en/of vaak gewijzigd → shardten volgens de gekozen shardsleutel. Twijfelgevallen bestaan (een middelgrote, matig vaak gewijzigde tabel) en vragen een expliciete afweging tussen schrijfkosten (referentietabel) en cross-shard-leeskosten (shardten).</p>
+<hr>
+<h2>10. Rebalancing: shards herverdelen zonder alles stil te leggen</h2>
+<p>Naarmate de Pensioenfederatie groeit (meer fondsen, meer deelnemers), moet de verdeling over shards op een gegeven moment worden herzien — een nieuwe shard toevoegen, of de belasting anders verdelen omdat één shard onevenredig is gegroeid.</p>
+<p><strong>Het risico van rebalancing:</strong> data verplaatsen tussen servers terwijl het systeem in gebruik blijft, is een operatie met een vergelijkbaar risicoprofiel als de zero-downtime-migraties uit deel 22 — alleen nu over servergrenzen heen in plaats van binnen één database.</p>
+<p><strong>Het patroon, in dezelfde geest als expand-contract:</strong></p>
+<ol>
+<li><strong>Expand:</strong> de nieuwe shard (of de nieuwe verdeling) wordt beschikbaar gemaakt, nog leeg of nog niet in gebruik voor nieuw verkeer.</li>
+<li><strong>Migrate:</strong> data wordt geleidelijk gekopieerd naar de nieuwe locatie (vaak met een mechanisme vergelijkbaar met logische replicatie, deel 18), terwijl schrijfacties dubbel worden bijgehouden of via een wachtrij worden verwerkt om niets te missen.</li>
+<li><strong>Contract:</strong> zodra de nieuwe verdeling compleet en geverifieerd is, wordt het verkeer omgeleid en de oude locatie van de verplaatste data opgeschoond.</li>
+</ol>
+<p><strong>Waarom dit zorgvuldig moet:</strong> een rebalancing die halverwege faalt of een verkeerde route neemt, kan leiden tot rijen die op <strong>twee</strong> shards tegelijk lijken te bestaan, of — erger — op <strong>geen enkele</strong>. De verificatiestap (rijtellingen én inhoudelijke steekproef, dezelfde discipline als deel 6, 16, 22) is hier niet optioneel.</p>
+<p>In de praktijk wordt rebalancing zelden volledig handmatig gedaan; deel 25 laat zien hoe Citus dit grotendeels automatiseert — met het besef dat automatisering het risico verkleint, niet wegneemt.</p>
+<hr>
+<h2>11. Consistente hashing versus bereik-gebaseerde sharding</h2>
+<p>Twee manieren om te bepalen welke shard een gegeven rij krijgt.</p>
+<p><strong>Bereik-gebaseerde sharding</strong> — vergelijkbaar met range-partitionering uit deel 16, maar dan over shards: shard 1 krijgt <code>deelnemer_id 1-500.000</code>, shard 2 krijgt <code>500.001-1.000.000</code>, enzovoort.</p>
+<p><em>Voordeel:</em> eenvoudig te begrijpen, en bereikquery’s (zeldzaam bij een sleutel als <code>deelnemer_id</code>, maar denkbaar) blijven binnen één shard.
+<em>Nadeel:</em> nieuwe deelnemers concentreren zich op de “nieuwste” shard, wat tot een ongelijke verdeling van schrijfbelasting leidt — een hotspot, vergelijkbaar met het tellerrij-probleem uit deel 15, nu op shard-niveau.</p>
+<p><strong>Hash-gebaseerde sharding</strong> — vergelijkbaar met hash-partitionering uit deel 16: een hash van de shardsleutel bepaalt de shard, wat een gelijkmatige verdeling geeft ongeacht de volgorde waarin rijen ontstaan.</p>
+<p><em>Voordeel:</em> gelijkmatige verdeling van zowel opslag als schrijfbelasting — geen hotspot op de “nieuwste” shard.
+<em>Nadeel:</em> geen enkele relatie tussen naburige sleutelwaarden en hun shard, dus bereikquery’s (zeldzaam bij <code>deelnemer_id</code>, maar wel relevant bij een sleutel als <code>aangemeld_op</code>) worden per definitie cross-shard.</p>
+<p><strong>Consistente hashing</strong> is een verfijning die specifiek rebalancing goedkoper maakt: bij het toevoegen van een shard hoeft niet de hele verdeling opnieuw berekend te worden (zoals bij een simpele <code>hash(sleutel) mod aantal_shards</code>, waar het aantal shards wijzigen bijna alle toewijzingen verandert), maar slechts een klein deel van de data verschuift naar de nieuwe shard.</p>
+<p><strong>Voor de Pensioenfederatie:</strong> hash-gebaseerde sharding op <code>deelnemer_id</code> is de gangbare keuze — geen natuurlijk bereikpatroon dat verloren gaat, en een gelijkmatige verdeling die zowel Meridiaan/Kompas als het afwijkende profiel van Baken redelijk verdeelt (mits <code>deelnemer_id</code>, niet <code>fonds_id</code>, de sleutel is).</p>
+<hr>
+<h2>12. Sharding en de rest van niveau 2, samengevat</h2>
+<p><strong>Partitionering (deel 16)</strong> blijft binnen elke shard relevant — een shard met een groot deel van <code>mutatie</code> heeft nog steeds baat bij maandelijkse partities.</p>
+<p><strong>Indexen (deel 14)</strong> worden per shard apart onderhouden; een BRIN-index op een shard met hoge correlatie werkt net zo goed als op een ongesplitste tabel.</p>
+<p><strong>Concurrency en locking (deel 15)</strong> gelden onverkort <strong>binnen</strong> een shard; over shards heen gelden ze niet — vandaar de noodzaak van 2PC of saga’s voor cross-shard-transacties (paragraaf 7).</p>
+<p><strong>Back-up, replicatie, HA (deel 17-19)</strong> moeten nu <strong>per shard</strong> worden ingericht — elke shard is in feite zijn eigen PostgreSQL-cluster met zijn eigen RPO/RTO-overwegingen, vermenigvuldigd met het aantal shards.</p>
+<p><strong>Monitoring (deel 20)</strong> moet niet alleen per shard maar ook <strong>over shards heen</strong> kunnen aggregeren — is de verdeling nog gelijkmatig, loopt één shard achter, is er een hotspot ontstaan?</p>
+<p><strong>Security (deel 21)</strong> moet consistent zijn over alle shards — een RLS-policy of rolrecht dat op de ene shard anders is geconfigureerd dan op de andere, is een potentieel lek, vergelijkbaar met schema-drift uit deel 23.</p>
+<hr>
+<h2>13. Wanneer je NIET moet shardenen</h2>
+<p>De eerlijke tegenkant, in dezelfde geest als elk krachtig gereedschap in deze cursus.</p>
+<p><strong>Als verticaal schalen nog ruimte heeft.</strong> Een zwaardere server is vrijwel altijd eenvoudiger dan sharding — minder architecturale complexiteit, geen cross-shard-problemen, geen nieuwe operationele laag. Controleer eerst of niveau 2’s technieken (partitionering, indexoptimalisatie, replicatie voor leesbelasting) de capaciteitsnood al oplossen.</p>
+<p><strong>Als de werklast veel cross-shard-joins of -transacties zou vereisen.</strong> Een datamodel met sterk verweven relaties die niet natuurlijk co-located kunnen worden, wordt door sharding trager en complexer in plaats van sneller.</p>
+<p><strong>Als het team de operationele last niet aankan.</strong> Sharding vermenigvuldigt bijna elke niveau-2-taak (paragraaf 12) met het aantal shards. Een team dat al moeite had met één cluster (deel 20), krijgt met sharding niet minder werk maar meer, verdeeld over meer systemen.</p>
+<p><strong>Als de groei nog onzeker of ver weg is.</strong> Net als bij patroon 3 in deel 23: begin niet bij de zwaarste oplossing “voor de zekerheid”. Een architectuur die begint bij verticaal schalen plus partitionering, met een doordacht pad naar sharding wanneer de cijfers dat rechtvaardigen, is vaak verstandiger dan vooraf shardten voor een groei die nog moet blijken.</p>
+<blockquote>
+<p><strong>De vraag die je stelt vóór je shardt: heb ik een gemeten, aangetoonde capaciteitsgrens die verticaal schalen niet meer oplost? Zo niet, is sharding een oplossing voor een probleem dat je nog niet hebt.</strong></p>
+</blockquote>
+<hr>
+<h2>14. Een sharding-ontwerp voor de Pensioenfederatie, conceptueel</h2>
+<p>Vooruitblikkend naar wat deel 25 concreet zal implementeren:</p>
+<ul>
+<li><strong>Shardsleutel:</strong> <code>deelnemer_id</code>, hash-gebaseerd, voor de kerntabellen (<code>deelnemer</code>, <code>dienstverband</code>, <code>mutatie</code>, <code>aanspraak</code>).</li>
+<li><strong>Co-locatie:</strong> alle tabellen die een <code>deelnemer_id</code> bevatten (direct of via een vreemde sleutel) worden op dezelfde sleutel gesplitst, zodat de meest voorkomende query’s (alles over één deelnemer) binnen één shard blijven.</li>
+<li><strong>Referentietabellen:</strong> <code>fonds</code>, sectorcodes, en vergelijkbare kleine naslagtabellen op elke shard gerepliceerd.</li>
+<li><strong>Wat cross-shard blijft:</strong> rapportages die over de hele federatie of over een heel fonds aggregeren (<code>werkgever</code>-gebaseerde rapportages, tenzij <code>werkgever</code> zelf ook co-located kan worden via een vergelijkbare sleutelkeuze).</li>
+</ul>
+<p><strong>Dit ontwerp wordt pas zinvol bij een concrete schaal die het rechtvaardigt</strong> — bij de huidige omvang van drie fondsen is dit een oefening in vooruitdenken, geen acute noodzaak. Precies de spanning uit paragraaf 13.</p>
+<hr>
+<h2>15. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shardsleutel kiezen op basis van wat conceptueel netjes lijkt (<code>fonds_id</code>)</td>
+<td>Te grof, ongelijke verdeling, Baken als hotspot</td>
+<td>Kiezen op werkelijk toegangspatroon (<code>deelnemer_id</code>)</td>
+</tr>
+<tr>
+<td>Sharding invoeren zonder verticaal schalen te hebben uitgeput</td>
+<td>Onnodige complexiteit voor een probleem dat niet bestond</td>
+<td>Eerst niveau-2-technieken, dan pas sharding</td>
+</tr>
+<tr>
+<td>Cross-shard-transacties negeren tot ze in productie fout gaan</td>
+<td>Inconsistente data zonder ACID-garantie</td>
+<td>Ontwerp co-locatie zodat kritieke transacties lokaal blijven</td>
+</tr>
+<tr>
+<td>Globale uniciteit vergeten bij het ontwerp van sleutels</td>
+<td>Sleutelbotsingen tussen shards</td>
+<td>UUID’s, offset-sequenties, of een centrale generator, vooraf gekozen</td>
+</tr>
+<tr>
+<td>Referentietabellen vergeten en kleine naslagtabellen ook shardten</td>
+<td>Onnodig cross-shard-verkeer voor iets triviaals</td>
+<td>Kleine, zelden gewijzigde tabellen als referentietabel</td>
+</tr>
+<tr>
+<td>Rebalancing zonder verificatie</td>
+<td>Rijen op twee shards, of op geen enkele</td>
+<td>Dezelfde verificatiediscipline als elke migratie (deel 6, 16, 22)</td>
+</tr>
+<tr>
+<td>Bereik-gebaseerde sharding op een oplopende sleutel zonder de hotspot-consequentie te overzien</td>
+<td>Nieuwe schrijfacties concentreren zich op één shard</td>
+<td>Hash-gebaseerd waar geen natuurlijk bereikpatroon nodig is</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>16. Kernbegrippen</h2>
+<p><strong>Verticaal schalen</strong> — een grotere machine.
+<strong>Horizontaal schalen</strong> — meer machines die de belasting delen.
+<strong>Sharding</strong> — horizontaal schalen toegepast op databasegegevens, verdeeld over onafhankelijke servers.
+<strong>Shardsleutel</strong> — de kolom die bepaalt naar welke shard een rij gaat.
+<strong>Co-locatie</strong> — het ontwerpprincipe dat gerelateerde rijen op dezelfde shard laat belanden.
+<strong>Cross-shard-join/-transactie</strong> — een bewerking die meerdere shards moet raadplegen of wijzigen.
+<strong>Two-phase commit (2PC)</strong> — een coördinatieprotocol voor atomaire cross-shard-transacties.
+<strong>Saga-patroon</strong> — een reeks lokale transacties met compensatie-acties, als alternatief voor 2PC.
+<strong>Referentietabel</strong> — een kleine tabel die op elke shard volledig wordt gerepliceerd.
+<strong>Rebalancing</strong> — het herverdelen van data over shards, bijvoorbeeld bij het toevoegen van een nieuwe shard.
+<strong>Consistente hashing</strong> — een hashingtechniek die rebalancing goedkoper maakt.</p>
+<hr>
+<p><em>Volgende deel: Citus in de praktijk. Vandaag de concepten, volgende keer de implementatie — distributed tables, reference tables, en het daadwerkelijk bouwen van de architectuur die vandaag conceptueel is geschetst.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">272 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-23-architectuur-voor-meerdere-fondsen/reader.html">&larr; Deel 23 — Architectuur voor meerdere fondsen</a><a class="dbm-prevnext next" href="../deel-25-citus-in-de-praktijk/reader.html">Deel 25 — Citus in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

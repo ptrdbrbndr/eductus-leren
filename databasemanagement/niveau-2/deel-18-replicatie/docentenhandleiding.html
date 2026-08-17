@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Replicatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 18 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 18: Replicatie</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Het belangrijkste onderscheid dat vandaag moet landen, staat al in paragraaf 2 van de reader:</p>
+<blockquote>
+<p>Back-up beschermt tegen fouten in de tijd. Replicatie beschermt tegen het uitvallen van een machine.</p>
+</blockquote>
+<p>Deelnemers verwarren deze twee structureel — “we hebben een replica, dus we zijn gedekt” is een veelgehoorde aanname die dit dagdeel moet corrigeren. Opdracht 18.1a maakt het concreet: een verkeerde <code>DELETE</code> repliceert binnen seconden mee, en dan heb je twee kapotte databases in plaats van één.</p>
+<p><strong>De tweede kernboodschap</strong> is dat promotie niet hetzelfde is als failover. Deelnemers zien in opdracht 18.8 hoe eenvoudig <code>pg_promote()</code> is, en moeten in dezelfde opdracht ontdekken hoeveel daar nog niet mee geregeld is — de opzet voor deel 19.</p>
+<p><strong>De praktische vaardigheid:</strong> de drie lag-typen (write/flush/replay) onderscheiden en weten dat <code>replay_lag</code> een actuele RPO-schending in wording is, niet alleen een prestatiegetal.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 18; een tweede PostgreSQL-instantie moet opgezet kunnen worden (zie het werkboek voor de Docker- en lokale route).</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Zet zelf een primary-replica-paar op</strong> vóór de sessie en oefen de choreografie van opdracht 18.2, 18.3 en 18.7 — dit zijn de drie momenten waar iets zichtbaar moet gebeuren en waar een verkeerde configuratie (verkeerde <code>application_name</code>, ontbrekende <code>pg_hba.conf</code>-regel) de hele demonstratie kan laten haperen.</li>
+<li>Controleer of deelnemers voldoende rechten hebben om een tweede instantie te starten — bij een gedeelde of beperkte omgeving is dit het tweede dagdeel (na deel 15) waar dat een genuine belemmering kan zijn.</li>
+<li>Bereid een korte, generieke anekdote voor over een organisatie die replicatie had maar geen recente back-up (of andersom) — het opent opdracht 18.1 goed.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Wat replicatie wel/niet is (§2) + <strong>opdracht 18.1</strong></td>
+<td>Plenair + zelfstandig</td>
+</tr>
+<tr>
+<td>0:15-0:20</td>
+<td>Fysieke replicatie: het principe (§3)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:20-0:50</td>
+<td><strong>Een replica opzetten (§4) + opdracht 18.2</strong></td>
+<td>Choreografie + tweetallen</td>
+</tr>
+<tr>
+<td>0:50-1:15</td>
+<td><strong>Synchroon/asynchroon (§5) + opdracht 18.3</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-1:55</td>
+<td>Vertraging (§6) + <strong>opdracht 18.4</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>1:55-2:15</td>
+<td>Replicatieslots (§7) + <strong>opdracht 18.5</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:15-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:50</td>
+<td>Hot standby (§8) + <strong>opdracht 18.6</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:50-3:15</td>
+<td><strong>Conflicten (§9) + opdracht 18.7</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>3:15-3:30</td>
+<td>Logische replicatie (§10-12) + promotie (§14)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:30-4:00</td>
+<td><strong>Opdracht 18.8 (kort) + opdracht 18.9</strong></td>
+<td>Tweetallen + drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 18.5 (replicatieslots) vervallen als praktijkopdracht en behandel als demonstratie — het principe is in vijf minuten te tonen. Kort <strong>nooit</strong> opdracht 18.3d/e (synchrone blokkade), 18.7 (conflicten) of 18.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Vertel de anekdote en stel dan de vraag van opdracht 18.1a rechtstreeks:</p>
+<blockquote>
+<p><em>“Iemand doet <code>DELETE FROM deelnemer;</code> zonder WHERE. Jullie hebben een prima werkende replica. Helpt die?”</em></p>
+</blockquote>
+<p>Laat de zaal even nadenken — er is altijd iemand die “nee, want het repliceert mee” zegt, en dat is het moment om het principe vast te zetten: replicatie kopieert getrouw, ook fouten.</p>
+<h3>4.2 Een replica opzetten (0:20)</h3>
+<p><strong>Doe dit eerst zelf voor</strong>, stap voor stap, met beide vensters zichtbaar. Wijs expliciet op het verband met deel 17: <code>pg_basebackup -R</code> is in essentie hetzelfde mechanisme als een PITR-herstel, alleen blijft de replica dóórvolgen in plaats van te stoppen bij een doel — het verschil zit in <code>standby.signal</code> versus een eenmalig herstel.</p>
+<p>Laat deelnemers bij 18.2g zelf de foutmelding zien wanneer ze op de replica proberen te schrijven. Dat is overtuigender dan het te vertellen.</p>
+<h3>4.3 Synchroon/asynchroon (0:50)</h3>
+<p><strong>Het meest tastbare experiment van de dag.</strong> Laat de blokkade in 18.3d echt gebeuren — een sessie die hangt zonder foutmelding is een ander soort ervaring dan een tekstuele uitleg over “de primary kan blokkeren”. Laat het een paar seconden hangen voordat je ingrijpt (de replica weer starten, of de instelling terugdraaien) zodat het moment landt.</p>
+<p>Sluit dit blok af met de koppeling naar deel 17: leg de RPO-tabel uit opdracht 17.1 ernaast en laat de zaal zelf concluderen welke rijen synchroon rechtvaardigen (waarschijnlijk geen enkele bij Meridiaan op dit moment).</p>
+<h3>4.4 Vertraging (1:30)</h3>
+<p>Het onderscheid tussen de drie lag-typen is abstract tot je het met een concreet experiment koppelt. Opdracht 18.4d (een zware query op de replica die zijn eigen <code>replay_lag</code> opstuwt) is het moment waarop het onderscheid concreet wordt: de replica ontvangt de WAL prima, maar heeft geen tijd om hem toe te passen omdat hij zelf bezet is.</p>
+<p>Maak paragraaf 6’s kernpunt expliciet:</p>
+<blockquote>
+<p><em>“Een oplopende replay_lag is geen prestatieprobleem alleen. Het is een RPO-schending die op dit moment aan het gebeuren is — als de primary nu uitvalt, verlies je precies zoveel als de lag op dit moment aangeeft.”</em></p>
+</blockquote>
+<h3>4.5 Replicatieslots (1:55)</h3>
+<p>Bewaar dit kort, maar laat 18.5e (de groeiende <code>pg_wal/</code> op de primary) echt zien. Het is een verrassend resultaat voor deelnemers: de replica doet niets meer, en toch groeit de primary. Verbind terug met deel 17’s waarschuwing over een falend <code>archive_command</code> — hetzelfde eindresultaat (volle schijf, database stopt met schrijven), nu via een ander mechanisme.</p>
+<h3>4.6 Hot standby (2:30)</h3>
+<p>Het praktische hoogtepunt voor de Meridiaan-casus: dit is letterlijk waar Karins rapportagewerklast hoort te draaien. Verwijs terug naar de rolgebonden <code>work_mem</code>-instellingen uit deel 11 en zeg dat dit de fysieke, servergebonden tegenhanger is van diezelfde gedachte — scheiding van werklasten.</p>
+<p>Onderdeel c) en d) van opdracht 18.6 is de subtielste constatering van het dagdeel: <code>idx_scan = 0</code> op de primary kan misleidend zijn als het gebruik op een replica plaatsvindt. Laat dit zelf ontdekt worden, niet verteld.</p>
+<h3>4.7 Conflicten (2:50)</h3>
+<p><strong>Doe 18.7 als een echte demonstratie van een botsing</strong>, niet als iets dat je alleen beschrijft. Laat de query op de replica daadwerkelijk afbreken met de foutmelding zichtbaar op het scherm. Herhaal dan met <code>hot_standby_feedback = on</code> en laat zien dat de query nu wél doorloopt.</p>
+<p>Het punt dat vaak wordt gemist: de “oplossing” (<code>feedback = on</code>) heeft een prijs, en die prijs is bloat op de <strong>primary</strong> — verbind expliciet terug naar deel 7 en 12. Dit is geen gratis knop.</p>
+<h3>4.8 Logische replicatie en promotie (3:15)</h3>
+<p>Kort houden qua praktijk (tijd is beperkt), maar zorg dat de drie toepassingen uit paragraaf 12 concreet landen: de zero-downtime-migratie uit deel 16, selectieve replicatie voor privacy, en cross-versie-upgrades. Dit is vooral conceptuele kennis voor het examen; de nadruk ligt op wanneer je het zou kiezen, niet op de volledige syntaxis.</p>
+<p>Bij promotie (opdracht 18.8): laat vooral onderdeel d) (het split-brain-gedachte-experiment) zijn werk doen. Het hoeft niet letterlijk uitgevoerd te worden als de tijd ontbreekt — een gesprek waarin de groep zelf het probleem beschrijft, is voldoende voor het leerdoel.</p>
+<h3>4.9 Opdracht 18.9 (3:30)</h3>
+<p>Stuur op:</p>
+<ul>
+<li><strong>RPO-koppeling.</strong> Groepen die synchroon kiezen zonder een concreet getal erbij, hebben paragraaf 5 niet toegepast.</li>
+<li><strong>Fysiek/logisch met een reden.</strong> Niet “logisch omdat het nieuwer klinkt” maar een functionele overweging (selectiviteit, privacy, cross-versie).</li>
+<li><strong>Punt 6 als expliciete grens.</strong> Dit is het scherpste beoordelingspunt: erkent de groep dat dit ontwerp promotie mogelijk maakt maar geen failover regelt? Dat is precies de brug naar volgende week.</li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Hoeveel replica’s is normaal?”</strong>
+Geen vast getal — het hangt af van het aantal beschikbaarheidsdoelen (failover-gereedheid, geografische spreiding, leesbelasting) en van wat de infrastructuur aankan. Twee tot drie fysieke replica’s is voor een organisatie van Meridiaans omvang gebruikelijk.</p>
+<p><strong>“Kost elke replica evenveel als de primary?”</strong>
+Qua opslag ja (het is een volledige kopie); qua rekenkracht kan een replica die alleen voor failover-gereedheid dient, lichter gedimensioneerd worden dan een die actief rapportagewerklast draagt.</p>
+<p><strong>“Wat gebeurt er met open transacties op de primary als hij uitvalt?”</strong>
+Ze zijn nooit gecommit en dus nooit gerepliceerd — ze verdwijnen, wat consistent is met de atomiciteitsgarantie uit deel 7. Alleen bevestigde commits (en, bij synchrone replicatie, alleen bevestigde én gerepliceerde commits) zijn gegarandeerd aanwezig.</p>
+<p><strong>“Kunnen we logische replicatie gebruiken om permanent twee actieve schrijfbare kopieën te hebben (multi-master)?”</strong>
+Niet met de ingebouwde logische replicatie zonder aanvullende conflictresolutielogica — schrijft dezelfde rij op beide kanten tegelijk, dan ontstaat precies het split-brain-probleem uit paragraaf 14. Er bestaan extensies en externe oplossingen voor multi-master, maar dat valt buiten deze cursus.</p>
+<p><strong>“Is hot_standby_feedback altijd de juiste keuze?”</strong>
+Nee — het is een afweging, geen standaardadvies. Bij een primary die al aan de grens van zijn autovacuum-capaciteit zit, kan het de situatie verergeren. Meet en beslis per omgeving.</p>
+<p><strong>“Wat is het verschil tussen een replicatieslot en gewoon WAL-archivering (deel 17)?”</strong>
+Een slot is voor een <strong>actieve, verbonden volger</strong> (streaming replicatie); WAL-archivering is voor <strong>toekomstig, nog onbekend gebruik</strong> (een back-up die je misschien ooit terugzet). Ze kunnen naast elkaar bestaan en dienen verschillende doelen.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Beantwoordt 18.1a correct zonder aarzeling</td>
+<td>Het kernonderscheid is geland</td>
+</tr>
+<tr>
+<td>Herkent bij 18.4e dat lag een actuele RPO-schending is</td>
+<td>Ziet verder dan een prestatiegetal</td>
+</tr>
+<tr>
+<td>Constateert zelf bij 18.6c/d het gevolg voor indexbeoordeling</td>
+<td>Verbindt met deel 14</td>
+</tr>
+<tr>
+<td>Ziet bij 18.7f de prijs van <code>hot_standby_feedback</code></td>
+<td>Verbindt met deel 7/12</td>
+</tr>
+<tr>
+<td>Erkent in 18.9 punt 6 expliciet de grens van dit ontwerp</td>
+<td>Klaar voor deel 19</td>
+</tr>
+<tr>
+<td>Denkt dat een replica een back-up vervangt</td>
+<td>Kernfout; herhalen vanuit §2</td>
+</tr>
+<tr>
+<td>Kiest overal synchroon zonder RPO-onderbouwing</td>
+<td>Doorvragen op de latencykosten</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 19</h2>
+<p>Brug: <em>“Jullie kunnen nu een replica opzetten, hem laten meelezen, en hem in geval van nood promoveren. Wat dit nog niet regelt, staat letterlijk in punt 6 van jullie eigen ontwerp: wie beslist dat de primary is uitgevallen, wie promoveert welke replica, en hoe voorkomen we dat de oude primary blijft meedoen? Dat is hoge beschikbaarheid, en het kost twee dagdelen — want het antwoord vraagt een derde partij die kan beslissen wanneer de twee databaseservers het zelf niet meer weten.”</em></p>
+<p>Geef mee: <strong>bewaar je replicatieontwerp uit opdracht 18.9.</strong> De topologie die je daar hebt gekozen, is het uitgangspunt voor de Patroni-cluster die je in deel 19 bouwt.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 18.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">338 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-17-back-up-en-herstel/reader.html">&larr; Deel 17 — Back-up en herstel</a><a class="dbm-prevnext next" href="../deel-19-hoge-beschikbaarheid/reader.html">Deel 19 — Hoge beschikbaarheid &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Geavanceerde indexering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 14 — Geavanceerde indexering</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 4 van 12 (deel 14 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Indexing”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waar we vandaan komen</li>
+<li>De indextypen in kaart</li>
+<li>B-tree, verdiept</li>
+<li>Partiële indexen, verdiept</li>
+<li>Expressie-indexen, verdiept</li>
+<li>GIN: zoeken bínnen een waarde</li>
+<li>pg_trgm: het probleem van <code>LIKE '%…%'</code></li>
+<li>GiST: bereiken, meetkunde en uitsluiting</li>
+<li>BRIN: de index van een paar kilobyte</li>
+<li>Hash-indexen</li>
+<li>Een index kiezen: de beslisboom</li>
+<li>Indexen bouwen op productie</li>
+<li>Onderhoud en opruimen</li>
+<li>Wat een index niet oplost</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de zes indextypen benoemen en per werklast het passende type kiezen;</li>
+<li>B-tree-indexen verfijnen met <code>INCLUDE</code>, sorteervolgorde en kolomvolgorde;</li>
+<li>een GIN-index inzetten voor <code>jsonb</code>, arrays en tekstzoeken, en de kosten benoemen;</li>
+<li><code>pg_trgm</code> gebruiken om <code>LIKE '%…%'</code> en fuzzy zoeken werkbaar te maken;</li>
+<li>uitleggen waar GiST voor dient en welke constructies erop leunen;</li>
+<li>beoordelen of een tabel geschikt is voor BRIN, en de winst inschatten;</li>
+<li>een index veilig aanmaken op een draaiende productieomgeving;</li>
+<li>ongebruikte, dubbele en ongeldige indexen opsporen en opruimen;</li>
+<li>beargumenteren wanneer een index níét de oplossing is.</li>
+</ul>
+<hr>
+<h2>2. Waar we vandaan komen</h2>
+<p>In deel 13 was de maatregel bij bijna elke query een index — en steeds een B-tree. Dat is terecht: B-tree lost het merendeel op.</p>
+<p>Maar er zijn vragen die een B-tree principieel niet kan beantwoorden:</p>
+<table>
+<thead>
+<tr>
+<th>De vraag</th>
+<th>Waarom B-tree faalt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>Welke berichten bevatten deze sleutel in hun JSON?</em></td>
+<td>De index kent de hele waarde, niet de inhoud</td>
+</tr>
+<tr>
+<td><em>Welke deelnemers heten ongeveer “Janssen”?</em></td>
+<td>Geen voorvoegsel om op te zoeken</td>
+</tr>
+<tr>
+<td><em>Welke adresperioden overlappen met deze?</em></td>
+<td>Bereiken zijn niet lineair te ordenen</td>
+</tr>
+<tr>
+<td><em>Welke mutaties vielen in maart?</em> — op een tabel van 600 MB</td>
+<td>Kan wel, maar de index kost 50 MB</td>
+</tr>
+</tbody>
+</table>
+<p>Voor elk van die vier bestaat een ander indextype. Vandaag leer je welk, en wat het kost.</p>
+<p><strong>De rode draad van dit dagdeel:</strong> een index is een afruil tussen leessnelheid en schrijfsnelheid, en bij de niet-B-tree-types is die afruil scherper. GIN maakt zoeken duizend keer sneller en schrijven merkbaar trager. BRIN is bijna gratis maar werkt alleen onder één strikte voorwaarde. Wie het type kiest zonder de afruil te kennen, verplaatst het probleem.</p>
+<hr>
+<h2>3. De indextypen in kaart</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Voor</th>
+<th>Omvang</th>
+<th>Schrijfkosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>B-tree</strong></td>
+<td>Gelijkheid, bereik, sortering</td>
+<td>Middel</td>
+<td>Laag</td>
+</tr>
+<tr>
+<td><strong>GIN</strong></td>
+<td>Zoeken <em>binnen</em> een waarde: <code>jsonb</code>, arrays, tekst</td>
+<td>Groot</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td><strong>GiST</strong></td>
+<td>Bereiken, meetkunde, uitsluiting, fuzzy</td>
+<td>Middel</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td><strong>SP-GiST</strong></td>
+<td>Niet-gebalanceerde structuren: quadtrees, tekstprefixen</td>
+<td>Klein</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td><strong>BRIN</strong></td>
+<td>Zeer grote tabellen met hoge correlatie</td>
+<td><strong>Minuscuul</strong></td>
+<td><strong>Zeer laag</strong></td>
+</tr>
+<tr>
+<td><strong>Hash</strong></td>
+<td>Alleen gelijkheid</td>
+<td>Klein</td>
+<td>Laag</td>
+</tr>
+</tbody>
+</table>
+<p>Twee waarnemingen die de rest van dit deel structureren:</p>
+<p><strong>GIN en BRIN staan aan de uiteinden.</strong> GIN is duur in ruimte en schrijfsnelheid en levert enorme leeswinst op vragen die anders onbeantwoordbaar zijn. BRIN is vrijwel gratis en levert alleen iets op onder een strikte voorwaarde. Alles ertussenin is nuance.</p>
+<p><strong>B-tree blijft de standaardkeuze.</strong> De andere types zijn specialisaties voor gevallen waarin B-tree niet kán. Ze zijn geen upgrade — precies zoals de datastore-categorieën in deel 1 geen generaties waren maar specialisaties.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-14-1.png" alt="De zes indextypen op de assen &quot;omvang&quot; en &quot;schrijfkosten&quot;, met per type de typische vraag erbij" loading="lazy"><figcaption>Figuur 14-1 — De zes indextypen op de assen &quot;omvang&quot; en &quot;schrijfkosten&quot;, met per type de typische vraag erbij</figcaption></figure>
+<hr>
+<h2>4. B-tree, verdiept</h2>
+<h3>Deduplicatie</h3>
+<p>Sinds PostgreSQL 13 slaat een B-tree herhaalde sleutelwaarden gecomprimeerd op: één keer de waarde, dan een lijst van rijverwijzingen. Op een kolom met weinig verschillende waarden — <code>kanaal</code> met vijf waarden op 2,4 miljoen rijen — scheelt dat aanzienlijk in omvang.</p>
+<p>Je hoeft er niets voor te doen; het staat standaard aan. Wél goed om te weten waarom een index op een kolom met lage cardinaliteit tegenwoordig kleiner is dan je verwacht.</p>
+<h3>INCLUDE, herzien</h3>
+<p>Uit deel 8: <code>INCLUDE</code>-kolommen staan in de index maar zijn niet doorzoekbaar. Het doel is een index-only scan.</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_dn_idx ON mutatie (deelnemer_id) INCLUDE (aangemeld_op, verwerkt_op);
+</code></pre>
+<p>Twee dingen die je nu weet en in deel 8 nog niet:</p>
+<ul>
+<li><strong>De winst hangt af van de visibility map</strong> (deel 12). Een index-only scan met veel <code>Heap Fetches</code> levert niets op. <code>INCLUDE</code> toevoegen op een tabel die zelden gevacuümd wordt, is verspilling.</li>
+<li><strong><code>INCLUDE</code>-kolommen blokkeren HOT-updates niet.</strong> Dat is het verschil met ze in de sleutel zetten: een kolom in de indexsleutel maakt elke wijziging daarvan tot een indexbijwerking, een <code>INCLUDE</code>-kolom ook — maar de sleutelkolommen bepalen wél de sorteervolgorde en dus de bruikbaarheid. Kortom: alleen in <code>INCLUDE</code> zetten wat je nooit als zoek- of sorteersleutel gebruikt.</li>
+</ul>
+<h3>Sorteervolgorde in de index</h3>
+<pre><code class="language-sql">CREATE INDEX premienota_recent_idx
+    ON premienota (werkgever_id, periode_jaar DESC, periode_maand DESC);
+</code></pre>
+<p>Een B-tree is gesorteerd, en de richting doet ertoe zodra je <code>ORDER BY … DESC</code> combineert met <code>LIMIT</code>. Met de juiste richting kan de database de index van voren aflopen en na tien rijen stoppen; met de verkeerde moet hij alles sorteren.</p>
+<p>Ook <code>NULLS FIRST</code> / <code>NULLS LAST</code> hoort erbij (deel 3): een index die anders sorteert dan je <code>ORDER BY</code>, kan de sortering niet vervangen.</p>
+<h3>Kolomvolgorde, herzien</h3>
+<p>De voorvoegselregel uit deel 8 blijft, met één toevoeging die op productieschaal telt: <strong>zet de meest selectieve kolom vooraan bij gelijkheidsvoorwaarden, maar zet gelijkheid altijd vóór bereik.</strong></p>
+<pre><code class="language-sql">WHERE werkgever_id = 42 AND periode_jaar BETWEEN 2023 AND 2025
+</code></pre>
+<p>→ <code>(werkgever_id, periode_jaar)</code>, niet andersom.</p>
+<p>De reden: na een bereikvoorwaarde kan de index niet meer selectief verder zoeken. Alles wat daarna komt, is filteren in plaats van zoeken.</p>
+<hr>
+<h2>5. Partiële indexen, verdiept</h2>
+<p>Uit deel 8: een index over een deel van de tabel. Op productieschaal is dit een van de krachtigste middelen.</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>Drie eigenschappen die je nu kunt waarderen:</p>
+<p><strong>Hij is klein.</strong> 12% van 2,4 miljoen in plaats van alles.</p>
+<p><strong>Hij groeit niet mee met de historie.</strong> Verwerkte mutaties verdwijnen uit de index. Op een tabel die vijf jaar groeit, blijft deze index even groot — dat is een structureel voordeel, geen eenmalige besparing.</p>
+<p><strong>Hij verlaagt de schrijfkosten.</strong> Een <code>INSERT</code> van een mutatie die meteen verwerkt is, raakt deze index helemaal niet.</p>
+<p><strong>De valkuil:</strong> de planner gebruikt een partiële index alleen als hij kan bewijzen dat de query binnen de voorwaarde valt. <code>WHERE verwerkt_op IS NULL</code> in de query matcht met <code>WHERE verwerkt_op IS NULL</code> in de index. Maar <code>WHERE verwerkt_op &gt; now() - interval '1 day'</code> niet, ook al is er overlap — de planner doet geen logisch redeneerwerk over datumbereiken.</p>
+<p><strong>Praktische toepassingen bij Meridiaan:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Index</th>
+<th>Voorwaarde</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Onverwerkte mutaties</td>
+<td><code>verwerkt_op IS NULL</code></td>
+<td>Werkverdeling (deel 7)</td>
+</tr>
+<tr>
+<td>Actieve deelnemers</td>
+<td><code>einddatum_deelname IS NULL</code></td>
+<td>Portaal raakt alleen actieven</td>
+</tr>
+<tr>
+<td>Onbetaalde nota’s</td>
+<td><code>betaaldatum IS NULL</code></td>
+<td>Debiteurenbewaking</td>
+</tr>
+<tr>
+<td>Uniek BSN onder actieven</td>
+<td><code>einddatum_deelname IS NULL</code></td>
+<td>Gedeeltelijke uniciteit (deel 6)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>6. Expressie-indexen, verdiept</h2>
+<p>Uit deel 8: een index op een berekening. Twee dingen die er op productieschaal bij komen.</p>
+<p><strong>Een expressie-index levert statistieken op.</strong> Dit is het onderbelichte voordeel. Zonder index heeft de planner geen idee hoeveel rijen aan <code>lower(achternaam) = 'jansen'</code> voldoen — hij gokt. Met een expressie-index verzamelt <code>ANALYZE</code> statistieken over de uitkomst van die expressie, en dan klopt de schatting. Dat lost soms een rij-estimatiefout op (deel 13) zonder dat de index zelf wordt gebruikt.</p>
+<p><strong>De expressie moet immutable zijn.</strong> Geen <code>now()</code>, geen <code>current_date</code>, geen functie die van de tijdzone afhangt. Dezelfde eis als bij gegenereerde kolommen (deel 6).</p>
+<p>Let daarbij op een valkuil: <code>to_char(aangemeld_op, 'YYYY-MM')</code> is <strong>niet</strong> immutable, want <code>timestamptz</code> naar tekst hangt af van de tijdzone-instelling van de sessie. Dit werkt dus niet:</p>
+<pre><code class="language-sql">CREATE INDEX ON mutatie (to_char(aangemeld_op, 'YYYY-MM'));   -- fout
+</code></pre>
+<p>De oplossing is niet de expressie forceren maar de query herschrijven naar een bereik op de kolom zelf — dan gebruikt hij de gewone index en is er niets nodig.</p>
+<hr>
+<h2>7. GIN: zoeken bínnen een waarde</h2>
+<p>Een B-tree indexeert een waarde als geheel. <strong>GIN</strong> (Generalized Inverted Index) indexeert de <em>onderdelen</em> van een waarde: de sleutels in een <code>jsonb</code>, de elementen van een array, de woorden in een tekst.</p>
+<p>De structuur is een omgekeerde index, zoals achter in een boek: per onderdeel een lijst van rijen waarin het voorkomt.</p>
+<h3>jsonb</h3>
+<pre><code class="language-sql">CREATE INDEX bericht_inhoud_idx ON koppelvlakbericht USING gin (inhoud);
+
+SELECT * FROM koppelvlakbericht WHERE inhoud @&gt; '{&quot;soort&quot;: &quot;adreswijziging&quot;}';
+SELECT * FROM koppelvlakbericht WHERE inhoud ? 'bsn';
+</code></pre>
+<p>De operatoren die deze index ondersteunt: <code>@&gt;</code> (bevat), <code>?</code> (heeft sleutel), <code>?|</code>, <code>?&amp;</code>.</p>
+<p><strong>Let op:</strong> de gewone <code>-&gt;&gt;</code>-toegang gebruikt deze index <strong>niet</strong>. <code>WHERE inhoud -&gt;&gt; 'soort' = 'adreswijziging'</code> valt terug op een sequentiële scan. Wil je dat wel indexeren, dan is een <strong>expressie-index</strong> met een B-tree de betere keuze:</p>
+<pre><code class="language-sql">CREATE INDEX bericht_soort_idx ON koppelvlakbericht ((inhoud -&gt;&gt; 'soort'));
+</code></pre>
+<p>Dat is een belangrijk onderscheid: GIN voor “bevat deze structuur”, B-tree op een expressie voor “deze specifieke sleutel heeft deze waarde”. In de praktijk heb je vaak het tweede nodig — en dan is de vervolgvraag of dat veld niet gewoon een kolom hoort te zijn (deel 5).</p>
+<h3>Kleinere variant</h3>
+<pre><code class="language-sql">CREATE INDEX ... USING gin (inhoud jsonb_path_ops);
+</code></pre>
+<p>Ondersteunt alleen <code>@&gt;</code>, maar is aanzienlijk kleiner en sneller. Als je alleen containment nodig hebt, is dit de keuze.</p>
+<h3>De kosten van GIN</h3>
+<p><strong>Schrijven is traag.</strong> Eén rij invoegen betekent voor elk onderdeel van de waarde een indexbijwerking. Een <code>jsonb</code> met vijftig sleutels levert vijftig bijwerkingen op.</p>
+<p>PostgreSQL verzacht dat met een <strong>pending list</strong>: nieuwe items komen eerst in een ongeordende lijst en worden later samengevoegd.</p>
+<pre><code class="language-sql">CREATE INDEX ... USING gin (inhoud) WITH (fastupdate = on, gin_pending_list_limit = '4MB');
+</code></pre>
+<p>De afruil: sneller schrijven, maar zoekopdrachten moeten de pending list óók doorlopen — en die is niet geïndexeerd. Bij een grote pending list worden zoekopdrachten onvoorspelbaar traag. Op een tabel die veel wordt geschreven én bevraagd, is <code>fastupdate = off</code> vaak de rustigere keuze.</p>
+<p><strong>GIN-indexen zijn groot.</strong> Reken op een index die een aanzienlijk deel van de tabelomvang beslaat, soms meer.</p>
+<hr>
+<h2>8. pg_trgm: het probleem van <code>LIKE '%…%'</code></h2>
+<p>De klantenservice van Meridiaan zoekt op een deel van een achternaam. <code>WHERE achternaam LIKE '%anss%'</code> kan geen B-tree gebruiken — er is geen voorvoegsel om op te zoeken (deel 8).</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX deelnemer_naam_trgm ON deelnemer USING gin (achternaam gin_trgm_ops);
+</code></pre>
+<p><strong>Hoe het werkt:</strong> de tekst wordt opgedeeld in trigrammen — groepjes van drie tekens. “Janssen” wordt <code>  j</code>, <code> ja</code>, <code>jan</code>, <code>ans</code>, <code>nss</code>, <code>sse</code>, <code>sen</code>, <code>en </code>. Die trigrammen komen in de GIN-index. Een zoekopdracht wordt op dezelfde manier opgedeeld, en de index levert de rijen die alle gevraagde trigrammen bevatten.</p>
+<p>Wat je hiermee kunt:</p>
+<pre><code class="language-sql">-- LIKE met jokers aan beide kanten
+SELECT * FROM deelnemer WHERE achternaam ILIKE '%anss%';
+
+-- Gelijkenis: typefouten opvangen
+SELECT achternaam, similarity(achternaam, 'Jansenn') AS gelijkenis
+FROM deelnemer
+WHERE achternaam % 'Jansenn'
+ORDER BY gelijkenis DESC LIMIT 10;
+</code></pre>
+<p>De operator <code>%</code> betekent “lijkt op”, met een instelbare drempel (<code>pg_trgm.similarity_threshold</code>, standaard 0,3).</p>
+<p><strong>Dat tweede voorbeeld is waardevoller dan het eerste.</strong> Een klantenservicemedewerker die een naam telefonisch opneemt, typt hem verkeerd. Zoeken op gelijkenis vindt de deelnemer alsnog — en dat is een functionele verbetering, geen prestatiemaatregel.</p>
+<p><strong>Kosten:</strong> een trigram-index is groot, vaak groter dan de geïndexeerde kolom. Op <code>deelnemer</code> met 340.000 achternamen is dat behapbaar; op miljoenen vrije tekstvelden wordt het een overweging.</p>
+<p><strong>Alternatief voor echte tekstzoekfunctionaliteit:</strong> <code>tsvector</code> met <code>to_tsquery</code>, ook met GIN. Dat kan stammen, stopwoorden en rangschikking — voor het doorzoeken van documenten. Voor het zoeken op een naam is trigram eenvoudiger en beter.</p>
+<hr>
+<h2>9. GiST: bereiken, meetkunde en uitsluiting</h2>
+<p><strong>GiST</strong> (Generalized Search Tree) is een raamwerk waarop verschillende indexstructuren kunnen worden gebouwd. Waar je het tegenkomt:</p>
+<p><strong>Bereiken.</strong> Uit deel 6, de exclusion constraint:</p>
+<pre><code class="language-sql">CONSTRAINT adres_geen_overlap
+    EXCLUDE USING gist (deelnemer_id WITH =, geldigheid WITH &amp;&amp;)
+</code></pre>
+<p>Die constraint bouwt een GiST-index. Zonder GiST is dit onmogelijk: een bereik is niet lineair te ordenen, dus een B-tree kan “overlapt met” niet beantwoorden.</p>
+<p>Diezelfde index versnelt ook peildatumquery’s:</p>
+<pre><code class="language-sql">SELECT * FROM adres WHERE deelnemer_id = 12345 AND geldigheid @&gt; DATE '2024-06-01';
+</code></pre>
+<p>Dat is een prettig neveneffect: de constraint die je om correctheidsredenen aanmaakte, betaalt zich uit in prestaties.</p>
+<p><strong>Geodata.</strong> Via PostGIS — buiten het bestek van deze cursus, maar het is de bekendste toepassing.</p>
+<p><strong>Trigrammen.</strong> <code>gist_trgm_ops</code> in plaats van <code>gin_trgm_ops</code>: kleiner, sneller te bouwen, langzamer bij zoeken. Voor <code>pg_trgm</code> is GIN meestal de betere keuze.</p>
+<p><strong>Nearest-neighbour.</strong> GiST kan “de tien dichtstbijzijnde” beantwoorden met de <code>&lt;-&gt;</code>-operator. Voor Meridiaan niet relevant; voor toepassingen met coördinaten of vectoren wel.</p>
+<p><strong>SP-GiST</strong> is een variant voor niet-gebalanceerde structuren — quadtrees, tekstprefixen, niet-overlappende bereiken. Zeldzaam in administratieve systemen; ken het als begrip.</p>
+<hr>
+<h2>10. BRIN: de index van een paar kilobyte</h2>
+<p><strong>BRIN</strong> (Block Range INdex) slaat per groep van opeenvolgende blokken alleen het <strong>minimum en maximum</strong> op. Standaard 128 pagina’s per groep, dus ongeveer 1 MB tabel per indexregel.</p>
+<p>Op <code>mutatie</code> met 600 MB betekent dat een index van enkele kilobytes, tegenover 50 MB voor een B-tree op dezelfde kolom.</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_brin ON mutatie USING brin (aangemeld_op);
+</code></pre>
+<p><strong>Hoe hij werkt:</strong> bij een query over een datumbereik controleert PostgreSQL per blokgroep of het gevraagde bereik binnen het opgeslagen minimum-maximum kan vallen. Groepen die dat uitsluiten, worden overgeslagen. De rest wordt gelezen en gefilterd.</p>
+<p><strong>De strikte voorwaarde: hoge correlatie.</strong> Dit is de betaling van deel 12.</p>
+<p>Bij een correlatie dicht bij 1 liggen opeenvolgende waarden fysiek bij elkaar, en dan sluit elke blokgroep een groot deel uit. Bij een lage correlatie bevat vrijwel elke blokgroep vrijwel het hele waardebereik — en dan sluit de index niets uit, en heb je de hele tabel gelezen plus een index geraadpleegd.</p>
+<pre><code class="language-sql">SELECT attname, correlation FROM pg_stats
+WHERE tablename = 'mutatie' ORDER BY abs(correlation) DESC NULLS LAST;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kolom</th>
+<th>Correlatie</th>
+<th>BRIN?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mutatie_id</code></td>
+<td>~1,0</td>
+<td>Uitstekend</td>
+</tr>
+<tr>
+<td><code>aangemeld_op</code></td>
+<td>hoog, als chronologisch ingevoegd</td>
+<td>Goed</td>
+</tr>
+<tr>
+<td><code>deelnemer_id</code></td>
+<td>laag</td>
+<td><strong>Waardeloos</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer BRIN de juiste keuze is:</strong></p>
+<ul>
+<li>zeer grote tabellen (tientallen gigabytes of meer);</li>
+<li>die van nature chronologisch of oplopend groeien;</li>
+<li>waar je bereikquery’s op doet;</li>
+<li>en waar een B-tree te veel ruimte of schrijfkosten zou kosten.</li>
+</ul>
+<p>Logtabellen, gebeurtenistabellen, tijdreeksen, en — bij Meridiaan — <code>mutatie</code>.</p>
+<p><strong>Afstemmen:</strong></p>
+<pre><code class="language-sql">CREATE INDEX ... USING brin (aangemeld_op) WITH (pages_per_range = 32);
+</code></pre>
+<p>Kleinere groepen betekent een preciezere index die meer uitsluit, maar ook een grotere index. Van 128 naar 32 maakt hem vier keer zo groot — wat op deze schaal nog steeds verwaarloosbaar is.</p>
+<p><strong>Onderhoud:</strong> een BRIN-index wordt niet automatisch bijgewerkt voor nieuwe blokken tot er gevacuümd wordt. Bij een tabel die snel groeit:</p>
+<pre><code class="language-sql">SELECT brin_summarize_new_values('mutatie_aangemeld_brin');
+</code></pre>
+<p>Of <code>autosummarize = on</code> bij het aanmaken.</p>
+<p><strong>De eerlijke afweging:</strong> BRIN is trager dan een B-tree bij het lezen — hij sluit uit, hij wijst niet aan. De winst zit in ruimte en schrijfsnelheid. Op een tabel van 600 MB is een B-tree van 50 MB prima betaalbaar; op een tabel van 600 GB is dat een ander gesprek.</p>
+<hr>
+<h2>11. Hash-indexen</h2>
+<p>Alleen gelijkheid, geen bereik, geen sortering.</p>
+<pre><code class="language-sql">CREATE INDEX ON deelnemer USING hash (bsn);
+</code></pre>
+<p>Sinds PostgreSQL 10 zijn ze WAL-gelogd en dus veilig en repliceerbaar. Daarvoor niet, en die geschiedenis verklaart waarom ze nog steeds een slechte naam hebben.</p>
+<p><strong>Wanneer nuttig:</strong> bij zeer lange sleutels waar een hash aanzienlijk kleiner is dan de waarde zelf, en waar je alleen gelijkheid nodig hebt.</p>
+<p><strong>Waarom je ze zelden gebruikt:</strong> een B-tree kan alles wat een hash-index kan, plus bereiken en sortering, tegen vergelijkbare kosten. De ruimtewinst is meestal niet groot genoeg om de beperking te rechtvaardigen.</p>
+<p>Ken ze voor het examen. Gebruik ze zelden.</p>
+<hr>
+<h2>12. Een index kiezen: de beslisboom</h2>
+<pre><code>Wat vraag je?
+│
+├─ Gelijkheid of bereik op een hele waarde?
+│   ├─ Tabel &lt; enkele GB, of hoge selectiviteit nodig?  → B-tree
+│   └─ Zeer grote tabel + hoge correlatie + bereikquery? → BRIN
+│
+├─ Zoeken bínnen een waarde?
+│   ├─ jsonb &quot;bevat&quot;                     → GIN (jsonb_path_ops)
+│   ├─ jsonb &quot;sleutel X = waarde Y&quot;      → B-tree op expressie
+│   ├─ array bevat element               → GIN
+│   └─ tekst: woorden                    → GIN op tsvector
+│
+├─ LIKE '%…%' of gelijkenis?             → GIN met gin_trgm_ops
+│
+├─ Overlappende bereiken of uitsluiting? → GiST
+│
+└─ Alleen een deel van de rijen?         → voeg WHERE toe aan elk van bovenstaande
+</code></pre>
+<p>Die laatste regel is belangrijk: <strong>partieel is geen apart type maar een eigenschap.</strong> Je kunt een partiële GIN-index maken, een partiële BRIN-index, en een partiële B-tree. Combineer waar het kan.</p>
+<p>Twee vragen die je stelt vóór je de boom in gaat:</p>
+<ol>
+<li><strong>Wat zegt <code>pg_stat_statements</code>?</strong> Bouw indexen voor de query’s die bovenaan staan, niet voor de query’s die je verwacht (deel 13).</li>
+<li><strong>Is een index wel het antwoord?</strong> Zie paragraaf 15.</li>
+</ol>
+<hr>
+<h2>13. Indexen bouwen op productie</h2>
+<pre><code class="language-sql">CREATE INDEX CONCURRENTLY mutatie_open_idx ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;
+</code></pre>
+<p><code>CONCURRENTLY</code> blokkeert geen schrijvers. Wat je moet weten:</p>
+<p><strong>Het duurt langer</strong> — de tabel wordt twee keer doorlopen.</p>
+<p><strong>Het kan niet in een transactie.</strong> De uitzondering op deel 6, paragraaf 21. Migratiescripts die alles in één transactie zetten, moeten hiervoor een uitzondering maken.</p>
+<p><strong>Het kan mislukken.</strong> Dan blijft er een <strong>ongeldige index</strong> achter: hij bestaat, hij wordt onderhouden bij elke schrijfbewerking, en hij wordt nooit gebruikt. Het slechtste van beide werelden.</p>
+<p>Ongeldige indexen opsporen:</p>
+<pre><code class="language-sql">SELECT c.relname AS index, t.relname AS tabel
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+WHERE NOT i.indisvalid;
+</code></pre>
+<p>Gevonden? <code>DROP INDEX CONCURRENTLY</code> en opnieuw proberen. <strong>Controleer dit altijd na een <code>CREATE INDEX CONCURRENTLY</code></strong> — het is een van de weinige fouten die stil blijven en alleen maar kosten.</p>
+<p><strong>Het patroon voor een productiemigratie:</strong></p>
+<ol>
+<li>Bouw de index <code>CONCURRENTLY</code> buiten de piek.</li>
+<li>Controleer <code>indisvalid</code>.</li>
+<li>Controleer met <code>EXPLAIN</code> dat hij gebruikt wordt.</li>
+<li>Meet de query opnieuw.</li>
+<li>Controleer na een week <code>idx_scan</code> — wordt hij werkelijk gebruikt?</li>
+</ol>
+<p>Stap 5 slaat vrijwel iedereen over, en het is de enige die vaststelt of de index zijn schrijfkosten waard was.</p>
+<hr>
+<h2>14. Onderhoud en opruimen</h2>
+<h3>Ongebruikte indexen</h3>
+<p>Uit deel 8, met de voorbehouden:</p>
+<pre><code class="language-sql">SELECT schemaname, relname AS tabel, indexrelname AS index,
+       idx_scan, pg_size_pretty(pg_relation_size(indexrelid)) AS omvang
+FROM pg_stat_user_indexes
+WHERE schemaname = 'meridiaan_prod'
+ORDER BY idx_scan, pg_relation_size(indexrelid) DESC;
+</code></pre>
+<p>De voorbehouden: de teller loopt sinds de laatste reset; seizoensgebonden indexen; indexen die een constraint afdwingen.</p>
+<p>Voeg daar op productieschaal één aan toe: <strong>een index op een replica wordt niet meegeteld in de statistieken van de primaire.</strong> Draait je rapportage op een leesreplica (deel 18), dan lijkt een index ongebruikt terwijl hij dat niet is.</p>
+<h3>Dubbele en overbodige indexen</h3>
+<p>Een index op <code>(a)</code> is overbodig als er ook een index op <code>(a, b)</code> bestaat — de tweede kan alles wat de eerste kan (voorvoegselregel, deel 8).</p>
+<pre><code class="language-sql">SELECT indrelid::regclass AS tabel,
+       array_agg(indexrelid::regclass) AS mogelijk_overbodig
+FROM pg_index
+GROUP BY indrelid, (indkey::text || ' ')
+HAVING count(*) &gt; 1;
+</code></pre>
+<p>Dit vindt exacte duplicaten. Voor voorvoegselgevallen moet je zelf kijken. Beide komen vaker voor dan je denkt, vooral in omgevingen waar meerdere mensen indexen hebben toegevoegd zonder te overleggen.</p>
+<h3>Indexbloat</h3>
+<p>Uit deel 12:</p>
+<pre><code class="language-sql">SELECT * FROM pgstatindex('mutatie_deelnemer_idx');
+REINDEX INDEX CONCURRENTLY mutatie_deelnemer_idx;
+</code></pre>
+<p>Let op <code>avg_leaf_density</code>: rond 90% gezond, onder 50% opgeblazen.</p>
+<hr>
+<h2>15. Wat een index niet oplost</h2>
+<p>De eerlijke tegenkant, en een terugkeer naar opdracht 8.7.</p>
+<p><strong>Vergrendeling.</strong> Een query die wacht op een lock, rekent niet. Een index maakt hem geen milliseconde sneller. Kijk in <code>pg_stat_activity</code> naar <code>wait_event_type = 'Lock'</code> (deel 7).</p>
+<p><strong>Te veel rijen ophalen.</strong> Een query die een miljoen rijen teruggeeft aan de applicatie, is traag door het transport, niet door het zoeken. De oplossing is minder rijen vragen.</p>
+<p><strong>Te veel aanroepen.</strong> Een query van 2 ms die per pagina honderd keer wordt aangeroepen, is een applicatieprobleem. In <code>pg_stat_statements</code> staat hij hoog op <code>calls</code>. Een index verlaagt hem naar 1 ms en het probleem blijft.</p>
+<p><strong>Een verkeerd datamodel.</strong> Als elke query drie zelfgemaakte joins nodig heeft om een gegeven te vinden dat een kolom had moeten zijn, is het antwoord deel 5 en niet deel 14.</p>
+<p><strong>Onvoldoende geheugen.</strong> Een index die niet in de bufferpool past, wordt elke keer van schijf gelezen. Dan is de vraag of <code>shared_buffers</code> klopt (deel 11), niet welke index je toevoegt.</p>
+<p><strong>Schrijfbelasting.</strong> Indexen maken schrijven trager. Op een tabel die vooral geschreven wordt, kan het toevoegen van een index de totale doorvoer verslechteren, ook al is die ene query sneller.</p>
+<blockquote>
+<p><strong>De vraag die je stelt vóór je een index bouwt: welke van de vier oorzaken uit deel 13 is dit? Alleen bij “ontbrekende index” is een index het antwoord.</strong></p>
+</blockquote>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GIN op een tabel met veel schrijfverkeer, zonder meting</td>
+<td>Schrijven merkbaar trager</td>
+<td>Meet de schrijfkant ook</td>
+</tr>
+<tr>
+<td>BRIN op een kolom met lage correlatie</td>
+<td>Index doet niets; hele tabel gelezen</td>
+<td>Controleer <code>correlation</code> eerst</td>
+</tr>
+<tr>
+<td><code>-&gt;&gt;</code> verwachten te indexeren met GIN</td>
+<td>Sequentiële scan</td>
+<td>B-tree op expressie</td>
+</tr>
+<tr>
+<td><code>CREATE INDEX CONCURRENTLY</code> niet controleren</td>
+<td>Ongeldige index die alleen kost</td>
+<td><code>indisvalid</code> controleren</td>
+</tr>
+<tr>
+<td>Index op <code>(a)</code> naast index op <code>(a,b)</code></td>
+<td>Dubbele schrijfkosten</td>
+<td>De eerste weggooien</td>
+</tr>
+<tr>
+<td>Trigram-index op elke tekstkolom</td>
+<td>Enorme indexen</td>
+<td>Alleen waar men werkelijk zo zoekt</td>
+</tr>
+<tr>
+<td>Partiële index waarvan de voorwaarde niet matcht</td>
+<td>Wordt nooit gebruikt</td>
+<td>Voorwaarde exact gelijk aan de query</td>
+</tr>
+<tr>
+<td>Indexen bouwen op verwachte query’s</td>
+<td>Indexen die niemand gebruikt</td>
+<td><code>pg_stat_statements</code> eerst</td>
+</tr>
+<tr>
+<td><code>idx_scan</code> na een week niet controleren</td>
+<td>Je weet niet of het hielp</td>
+<td>Stap 5 uit paragraaf 13</td>
+</tr>
+<tr>
+<td>Een index bouwen voor een vergrendelingsprobleem</td>
+<td>Geen effect</td>
+<td>Diagnose eerst (deel 13)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>de zes indextypen en hun toepassingsgebied;</li>
+<li>B-tree: deduplicatie, <code>INCLUDE</code>, sorteervolgorde, voorvoegselregel;</li>
+<li>partiële en expressie-indexen, inclusief de immutable-eis;</li>
+<li>GIN: <code>jsonb</code>-operatoren, <code>jsonb_path_ops</code>, <code>fastupdate</code> en de pending list;</li>
+<li><code>pg_trgm</code> en waarvoor het dient;</li>
+<li>GiST en de relatie met exclusion constraints;</li>
+<li>BRIN: werking, de correlatievoorwaarde, <code>pages_per_range</code>, samenvatten;</li>
+<li><code>CREATE INDEX CONCURRENTLY</code>, ongeldige indexen, <code>REINDEX CONCURRENTLY</code>;</li>
+<li>ongebruikte en dubbele indexen opsporen.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>18. Kernbegrippen</h2>
+<p><strong>GIN</strong> — omgekeerde index voor zoeken binnen een waarde.
+<strong><code>jsonb_path_ops</code></strong> — kleinere GIN-variant, alleen containment.
+<strong>Pending list</strong> — ongeordende wachtlijst bij GIN met <code>fastupdate</code>.
+<strong>Trigram</strong> — groepje van drie tekens; basis van <code>pg_trgm</code>.
+<strong>GiST</strong> — raamwerk voor indexen op bereiken, meetkunde en gelijkenis.
+<strong>BRIN</strong> — index die per blokgroep minimum en maximum opslaat.
+<strong><code>pages_per_range</code></strong> — aantal pagina’s per BRIN-blokgroep.
+<strong>Correlatie</strong> — voorwaarde waaronder BRIN werkt (deel 12).
+<strong>Deduplicatie</strong> — compressie van herhaalde sleutels in een B-tree.
+<strong>Ongeldige index</strong> — mislukte <code>CONCURRENTLY</code>-bouw; wordt onderhouden maar nooit gebruikt.</p>
+<hr>
+<p><em>Volgende deel: concurrency en locking, in twee dagdelen. Je hebt nu een database die snel is. Volgende keer kijken we wat er gebeurt als honderdvijftig sessies tegelijk hetzelfde willen — en dan blijkt snelheid niet het probleem.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">66 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">429 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">&larr; Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner</a><a class="dbm-prevnext next" href="../deel-15-concurrency-en-locking/reader.html">Deel 15 — Concurrency en locking &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

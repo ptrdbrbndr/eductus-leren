@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Back-up en herstel — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 17 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 17 — Back-up en herstel</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 8 van 14 (deel 17 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Backup &amp; recovery”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Het verkeerde stuk weggegooid</li>
+<li>Twee vragen vóór elke back-upstrategie: RPO en RTO</li>
+<li>Logisch versus fysiek: het fundamentele onderscheid</li>
+<li>pg_dump en pg_dumpall</li>
+<li>pg_basebackup</li>
+<li>Continuous archiving en WAL</li>
+<li>Point-in-time recovery</li>
+<li>Het herstellen, stap voor stap</li>
+<li>pgBackRest</li>
+<li>Incrementele en differentiële back-ups</li>
+<li>Back-ups testen: de enige manier om te weten of ze werken</li>
+<li>Tablespaces en back-up</li>
+<li>Een verwijderde partitie terughalen</li>
+<li>Bewaarbeleid voor back-ups</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>RPO en RTO vaststellen voor een gegeven werklast en daaruit een back-upstrategie afleiden;</li>
+<li>het verschil tussen logische en fysieke back-ups toepassen en per situatie de juiste kiezen;</li>
+<li><code>pg_dump</code>, <code>pg_dumpall</code> en <code>pg_basebackup</code> correct gebruiken, inclusief hun beperkingen;</li>
+<li>continuous archiving inrichten en uitleggen wat WAL-archivering met point-in-time recovery te maken heeft;</li>
+<li>een database herstellen tot een specifiek moment in het verleden;</li>
+<li><code>pgBackRest</code> inzetten voor incrementele back-ups op productieschaal;</li>
+<li>een back-up daadwerkelijk testen in plaats van aan te nemen dat hij werkt;</li>
+<li>een bewaarbeleid voor back-ups opstellen dat aansluit op de AVG-eisen uit deel 9.</li>
+</ul>
+<hr>
+<h2>2. Het verkeerde stuk weggegooid</h2>
+<p>Vorige keer eindigde met een vraag: wat als je per ongeluk de verkeerde partitie weggooit?</p>
+<pre><code class="language-sql">DROP TABLE mutatie_2024_06;   -- had 2023_06 moeten zijn
+</code></pre>
+<p>Milliseconden, geen foutmelding, geen bevestigingsvraag. De partitie en alles erin is weg.</p>
+<p><strong>De vraag die dit deel beantwoordt is niet “hoe voorkom ik dit”</strong> — mensen maken fouten, systemen crashen, schijven falen, en geen enkele voorzorgsmaatregel sluit dat volledig uit. De vraag is: <strong>kun je het terughalen, en hoe lang duurt dat?</strong></p>
+<p>Dat is het verschil tussen een back-up die <em>bestaat</em> en een back-up die <em>werkt</em>. Veel organisaties ontdekken het verschil op het moment dat het er het meest toe doet — en dat is precies de reden dat paragraaf 12 van dit deel niet optioneel is.</p>
+<hr>
+<h2>3. Twee vragen vóór elke back-upstrategie: RPO en RTO</h2>
+<p>Voordat je een tool kiest, beantwoord je twee vragen die niets met techniek te maken hebben.</p>
+<p><strong>RPO — Recovery Point Objective.</strong> Hoeveel gegevensverlies is acceptabel, gemeten in tijd? <em>“We mogen hoogstens vijf minuten aan mutaties kwijtraken.”</em></p>
+<p><strong>RTO — Recovery Time Objective.</strong> Hoe lang mag het herstel duren? <em>“Het portaal moet binnen twee uur weer beschikbaar zijn.”</em></p>
+<p>Deze twee getallen bepalen de hele strategie, en ze zijn <strong>bedrijfsbeslissingen</strong>, geen technische keuzes — precies zoals de bewaartermijn uit deel 16 een beslissing was voor compliance en niet voor jou alleen.</p>
+<table>
+<thead>
+<tr>
+<th>Antwoord van de business</th>
+<th>Technische consequentie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RPO = 24 uur</td>
+<td>Eén nachtelijke <code>pg_dump</code> volstaat</td>
+</tr>
+<tr>
+<td>RPO = 5 minuten</td>
+<td>Continuous WAL-archivering nodig (paragraaf 7)</td>
+</tr>
+<tr>
+<td>RTO = 1 week</td>
+<td>Een fysieke back-up die je rustig kunt terugzetten</td>
+</tr>
+<tr>
+<td>RTO = 30 minuten</td>
+<td>Een staande replica die je kunt promoveren (deel 18, 19)</td>
+</tr>
+</tbody>
+</table>
+<p>Bij Meridiaan: de stuurgroep moet vaststellen wat een acceptabel verlies is voor mutatiegegevens (waarschijnlijk minuten, gezien de wettelijke context) en wat een acceptabele uitvalstijd is voor het portaal (waarschijnlijk uren, niet minuten — dat rechtvaardigt de investering in deel 19 pas als RTO écht laag moet zijn).</p>
+<p><strong>Vraag die dit scherp stelt:</strong> <em>“Als de server nu in vlammen opgaat, hoeveel van vandaag mogen we kwijt zijn, en hoe laat moet Meridiaan morgenvroeg weer open zijn?”</em> Beide antwoorden bepalen alles wat volgt.</p>
+<hr>
+<h2>4. Logisch versus fysiek: het fundamentele onderscheid</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Logisch (<code>pg_dump</code>)</th>
+<th>Fysiek (<code>pg_basebackup</code>, filesystem)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wat het bevat</td>
+<td>SQL-opdrachten die de data reconstrueren</td>
+<td>Exacte kopie van de datadirectory</td>
+</tr>
+<tr>
+<td>Draagbaarheid</td>
+<td>Werkt op elke PostgreSQL-versie en -platform</td>
+<td>Alleen dezelfde majorversie, zelfde architectuur</td>
+</tr>
+<tr>
+<td>Herstelsnelheid op grote data</td>
+<td>Traag — alles wordt opnieuw ingevoegd en geïndexeerd</td>
+<td>Snel — bestanden kopiëren</td>
+</tr>
+<tr>
+<td>Granulariteit</td>
+<td>Eén tabel, één schema, hele database</td>
+<td>Het hele cluster</td>
+</tr>
+<tr>
+<td>Consistentie tijdens back-up</td>
+<td>Één momentopname (transactie)</td>
+<td>Vereist WAL om consistent te worden</td>
+</tr>
+<tr>
+<td>Geschikt voor PITR</td>
+<td>Nee</td>
+<td>Ja, in combinatie met WAL-archivering</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De vuistregel:</strong> logisch voor kleine databases, migraties tussen versies, en het selectief terughalen van één object. Fysiek voor productieschaal, snelle hersteltijden, en point-in-time recovery.</p>
+<p>Bij Meridiaan met 600 MB tot enkele gigabytes is de grens nog niet dwingend — maar de RTO-eis wel: een <code>pg_dump</code>-herstel van een tabel met 2,4 miljoen rijen en zijn indexen kost aanzienlijk meer tijd dan bestanden terugkopiëren.</p>
+<hr>
+<h2>5. pg_dump en pg_dumpall</h2>
+<pre><code class="language-bash"># Eén database, custom format (aanbevolen: comprimeert, ondersteunt selectief herstel)
+pg_dump -Fc -d meridiaan -f meridiaan.dump
+
+# Alleen schema, geen data — handig voor documentatie of een lege kopie
+pg_dump -Fc -s -d meridiaan -f schema.dump
+
+# Eén tabel
+pg_dump -Fc -t meridiaan_prod.mutatie -d meridiaan -f mutatie.dump
+
+# Alle databases plus rollen en globale objecten (niet de data zelf per database)
+pg_dumpall --globals-only -f globals.sql
+</code></pre>
+<p><strong><code>-Fc</code> (custom format)</strong> is vrijwel altijd de juiste keuze boven platte SQL: gecomprimeerd, en herstelbaar met selectie:</p>
+<pre><code class="language-bash">pg_restore -d meridiaan_test -t mutatie meridiaan.dump
+pg_restore -l meridiaan.dump                    # inhoudsopgave bekijken
+pg_restore -j 4 -d meridiaan_test meridiaan.dump # parallel herstellen
+</code></pre>
+<p><strong>Wat <code>pg_dump</code> niet meeneemt:</strong> rollen, tablespaces, en objecten buiten de gekozen database. Vandaar <code>pg_dumpall --globals-only</code> als aanvulling — de twee horen bij elkaar voor een volledig herstel.</p>
+<p><strong>Consistentie tijdens het dumpen:</strong> <code>pg_dump</code> draait in één transactie met een repeatable-read-achtige momentopname (deel 7). Een database die tijdens het dumpen wordt gewijzigd, levert een consistente back-up op van het moment waarop de dump begon — niet een mengsel van oud en nieuw.</p>
+<p><strong>Wanneer <code>pg_dump</code> niet volstaat:</strong> bij een RPO in minuten. Een dump van vanochtend 03:00 betekent bij een storing om 14:00 het verlies van elf uur werk. Daarvoor is continuous archiving nodig (paragraaf 7).</p>
+<hr>
+<h2>6. pg_basebackup</h2>
+<p>Een fysieke kopie van het hele cluster, gemaakt terwijl de server draait:</p>
+<pre><code class="language-bash">pg_basebackup -D /back-up/meridiaan_$(date +%Y%m%d) \
+    -Ft -z -Xs -P -h localhost -U replicatie_rol
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Optie</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-Ft</code></td>
+<td>Tar-formaat (compact, één bestand per tablespace)</td>
+</tr>
+<tr>
+<td><code>-z</code></td>
+<td>Comprimeren</td>
+</tr>
+<tr>
+<td><code>-Xs</code></td>
+<td>WAL streamen tijdens de back-up (nodig voor consistentie)</td>
+</tr>
+<tr>
+<td><code>-P</code></td>
+<td>Voortgang tonen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Waarom <code>-Xs</code> niet optioneel is:</strong> een fysieke back-up kopieert bestanden terwijl de server erin schrijft. Zonder de WAL die tijdens het kopiëren is gegenereerd, is de kopie inconsistent — sommige pagina’s zijn van vóór het kopiëren, andere van erna. De meegestreamde WAL maakt het mogelijk om bij het herstellen alles naar hetzelfde consistente moment te brengen. Dit is dezelfde crash-recovery-logica uit deel 2, nu toegepast op een back-up in plaats van een crash.</p>
+<p><strong>De rol die dit uitvoert</strong> heeft het recht <code>REPLICATION</code> nodig, geen superuser:</p>
+<pre><code class="language-sql">CREATE ROLE backup_rol LOGIN REPLICATION PASSWORD '…';
+</code></pre>
+<p>Dit is dezelfde soort minimale-rechten-overweging als in deel 9 — een back-uptaak hoeft geen andere rechten te hebben dan wat back-uppen vereist.</p>
+<hr>
+<h2>7. Continuous archiving en WAL</h2>
+<p>De sleutel tot een laag RPO. Uit deel 2: elke wijziging wordt eerst naar de WAL geschreven. <strong>Continuous archiving</strong> bewaart die WAL-segmenten permanent, in plaats van ze na een checkpoint te laten hergebruiken.</p>
+<pre><code># postgresql.conf
+wal_level = replica
+archive_mode = on
+archive_command = 'pgbackrest --stanza=meridiaan archive-push %p'
+</code></pre>
+<p>Vanaf dat moment is er een doorlopende stroom: een basisback-up (paragraaf 6) plus alle WAL-segmenten sindsdien. Samen kunnen ze de database naar <strong>elk moment</strong> tussen de basisback-up en nu reconstrueren.</p>
+<p><strong>Reken het door:</strong> met een basisback-up van elke nacht en continue WAL-archivering is het RPO teruggebracht van “sinds de laatste dump” naar “een fractie van een seconde” — de tijd die het kost om het laatste WAL-segment te schrijven en te archiveren.</p>
+<p><strong>Het eenvoudige <code>archive_command</code> zonder gereedschap:</strong></p>
+<pre><code>archive_command = 'test ! -f /back-up/wal/%f &amp;&amp; cp %p /back-up/wal/%f'
+</code></pre>
+<p>Werkt, maar mist wat <code>pgBackRest</code> (paragraaf 10) gratis geeft: compressie, encryptie, parallelle overdracht, en verificatie dat het segment werkelijk is aangekomen.</p>
+<p><strong>Waarschuwing:</strong> als <code>archive_command</code> faalt en dat onopgemerkt blijft, stapelen WAL-segmenten zich op in <code>pg_wal/</code> totdat de schijf vol loopt — een andere route naar hetzelfde probleem als de wraparound-waarschuwing uit deel 12. Monitor dit (deel 20).</p>
+<hr>
+<h2>8. Point-in-time recovery</h2>
+<p>De reden dat je dit allemaal opzet: <strong>herstellen naar een specifiek moment</strong>, niet alleen naar het moment van de laatste back-up.</p>
+<p>Scenario: om 14:32 voert iemand per ongeluk <code>DROP TABLE mutatie_2024_06;</code> uit — de fout uit paragraaf 2. Je wilt terug naar 14:31.</p>
+<pre><code># In postgresql.conf van de herstelde instantie, of via recovery.signal
+restore_command = 'pgbackrest --stanza=meridiaan archive-get %f &quot;%p&quot;'
+recovery_target_time = '2026-03-15 14:31:00+01'
+recovery_target_action = 'promote'
+</code></pre>
+<p>PostgreSQL herstelt de basisback-up, speelt vervolgens WAL-segmenten af vanaf dat moment, en <strong>stopt precies bij het opgegeven tijdstip</strong> — vóór de <code>DROP TABLE</code>. De verwijderde partitie is er weer.</p>
+<p><strong>Andere doelen dan een tijdstip:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Doel</th>
+<th>Wanneer nuttig</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>recovery_target_time</code></td>
+<td>Je weet ongeveer wanneer het misging</td>
+</tr>
+<tr>
+<td><code>recovery_target_xid</code></td>
+<td>Je kent het transactie-ID (uit een log)</td>
+</tr>
+<tr>
+<td><code>recovery_target_lsn</code></td>
+<td>Precisie tot op de WAL-positie</td>
+</tr>
+<tr>
+<td><code>recovery_target_name</code></td>
+<td>Een vooraf gezette naam met <code>pg_create_restore_point()</code></td>
+</tr>
+</tbody>
+</table>
+<p>Die laatste is nuttig vóór een risicovolle operatie: zet een herstelpunt vlak vóór een grote migratie, zodat je een expliciet, benoemd terugvalmoment hebt in plaats van te moeten gokken op een tijdstip.</p>
+<pre><code class="language-sql">SELECT pg_create_restore_point('voor_migratie_2026_03_15');
+</code></pre>
+<hr>
+<h2>9. Het herstellen, stap voor stap</h2>
+<p>Nooit op de productieomgeving zelf oefenen. Altijd naar een aparte locatie:</p>
+<ol>
+<li><strong>Stop, of gebruik een andere instantie.</strong> Herstel nooit over een draaiende productiedatabase heen.</li>
+<li><strong>Kopieer de laatste basisback-up</strong> naar het nieuwe datadirectory.</li>
+<li><strong>Zet <code>restore_command</code> en het herstel-doel.</strong></li>
+<li><strong>Maak <code>recovery.signal</code> aan</strong> (het bestand dat PostgreSQL vertelt dat dit een herstel is, niet een normale start).</li>
+<li><strong>Start de server.</strong> Hij herstelt automatisch en stopt bij het doel.</li>
+<li><strong>Controleer</strong> — is de verwijderde partitie er weer? Is er niets extra binnengekomen na het doelmoment?</li>
+<li><strong>Haal op wat je nodig hebt</strong>, of promoveer de instantie als dit de nieuwe productie wordt.</li>
+</ol>
+<p><strong>Bij een gedeeltelijk herstel</strong> (je wilt alleen die ene tabel terug, niet de hele database vervangen): herstel naar een aparte instantie, exporteer daarvandaan de specifieke gegevens met <code>pg_dump -t</code>, en importeer die in productie. Dat is trager dan een volledige omwisseling maar veel minder risicovol als de rest van de database intussen is doorgegaan.</p>
+<hr>
+<h2>10. pgBackRest</h2>
+<p>Het gereedschap dat de losse onderdelen (<code>pg_basebackup</code>, handmatige WAL-archivering, retentie) samenbrengt tot één beheerd systeem.</p>
+<pre><code class="language-bash"># Eenmalig: een stanza configureren (de naam voor je back-upreeks)
+pgbackrest --stanza=meridiaan --db1-path=/var/lib/postgresql/data stanza-create
+
+# Basisback-up
+pgbackrest --stanza=meridiaan --type=full backup
+
+# Herstellen naar een tijdstip
+pgbackrest --stanza=meridiaan --type=time \
+    --target=&quot;2026-03-15 14:31:00&quot; restore
+</code></pre>
+<p><strong>Wat je erbij krijgt ten opzichte van handmatig:</strong></p>
+<ul>
+<li><strong>Parallelle overdracht</strong> — een back-up van honderden gigabytes duurt met meerdere threads een fractie van de tijd.</li>
+<li><strong>Compressie en encryptie</strong> ingebouwd.</li>
+<li><strong>Verificatie</strong> — checksums per bestand, met periodieke controle dat een oude back-up nog intact is.</li>
+<li><strong>Retentiebeheer</strong> — automatisch oude back-ups opruimen volgens een schema (paragraaf 15).</li>
+<li><strong>Volledig, differentieel én incrementeel</strong> in één samenhangend systeem (paragraaf 11).</li>
+</ul>
+<p>Voor een productieomgeving is dit vrijwel altijd te verkiezen boven een handgeschreven <code>archive_command</code>-script. Het examen toetst de concepten; in de praktijk gebruik je hier zelden iets zelfgebouwds.</p>
+<hr>
+<h2>11. Incrementele en differentiële back-ups</h2>
+<p>Een volledige back-up van 600 MB elke nacht is bij Meridiaan nog behapbaar. Bij honderden gigabytes wordt dat een probleem — tijd, netwerk, opslag.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bevat</th>
+<th>Herstel vereist</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Volledig</strong></td>
+<td>Alles</td>
+<td>Alleen zichzelf</td>
+</tr>
+<tr>
+<td><strong>Differentieel</strong></td>
+<td>Alles gewijzigd sinds de laatste <strong>volledige</strong></td>
+<td>De laatste volledige + deze</td>
+</tr>
+<tr>
+<td><strong>Incrementeel</strong></td>
+<td>Alles gewijzigd sinds de <strong>vorige</strong> back-up (van welk type ook)</td>
+<td>De hele keten sindsdien</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De afruil:</strong> incrementeel is het kleinst per back-up maar het kwetsbaarst — een beschadigde schakel in de keten breekt het herstel van alles erna. Differentieel is een tussenweg: groter dan incrementeel, maar je hebt maar twee bestanden nodig om te herstellen.</p>
+<p><strong>Praktisch schema:</strong> wekelijks volledig, dagelijks incrementeel, continue WAL-archivering ertussen voor het laatste stuk RPO. <code>pgBackRest</code> beheert deze keten en de bijbehorende retentie automatisch.</p>
+<hr>
+<h2>12. Back-ups testen: de enige manier om te weten of ze werken</h2>
+<p>Dit is de belangrijkste paragraaf van dit deel, en de reden dat paragraaf 2 begon met een vraag in plaats van een tool.</p>
+<p><strong>Een back-up die nooit is teruggezet, is een aanname, geen garantie.</strong> Bekende manieren waarop een back-up faalt zonder dat iemand het merkt:</p>
+<ul>
+<li><code>archive_command</code> faalt stilletjes; de laatste weken WAL ontbreken.</li>
+<li>De back-up is technisch compleet maar de applicatie die hem zou moeten kunnen lezen, is intussen geüpgraded.</li>
+<li>Een schijf met bit-rot corrumpeert een deel van het archief, onopgemerkt tot het moment van herstel.</li>
+<li>Het script werkt, maar niemand heeft ooit gemeten hoe lang een volledig herstel duurt — en dat blijkt de RTO te overschrijden.</li>
+</ul>
+<p><strong>Het enige tegenmiddel: periodiek daadwerkelijk herstellen</strong>, naar een geïsoleerde omgeving, en controleren dat de gegevens kloppen — niet alleen dat het proces zonder foutmelding eindigt.</p>
+<pre><code class="language-sql">-- Na een testherstel: vergelijk met wat je verwacht
+SELECT count(*) FROM meridiaan_prod.deelnemer;
+SELECT max(aangemeld_op) FROM meridiaan_prod.mutatie;
+-- en, zoals in deel 6 en 16: een inhoudelijke steekproef, niet alleen een telling
+</code></pre>
+<p><strong>Meet en documenteer</strong> bij elke test: hoe lang duurde het volledige herstel? Dat getal is je werkelijke RTO, niet de RTO die op papier staat.</p>
+<p><strong>Aanbevolen frequentie:</strong> minimaal per kwartaal een volledig herstel op een test-omgeving, en na elke belangrijke wijziging aan de back-upconfiguratie zelf.</p>
+<hr>
+<h2>13. Tablespaces en back-up</h2>
+<p>Uit deel 11, paragraaf 14: een van de risico’s van tablespaces is dat een back-up ze allemaal moet meenemen.</p>
+<p><strong>Met <code>pg_basebackup</code> en <code>pgBackRest</code>:</strong> tablespaces worden automatisch meegenomen, mits de doellocaties bestaan of expliciet worden omgeleid (<code>--tablespace-mapping</code>).</p>
+<p><strong>Met een handmatige filesystem-kopie:</strong> een vergeten tablespace is een onvolledige back-up die er compleet uitziet — de fout wordt pas zichtbaar bij het herstellen, wanneer PostgreSQL een verwijzing tegenkomt naar een pad dat niet is meegekopieerd.</p>
+<p>Dit is een concreet argument om bij het opzetten van tablespaces (indien je die gebruikt) het back-upproces meteen te testen, niet pas wanneer het nodig is.</p>
+<hr>
+<h2>14. Een verwijderde partitie terughalen</h2>
+<p>Terug naar het openingsscenario, nu met de volledige aanpak.</p>
+<p><strong>Als je nog een losgekoppelde tabel hebt</strong> (deel 16: <code>DETACH</code> in plaats van direct <code>DROP</code>): niets aan de hand, gewoon opnieuw <code>ATTACH</code>en.</p>
+<p><strong>Als de partitie echt is verwijderd (<code>DROP TABLE</code>) en je geen recente logische dump van juist die tabel hebt:</strong></p>
+<ol>
+<li>Herstel de laatste basisback-up naar een aparte instantie.</li>
+<li>Stel <code>recovery_target_time</code> in op vlak vóór de <code>DROP TABLE</code> (te vinden in de serverlog, of bij twijfel iets ruimer nemen).</li>
+<li>Laat herstellen en promoveren.</li>
+<li><code>pg_dump -t mutatie_2024_06</code> vanuit die herstelde instantie.</li>
+<li><code>pg_restore</code> die ene tabel in productie, en koppel hem weer aan als partitie:</li>
+</ol>
+<pre><code class="language-sql">ALTER TABLE mutatie ATTACH PARTITION mutatie_2024_06
+    FOR VALUES FROM ('2024-06-01') TO ('2024-07-01');
+</code></pre>
+<p><strong>Dit hele traject kost tijd</strong> — precies waarom RTO een vooraf beantwoorde vraag moet zijn, en waarom <code>DETACH</code> vóór <code>DROP</code> (deel 16, paragraaf 12) de eerste verdedigingslinie is, niet de back-up. De back-up is het vangnet voor wanneer die eerste linie is overgeslagen.</p>
+<hr>
+<h2>15. Bewaarbeleid voor back-ups</h2>
+<p>Dezelfde vraag als bij partities (deel 16): hoe lang bewaar je een back-up, en wie beslist dat?</p>
+<p><strong>Technische overweging:</strong> hoe verder terug, hoe meer opslag. Een gangbaar schema: dagelijkse back-ups twee weken, wekelijkse een kwartaal, maandelijkse een jaar of langer.</p>
+<p><strong>AVG-overweging (deel 9):</strong> een back-up bevat <strong>alles</strong>, inclusief wat een deelnemer op verzoek uit productie is verwijderd. Een verwijderingsverzoek is dus niet compleet afgehandeld zolang de gegevens nog in oudere back-ups staan. Dit is een spanningsveld dat je expliciet moet bespreken met de privacyfunctionaris: hoelang blijft een verwijderd record “spookachtig” aanwezig in het back-uparchief, en is dat aanvaardbaar?</p>
+<p><strong>Praktisch antwoord dat vaak volstaat:</strong> een maximale bewaartermijn voor back-ups die korter is dan de wettelijke bewaarplicht voor de actieve gegevens zelf, zodat oude back-ups vanzelf uitfaseren en het probleem tijdelijk is in plaats van permanent.</p>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alleen <code>pg_dump</code>, geen continuous archiving</td>
+<td>RPO = tijd sinds de laatste dump</td>
+<td>WAL-archivering voor een laag RPO</td>
+</tr>
+<tr>
+<td>Back-up nooit getest</td>
+<td>Onbekende, mogelijk onbruikbare back-up</td>
+<td>Periodiek daadwerkelijk herstellen</td>
+</tr>
+<tr>
+<td><code>archive_command</code> faalt onopgemerkt</td>
+<td>Gat in de WAL-keten; PITR breekt</td>
+<td>Monitoring op archiveringsfouten</td>
+</tr>
+<tr>
+<td>Herstellen oefenen op productie</td>
+<td>Onnodig risico</td>
+<td>Aparte, geïsoleerde omgeving</td>
+</tr>
+<tr>
+<td>Tablespace vergeten bij handmatige back-up</td>
+<td>Onvolledig herstel, pas zichtbaar bij nood</td>
+<td>Geautomatiseerd gereedschap, getest</td>
+</tr>
+<tr>
+<td>Geen bewaarbeleid</td>
+<td>Onbegrensde opslagkosten én AVG-risico</td>
+<td>Expliciet schema, afgestemd met compliance</td>
+</tr>
+<tr>
+<td>RPO/RTO nooit vastgesteld</td>
+<td>Strategie zonder doel</td>
+<td>Eerst de bedrijfsvraag, dan de tool</td>
+</tr>
+<tr>
+<td>Back-up en productie op dezelfde schijf</td>
+<td>Beide verloren bij één schijfstoring</td>
+<td>Fysiek gescheiden opslag</td>
+</tr>
+<tr>
+<td>Alleen incrementeel, nooit volledig getest</td>
+<td>Een kapotte schakel breekt de hele keten</td>
+<td>Periodiek een volledige restore-test</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>RPO en RTO, en hun invloed op strategiekeuze;</li>
+<li>logische versus fysieke back-ups, met hun eigenschappen;</li>
+<li><code>pg_dump</code>/<code>pg_dumpall</code>/<code>pg_restore</code>, inclusief custom format en selectief herstel;</li>
+<li><code>pg_basebackup</code> en de rol van <code>-Xs</code>;</li>
+<li>continuous archiving: <code>archive_mode</code>, <code>archive_command</code>, <code>wal_level</code>;</li>
+<li>point-in-time recovery: <code>recovery_target_time</code>/<code>xid</code>/<code>lsn</code>/<code>name</code>;</li>
+<li>volledige, differentiële en incrementele back-ups;</li>
+<li>het belang van het testen van herstelprocedures.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>18. Kernbegrippen</h2>
+<p><strong>RPO</strong> — Recovery Point Objective; maximaal acceptabel gegevensverlies in tijd.
+<strong>RTO</strong> — Recovery Time Objective; maximaal acceptabele hersteltijd.
+<strong>Logische back-up</strong> — SQL-reconstructie van gegevens (<code>pg_dump</code>).
+<strong>Fysieke back-up</strong> — exacte kopie van het datadirectory (<code>pg_basebackup</code>).
+<strong>Continuous archiving</strong> — permanent bewaren van WAL-segmenten.
+<strong>Point-in-time recovery (PITR)</strong> — herstellen naar een specifiek moment.
+<strong><code>recovery_target_*</code></strong> — de parameters die het hersteldoel bepalen.
+<strong>Volledig/differentieel/incrementeel</strong> — de drie back-upvormen naar omvang en afhankelijkheid.
+<strong><code>pgBackRest</code></strong> — gereedschap voor beheerde, geverifieerde back-upreeksen.
+<strong>Restore-test</strong> — het daadwerkelijk uitvoeren van een herstel om te verifiëren dat de back-up werkt.</p>
+<hr>
+<p><em>Volgende deel: replicatie. Je kunt nu herstellen na een fout. Volgende keer zorg je dat er een tweede, actuele kopie continu meedraait — zodat een storing op de ene server niet eens hoeft te leiden tot een herstel.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">295 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-16-partitionering/reader.html">&larr; Deel 16 — Partitionering</a><a class="dbm-prevnext next" href="../deel-18-replicatie/reader.html">Deel 18 — Replicatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

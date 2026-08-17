@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Rollen, rechten en security — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 9 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 9 — Rollen, rechten en security</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 9 van 10
+Aansluiting: EDB PostgreSQL Associate — domeinen “Security” en “User management”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Het laatste probleem uit deel 1</li>
+<li>Vier lagen van toegang</li>
+<li>Verbindingen: pg_hba.conf</li>
+<li>Rollen: gebruikers en groepen</li>
+<li>Wachtwoorden en verificatie</li>
+<li>Rechten: GRANT en REVOKE</li>
+<li>De publieke valkuil</li>
+<li>Standaardrechten voor nieuwe objecten</li>
+<li>Het rollenmodel: leesrol, schrijfrol, applicatierol</li>
+<li>Rechten op kolomniveau</li>
+<li>Views als toegangslaag</li>
+<li>Row level security</li>
+<li>SECURITY DEFINER-functies</li>
+<li>Superuser en waarom je die niet gebruikt</li>
+<li>Encryptie</li>
+<li>Auditing en logging</li>
+<li>Privacy: AVG in de database</li>
+<li>Rechten inventariseren</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de vier lagen van toegangsbeheer benoemen en zeggen welke laag welk probleem oplost;</li>
+<li>uitleggen wat <code>pg_hba.conf</code> doet en waarom hij vóór alle rechten komt;</li>
+<li>rollen aanmaken en het onderscheid tussen gebruikers en groepen toepassen;</li>
+<li>rechten toekennen en intrekken op database-, schema-, tabel- en kolomniveau;</li>
+<li>de valkuil van de <code>PUBLIC</code>-rol herkennen en dichtzetten;</li>
+<li>standaardrechten instellen zodat nieuwe tabellen automatisch goed staan;</li>
+<li>een rollenmodel opzetten met scheiding tussen lezen, schrijven en eigenaarschap;</li>
+<li>row level security toepassen en de gevolgen ervan overzien;</li>
+<li>beargumenteren waarom applicaties nooit als superuser verbinden;</li>
+<li>de AVG-beginselen vertalen naar concrete maatregelen in de database.</li>
+</ul>
+<hr>
+<h2>2. Het laatste probleem uit deel 1</h2>
+<blockquote>
+<p><em>“Een stagiair krijgt toegang tot de map met werkgeverdata om een analyse te maken en ziet daarbij ook de bestanden met deelnemergegevens inclusief burgerservicenummers.”</em></p>
+</blockquote>
+<p>Dat is het zesde en laatste probleem van de schil bij Meridiaan. De andere vijf zijn opgelost: normalisatie (deel 5), constraints (deel 6), transacties (deel 7), en herstelbaarheid via WAL (deel 2). Vandaag sluit de lijst.</p>
+<p>Let op wat er precies misging. De stagiair kreeg <strong>legitiem</strong> toegang tot iets, en die toegang bleek breder dan bedoeld. Dat is de normale vorm van een beveiligingsprobleem: niet een inbreker, maar iemand met te veel rechten die iets ziet wat hem niet aangaat.</p>
+<p>Daaruit volgt het beginsel dat dit hele deel draagt:</p>
+<blockquote>
+<p><strong>Geef de minste rechten die het werk mogelijk maken, en niet meer.</strong></p>
+</blockquote>
+<p>Klinkt vanzelfsprekend. In de praktijk krijgt vrijwel elke applicatie bij Meridiaan straks één databasegebruiker met alle rechten op alles, omdat dat sneller werkt tijdens het bouwen. Dat is de gewoonte die je vandaag leert doorbreken.</p>
+<hr>
+<h2>3. Vier lagen van toegang</h2>
+<p>Toegang tot een PostgreSQL-database wordt op vier plekken bepaald. Ze werken in volgorde, en een <code>GRANT</code> helpt niets als de eerste laag je al tegenhoudt.</p>
+<table>
+<thead>
+<tr>
+<th>Laag</th>
+<th>Vraag</th>
+<th>Waar geregeld</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. Netwerk</strong></td>
+<td>Kun je de server bereiken?</td>
+<td>Firewall, <code>listen_addresses</code></td>
+</tr>
+<tr>
+<td><strong>2. Verbinding</strong></td>
+<td>Mag jij van daaraf verbinden, en hoe bewijs je wie je bent?</td>
+<td><code>pg_hba.conf</code></td>
+</tr>
+<tr>
+<td><strong>3. Rollen</strong></td>
+<td>Wie ben je, en tot welke groepen behoor je?</td>
+<td><code>CREATE ROLE</code></td>
+</tr>
+<tr>
+<td><strong>4. Rechten</strong></td>
+<td>Wat mag je met welk object?</td>
+<td><code>GRANT</code> / <code>REVOKE</code></td>
+</tr>
+</tbody>
+</table>
+<p>Bij een toegangsprobleem loop je ze in deze volgorde af. Het meest gemaakte diagnosefout is meteen naar laag 4 kijken terwijl het probleem in laag 2 zit.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-9-1.png" alt="De vier lagen als opeenvolgende poorten, met de foutmelding die bij elke laag hoort" loading="lazy"><figcaption>Figuur 9-1 — De vier lagen als opeenvolgende poorten, met de foutmelding die bij elke laag hoort</figcaption></figure>
+<hr>
+<h2>4. Verbindingen: pg_hba.conf</h2>
+<p><code>pg_hba.conf</code> (host-based authentication) staat in het datadirectory (deel 2) en bepaalt <strong>wie van waar op welke manier mag verbinden</strong>. Hij wordt van boven naar beneden gelezen; de eerste passende regel geldt, de rest wordt genegeerd.</p>
+<pre><code># TYPE  DATABASE     USER          ADDRESS          METHOD
+local   all          postgres                       peer
+host    meridiaan    meridiaan_app 10.0.1.0/24      scram-sha-256
+host    all          all           0.0.0.0/0        reject
+</code></pre>
+<p>De belangrijkste methoden:</p>
+<table>
+<thead>
+<tr>
+<th>Methode</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scram-sha-256</code></td>
+<td>Wachtwoord, veilig gehasht. <strong>De standaardkeuze.</strong></td>
+</tr>
+<tr>
+<td><code>md5</code></td>
+<td>Verouderd; alleen nog voor oude clients</td>
+</tr>
+<tr>
+<td><code>peer</code></td>
+<td>Lokaal: de OS-gebruikersnaam moet gelijk zijn aan de rolnaam</td>
+</tr>
+<tr>
+<td><code>cert</code></td>
+<td>Clientcertificaat</td>
+</tr>
+<tr>
+<td><code>reject</code></td>
+<td>Weiger expliciet</td>
+</tr>
+<tr>
+<td><code>trust</code></td>
+<td><strong>Geen controle. Nooit gebruiken buiten een wegwerpomgeving.</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Twee dingen om te onthouden:</p>
+<p><strong>De volgorde is beslissend.</strong> Een regel die alles toestaat bovenaan maakt alles daaronder betekenisloos. Zet specifieke regels boven algemene.</p>
+<p><strong>Wijzigingen vereisen een herlaadactie:</strong></p>
+<pre><code class="language-sql">SELECT pg_reload_conf();
+</code></pre>
+<p>Een herstart is niet nodig. Controleer daarna:</p>
+<pre><code class="language-sql">SELECT * FROM pg_hba_file_rules WHERE error IS NOT NULL;
+</code></pre>
+<p>Die view toont regels met fouten — handig, want een typefout in dit bestand kan je buitensluiten.</p>
+<hr>
+<h2>5. Rollen: gebruikers en groepen</h2>
+<p>PostgreSQL kent geen apart begrip “gebruiker” en “groep”. Er zijn alleen <strong>rollen</strong>, en het enige verschil is of een rol mag inloggen.</p>
+<pre><code class="language-sql">CREATE ROLE meridiaan_lezer;                              -- groep (NOLOGIN is standaard)
+CREATE ROLE anouk LOGIN PASSWORD 'wachtwoord';            -- gebruiker
+GRANT meridiaan_lezer TO anouk;                           -- lidmaatschap
+</code></pre>
+<p><code>CREATE USER</code> is precies hetzelfde als <code>CREATE ROLE … LOGIN</code>; het bestaat alleen voor de leesbaarheid.</p>
+<p><strong>Het model dat je aanhoudt:</strong></p>
+<ul>
+<li><strong>Rechten geef je aan groepsrollen</strong>, nooit rechtstreeks aan personen.</li>
+<li><strong>Personen krijgen lidmaatschap</strong> van de groepen die bij hun functie horen.</li>
+</ul>
+<p>Waarom dat ertoe doet: gaat Anouk weg, dan verwijder je één rol. Zijn de rechten rechtstreeks aan haar toegekend, dan moet je ze stuk voor stuk terugvinden — en dat lukt zelden volledig. Bij een functiewijziging geldt hetzelfde: lidmaatschap intrekken is één handeling, rechten uitzoeken is een project.</p>
+<p>Nuttige rolattributen:</p>
+<table>
+<thead>
+<tr>
+<th>Attribuut</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LOGIN</code></td>
+<td>Mag verbinden</td>
+</tr>
+<tr>
+<td><code>SUPERUSER</code></td>
+<td>Omzeilt alle rechtencontroles</td>
+</tr>
+<tr>
+<td><code>CREATEDB</code></td>
+<td>Mag databases maken</td>
+</tr>
+<tr>
+<td><code>CREATEROLE</code></td>
+<td>Mag rollen maken</td>
+</tr>
+<tr>
+<td><code>NOINHERIT</code></td>
+<td>Erft rechten niet automatisch; vereist <code>SET ROLE</code></td>
+</tr>
+<tr>
+<td><code>CONNECTION LIMIT n</code></td>
+<td>Maximum aantal gelijktijdige verbindingen</td>
+</tr>
+<tr>
+<td><code>VALID UNTIL 'datum'</code></td>
+<td>Vervaldatum — nuttig voor tijdelijke toegang</td>
+</tr>
+</tbody>
+</table>
+<p><code>VALID UNTIL</code> is het antwoord op de stagiair uit deel 1: geef tijdelijke toegang een einddatum, dan hoeft niemand eraan te denken hem in te trekken.</p>
+<hr>
+<h2>6. Wachtwoorden en verificatie</h2>
+<pre><code class="language-sql">ALTER ROLE anouk PASSWORD 'nieuw-wachtwoord';
+ALTER ROLE anouk VALID UNTIL '2026-12-31';
+</code></pre>
+<p><strong>Let op:</strong> een wachtwoord dat je in psql intypt, belandt in je shellgeschiedenis en mogelijk in de serverlog. Gebruik <code>\password anouk</code> in psql — dat vraagt het wachtwoord interactief en stuurt alleen de hash.</p>
+<p>Voor applicaties: zet wachtwoorden niet in code of configuratiebestanden die in versiebeheer staan. Gebruik een <code>.pgpass</code>-bestand, omgevingsvariabelen, of een sleutelkluis. In grotere organisaties is verificatie via LDAP, Kerberos of certificaten gebruikelijk; dat valt buiten niveau 1.</p>
+<p>Controleer welke hashmethode in gebruik is:</p>
+<pre><code class="language-sql">SHOW password_encryption;   -- hoort scram-sha-256 te zijn
+</code></pre>
+<hr>
+<h2>7. Rechten: GRANT en REVOKE</h2>
+<pre><code class="language-sql">GRANT CONNECT ON DATABASE meridiaan TO meridiaan_lezer;
+GRANT USAGE  ON SCHEMA meridiaan     TO meridiaan_lezer;
+GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_lezer;
+</code></pre>
+<p><strong>Alle drie zijn nodig</strong>, en dat is de meest voorkomende verwarring: rechten zijn hiërarchisch en elke laag moet apart worden opengezet. Wie alleen <code>SELECT</code> geeft maar <code>USAGE</code> op het schema vergeet, krijgt een cursist met een foutmelding en geen idee waarom.</p>
+<p>De rechten per objecttype:</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Rechten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Database</td>
+<td><code>CONNECT</code>, <code>CREATE</code>, <code>TEMPORARY</code></td>
+</tr>
+<tr>
+<td>Schema</td>
+<td><code>USAGE</code>, <code>CREATE</code></td>
+</tr>
+<tr>
+<td>Tabel</td>
+<td><code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>TRUNCATE</code>, <code>REFERENCES</code>, <code>TRIGGER</code></td>
+</tr>
+<tr>
+<td>Kolom</td>
+<td><code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>REFERENCES</code></td>
+</tr>
+<tr>
+<td>Sequentie</td>
+<td><code>USAGE</code>, <code>SELECT</code>, <code>UPDATE</code></td>
+</tr>
+<tr>
+<td>Functie</td>
+<td><code>EXECUTE</code></td>
+</tr>
+</tbody>
+</table>
+<p>Intrekken gaat met dezelfde structuur:</p>
+<pre><code class="language-sql">REVOKE INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA meridiaan FROM meridiaan_lezer;
+</code></pre>
+<p><strong>Vergeet de sequenties niet.</strong> Een rol met <code>INSERT</code>-recht op een tabel met een identiteitskolom heeft ook <code>USAGE</code> op de onderliggende sequentie nodig, anders faalt de invoeging met een onduidelijke foutmelding.</p>
+<pre><code class="language-sql">GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;
+</code></pre>
+<hr>
+<h2>8. De publieke valkuil</h2>
+<p>Er bestaat een ingebouwde rol <code>PUBLIC</code> waarvan <strong>iedereen</strong> automatisch lid is. Een aantal rechten is standaard aan <code>PUBLIC</code> toegekend, en dat verrast mensen.</p>
+<p>Standaard geldt:</p>
+<ul>
+<li><code>CONNECT</code> op elke nieuwe database — <strong>iedereen die kan inloggen, kan bij elke database</strong>;</li>
+<li><code>EXECUTE</code> op nieuwe functies;</li>
+<li><code>USAGE</code> op nieuwe talen en datatypen;</li>
+<li>in oudere versies ook <code>CREATE</code> op het schema <code>public</code> — sinds PostgreSQL 15 niet meer.</li>
+</ul>
+<p>Dichtzetten:</p>
+<pre><code class="language-sql">REVOKE CONNECT ON DATABASE meridiaan FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+</code></pre>
+<p>⚠ Doe dit bewust en gecontroleerd: het intrekken van rechten van <code>PUBLIC</code> kan bestaande applicaties breken die er stilzwijgend op leunden. Test het op acceptatie.</p>
+<p><strong>Dit is precies het stagiairprobleem in databasevorm.</strong> De stagiair kreeg een account voor de werkgeversanalyse; via <code>PUBLIC</code> kon hij verbinden met elke database op het cluster. Niemand had hem dat gegeven — het stond standaard aan.</p>
+<hr>
+<h2>9. Standaardrechten voor nieuwe objecten</h2>
+<p><code>GRANT … ON ALL TABLES</code> geldt alleen voor de tabellen die op dat moment bestaan. Een tabel die morgen wordt aangemaakt, valt erbuiten.</p>
+<p>Dat is de meest voorkomende oorzaak van “het werkte gisteren nog”:</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO meridiaan_lezer;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan
+    GRANT USAGE ON SEQUENCES TO meridiaan_schrijver;
+</code></pre>
+<p><strong>Belangrijk detail:</strong> standaardrechten gelden per <strong>aanmakende rol</strong>. Stel je ze in als <code>postgres</code>, dan werken ze alleen voor tabellen die <code>postgres</code> aanmaakt. Maakt je migratieproces tabellen aan onder een andere rol, dan moet je die rol expliciet noemen:</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO meridiaan_lezer;
+</code></pre>
+<p>Dit is de subtielste valkuil van dit deel, en de reden dat rechten in veel organisaties langzaam uit de pas lopen met de werkelijkheid.</p>
+<hr>
+<h2>10. Het rollenmodel: leesrol, schrijfrol, applicatierol</h2>
+<p>Het patroon dat je bij Meridiaan zou toepassen:</p>
+<pre><code class="language-sql">-- Eigenaar: bezit de objecten, voert migraties uit. Logt niet in.
+CREATE ROLE meridiaan_eigenaar NOLOGIN;
+
+-- Groepsrollen met rechten
+CREATE ROLE meridiaan_lezer NOLOGIN;
+CREATE ROLE meridiaan_schrijver NOLOGIN;
+
+GRANT CONNECT ON DATABASE meridiaan TO meridiaan_lezer;
+GRANT USAGE ON SCHEMA meridiaan TO meridiaan_lezer;
+GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_lezer;
+
+GRANT meridiaan_lezer TO meridiaan_schrijver;     -- schrijver kan ook lezen
+GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_schrijver;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;
+
+-- Inlogbare rollen
+CREATE ROLE portaal_app LOGIN PASSWORD '…';
+GRANT meridiaan_schrijver TO portaal_app;
+
+CREATE ROLE rapportage LOGIN PASSWORD '…';
+GRANT meridiaan_lezer TO rapportage;
+
+CREATE ROLE stagiair LOGIN PASSWORD '…' VALID UNTIL '2026-09-01';
+GRANT meridiaan_lezer TO stagiair;
+</code></pre>
+<p>Drie ontwerpkeuzes die het uitleggen waard zijn:</p>
+<p><strong>De eigenaar logt niet in.</strong> Objecten worden bezeten door een rol die niemand rechtstreeks gebruikt. Migraties draai je met <code>SET ROLE meridiaan_eigenaar</code>. Zo kan een gecompromitteerd applicatieaccount geen tabellen wijzigen of verwijderen — het bezit ze niet.</p>
+<p><strong>De applicatie is geen superuser.</strong> Dit is de belangrijkste regel van dit deel. Een applicatie die als superuser verbindt, omzeilt elke rechtencontrole, elke row level security en elke auditmaatregel. Bij een SQL-injectie in die applicatie ligt het hele cluster open.</p>
+<p><strong>Tijdelijke toegang heeft een einddatum.</strong> Zie de stagiair.</p>
+<hr>
+<h2>11. Rechten op kolomniveau</h2>
+<p>Terug naar het burgerservicenummer:</p>
+<pre><code class="language-sql">GRANT SELECT (deelnemer_id, voorletters, achternaam, woonplaats)
+    ON deelnemer TO meridiaan_lezer;
+</code></pre>
+<p>De rol kan deze kolommen zien en de rest niet. <code>SELECT *</code> levert dan een foutmelding op — wat op zichzelf informatief is, want de gebruiker weet nu dat er meer is.</p>
+<p><strong>De beperking:</strong> kolomrechten zijn omslachtig in beheer. Elke nieuwe kolom moet expliciet worden toegevoegd, anders is hij standaard onzichtbaar voor die rol. Bij een tabel die regelmatig wijzigt, loopt dat snel uit de pas.</p>
+<p>Voor het BSN-geval is een <strong>view</strong> meestal de betere oplossing.</p>
+<hr>
+<h2>12. Views als toegangslaag</h2>
+<pre><code class="language-sql">CREATE VIEW deelnemer_beperkt AS
+SELECT deelnemer_id, voorletters, tussenvoegsel, achternaam,
+       woonplaats, startdatum_deelname, einddatum_deelname
+FROM deelnemer;
+
+REVOKE ALL ON deelnemer FROM meridiaan_lezer;
+GRANT SELECT ON deelnemer_beperkt TO meridiaan_lezer;
+</code></pre>
+<p>De rol heeft geen enkel recht op de onderliggende tabel, maar kan de view wel bevragen — omdat de view draait met de rechten van zijn <strong>eigenaar</strong>, niet van de aanroeper.</p>
+<p>Voordelen boven kolomrechten: één plek om te onderhouden, en de definitie is leesbaar. Dit is ook de tweede reden om views te gebruiken die in deel 8 al werd aangekondigd.</p>
+<p><strong>Waarschuwing:</strong> een view met <code>security_invoker = true</code> (beschikbaar vanaf PostgreSQL 15) draait juist wél met de rechten van de aanroeper. Weet welke van de twee je maakt; de standaard is <code>false</code>.</p>
+<hr>
+<h2>13. Row level security</h2>
+<p>Kolomrechten en views beperken <strong>welke kolommen</strong> iemand ziet. Row level security beperkt <strong>welke rijen</strong>.</p>
+<pre><code class="language-sql">ALTER TABLE deelnemer ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY deelnemer_eigen_gegevens ON deelnemer
+    FOR SELECT
+    TO portaal_app
+    USING (deelnemer_id = current_setting('app.deelnemer_id')::integer);
+</code></pre>
+<p>De applicatie zet bij elke verbinding de context:</p>
+<pre><code class="language-sql">SET app.deelnemer_id = '1001';
+</code></pre>
+<p>Vanaf dat moment ziet die sessie alleen de eigen rij — ook bij <code>SELECT * FROM deelnemer</code>. Voor het deelnemersportaal van Meridiaan is dat een sterke maatregel: een fout in de applicatiecode kan dan geen gegevens van een andere deelnemer tonen.</p>
+<p><strong>Drie dingen die je moet weten:</strong></p>
+<ol>
+<li><strong>De tabeleigenaar omzeilt RLS standaard.</strong> Dat is een veelgemaakte testfout: je test als eigenaar, ziet alles, en concludeert dat het niet werkt. Forceer met <code>ALTER TABLE … FORCE ROW LEVEL SECURITY</code>.</li>
+<li><strong>Superusers omzeilen RLS altijd.</strong> Nog een reden waarom de applicatie geen superuser is.</li>
+<li><strong>Het kost prestaties.</strong> De policy-voorwaarde wordt aan elke query toegevoegd. Zorg dat de kolom in de policy geïndexeerd is (deel 8).</li>
+</ol>
+<p>Volledige behandeling van RLS-patronen — inclusief multi-tenant — hoort in niveau 2, deel 21.</p>
+<hr>
+<h2>14. SECURITY DEFINER-functies</h2>
+<p>Soms moet een gebruiker een handeling kunnen uitvoeren zonder de onderliggende rechten te hebben. Bijvoorbeeld: de klantenservice mag een mutatie als verwerkt markeren, maar niet zomaar in de mutatietabel schrijven.</p>
+<pre><code class="language-sql">CREATE FUNCTION mutatie_afronden(p_mutatie_id integer)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = meridiaan, pg_temp
+AS $$
+    UPDATE mutatie SET verwerkt_op = now()
+    WHERE mutatie_id = p_mutatie_id AND verwerkt_op IS NULL;
+$$;
+
+GRANT EXECUTE ON FUNCTION mutatie_afronden(integer) TO meridiaan_lezer;
+</code></pre>
+<p>De functie draait met de rechten van haar maker, niet van de aanroeper. De klantenservice kan dus precies deze ene handeling doen en niets meer.</p>
+<p><strong>De <code>SET search_path</code> is niet optioneel.</strong> Zonder die regel kan een aanvaller een eigen tabel of functie in zijn eigen schema zetten die eerder in het zoekpad staat, en die wordt dan uitgevoerd met verhoogde rechten. Dit is een bekende aanvalsvorm. Elke <code>SECURITY DEFINER</code>-functie hoort een vast zoekpad te hebben.</p>
+<hr>
+<h2>15. Superuser en waarom je die niet gebruikt</h2>
+<p>Een superuser omzeilt <strong>alle</strong> controles: rechten, RLS, <code>pg_hba</code> niet, maar al het overige wel. Hij kan bestanden op de server lezen en schrijven en willekeurige code uitvoeren via bepaalde extensies.</p>
+<p>Regels:</p>
+<ul>
+<li><strong>Applicaties verbinden nooit als superuser.</strong></li>
+<li><strong>Mensen verbinden zelden als superuser</strong> — alleen voor handelingen die het echt vereisen.</li>
+<li>De rol <code>postgres</code> is voor beheer, niet voor dagelijks werk.</li>
+<li>Wat je vaak nodig hebt zonder superuser te zijn, kan met de ingebouwde rollen: <code>pg_read_all_data</code>, <code>pg_write_all_data</code>, <code>pg_monitor</code>, <code>pg_signal_backend</code>.</li>
+</ul>
+<p><code>pg_monitor</code> is het bruikbaarst: het geeft toegang tot de statistiekweergaven (deel 2, deel 8) zonder verdere rechten. Precies wat een monitoringsysteem nodig heeft.</p>
+<hr>
+<h2>16. Encryptie</h2>
+<p>Drie plekken, drie mechanismen:</p>
+<p><strong>Onderweg (in transit).</strong> TLS tussen client en server. Aanzetten in <code>postgresql.conf</code> (<code>ssl = on</code>) en afdwingen in <code>pg_hba.conf</code> door <code>hostssl</code> te gebruiken in plaats van <code>host</code>. <strong>Doe dit altijd</strong> voor verbindingen die het netwerk over gaan.</p>
+<p><strong>In rust (at rest).</strong> PostgreSQL heeft geen ingebouwde tabelencryptie. In de praktijk versleutel je het bestandssysteem of de schijf. Dat beschermt tegen een gestolen schijf, niet tegen iemand met een geldige databaseverbinding — en dat is een onderscheid dat in beveiligingsgesprekken vaak wordt weggepoetst.</p>
+<p><strong>Op kolomniveau.</strong> Met de extensie <code>pgcrypto</code> kun je afzonderlijke waarden versleutelen. Overweeg het zorgvuldig: versleutelde kolommen zijn niet doorzoekbaar en niet indexeerbaar, en het sleutelbeheer wordt jouw probleem. Voor de meeste gevallen zijn goede rechten en RLS effectiever dan kolomencryptie.</p>
+<hr>
+<h2>17. Auditing en logging</h2>
+<p>De standaardlog van PostgreSQL logt geen query’s. Instellen in <code>postgresql.conf</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Instelling</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log_connections = on</code></td>
+<td>Wie verbindt wanneer</td>
+</tr>
+<tr>
+<td><code>log_disconnections = on</code></td>
+<td>En wanneer weer weg</td>
+</tr>
+<tr>
+<td><code>log_statement = 'ddl'</code></td>
+<td>Alle structuurwijzigingen</td>
+</tr>
+<tr>
+<td><code>log_min_duration_statement = 1000</code></td>
+<td>Query’s boven één seconde</td>
+</tr>
+<tr>
+<td><code>log_line_prefix</code></td>
+<td>Wat er vóór elke regel staat: tijdstip, gebruiker, database, sessie</td>
+</tr>
+</tbody>
+</table>
+<p><code>log_statement = 'all'</code> logt alles — informatief, maar het schrijft veel en het zet ook <strong>gegevens</strong> in de log, inclusief burgerservicenummers in <code>WHERE</code>-clausules. Dat maakt van je logbestand een tweede kopie van je persoonsgegevens, met andere toegangsregels. Denk daarover na voordat je het aanzet.</p>
+<p>Voor echte auditing bestaat de extensie <strong>pgaudit</strong>: die logt gestructureerd wie wat op welk object deed, met configuratie per rol en per objecttype. Dat is wat je nodig hebt als een toezichthouder vraagt wie de aanspraken van deelnemer X heeft ingezien. Volledige behandeling in niveau 2, deel 20 en 21.</p>
+<hr>
+<h2>18. Privacy: AVG in de database</h2>
+<p>De AVG-beginselen vertaald naar concrete databasemaatregelen:</p>
+<table>
+<thead>
+<tr>
+<th>Beginsel</th>
+<th>In de database</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Dataminimalisatie</strong></td>
+<td>Alleen vastleggen wat nodig is; BSN niet als sleutel (deel 2)</td>
+</tr>
+<tr>
+<td><strong>Doelbinding</strong></td>
+<td>Rollen per doel: rapportage ziet geen BSN</td>
+</tr>
+<tr>
+<td><strong>Opslagbeperking</strong></td>
+<td>Bewaartermijnen, en een proces dat ze uitvoert</td>
+</tr>
+<tr>
+<td><strong>Integriteit en vertrouwelijkheid</strong></td>
+<td>Rechten, RLS, TLS, encryptie in rust</td>
+</tr>
+<tr>
+<td><strong>Verantwoordingsplicht</strong></td>
+<td>Auditlog: aantoonbaar wie wat zag</td>
+</tr>
+</tbody>
+</table>
+<p>Drie dingen die bij Meridiaan concreet spelen:</p>
+<p><strong>Het BSN.</strong> In deel 2 besloten we het niet als primaire sleutel te gebruiken, en het privacyargument was toen: als sleutel verspreidt het zich via elke foreign key door het hele model. Nu zie je de tweede helft van dat argument — omdat het BSN in één kolom van één tabel staat, kun je er gericht rechten op zetten. Was het overal een foreign key geweest, dan was dat onbegonnen werk.</p>
+<p><strong>Testgegevens.</strong> Een kopie van productie op acceptatie is een tweede verzameling persoonsgegevens met zwakkere toegangscontrole. Anonimiseer of pseudonimiseer bij het kopiëren. Dit is in de praktijk de meest verwaarloosde maatregel — en de meest voorkomende oorzaak van een datalek dat niemand had voorzien.</p>
+<p><strong>Back-ups.</strong> Een back-up bevat alles, ook wat je op verzoek van een deelnemer hebt verwijderd. Weet waar je back-ups staan, hoe lang ze bewaard blijven en wie erbij kan. Back-upstrategie hoort in niveau 2, deel 17; de privacykant hoort hier.</p>
+<p><strong>Het recht op vergetelheid</strong> botst met de bewaarplicht die een pensioenuitvoerder heeft. Dat is geen technische vraag maar een juridische, en het antwoord verschilt per gegevenssoort. Wat jij moet leveren is het vermogen om gericht te verwijderen — en dat begint bij een model waarin je weet waar een persoon overal voorkomt.</p>
+<hr>
+<h2>19. Rechten inventariseren</h2>
+<p>De vraag “wie kan er bij wat” moet je kunnen beantwoorden.</p>
+<pre><code class="language-sql">-- Alle rollen en hun attributen
+\du
+
+-- Rechten op tabellen in een schema
+\dp meridiaan.*
+
+-- Wie is lid van welke rol
+SELECT r.rolname AS rol, m.rolname AS lid
+FROM pg_auth_members am
+JOIN pg_roles r ON r.oid = am.roleid
+JOIN pg_roles m ON m.oid = am.member
+ORDER BY 1, 2;
+
+-- Rechten op tabelniveau, leesbaar
+SELECT grantee, table_name, string_agg(privilege_type, ', ' ORDER BY privilege_type)
+FROM information_schema.table_privileges
+WHERE table_schema = 'meridiaan'
+GROUP BY grantee, table_name
+ORDER BY grantee, table_name;
+
+-- Superusers — hoort een korte lijst te zijn
+SELECT rolname FROM pg_roles WHERE rolsuper;
+</code></pre>
+<p>Die laatste is de eerste query die je draait als je een nieuwe omgeving overneemt. Is de lijst langer dan een handvol, dan heb je je eerste bevinding.</p>
+<hr>
+<h2>20. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Oplossing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Applicatie verbindt als superuser</td>
+<td>Alle controles omzeild</td>
+<td>Eigen rol met minimale rechten</td>
+</tr>
+<tr>
+<td><code>SELECT</code> gegeven, <code>USAGE</code> op schema vergeten</td>
+<td>Foutmelding zonder duidelijke oorzaak</td>
+<td>Alle drie de lagen</td>
+</tr>
+<tr>
+<td><code>PUBLIC</code>-rechten niet ingetrokken</td>
+<td>Iedereen kan overal verbinden</td>
+<td><code>REVOKE … FROM PUBLIC</code></td>
+</tr>
+<tr>
+<td>Standaardrechten niet ingesteld</td>
+<td>Nieuwe tabellen onzichtbaar</td>
+<td><code>ALTER DEFAULT PRIVILEGES</code></td>
+</tr>
+<tr>
+<td>Standaardrechten voor de verkeerde rol</td>
+<td>Werkt niet, en niemand ziet waarom</td>
+<td><code>FOR ROLE …</code> toevoegen</td>
+</tr>
+<tr>
+<td>Rechten rechtstreeks aan personen</td>
+<td>Onmogelijk op te ruimen bij vertrek</td>
+<td>Groepsrollen</td>
+</tr>
+<tr>
+<td><code>INSERT</code> gegeven, sequentie vergeten</td>
+<td>Invoegen faalt</td>
+<td><code>GRANT USAGE ON … SEQUENCES</code></td>
+</tr>
+<tr>
+<td>RLS getest als eigenaar</td>
+<td>Lijkt niet te werken</td>
+<td><code>FORCE ROW LEVEL SECURITY</code></td>
+</tr>
+<tr>
+<td><code>SECURITY DEFINER</code> zonder <code>search_path</code></td>
+<td>Rechtenescalatie mogelijk</td>
+<td>Altijd <code>SET search_path</code></td>
+</tr>
+<tr>
+<td><code>log_statement = 'all'</code> op een tabel met BSN</td>
+<td>Tweede kopie persoonsgegevens</td>
+<td>Bewust kiezen; pgaudit overwegen</td>
+</tr>
+<tr>
+<td>Productiekopie op acceptatie</td>
+<td>Datalek in wachtstand</td>
+<td>Anonimiseren bij kopiëren</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>21. Aansluiting op de certificering</h2>
+<p>Voor de Associate-certificering paraat:</p>
+<ul>
+<li>de rol van <code>pg_hba.conf</code>, de volgorde van regels, en de verificatiemethoden;</li>
+<li>rollen versus gebruikers, en rolattributen;</li>
+<li>de rechtenhiërarchie database → schema → tabel → kolom;</li>
+<li><code>PUBLIC</code> en de standaardrechten daarvan;</li>
+<li><code>ALTER DEFAULT PRIVILEGES</code>;</li>
+<li>het verschil tussen <code>SECURITY DEFINER</code> en <code>SECURITY INVOKER</code>;</li>
+<li>de basis van row level security;</li>
+<li>de ingebouwde rollen zoals <code>pg_monitor</code> en <code>pg_read_all_data</code>.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>22. Kernbegrippen</h2>
+<p><strong><code>pg_hba.conf</code></strong> — bepaalt wie van waar op welke manier mag verbinden.
+<strong>Rol</strong> — gebruiker én groep; het verschil is alleen <code>LOGIN</code>.
+<strong><code>PUBLIC</code></strong> — ingebouwde rol waarvan iedereen lid is.
+<strong>Standaardrechten</strong> — rechten die automatisch gelden voor nieuw aangemaakte objecten.
+<strong>Row level security</strong> — beperking op rijniveau via policies.
+<strong><code>SECURITY DEFINER</code></strong> — functie die draait met de rechten van de maker.
+<strong>Superuser</strong> — rol die alle rechtencontroles omzeilt.
+<strong><code>pg_monitor</code></strong> — ingebouwde rol voor monitoring zonder verdere rechten.
+<strong>Pseudonimiseren</strong> — persoonsgegevens vervangen door kunstmatige waarden.
+<strong>Minste-rechtenbeginsel</strong> — geef de minste rechten die het werk mogelijk maken.</p>
+<hr>
+<p><em>Volgende deel: de capstone. Je bouwt en verdedigt de complete Meridiaan-datalaag — model, DDL, query’s, indexen en autorisatie. En je legt je adviesnota uit deel 1 ernaast.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">56 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">387 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-08-indexen-en-views/reader.html">&larr; Deel 8 — Indexen en views</a><a class="dbm-prevnext next" href="../deel-10-capstone-de-meridiaan-datalaag/opdrachtdocument.html">Deel 10 — Capstone: de Meridiaan-datalaag &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Partitionering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 16 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 16: Partitionering</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Vier dagdelen lang was <code>mutatie</code> de tabel waar problemen zich verzamelden — autovacuum die te laat komt, bloat na een grote update, de duurste query in <code>pg_stat_statements</code>, een B-tree die 50 MB kost. Vandaag blijkt dat geen van die problemen losstond: ze zijn allemaal het gevolg van één ontwerpkeuze die nooit is gemaakt — dat deze tabel onbegrensd groeit terwijl hij vrijwel uitsluitend tijdgebonden wordt bevraagd.</p>
+<p><strong>De kernbelofte die het dagdeel draagt:</strong> het weggooien van oude gegevens verandert van een <code>DELETE</code> die bloat achterlaat in een <code>DROP TABLE</code> van milliseconden zonder nazorg. Opdracht 16.6 laat deelnemers dat zelf meten, en het verschil is groot genoeg om overtuigend te zijn zonder dat je het hoeft te beweren.</p>
+<p><strong>De tegenhanger die net zo belangrijk is:</strong> paragraaf 16 en opdracht 16.8 behandelen wanneer partitionering de verkeerde keuze is. Deelnemers die net een krachtig nieuw gereedschap hebben gekregen, willen het overal toepassen — op <code>werkgever</code> met 4.100 rijen, op een bloatprobleem dat eigenlijk een fill-factor-vraag is. Dat moet je actief afremmen.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 16; toegang tot <code>meridiaan_prod</code>.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Genereer zelf vooraf een script</strong> dat de tientallen <code>CREATE TABLE PARTITION OF</code>-opdrachten voor vier jaar plus twee maanden bouwt, zodat je het kunt delen als deelnemers vastlopen in typewerk. Het is didactisch waardevol dat ze het proces begrijpen, niet dat ze het handmatig uittypen.</li>
+<li>Controleer of <code>pg_partman</code> beschikbaar is op de gebruikte installatie. Zo niet, bereid opdracht 16.7 voor als demonstratie in plaats van praktijkopdracht — zie Toolbijlage A.</li>
+<li><strong>Draai opdracht 16.6 zelf</strong> en noteer je eigen tijden voor de <code>DELETE</code>-route en de <code>DETACH</code>/<code>DROP</code>-route. Dat verschil is het cijfer waar het dagdeel op leunt.</li>
+<li>Zorg voor een schoon <code>oefening16</code>-schema; er wordt vandaag een volledige kopie van <code>mutatie</code> gebouwd, dus reken op extra schijfruimte (vergelijkbaar met de omvang van <code>mutatie</code> zelf, ongeveer 600 MB tot 1 GB met indexen).</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Waarom mutatie de kandidaat is (§2)</td>
+<td>Plenair, terugblik op vier dagdelen</td>
+</tr>
+<tr>
+<td>0:15-0:25</td>
+<td>Wat partitionering wel/niet oplost (§3) + <strong>opdracht 16.1</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>0:25-0:55</td>
+<td>Declaratieve partitionering, range (§4-5) + <strong>opdracht 16.2</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>0:55-1:15</td>
+<td><strong>Opdracht 16.3</strong> — migreren en verifiëren</td>
+<td>Tweetallen</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-1:55</td>
+<td><strong>Partition pruning (§8) + opdracht 16.4</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>1:55-2:15</td>
+<td>Indexen en constraints (§9-10) + <strong>opdracht 16.5</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:15-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:50</td>
+<td><strong>De kernbelofte: opdracht 16.6</strong></td>
+<td>Individueel, dan plenair</td>
+</tr>
+<tr>
+<td>2:50-3:05</td>
+<td>List/hash-partitionering (§6-7), pg_partman (§15) + <strong>opdracht 16.7</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>3:05-3:20</td>
+<td>Wanneer niet partitioneren (§16) + <strong>opdracht 16.8</strong></td>
+<td>Drietallen + plenair</td>
+</tr>
+<tr>
+<td>3:20-4:00</td>
+<td><strong>Opdracht 16.9</strong> — het partitioneringsvoorstel</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> kort paragraaf 6-7 (list/hash) in tot een korte presentatie zonder praktijkopdracht — bij Meridiaan is range verreweg het belangrijkste type. Kort <strong>nooit</strong> opdracht 16.4, 16.6 of 16.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Zet de tabel uit paragraaf 2 op het bord: vier dagdelen, vijf problemen, allemaal bij <code>mutatie</code>. Vraag de zaal:</p>
+<blockquote>
+<p><em>“Wat hebben deze vijf problemen gemeen?”</em></p>
+</blockquote>
+<p>Laat ze zelf op het antwoord komen — onbegrensde groei, tijdgebonden bevraging — voordat je het zegt. Dat is effectiever dan het te presenteren, want het laat zien dat partitionering geen nieuw trucje is maar het antwoord op een patroon dat ze zelf al vier keer zijn tegengekomen.</p>
+<h3>4.2 Wat het wel/niet oplost (0:15)</h3>
+<p>Geef de toetsvraag uit paragraaf 3 meteen mee, vóór er iets gebouwd is:</p>
+<blockquote>
+<p><em>“Bevraag ik deze tabel structureel langs een as die ook zijn natuurlijke groei bepaalt, en wil ik oude delen periodiek in bulk kunnen verwijderen of verplaatsen?”</em></p>
+</blockquote>
+<p>Laat opdracht 16.1 die vraag toepassen vóórdat er één regel SQL is geschreven. Dat is bewust: deelnemers die eerst bouwen en dan pas de toets krijgen, hebben al een oordeel gevormd op basis van “het werkt” in plaats van “het is de juiste keuze”.</p>
+<h3>4.3 Declaratieve partitionering (0:25)</h3>
+<p>Het punt dat verrassing oproept: de primaire sleutel moet de partitiesleutel bevatten. Laat opdracht 16.2b het andersom laten proberen zodat de foutmelding zelf het argument levert, in plaats van dit als regel te presenteren.</p>
+<p>Deel het voorbereide generatiescript zodra deelnemers merken dat vijftig <code>CREATE TABLE</code>-opdrachten met de hand typen niet de bedoeling is.</p>
+<h3>4.4 Migreren (0:55)</h3>
+<p>Sta erop dat opdracht 16.3e (de inhoudelijke controle) echt wordt uitgevoerd en niet wordt overgeslagen voor de rijtelling. Verwijs expliciet terug naar deel 6, opdracht 6.8, waar dit onderscheid — tellen bewijst niets, vergelijken wel — voor het eerst werd gemaakt. Herhaling op een nieuw onderwerp verankert het.</p>
+<h3>4.5 Partition pruning (1:30)</h3>
+<p><strong>Doe 16.4a en 16.4b na elkaar, plenair, op het grote scherm.</strong> Laat de zaal eerst het plan met één partitie zien, dan hetzelfde met een functie op de kolom en een <code>Append</code> over alle partities. Het contrast moet zichtbaar zijn in dezelfde minuut.</p>
+<p>Trek de lijn door naar deel 8 en 13: dit is exact dezelfde valkuil als de functie-om-de-kolom-fout bij gewone indexen, nu met grotere gevolgen omdat je in één keer alle partities in plaats van één tabel scant.</p>
+<h3>4.6 Indexen (1:55)</h3>
+<p>Het punt dat blijft hangen: één <code>CREATE INDEX</code> op de ouder bouwt hem op <strong>elke</strong> partitie, inclusief toekomstige. Laat opdracht 16.5c dat aantonen — een nieuwe partitie toevoegen en meteen controleren dat de index er al staat, zonder dat iemand hem apart heeft gemaakt.</p>
+<h3>4.7 De kernbelofte (2:30)</h3>
+<p><strong>Het belangrijkste kwartier van het dagdeel.</strong> Laat deelnemers eerst individueel meten (16.6a-c), dan de resultaten plenair verzamelen op het bord: tijd voor <code>DELETE</code> naast tijd voor <code>DETACH</code>/<code>DROP</code>.</p>
+<p>Het verschil spreekt voor zichzelf als het er in getallen staat. Zeg er één ding bij dat vaak wordt gemist:</p>
+<blockquote>
+<p><em>“Het gaat niet alleen om de tijd. De <code>DELETE</code> laat bloat achter die je met <code>VACUUM</code> moet opruimen. De <code>DROP TABLE</code> laat niets achter — er is niets om op te ruimen, want de hele structuur is weg.”</em></p>
+</blockquote>
+<h3>4.8 List/hash en pg_partman (2:50)</h3>
+<p>Kort houden. Bij list-partitionering is het enige dat moet landen dat het bij Meridiaan nu geen goede kandidaat heeft (werkgever is te klein) maar relevant wordt bij multi-tenant-scenario’s — een vooruitwijzing naar niveau 3.</p>
+<p>Bij <code>pg_partman</code>: als de extensie ontbreekt, is dit een goed moment voor een korte conceptuele bespreking in plaats van praktijkwerk. Het punt dat je hoe dan ook moet maken: de extensie automatiseert het <em>wanneer</em>, niet het <em>hoelang</em> — de bewaartermijn blijft een bedrijfsbeslissing.</p>
+<h3>4.9 Wanneer niet (3:05)</h3>
+<p>Loop opdracht 16.8 plenair na. Het patroon dat je benoemt: elk van de vier voorstellen komt van iemand die het nieuwe gereedschap wil gebruiken, niet van een tabel die de toetsvraag positief beantwoordt. Zeg dat hardop — het is de correctie die dit dagdeel nodig heeft, net zoals deel 14 eindigde met “wat een index niet oplost”.</p>
+<h3>4.10 Opdracht 16.9 (3:20)</h3>
+<p>Stuur op de vier dingen uit de beoordelingspunten, met extra nadruk op <strong>punt 5</strong> (gevolgen voor bestaande query’s en processen). Dit is de scherpste toets van de opdracht: groepen die partitionering behandelen als een geïsoleerde maatregel in plaats van iets dat de partiële index uit deel 14 en de wachtrijquery uit deel 15 raakt, hebben het niveau nog niet als een samenhangend geheel gezien.</p>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Kunnen we een bestaande tabel niet gewoon in-place partitioneren?”</strong>
+Nee, dat bestaat niet in PostgreSQL. Een gewone tabel omzetten naar gepartitioneerd vereist altijd een nieuwe structuur en een kopieerslag — de vraag is alleen of dat in één venster kan of gefaseerd moet.</p>
+<p><strong>“Hoeveel partities is te veel?”</strong>
+Geen hard getal, maar honderden tot laagduizenden is werkbaar; daarboven neemt de plannertijd merkbaar toe, ook bij pruning. Kies de partitiegrootte op basis van volume, niet op de fijnst mogelijke indeling.</p>
+<p><strong>“Werkt SKIP LOCKED nog hetzelfde op een gepartitioneerde tabel?”</strong>
+Ja — de wachtrijquery uit deel 15 filtert op <code>verwerkt_op</code>, niet op de partitiesleutel, dus pruning speelt daar geen rol. De partiële index per partitie houdt hem snel.</p>
+<p><strong>“Moeten we alle historische partities apart van tevoren aanmaken bij de migratie?”</strong>
+Ja, voor de bestaande historie moet je ze allemaal aanmaken vóór het kopiëren — anders belanden oude rijen in de default. Alleen de <em>toekomstige</em> partities kun je aan <code>pg_partman</code> overlaten.</p>
+<p><strong>“Kost partitionering extra geheugen of CPU bij normaal gebruik?”</strong>
+Marginaal: de planner moet per query bepalen welke partities relevant zijn, wat een kleine vaste kostenpost is. Bij honderden partities kan dat merkbaar worden; bij tientallen niet.</p>
+<p><strong>“Is dit hetzelfde als sharding?”</strong>
+Nee, en dat verwarren mensen vaak. Partitionering verdeelt gegevens binnen <strong>één database</strong>, op één server. Sharding verdeelt gegevens over <strong>meerdere servers</strong>. Dat laatste komt in niveau 3 aan bod bij Citus.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Legt zelf het verband tussen de vijf eerdere problemen en onbegrensde groei</td>
+<td>Ziet het patroon over dagdelen heen</td>
+</tr>
+<tr>
+<td>Meet bij 16.6 daadwerkelijk beide routes voordat hij concludeert</td>
+<td>Werkt methodisch</td>
+</tr>
+<tr>
+<td>Herkent bij 16.4b onmiddellijk de functie-op-kolom-fout</td>
+<td>Verbindt met deel 8/13</td>
+</tr>
+<tr>
+<td>Wijst bij 16.8 partitionering af op een tabel van 4.100 rijen</td>
+<td>Gebruikt de toetsvraag, niet enthousiasme</td>
+</tr>
+<tr>
+<td>Noemt bij 16.9 punt 5 expliciet de partiële index en de wachtrijquery</td>
+<td>Ziet het niveau als samenhangend geheel</td>
+</tr>
+<tr>
+<td>Stelt voor <code>werkgever</code> of <code>deelnemer</code> te partitioneren</td>
+<td>Terugbrengen naar de toetsvraag</td>
+</tr>
+<tr>
+<td>Vergeet de bewaartermijn als bedrijfsbeslissing te noemen</td>
+<td>Herhalen vanuit deel 9</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 17</h2>
+<p>Brug: <em>“Jullie kunnen nu een tabel van vier jaar mutaties in behapbare stukken knippen, en oude stukken in milliseconden weggooien. Volgende keer draait het om het tegenovergestelde risico: wat als je per ongeluk het verkeerde stuk weggooit, of de hele schijf valt uit? Dan blijkt er een verschil te zijn tussen een back-up die klaarstaat en een back-up die werkt — en dat verschil ontdek je het beste vóórdat het ertoe doet.”</em></p>
+<p>Geef mee: <strong>bewaar je gepartitioneerde <code>oefening16.mutatie</code>.</strong> In deel 17 gebruik je die structuur om te oefenen met het maken van een back-up en — belangrijker — het daadwerkelijk terughalen van één verwijderde partitie.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 16.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">55 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-15-concurrency-en-locking/reader.html">&larr; Deel 15 — Concurrency en locking</a><a class="dbm-prevnext next" href="../deel-17-back-up-en-herstel/reader.html">Deel 17 — Back-up en herstel &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

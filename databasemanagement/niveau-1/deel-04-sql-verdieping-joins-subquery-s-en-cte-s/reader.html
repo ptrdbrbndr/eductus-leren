@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — SQL verdieping: joins, subquery&#39;s en CTE&#39;s — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 4 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 4 — SQL verdieping: joins, subquery’s en CTE’s</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 4 van 10
+Aansluiting: EDB PostgreSQL Associate — domein “SQL”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom joinen</li>
+<li>INNER JOIN</li>
+<li>LEFT JOIN — en waarom die vaak het juiste antwoord is</li>
+<li>RIGHT, FULL en CROSS</li>
+<li>Joinvoorwaarden: ON, USING, NATURAL</li>
+<li>De klassieke LEFT JOIN-fout</li>
+<li>Self join</li>
+<li>Joins met meer dan twee tabellen</li>
+<li>Verzamelingsoperatoren: UNION, INTERSECT, EXCEPT</li>
+<li>Subquery’s: scalair, IN, EXISTS</li>
+<li>Gecorreleerde subquery’s</li>
+<li>Afgeleide tabellen</li>
+<li>CTE’s met WITH</li>
+<li>Recursieve CTE’s</li>
+<li>Vensterfuncties — eerste kennismaking</li>
+<li>Dezelfde vraag, vier manieren</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>gegevens uit meerdere tabellen combineren met de juiste soort join;</li>
+<li>uitleggen wanneer <code>INNER</code> en wanneer <code>LEFT</code> het bedrijfsmatig juiste antwoord geeft;</li>
+<li>de klassieke fout herkennen waarbij een <code>LEFT JOIN</code> stilzwijgend een <code>INNER JOIN</code> wordt;</li>
+<li>een self join schrijven en toepassen;</li>
+<li>verzamelingsoperatoren gebruiken en het verschil met joins uitleggen;</li>
+<li>subquery’s schrijven in de vorm van scalair, <code>IN</code>, <code>EXISTS</code> en gecorreleerd;</li>
+<li>CTE’s gebruiken om complexe query’s leesbaar te maken, inclusief een recursieve;</li>
+<li>een eenvoudige vensterfunctie toepassen;</li>
+<li>dezelfde vraag op meerdere manieren beantwoorden en de afweging tussen die manieren motiveren.</li>
+</ul>
+<hr>
+<h2>2. Waarom joinen</h2>
+<p>Deel 5 gaat over normalisatie: het opsplitsen van gegevens over tabellen zodat elk feit één keer wordt vastgelegd. Joinen is de tegenbeweging — het weer samenbrengen van wat bewust is gescheiden.</p>
+<p>Bij Meridiaan staat de naam van een werkgever in <code>werkgever</code> en de premie in <code>premienota</code>. Die scheiding is juist: de naam staat één keer, en een naamswijziging raakt één rij. Maar zodra iemand vraagt “welke werkgevers betalen te laat”, heb je beide nodig.</p>
+<p><strong>Denk in verzamelingen, niet in stappen.</strong> Een join is geen lus die per rij iets opzoekt; het is één bewerking op twee verzamelingen. Wie in lussen denkt, schrijft query’s die werken op tien rijen en onbruikbaar zijn op tien miljoen.</p>
+<hr>
+<h2>3. INNER JOIN</h2>
+<pre><code class="language-sql">SELECT d.achternaam, w.naam AS werkgever
+FROM dienstverband dv
+JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id
+JOIN werkgever w ON w.werkgever_id = dv.werkgever_id;
+</code></pre>
+<p><code>JOIN</code> zonder verdere aanduiding betekent <code>INNER JOIN</code>. Het resultaat bevat alleen rijen waarvoor aan beide kanten een match bestaat.</p>
+<p>Uit deel 2: <strong>een join is een cartesisch product met een filter.</strong> Formeel:</p>
+<pre><code class="language-sql">-- Deze twee zijn gelijkwaardig
+SELECT * FROM a JOIN b ON a.id = b.a_id;
+SELECT * FROM a, b WHERE a.id = b.a_id;
+</code></pre>
+<p>De tweede vorm (komma-join) is verouderd. Gebruik hem niet: als je de <code>WHERE</code> vergeet, krijg je stilzwijgend een cartesisch product, terwijl de expliciete <code>JOIN</code>-syntaxis je dwingt de voorwaarde op te schrijven en bovendien leesbaarder is bij meer dan twee tabellen.</p>
+<p><strong>Aliassen zijn hier geen luxe.</strong> Bij drie of meer tabellen wordt <code>dv.deelnemer_id</code> versus <code>d.deelnemer_id</code> de enige manier om te zien waar iets vandaan komt. Gebruik korte, betekenisvolle aliassen (<code>d</code>, <code>w</code>, <code>dv</code>, <code>p</code>) en gebruik ze consequent — ook waar de kolomnaam eenduidig is.</p>
+<hr>
+<h2>4. LEFT JOIN — en waarom die vaak het juiste antwoord is</h2>
+<pre><code class="language-sql">SELECT w.naam, count(dv.dienstverband_id) AS aantal_dienstverbanden
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.werkgever_id, w.naam
+ORDER BY aantal_dienstverbanden;
+</code></pre>
+<p><code>LEFT JOIN</code> behoudt <strong>alle rijen uit de linkertabel</strong>, ook als er rechts geen match is. Ontbrekende waarden worden NULL.</p>
+<p>Waarom dat hier essentieel is: in de casusdatabase zitten werkgevers zonder enkel dienstverband. Met een <code>INNER JOIN</code> verdwijnen die uit het overzicht — en juist die werkgevers zijn interessant, want een aangesloten werkgever zonder deelnemers is óf een fout in de administratie, óf een werkgever die niets aanlevert.</p>
+<p><strong>De vuistregel:</strong></p>
+<blockquote>
+<p><code>INNER JOIN</code> beantwoordt vragen over combinaties. <code>LEFT JOIN</code> beantwoordt vragen over de linkertabel, met aanvullende informatie.</p>
+</blockquote>
+<p>“Toon alle werkgevers met hun aantal deelnemers” is een vraag over werkgevers. Dus <code>LEFT</code>. Wie hier <code>INNER</code> gebruikt, geeft een antwoord dat er goed uitziet en waarin stilzwijgend rijen ontbreken — hetzelfde patroon als de NULL-val uit deel 3.</p>
+<p>Let ook op <code>count(dv.dienstverband_id)</code> in het voorbeeld: <code>count(*)</code> zou hier <strong>1</strong> tellen voor een werkgever zonder dienstverbanden, want er ís een rij (met NULL’s erin). <code>count(kolom)</code> telt alleen niet-NULL waarden en levert correct 0. Dit is de belangrijkste plek waar het <code>count</code>-onderscheid uit deel 2 en 3 werkelijk pijn doet.</p>
+<hr>
+<h2>5. RIGHT, FULL en CROSS</h2>
+<p><strong><code>RIGHT JOIN</code></strong> doet hetzelfde als <code>LEFT</code>, maar dan de andere kant op. In de praktijk zelden gebruikt: het is leesbaarder om de tabellen om te draaien en <code>LEFT</code> te schrijven. Kom je het tegen in bestaande code, herschrijf het.</p>
+<p><strong><code>FULL JOIN</code></strong> behoudt alle rijen van beide kanten. Nuttig bij het vergelijken van twee gegevensverzamelingen die zouden moeten overeenkomen:</p>
+<pre><code class="language-sql">SELECT coalesce(a.deelnemer_id, b.deelnemer_id) AS id,
+       a.bedrag AS uit_bron_a,
+       b.bedrag AS uit_bron_b
+FROM bron_a a
+FULL JOIN bron_b b ON a.deelnemer_id = b.deelnemer_id
+WHERE a.deelnemer_id IS NULL
+   OR b.deelnemer_id IS NULL
+   OR a.bedrag &lt;&gt; b.bedrag;
+</code></pre>
+<p>Dit is precies het gereedschap waarmee je bij Meridiaan zou onderzoeken waarom drie afdelingen op drie aantallen uitkwamen.</p>
+<p><strong><code>CROSS JOIN</code></strong> levert elke combinatie. Zelden bedoeld, maar wél nuttig om een volledig raster te maken — bijvoorbeeld alle maanden van 2025 maal alle sectoren, zodat maanden zonder gegevens toch als rij verschijnen (met nul).</p>
+<hr>
+<h2>6. Joinvoorwaarden: ON, USING, NATURAL</h2>
+<pre><code class="language-sql">JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id   -- expliciet
+JOIN deelnemer USING (deelnemer_id)                    -- korter, kolomnamen gelijk
+NATURAL JOIN deelnemer                                 -- joint op alle gelijknamige kolommen
+</code></pre>
+<p><code>ON</code> is het meest expliciet en werkt altijd. <code>USING</code> is korter en levert bovendien één gecombineerde kolom in plaats van twee — prettig, en veilig zolang de kolomnamen bewust gelijk zijn.</p>
+<p><strong><code>NATURAL JOIN</code>: gebruik niet.</strong> Het joint op álle gelijknamige kolommen, dus als iemand later een kolom <code>naam</code> toevoegt aan twee tabellen, verandert je resultaat zonder dat je query wijzigt. Dat is een bug die maanden later opduikt en waarvan de oorzaak nauwelijks te vinden is.</p>
+<hr>
+<h2>7. De klassieke LEFT JOIN-fout</h2>
+<p>Deze verdient een eigen paragraaf, omdat vrijwel iedereen hem één keer maakt.</p>
+<pre><code class="language-sql">-- Bedoeld: alle werkgevers, met hun onbetaalde nota's
+SELECT w.naam, count(p.premienota_id)
+FROM werkgever w
+LEFT JOIN premienota p ON p.werkgever_id = w.werkgever_id
+WHERE p.betaaldatum IS NULL          -- ← hier gaat het mis
+GROUP BY w.werkgever_id, w.naam;
+</code></pre>
+<p>De <code>WHERE</code> wordt toegepast <strong>ná</strong> de join. Rijen van werkgevers zonder enkele nota hebben overal NULL, dus ook <code>p.betaaldatum IS NULL</code> — die blijven toevallig staan. Maar werkgevers die álles betaald hebben, verdwijnen volledig: hun rijen hebben een gevulde <code>betaaldatum</code> en worden weggefilterd. Je <code>LEFT JOIN</code> is een <code>INNER JOIN</code> geworden, met een resultaat dat je niet vroeg.</p>
+<p>Correct is de voorwaarde in de join zetten:</p>
+<pre><code class="language-sql">SELECT w.naam, count(p.premienota_id) AS onbetaald
+FROM werkgever w
+LEFT JOIN premienota p
+       ON p.werkgever_id = w.werkgever_id
+      AND p.betaaldatum IS NULL       -- ← onderdeel van de join
+GROUP BY w.werkgever_id, w.naam
+ORDER BY onbetaald DESC;
+</code></pre>
+<p><strong>De regel:</strong> bij een <code>LEFT JOIN</code> horen voorwaarden over de rechtertabel in <code>ON</code>, niet in <code>WHERE</code>. Een voorwaarde over de rechtertabel in <code>WHERE</code> maakt van je outer join een inner join — behalve als die voorwaarde <code>IS NULL</code> is, want dan doe je juist bewust een <em>anti-join</em> (zie paragraaf 11).</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-4-1.png" alt="Twee identieke query&#39;s, één met de voorwaarde in ON en één in WHERE, met het verschil in resultaat ernaast" loading="lazy"><figcaption>Figuur 4-1 — Twee identieke query&#39;s, één met de voorwaarde in ON en één in WHERE, met het verschil in resultaat ernaast</figcaption></figure>
+<hr>
+<h2>8. Self join</h2>
+<p>Een tabel joinen met zichzelf, bijvoorbeeld om paren te vinden:</p>
+<pre><code class="language-sql">-- Deelnemers die bij dezelfde werkgever werken
+SELECT a.deelnemer_id AS deelnemer_1,
+       b.deelnemer_id AS deelnemer_2,
+       a.werkgever_id
+FROM dienstverband a
+JOIN dienstverband b
+      ON a.werkgever_id = b.werkgever_id
+     AND a.deelnemer_id &lt; b.deelnemer_id;
+</code></pre>
+<p>Twee dingen: aliassen zijn hier verplicht (anders is niet te zeggen welke kant je bedoelt), en <code>&lt;</code> in plaats van <code>&lt;&gt;</code> voorkomt dat je elk paar twee keer krijgt én dat iemand met zichzelf gepaard wordt.</p>
+<hr>
+<h2>9. Joins met meer dan twee tabellen</h2>
+<pre><code class="language-sql">SELECT w.sector,
+       count(DISTINCT d.deelnemer_id) AS deelnemers,
+       round(avg(a.bedrag_jaarlijks), 2) AS gem_ouderdomsaanspraak
+FROM werkgever w
+JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+JOIN deelnemer d      ON d.deelnemer_id  = dv.deelnemer_id
+JOIN aanspraak a      ON a.deelnemer_id  = d.deelnemer_id
+                     AND a.soort = 'ouderdom'
+GROUP BY w.sector
+ORDER BY deelnemers DESC;
+</code></pre>
+<p>Let op <code>count(DISTINCT d.deelnemer_id)</code>. Zonder <code>DISTINCT</code> tel je te hoog: een deelnemer met twee dienstverbanden verschijnt tweemaal, en na de join met <code>aanspraak</code> nog vaker. Dit is de <strong>fan-out</strong>: elke join met een één-op-veel-relatie vermenigvuldigt rijen.</p>
+<p><strong>Fan-out is de sluipmoordenaar van rapportages.</strong> Sommeer je <code>bedrag_jaarlijks</code> in bovenstaande query, dan tel je aanspraken meermaals mee zonder enige waarschuwing. De uitkomst ziet er plausibel uit en is structureel te hoog.</p>
+<p>Twee manieren om dat te voorkomen: <code>count(DISTINCT ...)</code> waar het om tellen gaat, of de aggregatie in een subquery of CTE doen vóór je joint. Die tweede aanpak is meestal schoner — zie paragraaf 14.</p>
+<hr>
+<h2>10. Verzamelingsoperatoren: UNION, INTERSECT, EXCEPT</h2>
+<p>Joins zetten tabellen <em>naast</em> elkaar; verzamelingsoperatoren zetten resultaten <em>onder</em> elkaar.</p>
+<pre><code class="language-sql">SELECT achternaam FROM deelnemer WHERE land = 'BE'
+UNION
+SELECT achternaam FROM deelnemer WHERE land = 'DE'
+ORDER BY achternaam;
+</code></pre>
+<p>Eisen: gelijk aantal kolommen, verenigbare typen. De kolomnamen komen van de eerste query.</p>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UNION</code></td>
+<td>Samenvoegen, <strong>duplicaten verwijderen</strong></td>
+</tr>
+<tr>
+<td><code>UNION ALL</code></td>
+<td>Samenvoegen, duplicaten behouden</td>
+</tr>
+<tr>
+<td><code>INTERSECT</code></td>
+<td>Alleen rijen die in beide voorkomen</td>
+</tr>
+<tr>
+<td><code>EXCEPT</code></td>
+<td>Rijen uit de eerste die niet in de tweede voorkomen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gebruik <code>UNION ALL</code> tenzij je echt wilt ontdubbelen.</strong> <code>UNION</code> moet sorteren of hashen om duplicaten te vinden, en dat kost werk dat je vaak niet nodig hebt.</p>
+<p><code>EXCEPT</code> is handig bij afstemming: welke deelnemers zitten wel in bron A en niet in bron B?</p>
+<hr>
+<h2>11. Subquery’s: scalair, IN, EXISTS</h2>
+<p><strong>Scalaire subquery</strong> — levert één waarde:</p>
+<pre><code class="language-sql">SELECT achternaam, jaarsalaris
+FROM dienstverband JOIN deelnemer USING (deelnemer_id)
+WHERE jaarsalaris &gt; (SELECT avg(jaarsalaris) FROM dienstverband);
+</code></pre>
+<p><strong><code>IN</code></strong> — levert een lijst:</p>
+<pre><code class="language-sql">SELECT naam FROM werkgever
+WHERE werkgever_id IN (
+    SELECT werkgever_id FROM premienota WHERE betaaldatum IS NULL
+);
+</code></pre>
+<p><strong><code>EXISTS</code></strong> — toetst bestaan:</p>
+<pre><code class="language-sql">SELECT naam FROM werkgever w
+WHERE EXISTS (
+    SELECT 1 FROM premienota p
+    WHERE p.werkgever_id = w.werkgever_id AND p.betaaldatum IS NULL
+);
+</code></pre>
+<p>En de tegenhanger, de <strong>anti-join</strong>:</p>
+<pre><code class="language-sql">-- Werkgevers zonder enig dienstverband
+SELECT naam FROM werkgever w
+WHERE NOT EXISTS (
+    SELECT 1 FROM dienstverband dv WHERE dv.werkgever_id = w.werkgever_id
+);
+</code></pre>
+<p><strong><code>NOT IN</code> versus <code>NOT EXISTS</code>.</strong> Herinner je deel 2: als de subquery ook maar één NULL oplevert, geeft <code>NOT IN</code> nooit rijen terug — zonder foutmelding. <code>NOT EXISTS</code> heeft dat probleem niet.</p>
+<blockquote>
+<p><strong>Vuistregel voor de rest van je loopbaan: gebruik <code>NOT EXISTS</code>, niet <code>NOT IN</code>.</strong></p>
+</blockquote>
+<p>Dat de subquery bij <code>EXISTS</code> <code>SELECT 1</code> schrijft is conventie: er wordt toch niets met de waarde gedaan, alleen met het bestaan van een rij.</p>
+<hr>
+<h2>12. Gecorreleerde subquery’s</h2>
+<p>Een subquery die verwijst naar de buitenste query, en dus per rij opnieuw wordt geëvalueerd:</p>
+<pre><code class="language-sql">SELECT d.achternaam,
+       (SELECT count(*) FROM aanspraak a WHERE a.deelnemer_id = d.deelnemer_id)
+           AS aantal_aanspraken
+FROM deelnemer d;
+</code></pre>
+<p>Leesbaar, en op kleine gegevensverzamelingen prima. Op 8.000 deelnemers voert PostgreSQL dit vaak nog efficiënt uit doordat de planner het herschrijft, maar het patroon schaalt slecht als de planner dat niet kan.</p>
+<p>De verzamelingsgerichte variant:</p>
+<pre><code class="language-sql">SELECT d.achternaam, count(a.aanspraak_id) AS aantal_aanspraken
+FROM deelnemer d
+LEFT JOIN aanspraak a ON a.deelnemer_id = d.deelnemer_id
+GROUP BY d.deelnemer_id, d.achternaam;
+</code></pre>
+<p>Wanneer welke? Meet het (deel 8). De algemene neiging: <strong>schrijf verzamelingsgericht, tenzij de gecorreleerde vorm aantoonbaar leesbaarder is en de gegevens klein blijven.</strong></p>
+<hr>
+<h2>13. Afgeleide tabellen</h2>
+<p>Een subquery in de <code>FROM</code>:</p>
+<pre><code class="language-sql">SELECT sector, round(avg(aantal), 1) AS gem_deelnemers_per_werkgever
+FROM (
+    SELECT w.sector, w.werkgever_id, count(dv.deelnemer_id) AS aantal
+    FROM werkgever w
+    LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+    GROUP BY w.sector, w.werkgever_id
+) AS per_werkgever
+GROUP BY sector
+ORDER BY gem_deelnemers_per_werkgever DESC;
+</code></pre>
+<p>Dit is de standaardoplossing voor “een gemiddelde van een telling”: eerst tellen per werkgever, dan middelen per sector. Een afgeleide tabel heeft in PostgreSQL een alias nodig, ook als je hem nergens gebruikt.</p>
+<hr>
+<h2>14. CTE’s met WITH</h2>
+<p>Dezelfde query, leesbaarder:</p>
+<pre><code class="language-sql">WITH per_werkgever AS (
+    SELECT w.sector, w.werkgever_id, count(dv.deelnemer_id) AS aantal
+    FROM werkgever w
+    LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+    GROUP BY w.sector, w.werkgever_id
+)
+SELECT sector, round(avg(aantal), 1) AS gem_deelnemers_per_werkgever
+FROM per_werkgever
+GROUP BY sector
+ORDER BY gem_deelnemers_per_werkgever DESC;
+</code></pre>
+<p>Een <strong>CTE</strong> (common table expression, “WITH-query”) is een benoemd tussenresultaat. Voordelen: van boven naar beneden leesbaar, meerdere keren bruikbaar, en makkelijk stap voor stap te testen — voer alleen het CTE-deel uit en kijk of dat klopt voordat je verder bouwt.</p>
+<p>Meerdere CTE’s mogen, en mogen naar elkaar verwijzen:</p>
+<pre><code class="language-sql">WITH notas_2025 AS (
+    SELECT * FROM premienota WHERE periode_jaar = 2025
+),
+per_werkgever AS (
+    SELECT werkgever_id,
+           count(*)                                     AS aantal,
+           count(*) FILTER (WHERE betaaldatum IS NULL)   AS onbetaald
+    FROM notas_2025
+    GROUP BY werkgever_id
+)
+SELECT w.naam, p.aantal, p.onbetaald
+FROM per_werkgever p
+JOIN werkgever w USING (werkgever_id)
+WHERE p.onbetaald &gt; 3
+ORDER BY p.onbetaald DESC;
+</code></pre>
+<p><strong>Een prestatie-opmerking die je moet kennen.</strong> In oudere PostgreSQL-versies was een CTE altijd een <em>optimization fence</em>: hij werd afzonderlijk uitgevoerd en de planner mocht hem niet met de rest samenvoegen. Sinds versie 12 worden CTE’s die één keer gebruikt worden standaard wél samengevoegd, tenzij je <code>MATERIALIZED</code> schrijft. Advies uit oudere bronnen dat “CTE’s traag zijn” is dus achterhaald — maar controleer welke versie je draait (Toolbijlage) voordat je iets aanneemt.</p>
+<hr>
+<h2>15. Recursieve CTE’s</h2>
+<p>Voor hiërarchieën en reeksen:</p>
+<pre><code class="language-sql">WITH RECURSIVE maanden AS (
+    SELECT DATE '2025-01-01' AS maand
+    UNION ALL
+    SELECT maand + INTERVAL '1 month'
+    FROM maanden
+    WHERE maand &lt; DATE '2025-12-01'
+)
+SELECT maand FROM maanden;
+</code></pre>
+<p>De opbouw is altijd hetzelfde: een <strong>ankerdeel</strong> (het startpunt), <code>UNION ALL</code>, en een <strong>recursief deel</strong> dat naar de CTE zelf verwijst — met een stopvoorwaarde.</p>
+<p>Praktisch nut bij Meridiaan: een volledige maandreeks maken zodat maanden zónder mutaties óók in het rapport verschijnen, met nul. Dat is een terugkerende eis in stuurinformatie, want een ontbrekende rij en een rij met nul zien er in een grafiek heel verschillend uit.</p>
+<p><strong>Waarschuwing:</strong> vergeet je de stopvoorwaarde, dan loopt de query oneindig door. Test recursieve CTE’s altijd eerst met een harde <code>LIMIT</code>.</p>
+<p>Voor eenvoudige reeksen is <code>generate_series</code> overigens korter:</p>
+<pre><code class="language-sql">SELECT generate_series(DATE '2025-01-01', DATE '2025-12-01', INTERVAL '1 month');
+</code></pre>
+<p>Gebruik recursie voor echte hiërarchieën (organisatiestructuren, stuklijsten), niet voor reeksen.</p>
+<hr>
+<h2>16. Vensterfuncties — eerste kennismaking</h2>
+<p>Een vensterfunctie rekent over een groep rijen <strong>zonder die rijen samen te vouwen</strong>. Dat is het verschil met een gewone aggregatie.</p>
+<pre><code class="language-sql">SELECT
+    w.sector,
+    w.naam,
+    count(dv.deelnemer_id)                                   AS deelnemers,
+    sum(count(dv.deelnemer_id)) OVER (PARTITION BY w.sector) AS deelnemers_in_sector
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.sector, w.werkgever_id, w.naam
+ORDER BY w.sector, deelnemers DESC;
+</code></pre>
+<p>Elke werkgever blijft een eigen rij, maar krijgt er het sectortotaal naast. Zonder vensterfuncties zou je daarvoor twee query’s moeten joinen.</p>
+<p>De meest bruikbare:</p>
+<table>
+<thead>
+<tr>
+<th>Functie</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>row_number()</code></td>
+<td>Volgnummer binnen de partitie</td>
+</tr>
+<tr>
+<td><code>rank()</code> / <code>dense_rank()</code></td>
+<td>Rangorde, met/zonder gaten bij gelijkspel</td>
+</tr>
+<tr>
+<td><code>sum() OVER (…)</code></td>
+<td>Lopend of groepstotaal</td>
+</tr>
+<tr>
+<td><code>lag()</code> / <code>lead()</code></td>
+<td>Waarde uit de vorige/volgende rij</td>
+</tr>
+</tbody>
+</table>
+<p>Het patroon dat je het vaakst nodig hebt — de meest recente rij per groep:</p>
+<pre><code class="language-sql">SELECT werkgever_id, periode_jaar, periode_maand, bedrag
+FROM (
+    SELECT p.*,
+           row_number() OVER (PARTITION BY werkgever_id
+                              ORDER BY periode_jaar DESC, periode_maand DESC) AS rn
+    FROM premienota p
+) AS genummerd
+WHERE rn = 1;
+</code></pre>
+<p>Merk op dat de filtering op <code>rn = 1</code> in een buitenste query moet: vensterfuncties worden pas in de <code>SELECT</code>-fase berekend en zijn in <code>WHERE</code> nog niet beschikbaar — opnieuw de uitvoeringsvolgorde uit deel 3.</p>
+<p>Dit is een kennismaking; vensterfuncties worden in niveau 2 volledig behandeld. <code>DISTINCT ON</code> uit deel 3 lost hetzelfde probleem op, korter maar niet-standaard.</p>
+<hr>
+<h2>17. Dezelfde vraag, vier manieren</h2>
+<p><em>“Welke werkgevers hebben geen enkel dienstverband?”</em></p>
+<pre><code class="language-sql">-- 1. NOT EXISTS (anti-join) — aanbevolen
+SELECT naam FROM werkgever w
+WHERE NOT EXISTS (SELECT 1 FROM dienstverband dv WHERE dv.werkgever_id = w.werkgever_id);
+
+-- 2. LEFT JOIN met IS NULL — even goed, andere leesbaarheid
+SELECT w.naam FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+WHERE dv.dienstverband_id IS NULL;
+
+-- 3. NOT IN — werkt hier, maar breekt zodra werkgever_id NULL kan zijn
+SELECT naam FROM werkgever
+WHERE werkgever_id NOT IN (SELECT werkgever_id FROM dienstverband);
+
+-- 4. EXCEPT — leesbaar bij het vergelijken van sleutelverzamelingen
+SELECT werkgever_id FROM werkgever
+EXCEPT
+SELECT werkgever_id FROM dienstverband;
+</code></pre>
+<p>Alle vier geven hier hetzelfde antwoord. De afweging:</p>
+<ul>
+<li><strong>1 en 2</strong> zijn de werkpaarden; kies op leesbaarheid binnen je team.</li>
+<li><strong>3</strong> is een tijdbom. Vandaag is <code>werkgever_id</code> in <code>dienstverband</code> <code>NOT NULL</code>; verandert dat ooit, dan levert deze query stil niets meer op.</li>
+<li><strong>4</strong> is elegant als je alleen sleutels nodig hebt, maar onhandig zodra je er kolommen bij wilt.</li>
+</ul>
+<p>Dat vier vormen hetzelfde antwoord geven, is geen toeval maar een gevolg van het relationele model uit deel 2: bewerkingen zijn gesloten en herschrijfbaar. <strong>De keuze gaat daarom bijna nooit over snelheid en bijna altijd over leesbaarheid en robuustheid.</strong> Meet als je twijfelt (deel 8); gok nooit.</p>
+<hr>
+<h2>18. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Oplossing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INNER</code> waar <code>LEFT</code> bedoeld is</td>
+<td>Rijen ontbreken stil</td>
+<td>Vraag: gaat de vraag over de linkertabel?</td>
+</tr>
+<tr>
+<td>Voorwaarde over rechtertabel in <code>WHERE</code> bij <code>LEFT JOIN</code></td>
+<td>Wordt een inner join</td>
+<td>Voorwaarde in <code>ON</code></td>
+</tr>
+<tr>
+<td><code>count(*)</code> na een <code>LEFT JOIN</code></td>
+<td>Telt 1 voor “geen match”</td>
+<td><code>count(kolom)</code></td>
+</tr>
+<tr>
+<td>Fan-out bij één-op-veel</td>
+<td>Totalen te hoog</td>
+<td><code>count(DISTINCT …)</code> of eerst aggregeren in een CTE</td>
+</tr>
+<tr>
+<td><code>NOT IN</code> met mogelijke NULL</td>
+<td>Nooit rijen</td>
+<td><code>NOT EXISTS</code></td>
+</tr>
+<tr>
+<td><code>NATURAL JOIN</code></td>
+<td>Breekt bij een nieuwe kolom</td>
+<td><code>ON</code> of <code>USING</code></td>
+</tr>
+<tr>
+<td>Komma-join zonder <code>WHERE</code></td>
+<td>Cartesisch product</td>
+<td>Expliciete <code>JOIN</code>-syntaxis</td>
+</tr>
+<tr>
+<td><code>UNION</code> waar <code>UNION ALL</code> volstaat</td>
+<td>Onnodig ontdubbelwerk</td>
+<td><code>UNION ALL</code></td>
+</tr>
+<tr>
+<td>Recursieve CTE zonder stopvoorwaarde</td>
+<td>Oneindige query</td>
+<td>Stopvoorwaarde + <code>LIMIT</code> bij testen</td>
+</tr>
+<tr>
+<td>Vensterfunctie in <code>WHERE</code></td>
+<td>Foutmelding</td>
+<td>Omhullende query met <code>WHERE rn = 1</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>19. Aansluiting op de certificering</h2>
+<p>Voor de Associate-certificering paraat:</p>
+<ul>
+<li>de jointypen en hun resultaat, inclusief het gedrag bij ontbrekende matches;</li>
+<li>het verschil tussen een voorwaarde in <code>ON</code> en in <code>WHERE</code> bij een outer join;</li>
+<li><code>NOT IN</code> versus <code>NOT EXISTS</code> in aanwezigheid van NULL;</li>
+<li>de verzamelingsoperatoren en het verschil tussen <code>UNION</code> en <code>UNION ALL</code>;</li>
+<li>de opbouw van een CTE, inclusief het recursieve patroon;</li>
+<li>de basis van vensterfuncties en waarom ze niet in <code>WHERE</code> gebruikt kunnen worden.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>20. Kernbegrippen</h2>
+<p><strong>Inner join</strong> — alleen rijen met een match aan beide kanten.
+<strong>Outer join</strong> — behoudt rijen zonder match, aangevuld met NULL.
+<strong>Anti-join</strong> — rijen zonder tegenhanger; <code>NOT EXISTS</code> of <code>LEFT JOIN … IS NULL</code>.
+<strong>Fan-out</strong> — rijvermenigvuldiging door een join op een één-op-veel-relatie.
+<strong>Self join</strong> — een tabel met zichzelf joinen.
+<strong>Gecorreleerde subquery</strong> — subquery die per rij van de buitenste query wordt geëvalueerd.
+<strong>Afgeleide tabel</strong> — subquery in de <code>FROM</code>, met verplichte alias.
+<strong>CTE</strong> — benoemd tussenresultaat met <code>WITH</code>.
+<strong>Vensterfunctie</strong> — rekent over een groep rijen zonder ze samen te vouwen.
+<strong>Optimization fence</strong> — constructie die de planner belet te herschrijven.</p>
+<hr>
+<p><em>Volgende deel: datamodellering en normalisatie. Je gaat het model achter deze database beoordelen — inclusief de bewuste ontwerpfouten die erin zijn gelaten.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">68 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">423 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">&larr; Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren</a><a class="dbm-prevnext next" href="../deel-05-datamodellering-en-normalisatie/reader.html">Deel 5 — Datamodellering en normalisatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Sharding-fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 24 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 24 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 24: Sharding-fundamenten</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Een bewust conceptueel dagdeel — geen multi-server-omgeving, geen Citus (dat is deel 25). Het doel is dat deelnemers de <strong>denkwijze</strong> van sharding beheersen vóórdat ze het gereedschap in handen krijgen, zodat ze in deel 25 niet blindelings een tool volgen maar begrijpen welke keuzes ze maken en waarom.</p>
+<p><strong>De centrale boodschap, drie keer herhaald in verschillende vorm:</strong> sharding is een ruil, geen gratis capaciteit. Je levert cross-shard-joins, cross-shard-transacties en globale uniciteit in, in ruil voor horizontale capaciteit. Deelnemers die dit dagdeel afsluiten met “sharding lost alles op” hebben de kern gemist.</p>
+<p><strong>De tweede boodschap, minstens zo belangrijk:</strong> de shardsleutel is de belangrijkste beslissing van het hele traject, en <code>fonds_id</code> — de eerste, intuïtieve gedachte bij deze casus — is een <strong>slechte</strong> keuze. Dat inzicht moet zelf ontdekt worden (opdracht 24.2), niet alleen verteld.</p>
+<p><strong>De derde boodschap:</strong> shardenen zonder gemeten noodzaak is dezelfde fout als BRIN op een kleine tabel (deel 14) of patroon 3 voor een klein fonds (deel 23) — een krachtig gereedschap toegepast zonder dat het probleem bestaat dat het oplost.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> deel 23 afgerond; geen aanvullende technische opzet.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li>Bereid een eenvoudig visueel schema voor van “shard versus partitie” (twee servers met elk hun eigen resources, versus één server met interne opdeling) — dit onderscheid is abstract en profiteert sterk van een plaatje.</li>
+<li>Reken vooraf zelf de capaciteitsberekening uit opdracht 24.1 door, zodat je een gevoel hebt voor realistische getallen als de zaal ermee worstelt.</li>
+<li>Overweeg een eenvoudige, niet-technische analogie voor cross-shard-transacties gereed te hebben (bijvoorbeeld: twee filialen van dezelfde bank die geld tussen elkaar overboeken zonder gedeeld grootboek) om het probleem invoelbaar te maken vóór de technische oplossingen (2PC, saga) worden geïntroduceerd.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Waarom partitionering ooit niet volstaat (§2) + <strong>opdracht 24.1</strong></td>
+<td>Plenair + individueel</td>
+</tr>
+<tr>
+<td>0:15-0:30</td>
+<td>Verticaal vs. horizontaal (§3), wat sharding is (§4)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:30-1:00</td>
+<td><strong>De shardsleutel (§5) + opdracht 24.2</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>1:00-1:15</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:15-1:35</td>
+<td>Cross-shard-joins (§6) + <strong>opdracht 24.3</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>1:35-2:00</td>
+<td><strong>Cross-shard-transacties (§7) + opdracht 24.4</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>2:00-2:15</td>
+<td>Globale uniciteit (§8), referentiedata (§9) + <strong>opdracht 24.5</strong></td>
+<td>Presentatie + individueel</td>
+</tr>
+<tr>
+<td>2:15-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:50</td>
+<td>Bereik vs. hash (§11) + <strong>opdracht 24.6</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:50-3:10</td>
+<td>Rebalancing (§10) + <strong>opdracht 24.7</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>3:10-3:25</td>
+<td>Wanneer NIET shardenen (§13) + <strong>opdracht 24.8</strong></td>
+<td>Presentatie + individueel</td>
+</tr>
+<tr>
+<td>3:25-4:00</td>
+<td><strong>Opdracht 24.9</strong> — het principebesluit</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> comprimeer paragraaf 12 (sharding en niveau 2 samengevat) tot een korte opsomming — het is een synthese van eerder behandelde stof, geen nieuw materiaal. Kort <strong>nooit</strong> opdracht 24.2 (shardsleutel) of 24.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Laat opdracht 24.1b de zaal zelf laten rekenen vóór je het concept “grens van verticaal schalen” introduceert. Een concreet getal (48 miljoen rijen bij twintig fondsen, tegen een aangenomen grens van 50 miljoen) maakt het probleem tastbaar in plaats van abstract.</p>
+<h3>4.2 Sharding versus partitionering (0:15)</h3>
+<p>Gebruik je visuele schema. Het punt dat moet landen: partities delen resources (dezelfde server), shards niet. Dit is het fundamentele onderscheid waar de rest van de dag op voortbouwt.</p>
+<h3>4.3 De shardsleutel (0:30)</h3>
+<p><strong>Het belangrijkste kwartier van het dagdeel.</strong> Laat de zaal bij opdracht 24.2 eerst zelf <code>fonds_id</code> als voor de hand liggende keuze voorstellen (dat gebeurt vrijwel altijd) voordat je de zwaktes erin laat ontdekken: te lage cardiniteit, en vooral de ongelijke verdeling door Baken. Dat “aha, dat werkt dus niet”-moment is sterker dan meteen <code>deelnemer_id</code> te presenteren als het juiste antwoord.</p>
+<h3>4.4 Cross-shard-joins en co-locatie (1:15)</h3>
+<p>Laat opdracht 24.3 concreet worden met de bekende Meridiaan-tabellen. Onderdeel c) en d) (de lastige <code>werkgever</code>-tabel) is het scherpste punt: niet elke tabel co-locaten netjes, en soms is een referentietabel de pragmatische uitweg in plaats van een perfecte oplossing.</p>
+<h3>4.5 Cross-shard-transacties (1:35)</h3>
+<p>Gebruik je bank-analogie om het probleem invoelbaar te maken vóór 2PC en saga’s worden geïntroduceerd. Het punt in opdracht 24.4d (waarom een zeldzaam probleem gevaarlijker is dan een veelvoorkomend) is een belangrijke, contra-intuïtieve les — verbind hem expliciet met de testdiscipline uit deel 17 en 19.</p>
+<h3>4.6 Uniciteit en referentiedata (2:00)</h3>
+<p>Vlot en praktisch. Opdracht 24.5 is bewust kort — het is een toepassingsoefening, geen nieuw concept.</p>
+<h3>4.7 Bereik versus hash (2:30)</h3>
+<p>Laat de hotspot-consequentie van bereik-gebaseerde sharding zelf ontdekt worden in opdracht 24.6a vóór je hash-gebaseerd als oplossing presenteert. Verbind terug naar het tellerrij-probleem uit deel 15 — dezelfde onderliggende dynamiek (concentratie van schrijfverkeer op één plek), nu op shard-niveau.</p>
+<h3>4.8 Rebalancing (2:50)</h3>
+<p>Verbind expliciet met expand-contract uit deel 22. Dit hoeft geen nieuw patroon te zijn voor deelnemers — het is hetzelfde patroon op een grotere schaal. Het punt over consistente hashing (opdracht 24.7c) is technisch maar belangrijk voor het examen; besteed er voldoende tijd aan zonder in de wiskundige details te verzanden.</p>
+<h3>4.9 Wanneer niet shardenen (3:10)</h3>
+<p><strong>Dit blok moet als een correctie aanvoelen op het enthousiasme dat de voorgaande uren hebben opgebouwd.</strong> Deelnemers hebben net geleerd hoe krachtig sharding is; dit blok remt dat af met dezelfde discipline als “wat een index niet oplost” (deel 14) en “wanneer niet partitioneren” (deel 16). Zeg dat de parallel expliciet.</p>
+<h3>4.10 Opdracht 24.9 (3:25)</h3>
+<p>Stuur op:</p>
+<ul>
+<li><strong>Een eerlijk “nog niet nodig”</strong> als punt 1, onderbouwd met cijfers.</li>
+<li><strong>Een doordachte shardsleutel-analyse</strong> met erkenning van het lastige geval.</li>
+<li><strong>Een concreet, meetbaar signaal in punt 5</strong> — dit is het scherpste beoordelingspunt en het punt waar groepen het snelst vaag worden.</li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Is Citus de enige manier om te shardten met PostgreSQL?”</strong>
+Nee, er bestaan alternatieve benaderingen (handmatige sharding met foreign data wrappers, applicatieniveau-sharding), maar Citus is de meest gangbare, geïntegreerde oplossing en daarom het onderwerp van deel 25.</p>
+<p><strong>“Kan een tabel gedeeltelijk gesherd zijn en gedeeltelijk niet?”</strong>
+Ja — dat is precies het onderscheid tussen gesharde tabellen en referentietabellen (paragraaf 9). Een systeem bestaat typisch uit een mix van beide.</p>
+<p><strong>“Wat als de shardsleutel achteraf verkeerd blijkt?”</strong>
+Een kostbare, maar niet onmogelijke migratie — vergelijkbaar met de rebalancing uit paragraaf 10, maar dan voor de héle dataset in plaats van een deel. Dit is precies waarom paragraaf 5 zoveel nadruk legt op de juiste keuze vooraf.</p>
+<p><strong>“Waarom niet gewoon altijd UUID’s gebruiken om het uniciteitsprobleem te vermijden?”</strong>
+Dat kán, maar de prijs (grotere sleutels, geen natuurlijke sorteervolgorde, minder efficiënte BRIN-indexen) is reëel. Voor tabellen die niet gesherd worden, blijft een gewone <code>bigint</code>-identiteit vaak de betere keuze.</p>
+<p><strong>“Is 2PC niet gewoon altijd de veilige keuze voor cross-shard-transacties?”</strong>
+Correct in garantie, maar traag en kwetsbaar voor een falende coördinator. De sterkste aanbeveling blijft: ontwerp het probleem weg met co-locatie waar mogelijk, en gebruik 2PC alleen voor het onvermijdelijke restje.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ontdekt zelf de zwaktes van <code>fonds_id</code> als shardsleutel</td>
+<td>De kernvaardigheid van het dagdeel</td>
+</tr>
+<tr>
+<td>Herkent bij 24.3 dat niet elke tabel netjes co-locaten kan</td>
+<td>Denkt realistisch, niet ideaal</td>
+</tr>
+<tr>
+<td>Legt uit waarom een zeldzaam cross-shard-probleem gevaarlijker is dan een veelvoorkomend</td>
+<td>Verbindt met testdiscipline uit deel 17/19</td>
+</tr>
+<tr>
+<td>Stelt in 24.9 een eerlijk “nog niet nodig” met cijfers</td>
+<td>De belangrijkste correctie van het dagdeel is geland</td>
+</tr>
+<tr>
+<td>Wil meteen shardten “voor de toekomst”</td>
+<td>Doorvragen op gemeten noodzaak</td>
+</tr>
+<tr>
+<td>Kiest <code>fonds_id</code> als shardsleutel zonder de zwaktes te overwegen</td>
+<td>Terugbrengen naar cardinaliteit en verdeling</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 25</h2>
+<p>Brug: <em>“Vandaag hebben jullie de concepten en de afwegingen van sharding doorgrond, zonder een enkele regel implementatiecode. Volgende keer wordt het concreet: Citus, de PostgreSQL-extensie die distributed tables, reference tables en rebalancing daadwerkelijk implementeert. Alles wat jullie vandaag hebben afgewogen — de shardsleutel, co-locatie, referentietabellen — bouwen jullie volgende keer echt.”</em></p>
+<hr>
+<p><em>Einde docentenhandleiding deel 24.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">272 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-23-architectuur-voor-meerdere-fondsen/reader.html">&larr; Deel 23 — Architectuur voor meerdere fondsen</a><a class="dbm-prevnext next" href="../deel-25-citus-in-de-praktijk/reader.html">Deel 25 — Citus in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

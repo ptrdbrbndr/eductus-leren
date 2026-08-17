@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Transacties, ACID en MVCC — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 7 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 7 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 7: Transacties, ACID en MVCC</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p><strong>Belangrijk: dit dagdeel werk je met twee psql-vensters naast elkaar.</strong> Open ze allebei nu, en label ze in je hoofd als Sessie 1 en Sessie 2. Zet in beide:</p>
+<pre><code class="language-sql">SET search_path TO oefening, meridiaan, public;
+</code></pre>
+<p>Je gebruikt het oefeningschema uit deel 6. Is dat er niet meer, maak dan eerst een werktabel:</p>
+<pre><code class="language-sql">CREATE SCHEMA IF NOT EXISTS oefening;
+SET search_path TO oefening, meridiaan, public;
+
+CREATE TABLE dienstverband (LIKE meridiaan.dienstverband INCLUDING ALL);
+INSERT INTO dienstverband OVERRIDING SYSTEM VALUE
+SELECT * FROM meridiaan.dienstverband;
+</code></pre>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 7.1 — Atomiciteit voelen (10 min, individueel)</h2>
+<p>a) Start een transactie, verwijder alle rijen uit een tabel in je oefeningschema, tel ze, en draai terug. Tel opnieuw.
+b) Start een transactie, voer een <code>UPDATE</code> uit en daarna een opdracht met een syntaxisfout. Probeer daarna een geldige <code>SELECT</code>. Wat gebeurt er?
+c) Hoe kom je uit die toestand?
+d) Waarom is dit gedrag een bescherming en geen hindernis?
+e) Gebruik een savepoint om een mislukte <code>INSERT</code> op te vangen zonder de rest van de transactie te verliezen.</p>
+<hr>
+<h2>Opdracht 7.2 — Twee sessies, één rij (15 min, tweetallen)</h2>
+<p>Werk met twee vensters. Voer stap voor stap uit en noteer per stap wat je ziet.</p>
+<pre><code>Sessie 1                                Sessie 2
+BEGIN;
+UPDATE dienstverband
+  SET deeltijdfactor = 0.5
+  WHERE dienstverband_id = 1;
+                                        SELECT deeltijdfactor FROM dienstverband
+                                          WHERE dienstverband_id = 1;
+                                        -- wat zie je?
+                                        BEGIN;
+                                        UPDATE dienstverband
+                                          SET deeltijdfactor = 0.8
+                                          WHERE dienstverband_id = 1;
+                                        -- wat gebeurt er?
+COMMIT;
+                                        -- en nu?
+                                        COMMIT;
+SELECT deeltijdfactor FROM dienstverband
+  WHERE dienstverband_id = 1;
+</code></pre>
+<p>a) Wat zag sessie 2 bij de eerste <code>SELECT</code>, en waarom?
+b) Wat gebeurde er bij de <code>UPDATE</code> van sessie 2?
+c) Wat is de eindwaarde?
+d) Welke ACID-eigenschap heb je hier zien werken, en welke niet?</p>
+<hr>
+<h2>Opdracht 7.3 — De anomalieën reproduceren (25 min, tweetallen)</h2>
+<p><strong>Non-repeatable read.</strong> Sessie 1 op read committed (de standaard):</p>
+<pre><code>Sessie 1                                Sessie 2
+BEGIN;
+SELECT count(*) FROM dienstverband
+  WHERE deeltijdfactor &gt; 0.9;
+                                        UPDATE dienstverband
+                                          SET deeltijdfactor = 0.95
+                                          WHERE dienstverband_id = 2;
+SELECT count(*) FROM dienstverband
+  WHERE deeltijdfactor &gt; 0.9;
+COMMIT;
+</code></pre>
+<p>a) Verschillen de twee tellingen? Wat betekent dat?
+b) Herhaal met <code>BEGIN ISOLATION LEVEL REPEATABLE READ;</code> in sessie 1. Wat verandert er?</p>
+<p><strong>Phantom read.</strong> Herhaal het experiment, maar laat sessie 2 nu een nieuwe rij <code>INSERT</code>en die aan de voorwaarde voldoet.</p>
+<p>c) Wat gebeurt er onder read committed?
+d) Wat gebeurt er onder repeatable read? Wijkt PostgreSQL hier af van de SQL-standaard?</p>
+<p><strong>Dirty read.</strong></p>
+<p>e) Probeer een dirty read te veroorzaken: sessie 2 wijzigt zonder commit, sessie 1 leest. Lukt het? Waarom (niet)?</p>
+<p>f) Vul de tabel uit paragraaf 8 van de reader in op basis van je eigen waarnemingen.</p>
+<hr>
+<h2>Opdracht 7.4 — MVCC zichtbaar maken (15 min, individueel)</h2>
+<p>a) Vraag <code>xmin</code> en <code>xmax</code> op van een paar rijen in je oefeningtabel.
+b) Voer een <code>UPDATE</code> uit op één rij en kijk opnieuw. Wat is er veranderd?
+c) Voer <code>SELECT txid_current();</code> uit binnen een transactie en vergelijk met de <code>xmin</code> van de zojuist gewijzigde rij.
+d) Verwijder een rij binnen een transactie (nog niet committen) en kijk vanuit de andere sessie of hij er nog is. Verklaar.
+e) Waarom groeit een tabel bij een <code>UPDATE</code> van een miljoen rijen ongeveer met de omvang van die tabel?</p>
+<hr>
+<h2>Opdracht 7.5 — De lost update (20 min, tweetallen)</h2>
+<p>Dit is de kernopdracht. Werk met twee vensters.</p>
+<p>a) Reproduceer de lost update uit paragraaf 15 van de reader op <code>dienstverband_id = 1</code>. Noteer de beginwaarde, beide bedoelde wijzigingen, en de eindwaarde.
+b) Hoeveel euro is er “verdwenen”? Kreeg iemand een foutmelding?
+c) Los het op met oplossing 1 (rekenen in de <code>UPDATE</code>). Voer het experiment opnieuw uit. Wat is nu de eindwaarde?
+d) Los het op met oplossing 2 (<code>SELECT … FOR UPDATE</code>). Waar wacht sessie 2 nu?
+e) Voer het oorspronkelijke experiment nog één keer uit, maar zet beide sessies op <code>REPEATABLE READ</code>. Wat krijgt sessie 2 te zien?
+f) Karin vraagt waarom de database dit niet vanzelf voorkomt. Formuleer een antwoord in maximaal 80 woorden.</p>
+<hr>
+<h2>Opdracht 7.6 — Deadlock (15 min, tweetallen)</h2>
+<p>a) Veroorzaak een deadlock: sessie 1 wijzigt rij A dan B, sessie 2 wijzigt rij B dan A.
+b) Noteer de foutmelding letterlijk. Welke sessie werd afgebroken?
+c) Wat gebeurde er met het werk van de afgebroken sessie?
+d) Herhaal het, maar laat beide sessies de rijen in dezelfde volgorde benaderen. Treedt de deadlock nog op?
+e) Formuleer de afspraak die je hierover in een ontwikkelteam zou maken, in één zin.</p>
+<hr>
+<h2>Opdracht 7.7 — SKIP LOCKED voor de mutatieverwerking (15 min, tweetallen)</h2>
+<p>Meridiaan wil de mutatieverwerking over meerdere processen verdelen.</p>
+<p>a) Schrijf een query die tien onverwerkte mutaties ophaalt en vergrendelt.
+b) Voer hem in beide sessies uit binnen een transactie, zonder <code>SKIP LOCKED</code>. Wat gebeurt er in sessie 2?
+c) Voeg <code>SKIP LOCKED</code> toe en herhaal. Wat is het verschil?
+d) Waarom is <code>ORDER BY</code> hier belangrijk, en waarom is het tegelijk geen garantie?
+e) Wat gebeurt er als een verwerkend proces crasht nadat het de rijen heeft vergrendeld maar vóór de commit?</p>
+<hr>
+<h2>Opdracht 7.8 — Idle in transaction opsporen (10 min, individueel)</h2>
+<p>a) Open een transactie in sessie 1 met alleen een <code>SELECT</code>, en doe verder niets.
+b) Zoek die sessie op in <code>pg_stat_activity</code>. In welke toestand staat hij?
+c) Schrijf een query die alle sessies toont die langer dan vijf minuten een transactie openhebben.
+d) Beëindig de transactie en controleer dat de toestand verandert.
+e) Leg in twee zinnen uit waarom deze toestand schadelijk is voor de hele database, niet alleen voor die ene sessie.</p>
+<hr>
+<h2>Opdracht 7.9 — Transactieontwerp voor Meridiaan (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Voor elk van de volgende vier bedrijfshandelingen: bepaal de transactiegrens, het isolatieniveau, en de vergrendelstrategie. Motiveer.</p>
+<p><strong>A. Nieuwe deelnemer aanmelden.</strong> Een werkgever meldt via het portaal een nieuwe medewerker aan. Er wordt een deelnemer aangemaakt, een dienstverband, en een eerste salarisgegeven.</p>
+<p><strong>B. Adreswijziging via het deelnemersportaal.</strong> De deelnemer opent het formulier, past het adres aan, en verstuurt. Er moet een adresperiode worden afgesloten en een nieuwe geopend (deel 6).</p>
+<p><strong>C. Maandelijkse premienotarun.</strong> Voor alle 250 werkgevers wordt een nota berekend en vastgelegd. Duurt ongeveer twintig minuten.</p>
+<p><strong>D. Kwartaalrapportage.</strong> Telt deelnemers, sommeert aanspraken en berekent premietotalen over meerdere tabellen. Duurt enkele minuten en draait tijdens kantooruren.</p>
+<p>Lever per handeling:</p>
+<ul>
+<li>waar <code>BEGIN</code> en <code>COMMIT</code> staan (en waarom niet ruimer of krapper);</li>
+<li>het isolatieniveau met motivering;</li>
+<li>de vergrendelstrategie (geen, <code>FOR UPDATE</code>, versiekolom);</li>
+<li>één ding dat misgaat als je het verkeerd doet.</li>
+</ul>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Staat er bij B géén transactie om de gebruikersinteractie heen?</li>
+<li>Is bij C bedacht wat een transactie van twintig minuten met de bloat doet?</li>
+<li>Is bij D het isolatieniveau onderbouwd vanuit de eis dat de deeltotalen moeten optellen?</li>
+<li>Wordt bij A de atomiciteit expliciet als reden genoemd?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 7.1</h2>
+<p>a)</p>
+<pre><code class="language-sql">BEGIN;
+DELETE FROM dienstverband;
+SELECT count(*) FROM dienstverband;   -- 0
+ROLLBACK;
+SELECT count(*) FROM dienstverband;   -- weer het oorspronkelijke aantal
+</code></pre>
+<p>Binnen de transactie zie je je eigen wijziging; na <code>ROLLBACK</code> is het alsof er niets is gebeurd.</p>
+<p>b) De <code>SELECT</code> wordt geweigerd:</p>
+<pre><code>ERROR: current transaction is aborted, commands ignored until end of transaction block
+</code></pre>
+<p>c) <code>ROLLBACK;</code> (of <code>COMMIT;</code>, die in deze toestand als rollback werkt).</p>
+<p>d) Omdat je anders verder zou werken op een toestand die je niet kent. Stel dat stap 3 van vijf mislukt en de database liet je gewoon doorgaan met stap 4 en 5 — dan commit je een half uitgevoerde bedrijfshandeling. De aborted-toestand dwingt je een bewuste keuze te maken.</p>
+<p>e)</p>
+<pre><code class="language-sql">BEGIN;
+INSERT INTO plaats (naam) VALUES ('Zwolle');
+SAVEPOINT s1;
+INSERT INTO plaats (naam) VALUES ('Zwolle');   -- fout: al aanwezig
+ROLLBACK TO SAVEPOINT s1;
+INSERT INTO plaats (naam) VALUES ('Kampen');
+COMMIT;
+</code></pre>
+<p>Zwolle en Kampen zijn opgeslagen; de mislukte poging is verdwenen.</p>
+<hr>
+<h2>Uitwerking 7.2</h2>
+<p>a) Sessie 2 zag de <strong>oude waarde</strong>. De wijziging van sessie 1 was nog niet vastgelegd, en PostgreSQL toont geen niet-vastgelegde wijzigingen. Dit is MVCC in werking: sessie 2 leest een oudere rijversie en hoeft niet te wachten.</p>
+<p>b) De <code>UPDATE</code> van sessie 2 <strong>wacht</strong>. Sessie 1 houdt een rijlock op deze rij tot het eind van haar transactie.</p>
+<p>c) Na de <code>COMMIT</code> van sessie 1 gaat sessie 2 door, leest onder read committed de nieuwe waarde en overschrijft die. De eindwaarde is <strong>0.8</strong> — de waarde van de laatste committer.</p>
+<p>d) <strong>Isolatie werkte:</strong> sessie 2 zag nooit een niet-vastgelegde waarde. <strong>Atomiciteit werkte</strong> binnen elke transactie.</p>
+<p>Wat je <em>niet</em> zag: bescherming tegen het overschrijven zelf. De wijziging van sessie 1 is volledig verdwenen zonder waarschuwing. Dat is opdracht 7.5.</p>
+<hr>
+<h2>Uitwerking 7.3</h2>
+<p>a) <strong>Ja, de tellingen verschillen.</strong> Onder read committed neemt elke opdracht een nieuwe momentopname, dus de tweede <code>SELECT</code> ziet de commit van sessie 2. Binnen één transactie is dezelfde vraag twee keer anders beantwoord — dat is de non-repeatable read.</p>
+<p>Waarom dat erg is: een rapportage die eerst het aantal telt en daarna de bedragen sommeert, kan getallen opleveren die niet bij elkaar horen.</p>
+<p>b) Onder <code>REPEATABLE READ</code> zijn beide tellingen <strong>gelijk</strong>. De transactie werkt op één momentopname die bij de eerste opdracht is genomen.</p>
+<p>c) Onder read committed verschijnt de nieuwe rij in de tweede telling: <strong>phantom read</strong>.</p>
+<p>d) Onder repeatable read verschijnt hij <strong>niet</strong>. Dit is inderdaad strenger dan de SQL-standaard eist: die staat phantoms op repeatable read toe. PostgreSQL sluit ze uit omdat de momentopname per definitie ook nieuwe rijen buitensluit. Goed om te weten voor het examen én voor gesprekken met mensen die uit een ander DBMS komen.</p>
+<p>e) <strong>Het lukt niet.</strong> PostgreSQL kent geen read uncommitted; vraag je erom, dan krijg je read committed. Niet-vastgelegde wijzigingen zijn voor andere sessies principieel onzichtbaar, omdat MVCC alleen versies toont waarvan de makende transactie is vastgelegd. Dirty reads zijn hier dus geen instelling maar een onmogelijkheid.</p>
+<p>f) De ingevulde tabel hoort overeen te komen met paragraaf 8 van de reader, inclusief de twee PostgreSQL-afwijkingen: geen read uncommitted, en geen phantoms op repeatable read.</p>
+<hr>
+<h2>Uitwerking 7.4</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT xmin, xmax, dienstverband_id FROM dienstverband LIMIT 5;
+</code></pre>
+<p>Alle rijen hebben dezelfde <code>xmin</code> (de transactie van de <code>INSERT</code>) en <code>xmax</code> = 0.</p>
+<p>b) Na een <code>UPDATE</code> heeft de gewijzigde rij een <strong>nieuwe <code>xmin</code></strong> — het is fysiek een nieuwe rijversie. De oude versie bestaat nog, maar is voor jouw sessie niet meer zichtbaar; hij heeft een gevulde <code>xmax</code>.</p>
+<p>c) De <code>xmin</code> van de nieuwe rijversie is gelijk aan het transactie-ID van de transactie die de <code>UPDATE</code> deed.</p>
+<p>d) Vanuit de andere sessie is de rij er <strong>nog steeds</strong>. <code>DELETE</code> markeert alleen; de rijversie blijft staan tot de verwijderende transactie is vastgelegd én er geen enkele transactie meer is die hem kan zien. Pas dan mag vacuum hem opruimen.</p>
+<p>e) Omdat elke <code>UPDATE</code> een <strong>nieuwe rijversie schrijft</strong> in plaats van de bestaande te wijzigen. Na het bijwerken van een miljoen rijen staan er tijdelijk twee miljoen rijversies. De oude worden pas na vacuum herbruikbaar — en zelfs dan komt de ruimte niet terug naar het besturingssysteem, alleen beschikbaar binnen de tabel.</p>
+<p>Dit is de belangrijkste praktische consequentie van MVCC en de reden dat een grote <code>UPDATE</code> op een productiedatabase planning vereist.</p>
+<hr>
+<h2>Uitwerking 7.5</h2>
+<p>a) Beginwaarde bijvoorbeeld 50.000; sessie 1 zet 52.000, sessie 2 zet 51.000. Eindwaarde: <strong>51.000</strong>.</p>
+<p>b) <strong>2.000 euro verdwenen</strong>, en niemand kreeg een foutmelding. Beide medewerkers zagen “opgeslagen”. Dit is exact het Excel-probleem uit deel 1, nu in een database met constraints, foreign keys en ACID — en toch gebeurt het.</p>
+<p>Dat is het punt van deze opdracht: ACID beschermt hier niet vanzelf. De <strong>I</strong> garandeert dat sessies elkaar niet in een halve toestand zien, niet dat ze elkaars werk niet overschrijven.</p>
+<p>c)</p>
+<pre><code class="language-sql">UPDATE dienstverband SET jaarsalaris = jaarsalaris + 2000 WHERE dienstverband_id = 1;
+-- en in de andere sessie: + 1000
+</code></pre>
+<p>Eindwaarde <strong>53.000</strong>. Sessie 2 wacht op de rijlock, leest daarna de nieuwe waarde (52.000) en telt daar 1.000 bij op.</p>
+<p>d) Met <code>FOR UPDATE</code> wacht sessie 2 <strong>al bij de <code>SELECT</code></strong>, dus vóórdat de medewerker gaat rekenen. Daardoor rekent hij met de actuele waarde in plaats van met een verouderde.</p>
+<p>e) Onder <code>REPEATABLE READ</code> krijgt sessie 2 bij de <code>UPDATE</code>:</p>
+<pre><code>ERROR: could not serialize access due to concurrent update
+</code></pre>
+<p>De transactie wordt afgebroken in plaats van stil te overschrijven. Dat is een verbetering — mits de applicatie de fout opvangt en opnieuw probeert. Doet hij dat niet, dan krijgt de medewerker een technische foutmelding en is de wijziging alsnog niet doorgevoerd.</p>
+<p>f) Modelantwoord (76 woorden):</p>
+<blockquote>
+<p>Omdat de database niet kan weten dat die twee wijzigingen bij elkaar horen. Vanuit haar gezichtspunt heeft iemand eerst 52.000 opgeslagen en daarna iemand 51.000 — beide zijn geldige waarden, netjes na elkaar vastgelegd. Dat de tweede persoon rekende op basis van een verouderd scherm, is informatie die alleen wij hebben.</p>
+<p>Daarom moeten wij het aangeven: door in de database te rekenen, door de rij te vergrendelen, of door een versienummer mee te sturen.</p>
+</blockquote>
+<hr>
+<h2>Uitwerking 7.6</h2>
+<p>a)</p>
+<pre><code>Sessie 1                          Sessie 2
+BEGIN;                            BEGIN;
+UPDATE dienstverband SET
+ deeltijdfactor=0.5 WHERE id=1;
+                                  UPDATE dienstverband SET
+                                   deeltijdfactor=0.5 WHERE id=2;
+UPDATE dienstverband SET
+ deeltijdfactor=0.6 WHERE id=2;   -- wacht
+                                  UPDATE dienstverband SET
+                                   deeltijdfactor=0.6 WHERE id=1;  -- deadlock
+</code></pre>
+<p>b)</p>
+<pre><code>ERROR: deadlock detected
+DETAIL: Process N waits for ShareLock on transaction M; blocked by process K.
+</code></pre>
+<p>PostgreSQL kiest zelf een slachtoffer — meestal de transactie die de cyclus sloot, maar dat is geen garantie.</p>
+<p>c) De afgebroken transactie is <strong>volledig teruggedraaid</strong>. Beide wijzigingen daarvan zijn weg; de andere sessie gaat gewoon door. De applicatie moet dit opvangen en opnieuw proberen.</p>
+<p>d) <strong>Nee.</strong> Benaderen beide sessies eerst rij 1 en dan rij 2, dan wacht de tweede sessie netjes bij rij 1 en ontstaat er geen cyclus. Er is wachttijd, maar geen deadlock.</p>
+<p>e) Modelantwoord: <em>“Binnen één transactie benaderen we rijen altijd in oplopende volgorde van hun primaire sleutel, tenzij er een expliciete reden is om daarvan af te wijken — en dan documenteren we die.”</em></p>
+<hr>
+<h2>Uitwerking 7.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">BEGIN;
+SELECT * FROM meridiaan.mutatie
+WHERE verwerkt_op IS NULL
+ORDER BY aangemeld_op
+LIMIT 10
+FOR UPDATE;
+</code></pre>
+<p>b) Sessie 2 <strong>wacht</strong> tot sessie 1 klaar is. Twee verwerkers leveren dus geen enkele versnelling op — ze staan op elkaar te wachten.</p>
+<p>c) Met <code>SKIP LOCKED</code> slaat sessie 2 de vergrendelde rijen over en pakt de volgende tien. Beide verwerkers werken parallel aan verschillende mutaties. Dit is precies het patroon dat Meridiaan nodig heeft.</p>
+<p>d) <code>ORDER BY</code> zorgt dat de oudste mutaties het eerst worden opgepakt — belangrijk voor doorlooptijden en voor de eerlijkheid richting deelnemers. Het is <strong>geen garantie</strong> op volgorde van verwerking: met <code>SKIP LOCKED</code> kan verwerker 2 een jongere mutatie afronden vóórdat verwerker 1 klaar is met een oudere. Is strikte volgorde een eis, dan is dit patroon niet geschikt.</p>
+<p>e) De transactie wordt teruggedraaid, de locks vallen weg, en de rijen zijn weer beschikbaar voor een andere verwerker. Dat is precies de bedoeling: een gecrashte verwerker blokkeert niets permanent. Dit is een sterk argument voor het vergrendelen in de database in plaats van een eigen “in behandeling”-vlag in een kolom — die vlag zou na een crash blijven staan.</p>
+<hr>
+<h2>Uitwerking 7.8</h2>
+<p>a)</p>
+<pre><code class="language-sql">BEGIN;
+SELECT count(*) FROM dienstverband;
+-- verder niets doen
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT pid, state, now() - xact_start AS duur, query
+FROM pg_stat_activity
+WHERE backend_type = 'client backend';
+</code></pre>
+<p>Toestand: <strong><code>idle in transaction</code></strong>.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT pid, usename, state, now() - xact_start AS duur, left(query, 60) AS laatste_query
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+  AND now() - xact_start &gt; INTERVAL '5 minutes'
+ORDER BY xact_start;
+</code></pre>
+<p>d) Na <code>COMMIT</code> of <code>ROLLBACK</code> staat de toestand op <code>idle</code>.</p>
+<p>e) Modelantwoord: <em>“Zolang de transactie openstaat, moeten alle rijversies bewaard blijven die zij nog zou kunnen zien — in de hele database, niet alleen in de tabellen die zij heeft aangeraakt. Vacuum kan daardoor niets opruimen, tabellen groeien, en query’s worden overal trager terwijl de veroorzakende sessie zelf niets doet.”</em></p>
+<hr>
+<h2>Uitwerking 7.9 — modelantwoord</h2>
+<p><strong>A. Nieuwe deelnemer aanmelden</strong></p>
+<ul>
+<li><strong>Transactiegrens:</strong> één transactie om alle drie de <code>INSERT</code>s. Ruimer kan niet (er is niets anders bij deze handeling); krapper mag niet.</li>
+<li><strong>Isolatieniveau:</strong> read committed. Geen herhaald lezen, geen conflictgevoelige logica.</li>
+<li><strong>Vergrendeling:</strong> geen. Het gaat om nieuwe rijen; er is niets om te overschrijven.</li>
+<li><strong>Wat misgaat bij een verkeerde keuze:</strong> bij drie losse transacties kun je een deelnemer zonder dienstverband overhouden als stap 2 faalt — een halve aanmelding die niemand opmerkt tot de eerste premienota. Dit is het atomiciteitsargument.</li>
+</ul>
+<p><strong>B. Adreswijziging via het portaal</strong></p>
+<ul>
+<li><strong>Transactiegrens:</strong> de transactie begint <strong>ná</strong> het versturen van het formulier en omvat alleen het afsluiten van de oude periode en het openen van de nieuwe. Nooit rond de gebruikersinteractie.</li>
+<li><strong>Isolatieniveau:</strong> read committed.</li>
+<li><strong>Vergrendeling:</strong> <strong>optimistisch, met een versiekolom.</strong> Tussen het openen van het formulier en het versturen kan iemand anders (de klantenservice) het adres al hebben gewijzigd. De gebruiker hoort dan te horen: “dit is intussen gewijzigd.”</li>
+<li><strong>Wat misgaat:</strong> een <code>BEGIN</code> bij het openen van het formulier levert <code>idle in transaction</code> op zolang de deelnemer nadenkt — met bloat en locks tot gevolg. En zonder versiecontrole overschrijft de deelnemer stil de correctie van de klantenservice.</li>
+<li><strong>Aandachtspunt:</strong> de exclusion constraint uit deel 6 vangt overlap op, maar geeft dan een technische fout. De applicatie moet die vertalen naar iets begrijpelijks.</li>
+</ul>
+<p><strong>C. Maandelijkse premienotarun</strong></p>
+<ul>
+<li><strong>Transactiegrens:</strong> <strong>niet één transactie van twintig minuten.</strong> Verdeel in partijen — bijvoorbeeld per werkgever of per honderd werkgevers — elk in een eigen transactie.</li>
+<li><strong>Isolatieniveau:</strong> read committed.</li>
+<li><strong>Vergrendeling:</strong> geen bijzondere; wel een markering per werkgever zodat een hervatting na een fout niet dubbel factureert.</li>
+<li><strong>Wat misgaat:</strong> één transactie van twintig minuten houdt de opruimhorizon twintig minuten tegen voor de hele database, en bij een fout in werkgever 249 is het werk van alle 248 andere weg. Daar staat tegenover: met partijen verlies je de atomiciteit van de run als geheel, dus je hebt hervattingslogica nodig. <strong>Die afruil expliciet benoemen is de kern van deze casus.</strong></li>
+</ul>
+<p><strong>D. Kwartaalrapportage</strong></p>
+<ul>
+<li><strong>Transactiegrens:</strong> één transactie om alle deelquery’s heen — juist omdat de getallen bij elkaar moeten horen.</li>
+<li><strong>Isolatieniveau:</strong> <strong>repeatable read.</strong> Zonder dat komen het deelnemersaantal, de aanspraaksom en het premietotaal uit verschillende momenten, en tellen ze niet op. Dat is precies het “drie afdelingen, drie aantallen”-probleem uit deel 1, nu veroorzaakt door isolatie in plaats van door NULL.</li>
+<li><strong>Vergrendeling:</strong> geen — dankzij MVCC blokkeert een lezende transactie niets, ook niet als hij minuten duurt.</li>
+<li><strong>Wat misgaat:</strong> onder read committed levert het rapport intern inconsistente cijfers op die niemand kan verklaren. En houd de duur in de gaten: ook een lezende transactie van een uur remt vacuum.</li>
+</ul>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>B</strong> is de belangrijkste: groepen die daar een transactie om de gebruikersinteractie zetten, hebben paragraaf 18 gemist. Dit is de fout die in de praktijk het vaakst voorkomt.</li>
+<li><strong>C</strong> toetst of ze de afruil zien tussen atomiciteit en transactieduur. Beide antwoorden zijn verdedigbaar; het gaat om de motivering.</li>
+<li><strong>D</strong> is de enige waar een strenger isolatieniveau nodig is. Groepen die overal read committed kiezen, moet je vragen: <em>“tellen jullie deelcijfers op tot het totaal?”</em></li>
+<li>Groepen die overal <code>serializable</code> kiezen “voor de zekerheid”: vraag wie de retry-logica schrijft.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 7.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">511 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-06-ddl-datatypen-en-constraints/reader.html">&larr; Deel 6 — DDL, datatypen en constraints</a><a class="dbm-prevnext next" href="../deel-08-indexen-en-views/reader.html">Deel 8 — Indexen en views &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

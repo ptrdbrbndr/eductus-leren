@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — SQL verdieping: joins, subquery&#39;s en CTE&#39;s — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 4 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 4 — Slidedeck</h1>
+<p><strong>SQL verdieping: joins, subquery’s en CTE’s</strong>
+Niveau 1, dagdeel 4 | 40 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Joins, subquery’s en CTE’s</h1>
+<h2>Niveau 1 — Deel 4</h2>
+<p><em>Gegevens uit meerdere tabellen combineren — zonder stille fouten</em></p>
+<hr>
+<h2>Slide 2 — Jullie vragen uit deel 3</h2>
+<p><strong>Notities:</strong> oogst drie vragen die met deel 3 onbeantwoordbaar waren. Schrijf ze op het bord. Kom er aan het eind op terug.</p>
+<hr>
+<h2>Slide 3 — Drie fouten die geen foutmelding geven</h2>
+<ol>
+<li><code>INNER</code> waar <code>LEFT</code> bedoeld is → <strong>rijen ontbreken</strong></li>
+<li>Voorwaarde in <code>WHERE</code> bij een outer join → <strong>outer wordt inner</strong></li>
+<li>Fan-out bij één-op-veel → <strong>totalen te hoog</strong></li>
+</ol>
+<h1>Alle drie zien er plausibel uit.</h1>
+<hr>
+<h2>Slide 4 — Waarom joinen</h2>
+<p>Deel 5 splitst gegevens op zodat elk feit één keer bestaat.
+Joinen brengt weer samen wat bewust gescheiden is.</p>
+<p><strong>Denk in verzamelingen, niet in lussen.</strong></p>
+<hr>
+<h2>Slide 5 — Een join is een filter op een product</h2>
+<pre><code class="language-sql">SELECT count(*) FROM werkgever, dienstverband;
+-- 250 × 11.000
+SELECT count(*) FROM werkgever JOIN dienstverband USING (werkgever_id);
+</code></pre>
+<p><strong>Notities:</strong> live draaien. Het eerste getal maakt indruk.</p>
+<hr>
+<h2>Slide 6 — INNER JOIN</h2>
+<pre><code class="language-sql">SELECT d.achternaam, w.naam
+FROM dienstverband dv
+JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id
+JOIN werkgever w ON w.werkgever_id = dv.werkgever_id;
+</code></pre>
+<p>Alleen rijen met een match aan <strong>beide</strong> kanten.</p>
+<p><strong>Aliassen zijn geen luxe.</strong> Gebruik ze vanaf nu altijd.</p>
+<hr>
+<h2>Slide 7 — Niet doen</h2>
+<pre><code class="language-sql">SELECT * FROM a, b WHERE a.id = b.a_id;   -- komma-join
+</code></pre>
+<p>Vergeet je de <code>WHERE</code> → stilzwijgend een cartesisch product.</p>
+<p>Gebruik de expliciete <code>JOIN</code>-syntaxis.</p>
+<hr>
+<h2>Slide 8 — Opdracht 4.1</h2>
+<h1>Eerste joins</h1>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 9 — LEFT JOIN</h2>
+<pre><code class="language-sql">SELECT w.naam, count(dv.dienstverband_id)
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.werkgever_id, w.naam;
+</code></pre>
+<p>Behoudt <strong>alle</strong> rijen links, ook zonder match.</p>
+<hr>
+<h2>Slide 10 — De vuistregel</h2>
+<blockquote>
+<p><code>INNER</code> beantwoordt vragen over <strong>combinaties</strong>.</p>
+<p><code>LEFT</code> beantwoordt vragen over <strong>de linkertabel</strong>, met extra informatie.</p>
+</blockquote>
+<p>“Alle werkgevers met hun aantal deelnemers” → <strong>LEFT</strong></p>
+<hr>
+<h2>Slide 11 — Waarom juist die rijen interessant zijn</h2>
+<p>Een aangesloten werkgever <strong>zonder enige deelnemer</strong> is:</p>
+<ul>
+<li>een fout in de administratie, of</li>
+<li>een werkgever die niets aanlevert</li>
+</ul>
+<h1>LEFT JOIN vindt wat er níét is.</h1>
+<hr>
+<h2>Slide 12 — Voorspel</h2>
+<p>Werkgever zonder dienstverbanden, na <code>LEFT JOIN</code>:</p>
+<pre><code class="language-sql">count(*)                    → ?
+count(dv.dienstverband_id)  → ?
+</code></pre>
+<p><strong>Notities:</strong> meerderheid zegt 0 en 0. Het is 1 en 0.</p>
+<hr>
+<h2>Slide 13 — count(*) na een LEFT JOIN</h2>
+<p>Er ís een rij — gevuld met NULL’s.</p>
+<p><code>count(*)</code> telt hem: <strong>1</strong>
+<code>count(kolom)</code> telt alleen niet-NULL: <strong>0</strong></p>
+<hr>
+<h2>Slide 14 — RIGHT, FULL, CROSS</h2>
+<p><strong>RIGHT</strong> — draai de tabellen om en schrijf <code>LEFT</code>
+<strong>FULL</strong> — alles van beide kanten; voor het vergelijken van bronnen
+<strong>CROSS</strong> — elke combinatie; nuttig om een volledig raster te maken</p>
+<hr>
+<h2>Slide 15 — ON, USING, NATURAL</h2>
+<pre><code class="language-sql">ON d.deelnemer_id = dv.deelnemer_id   -- altijd goed
+USING (deelnemer_id)                  -- korter, één kolom
+NATURAL JOIN                          -- NIET GEBRUIKEN
+</code></pre>
+<p><code>NATURAL</code> joint op <strong>alle</strong> gelijknamige kolommen.
+Iemand voegt een kolom toe → je query verandert stilzwijgend.</p>
+<hr>
+<h2>Slide 16 — Opdracht 4.2</h2>
+<h1>INNER of LEFT</h1>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 17 — Pauze</h2>
+<hr>
+<h2>Slide 18 — De klassieke fout</h2>
+<pre><code class="language-sql">SELECT w.naam, count(p.premienota_id)
+FROM werkgever w
+LEFT JOIN premienota p ON p.werkgever_id = w.werkgever_id
+WHERE p.betaaldatum IS NULL        -- ← hier
+GROUP BY w.werkgever_id, w.naam;
+</code></pre>
+<p><strong>Notities:</strong> draaien, rijen tellen, zaal laten verklaren vóórdat je het zegt.</p>
+<hr>
+<h2>Slide 19 — Waarom</h2>
+<pre><code>1. FROM / JOIN   ← de rijen ontstaan
+2. WHERE         ← en worden hier weggegooid
+</code></pre>
+<p>Werkgevers die álles betaalden, hebben geen enkele rij meer over.</p>
+<h1>Je LEFT JOIN is een INNER JOIN geworden.</h1>
+<hr>
+<h2>Slide 20 — De reparatie</h2>
+<pre><code class="language-sql">LEFT JOIN premienota p
+       ON p.werkgever_id = w.werkgever_id
+      AND p.betaaldatum IS NULL
+</code></pre>
+<p><strong>Regel:</strong> bij een outer join horen voorwaarden over de rechtertabel in <code>ON</code>, niet in <code>WHERE</code>.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-4-1.png" alt="Figuur 4-1" loading="lazy"><figcaption>Figuur 4-1</figcaption></figure>
+<hr>
+<h2>Slide 21 — Opdracht 4.3</h2>
+<h1>De klassieke fout</h1>
+<p>Vinden, verklaren, repareren, controleren.</p>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 22 — Fan-out</h2>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer;                      -- 8.000
+SELECT count(*) FROM deelnemer JOIN aanspraak …;     -- 13.300
+SELECT count(*) FROM deelnemer JOIN aanspraak
+                               JOIN dienstverband …; -- veel meer
+</code></pre>
+<p>Elke één-op-veel-join <strong>vermenigvuldigt rijen</strong>.</p>
+<hr>
+<h2>Slide 23 — De vraag die niemand kan beantwoorden</h2>
+<p>Stel dat daar <code>sum(bedrag)</code> had gestaan.</p>
+<h1>Hoeveel te hoog is dat rapport?</h1>
+<p>Niet alleen fout — <strong>onbepaald</strong> fout.</p>
+<hr>
+<h2>Slide 24 — Twee oplossingen</h2>
+<ol>
+<li><code>count(DISTINCT …)</code> waar je telt</li>
+<li><strong>Eerst aggregeren in een CTE, dan joinen</strong></li>
+</ol>
+<p>De tweede is meestal schoner — en het patroon voor opdracht 4.9.</p>
+<hr>
+<h2>Slide 25 — Opdracht 4.4</h2>
+<h1>Fan-out</h1>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 26 — UNION, INTERSECT, EXCEPT</h2>
+<p>Joins zetten tabellen <strong>naast</strong> elkaar.
+Verzamelingsoperatoren zetten resultaten <strong>onder</strong> elkaar.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UNION</code></td>
+<td>Samenvoegen, ontdubbelen</td>
+</tr>
+<tr>
+<td><code>UNION ALL</code></td>
+<td>Samenvoegen, alles behouden</td>
+</tr>
+<tr>
+<td><code>INTERSECT</code></td>
+<td>In beide</td>
+</tr>
+<tr>
+<td><code>EXCEPT</code></td>
+<td>Wel in de eerste, niet in de tweede</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gebruik <code>UNION ALL</code> tenzij je écht wilt ontdubbelen.</strong></p>
+<hr>
+<h2>Slide 27 — Pauze</h2>
+<hr>
+<h2>Slide 28 — Subquery’s</h2>
+<p><strong>Scalair</strong> — één waarde</p>
+<pre><code class="language-sql">WHERE jaarsalaris &gt; (SELECT avg(jaarsalaris) FROM dienstverband)
+</code></pre>
+<p><strong>IN</strong> — een lijst
+<strong>EXISTS</strong> — bestaat er een rij?
+<strong>NOT EXISTS</strong> — anti-join</p>
+<hr>
+<h2>Slide 29 — De harde regel van vandaag</h2>
+<h1>Gebruik <code>NOT EXISTS</code>,</h1>
+<h1>niet <code>NOT IN</code>.</h1>
+<p>Eén NULL in de subquery → <code>NOT IN</code> geeft <strong>nooit</strong> rijen.
+Geen foutmelding.</p>
+<hr>
+<h2>Slide 30 — Opdracht 4.5</h2>
+<h1>Subquery’s en anti-joins</h1>
+<p>Inclusief de <code>NOT IN</code>-valkuil op <code>bsn</code>.</p>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 31 — CTE’s</h2>
+<pre><code class="language-sql">WITH per_werkgever AS (
+    …
+)
+SELECT … FROM per_werkgever …;
+</code></pre>
+<ul>
+<li>Van boven naar beneden leesbaar</li>
+<li>Meerdere keren bruikbaar</li>
+<li><strong>Stap voor stap te testen</strong></li>
+</ul>
+<hr>
+<h2>Slide 32 — Zo bouw je een complexe query</h2>
+<ol>
+<li>Schrijf de eerste CTE</li>
+<li>Voer <strong>alleen die</strong> uit — klopt het?</li>
+<li>Bouw verder</li>
+<li>Herhaal</li>
+</ol>
+<p><strong>Notities:</strong> demonstreer dit. Het is de werkwijze die ze bij 4.9 nodig hebben.</p>
+<hr>
+<h2>Slide 33 — Zijn CTE’s traag?</h2>
+<p>Tot versie 12: ja, altijd een <em>optimization fence</em>.
+Sinds versie 12: nee, bij enkelvoudig gebruik.</p>
+<h1>Let bij PostgreSQL-advies altijd</h1>
+<h1>op versie én datum.</h1>
+<hr>
+<h2>Slide 34 — Recursieve CTE</h2>
+<pre><code class="language-sql">WITH RECURSIVE maanden AS (
+    SELECT DATE '2025-01-01' AS maand      -- anker
+    UNION ALL
+    SELECT maand + INTERVAL '1 month'      -- recursie
+    FROM maanden WHERE maand &lt; DATE '2025-12-01'   -- stop
+)
+</code></pre>
+<p>Vergeet de stopvoorwaarde → oneindige query.
+Voor reeksen: liever <code>generate_series</code>.</p>
+<hr>
+<h2>Slide 35 — Opdracht 4.6</h2>
+<h1>CTE’s</h1>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 36 — Vensterfuncties</h2>
+<h1>Rekent over een groep rijen</h1>
+<h1>zonder ze samen te vouwen.</h1>
+<p><code>row_number()</code> · <code>rank()</code> · <code>sum() OVER (…)</code> · <code>lag()</code> / <code>lead()</code></p>
+<hr>
+<h2>Slide 37 — Het patroon dat je het vaakst nodig hebt</h2>
+<pre><code class="language-sql">SELECT * FROM (
+    SELECT p.*, row_number() OVER (PARTITION BY werkgever_id
+                                   ORDER BY periode_jaar DESC,
+                                            periode_maand DESC) AS rn
+    FROM premienota p
+) x WHERE rn = 1;
+</code></pre>
+<p>De filtering moet naar buiten — vensterfuncties bestaan in <code>WHERE</code> nog niet.</p>
+<hr>
+<h2>Slide 38 — Dezelfde vraag, vier manieren</h2>
+<p><em>Welke werkgevers hebben geen dienstverband?</em></p>
+<ol>
+<li><code>NOT EXISTS</code> — aanbevolen</li>
+<li><code>LEFT JOIN … IS NULL</code> — even goed</li>
+<li><code>NOT IN</code> — tijdbom</li>
+<li><code>EXCEPT</code> — elegant voor sleutels</li>
+</ol>
+<h1>De keuze gaat over leesbaarheid</h1>
+<h1>en robuustheid. Zelden over snelheid.</h1>
+<hr>
+<h2>Slide 39 — Opdracht 4.9</h2>
+<h1>Het werkgeversdossier</h1>
+<p>Alle werkgevers · geen fan-out · geen NULL waar een getal hoort · opgebouwd met CTE’s</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 40 — Volgende keer</h2>
+<h1>Deel 5 — Datamodellering en normalisatie</h1>
+<p>Vier dagdelen hebben we deze database gebruikt.
+Volgende keer <strong>beoordelen</strong> we hem — inclusief de bewuste fouten.</p>
+<p><strong>Meenemen:</strong> één ding in het model dat je zou veranderen.</p>
+<hr>
+<p><em>Einde slidedeck deel 4.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">68 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">423 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">&larr; Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren</a><a class="dbm-prevnext next" href="../deel-05-datamodellering-en-normalisatie/reader.html">Deel 5 — Datamodellering en normalisatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

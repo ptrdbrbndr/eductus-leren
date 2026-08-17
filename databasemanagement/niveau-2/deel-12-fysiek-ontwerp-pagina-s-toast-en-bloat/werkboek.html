@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Fysiek ontwerp: pagina&#39;s, TOAST en bloat — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 12 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 12: Fysiek ontwerp</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\timing on
+CREATE EXTENSION IF NOT EXISTS pgstattuple;
+</code></pre>
+<p>Neem je aantekening uit deel 11 erbij: de omvang van elke tabel na de <code>VACUUM</code> van vorige keer.</p>
+<p>Werk voor de experimenten in een eigen schema, zodat <code>meridiaan_prod</code> bruikbaar blijft:</p>
+<pre><code class="language-sql">CREATE SCHEMA IF NOT EXISTS oefening12;
+</code></pre>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 12.1 — De overhead per rij (15 min, individueel)</h2>
+<p>a) Maak een tabel met twee <code>integer</code>-kolommen en vul hem met een miljoen rijen uit <code>generate_series</code>.
+b) Hoe groot is die tabel? Deel door een miljoen. Hoeveel bytes per rij?
+c) Hoeveel bytes aan gegevens zitten er werkelijk in? Waar is de rest gebleven?
+d) Maak een tweede tabel met dezelfde twee kolommen plus acht extra <code>integer</code>-kolommen, en vul die ook met een miljoen rijen. Hoeveel bytes per rij nu?
+e) Wat is de overhead per rij, uitgedrukt als percentage, in beide gevallen?
+f) Welk ontwerpadvies volgt hieruit voor een tabel die je zou willen opsplitsen “voor de netheid”?</p>
+<hr>
+<h2>Opdracht 12.2 — Uitlijning meten (20 min, tweetallen)</h2>
+<p>a) Voorspel welke van deze twee rijen groter is, en met hoeveel:</p>
+<pre><code class="language-sql">SELECT pg_column_size(ROW(1::smallint, 1::bigint, 1::smallint, 1::bigint, 1::integer)) AS variant_a,
+       pg_column_size(ROW(1::bigint, 1::bigint, 1::integer, 1::smallint, 1::smallint)) AS variant_b;
+</code></pre>
+<p>b) Voer uit. Klopte je voorspelling?
+c) Bouw twee echte tabellen met deze kolomvolgordes en vul beide met een miljoen rijen. Vergelijk de omvang op schijf.
+d) Komt het verschil overeen met wat <code>pg_column_size</code> voorspelde? Zo niet, wat verklaart het verschil?
+e) Bekijk de kolomvolgorde van <code>meridiaan_prod.mutatie</code>. Is die optimaal? Herschik hem op papier en schat de besparing op 2,4 miljoen rijen.
+f) Bij welke tabel in <code>meridiaan_prod</code> is dit de moeite waard, en bij welke niet?
+g) Waarom zou je een geoptimaliseerde kolomvolgorde toch kunnen afwijzen?</p>
+<hr>
+<h2>Opdracht 12.3 — TOAST zichtbaar maken (20 min, drietallen)</h2>
+<p>a) Maak een tabel met een <code>text</code>-kolom en voeg drie rijen toe: één van 100 tekens, één van 1.500 tekens, en één van 100.000 tekens.
+b) Vergelijk <code>pg_relation_size</code> en <code>pg_total_relation_size</code>. Wat verklaart het verschil?
+c) Zoek de bijbehorende TOAST-tabel op in <code>pg_class</code>. Hoe groot is die?
+d) Welke van de drie rijen staat er waarschijnlijk in? Controleer met <code>pg_column_size</code> per rij.
+e) Meet het verschil tussen <code>SELECT id FROM …</code> en <code>SELECT * FROM …</code> op deze tabel. Verklaar.
+f) Zet de opslagstrategie op <code>EXTERNAL</code> voor die kolom, voeg dezelfde rijen opnieuw toe en meet opnieuw. Wat is er veranderd?
+g) Welk advies geef je voor de tabel <code>koppelvlakbericht</code> uit deel 6, die ruwe berichten in <code>jsonb</code> bewaart?</p>
+<hr>
+<h2>Opdracht 12.4 — HOT-updates en fill factor (25 min, drietallen)</h2>
+<p>a) Maak een tabel met een <code>id</code>, een geïndexeerde kolom <code>status</code> en een niet-geïndexeerde kolom <code>notitie</code>. Vul hem met 200.000 rijen.
+b) Reset de statistieken voor deze tabel en werk <code>notitie</code> bij op alle rijen. Kijk daarna naar <code>n_tup_upd</code> en <code>n_tup_hot_upd</code>. Welk percentage was HOT?
+c) Herhaal, maar werk nu <code>status</code> bij. Wat is het percentage nu? Verklaar.
+d) Maak een tweede tabel, identiek, maar met <code>fillfactor = 85</code>. Herhaal experiment b). Verschilt het percentage?
+e) Meet de omvang van beide tabellen na de updates. Welke is groter, en waarom is dat niet het hele verhaal?
+f) Kijk naar <code>n_tup_hot_upd</code> voor de tabellen in <code>meridiaan_prod</code>. Welke tabel is de beste kandidaat voor een lagere fill factor?
+g) Waarom werkt <code>ALTER TABLE … SET (fillfactor = 85)</code> niet met terugwerkende kracht?</p>
+<hr>
+<h2>Opdracht 12.5 — Bloat meten en opruimen (20 min, tweetallen)</h2>
+<p>a) Meet de bloat van alle tabellen in <code>meridiaan_prod</code> met de schatting uit de reader.
+b) Meet <code>mutatie</code> exact met <code>pgstattuple</code>. Wijkt het af van de schatting?
+c) Vergelijk de looptijd van <code>pgstattuple</code> en <code>pgstattuple_approx</code>. Wat is het verschil, en wanneer gebruik je welke?
+d) Veroorzaak nu zelf bloat: werk 30% van de rijen in een kopie van <code>mutatie</code> bij en meet opnieuw.
+e) Voer <code>VACUUM</code> uit en meet nog een keer. Wat verandert er wel en wat niet?
+f) Open in een tweede sessie een transactie met <code>BEGIN; SELECT count(*) FROM mutatie;</code> en laat die openstaan. Werk dan opnieuw rijen bij en draai <code>VACUUM</code>. Wat gebeurt er nu, en waarom?
+g) Sluit de transactie en herhaal de <code>VACUUM</code>. Verklaar het resultaat aan Ruud in twee zinnen.</p>
+<hr>
+<h2>Opdracht 12.6 — Freeze en wraparound (15 min, individueel)</h2>
+<p>a) Bekijk <code>age(relfrozenxid)</code> voor alle tabellen in <code>meridiaan_prod</code>. Welke is het verst?
+b) Hoeveel procent van de weg naar wraparound is dat?
+c) Wat is de waarde van <code>autovacuum_freeze_max_age</code> op jouw installatie?
+d) Schrijf een monitoringquery die een waarschuwing geeft bij meer dan 50% van <code>autovacuum_freeze_max_age</code>.
+e) Wat gebeurt er als deze waarde blijft oplopen? Beschrijf de vier fasen.
+f) Waarom is dit de enige waarde uit dit dagdeel die je écht moet monitoren?</p>
+<hr>
+<h2>Opdracht 12.7 — Index-only scans en Heap Fetches (15 min, tweetallen)</h2>
+<p>a) Maak een index op <code>mutatie (deelnemer_id) INCLUDE (aangemeld_op)</code>.
+b) Draai <code>EXPLAIN (ANALYZE, BUFFERS)</code> op een query die alleen die twee kolommen opvraagt voor één deelnemer. Zie je een <code>Index Only Scan</code>?
+c) Hoeveel <code>Heap Fetches</code> staan er?
+d) Werk nu een willekeurige rij in de tabel bij en herhaal de meting. Verandert het aantal <code>Heap Fetches</code>?
+e) Draai <code>VACUUM mutatie;</code> en meet opnieuw. Wat is er gebeurd?
+f) Waarom is de oplossing hier <code>VACUUM</code> en niet een andere index?</p>
+<hr>
+<h2>Opdracht 12.8 — Correlatie (10 min, individueel)</h2>
+<p>a) Bekijk de correlatie van alle kolommen van <code>mutatie</code>.
+b) Welke kolom heeft de hoogste correlatie, en waarom die?
+c) Wat betekent dat voor een indexscan over een bereik op die kolom?
+d) Bekijk de correlatie van <code>deelnemer_id</code> in dezelfde tabel. Waarom is die veel lager?
+e) Welke kolom zou een goede kandidaat zijn voor een BRIN-index (deel 14), en welke absoluut niet?</p>
+<hr>
+<h2>Opdracht 12.9 — Het opslagadvies (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Ruud wil weten wat er kan aan de opslag van <code>meridiaan_prod</code>, want de schijf loopt sneller vol dan begroot.</p>
+<p>Lever een <strong>opslagadvies</strong> van maximaal twee A4:</p>
+<ol>
+<li><strong>Een overzicht</strong> van de huidige situatie: per tabel de omvang, het aandeel indexen, het aandeel TOAST, en de geschatte bloat.</li>
+<li><strong>Per maatregel:</strong> wat hij oplevert (met een cijfer), wat hij kost, en of hij downtime vereist.</li>
+<li><strong>Een prioritering</strong> die onderscheid maakt tussen <em>nu opruimen</em> en <em>voorkomen dat het terugkomt</em>.</li>
+<li><strong>Eén maatregel die je afraadt</strong>, met reden.</li>
+<li><strong>Wat er in de monitoring moet</strong>, zodat Ruud dit gesprek niet over een half jaar opnieuw voert.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Staat er bij elke maatregel een cijfer, of alleen een bewering?</li>
+<li>Is er onderscheid tussen symptoom en oorzaak?</li>
+<li>Is de afgeraden maatregel een echte afweging?</li>
+<li>Staat <code>age(relfrozenxid)</code> in het monitoringvoorstel?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 12.1</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.smal (a integer, b integer);
+INSERT INTO oefening12.smal SELECT g, g FROM generate_series(1, 1000000) g;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT pg_size_pretty(pg_relation_size('oefening12.smal')),
+       pg_relation_size('oefening12.smal') / 1000000.0 AS bytes_per_rij;
+</code></pre>
+<p>Ongeveer <strong>36 bytes per rij</strong>.</p>
+<p>c) De gegevens zijn 8 bytes (twee integers). De rest is: 24 bytes tuple header, 4 bytes item pointer in de pagina, plus een klein deel pagina-header verdeeld over de rijen.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.breed (a integer, b integer, c integer, d integer,
+    e integer, f integer, g integer, h integer, i integer, j integer);
+INSERT INTO oefening12.breed
+SELECT g,g,g,g,g,g,g,g,g,g FROM generate_series(1, 1000000) g;
+</code></pre>
+<p>Ongeveer <strong>68 bytes per rij</strong> (40 bytes gegevens plus dezelfde overhead).</p>
+<p>e) Smal: 28 van de 36 bytes is overhead → <strong>78%</strong>.
+Breed: 28 van de 68 → <strong>41%</strong>.</p>
+<p>f) Modelantwoord: <em>“Een tabel opsplitsen die altijd samen wordt opgehaald, verdubbelt de vaste overhead per rij én voegt een join toe. Bij smalle tabellen met veel rijen is die overhead het grootste deel van de opslag. Splitsen doe je omdat het model erom vraagt (normalisatie, deel 5), niet omdat het er netter uitziet.”</em></p>
+<hr>
+<h2>Uitwerking 12.2</h2>
+<p>a) Variant A is groter. Verwacht verschil: <strong>12 bytes</strong> (36 tegen 24).</p>
+<p>b) De uitkomst bevestigt dat meestal. Kleine afwijkingen kunnen optreden door hoe <code>ROW()</code> wordt samengesteld; het verschil van 12 blijft.</p>
+<p>c)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.slecht (a smallint, b bigint, c smallint, d bigint, e integer);
+CREATE TABLE oefening12.goed   (b bigint, d bigint, e integer, a smallint, c smallint);
+
+INSERT INTO oefening12.slecht SELECT 1,1,1,1,1 FROM generate_series(1,1000000);
+INSERT INTO oefening12.goed   SELECT 1,1,1,1,1 FROM generate_series(1,1000000);
+
+SELECT pg_size_pretty(pg_relation_size('oefening12.slecht')) AS slecht,
+       pg_size_pretty(pg_relation_size('oefening12.goed'))   AS goed;
+</code></pre>
+<p>Verschil in de orde van <strong>10 tot 12 MB</strong> op een miljoen rijen.</p>
+<p>d) Het verschil op schijf is doorgaans iets kleiner dan 12 MB. Verklaring: de rijen worden per pagina van 8 kB opgeslagen, en de restruimte die niet meer voor een hele rij volstaat, gaat verloren. Dat effect maskeert een deel van de winst. Het patroon blijft.</p>
+<p>e) <code>mutatie</code> heeft: <code>mutatie_id bigint</code>, <code>deelnemer_id integer</code>, <code>soort text</code>, <code>kanaal text</code>, <code>aangemeld_op timestamptz</code>, <code>verwerkt_op timestamptz</code>.</p>
+<p>Optimale volgorde: <code>mutatie_id</code> (8), <code>aangemeld_op</code> (8), <code>verwerkt_op</code> (8), <code>deelnemer_id</code> (4), dan de tekstkolommen.</p>
+<p>In het huidige script staat <code>deelnemer_id</code> (4) tussen <code>mutatie_id</code> (8) en de tekstkolommen — dat is toevallig niet ongunstig, omdat de variabele types achteraan geen uitlijningseis hebben. <strong>De besparing is hier klein.</strong> Dat is een eerlijk resultaat en een goed leermoment: niet elke tabel heeft een probleem.</p>
+<p>Wél ongunstig zou zijn: <code>soort text, mutatie_id bigint, kanaal text, aangemeld_op timestamptz</code>.</p>
+<p>f) <strong>De moeite waard:</strong> <code>mutatie</code> (2,4 miljoen) en <code>aanspraak</code> (564.000), als er iets te winnen is.
+<strong>Niet de moeite waard:</strong> <code>werkgever</code> (4.100) en <code>adviseur</code> (60). Een besparing van 12 bytes op 4.100 rijen is 49 kB.</p>
+<p>g) Omdat een logische groepering van kolommen ook waarde heeft: een <code>CREATE TABLE</code> waarin bij elkaar horende velden bij elkaar staan, is beter te lezen en te onderhouden. Wie op bytes optimaliseert, moet dat documenteren — anders zet de volgende ontwikkelaar de volgorde “netjes” terug en is de winst weg zonder dat iemand het merkt.</p>
+<hr>
+<h2>Uitwerking 12.3</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.toasttest (id integer, inhoud text);
+INSERT INTO oefening12.toasttest VALUES
+  (1, repeat('a', 100)),
+  (2, repeat('b', 1500)),
+  (3, repeat('c', 100000));
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT pg_size_pretty(pg_relation_size('oefening12.toasttest'))       AS hoofdtabel,
+       pg_size_pretty(pg_total_relation_size('oefening12.toasttest')) AS totaal;
+</code></pre>
+<p>De hoofdtabel is enkele kilobytes; het totaal is groter. Het verschil is de TOAST-tabel.</p>
+<p><strong>Let op:</strong> door compressie kan het verschil kleiner zijn dan verwacht — <code>repeat('c', 100000)</code> comprimeert extreem goed. Gebruik voor een eerlijker beeld willekeurige tekst:</p>
+<pre><code class="language-sql">INSERT INTO oefening12.toasttest
+SELECT 4, string_agg(md5(random()::text), '') FROM generate_series(1, 4000);
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT c.relname AS tabel, t.relname AS toast_tabel,
+       pg_size_pretty(pg_relation_size(t.oid)) AS toast_omvang
+FROM pg_class c JOIN pg_class t ON t.oid = c.reltoastrelid
+WHERE c.relname = 'toasttest';
+</code></pre>
+<p>d)</p>
+<pre><code class="language-sql">SELECT id, pg_column_size(inhoud) FROM oefening12.toasttest ORDER BY id;
+</code></pre>
+<p>Rij 3 (en de willekeurige rij 4) staan in TOAST. De drempel ligt rond 2 kB per rij; rij 2 met 1.500 tekens blijft er meestal net onder, zeker na compressie.</p>
+<p>e)</p>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS) SELECT id FROM oefening12.toasttest;
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM oefening12.toasttest;
+</code></pre>
+<p>De tweede leest extra buffers uit de TOAST-tabel. Op drie rijen is het verschil klein; op een tabel met een miljoen rijen met TOAST-waarden is het een factor.</p>
+<p><strong>Dit is het concrete argument tegen <code>SELECT *</code></strong> uit deel 3, nu met een mechanisme: het kost letterlijk extra leesbewerkingen, per rij.</p>
+<p>f)</p>
+<pre><code class="language-sql">ALTER TABLE oefening12.toasttest ALTER COLUMN inhoud SET STORAGE EXTERNAL;
+</code></pre>
+<p>De TOAST-tabel wordt <strong>groter</strong> (geen compressie meer), maar het uitlezen van een deel van de waarde wordt sneller omdat er niet gedecomprimeerd hoeft te worden.</p>
+<p>Let op: de wijziging geldt alleen voor <strong>nieuw geschreven</strong> waarden. Bestaande rijen moeten herschreven worden.</p>
+<p>g) Modelantwoord: <em>“Ruwe berichten worden bewaard voor onderzoek en aantoonbaarheid en worden zelden geraadpleegd. Laat de standaard <code>EXTENDED</code> staan: compressie bespaart aanzienlijk op een tabel die vooral groeit. <code>EXTERNAL</code> is pas interessant als we structureel deelvelden uit die berichten gaan opvragen — en dan is de betere vraag of die velden niet als echte kolom horen te bestaan (deel 5).”</em></p>
+<hr>
+<h2>Uitwerking 12.4</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.hot_100 (
+    id integer PRIMARY KEY, status text, notitie text);
+INSERT INTO oefening12.hot_100
+SELECT g, 'open', 'x' FROM generate_series(1, 200000) g;
+CREATE INDEX ON oefening12.hot_100 (status);
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT pg_stat_reset_single_table_counters('oefening12.hot_100'::regclass);
+UPDATE oefening12.hot_100 SET notitie = 'gewijzigd';
+SELECT n_tup_upd, n_tup_hot_upd,
+       round(100.0*n_tup_hot_upd/nullif(n_tup_upd,0),1) AS pct_hot
+FROM pg_stat_user_tables WHERE relname = 'hot_100';
+</code></pre>
+<p>Het percentage is <strong>laag</strong> — vaak onder de 20%. Reden: de tabel is met <code>fillfactor = 100</code> gevuld, dus er is geen ruimte op de pagina voor de nieuwe versie.</p>
+<p>c) Bij het bijwerken van <code>status</code> (wél geïndexeerd) is het percentage <strong>nul</strong>. Voorwaarde 1 voor HOT is geschonden: er wordt een geïndexeerde kolom gewijzigd, dus de index moet hoe dan ook bij.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.hot_85 (
+    id integer PRIMARY KEY, status text, notitie text) WITH (fillfactor = 85);
+</code></pre>
+<p>Zelfde vulling en zelfde experiment. Het HOT-percentage ligt nu <strong>aanzienlijk hoger</strong> — vaak boven de 90%. Er was ruimte op de pagina.</p>
+<p>e) De tabel met <code>fillfactor = 85</code> is bij het vullen <strong>groter</strong> (dezelfde rijen over meer pagina’s). Maar na de updates is het beeld anders: de tabel met fillfactor 100 heeft voor elke update een nieuwe pagina moeten gebruiken én alle indexen bijgewerkt.</p>
+<p><strong>Dat laatste is het punt dat de omvangvergelijking niet toont:</strong> de winst van HOT zit vooral in minder indexbijwerking en minder indexbloat, niet in tabelomvang.</p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT relname, n_tup_upd, n_tup_hot_upd,
+       round(100.0*n_tup_hot_upd/nullif(n_tup_upd,0),1) AS pct_hot
+FROM pg_stat_user_tables
+WHERE schemaname = 'meridiaan_prod' AND n_tup_upd &gt; 0
+ORDER BY n_tup_upd DESC;
+</code></pre>
+<p><strong><code>mutatie</code></strong> is de kandidaat: elke rij wordt precies één keer bijgewerkt (<code>verwerkt_op</code> vullen), en die kolom is niet geïndexeerd. Precies het profiel voor een lagere fill factor.</p>
+<p>g) Omdat fill factor bepaalt hoe vol een pagina wordt <strong>gevuld bij het schrijven</strong>. Bestaande pagina’s zijn al vol; die worden niet vanzelf herschreven. De instelling werkt voor nieuwe pagina’s, en voor de bestaande pas na een herschrijving (<code>VACUUM FULL</code> of <code>pg_repack</code>).</p>
+<hr>
+<h2>Uitwerking 12.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT relname, n_live_tup, n_dead_tup,
+       round(100.0*n_dead_tup/nullif(n_live_tup+n_dead_tup,0),1) AS pct_dood,
+       pg_size_pretty(pg_total_relation_size(relid)) AS omvang, last_autovacuum
+FROM pg_stat_user_tables WHERE schemaname='meridiaan_prod'
+ORDER BY n_dead_tup DESC;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT table_len, tuple_percent, dead_tuple_percent, free_percent
+FROM pgstattuple('mutatie');
+</code></pre>
+<p>De exacte meting wijkt meestal af van de schatting: <code>n_dead_tup</code> wordt door autovacuum bijgewerkt en loopt achter. Ook toont <code>pgstattuple</code> de <strong>vrije ruimte</strong> apart, en dat is precies wat de schatting niet ziet.</p>
+<p>c) <code>pgstattuple</code> scant de hele tabel — op 600 MB duurt dat seconden tot tientallen seconden. <code>pgstattuple_approx</code> gebruikt een steekproef en is ordes van grootte sneller.</p>
+<p><strong>Gebruik <code>approx</code> voor routinecontroles</strong>, de exacte variant alleen als je een beslissing over <code>pg_repack</code> wilt onderbouwen — en dan buiten de piek, want de scan verdringt je bufferpool.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE TABLE oefening12.mut_kopie AS SELECT * FROM mutatie;
+UPDATE oefening12.mut_kopie SET soort = soort WHERE random() &lt; 0.3;
+</code></pre>
+<p>De omvang stijgt met ongeveer 30%; <code>n_dead_tup</code> loopt op naar circa 700.000.</p>
+<p>e) <code>VACUUM</code> brengt <code>n_dead_tup</code> naar nul en <code>free_percent</code> omhoog. <strong>De omvang op schijf blijft gelijk</strong> — de ruimte is herbruikbaar, niet teruggegeven. Dit is dezelfde waarneming als in deel 11, nu op een tabel die je zelf hebt opgeblazen.</p>
+<p>f) <strong>Vacuum kan nu niets opruimen.</strong> De openstaande transactie in sessie 2 heeft een momentopname waarin die oude rijversies mogelijk nog zichtbaar zijn, dus ze moeten bewaard blijven. <code>n_dead_tup</code> blijft hoog en de tabel blijft groeien.</p>
+<p>Controleer met:</p>
+<pre><code class="language-sql">VACUUM (VERBOSE) oefening12.mut_kopie;
+</code></pre>
+<p>De uitvoer meldt dat er rijen niet verwijderd konden worden.</p>
+<p>g) Modelantwoord: <em>“Eén sessie die een transactie open laat staan, blokkeert het opruimen in de hele database — ook in tabellen waar die sessie nooit is geweest, want vacuum moet alles bewaren wat zij nog zou kunnen zien. Daarom is <code>idle in transaction</code> geen netheidskwestie maar de meest onderschatte oorzaak van een volle schijf.”</em></p>
+<hr>
+<h2>Uitwerking 12.6</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT c.relname, age(c.relfrozenxid) AS leeftijd
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'r' AND n.nspname = 'meridiaan_prod'
+ORDER BY 2 DESC;
+</code></pre>
+<p>Op een verse database zijn deze waarden laag (enkele duizenden tot miljoenen).</p>
+<p>b) Deel door 2.000.000.000. Op een verse database is dat een fractie van een procent.</p>
+<p>c) <code>SHOW autovacuum_freeze_max_age;</code> — standaard 200.000.000.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT c.relname,
+       age(c.relfrozenxid) AS leeftijd,
+       current_setting('autovacuum_freeze_max_age')::bigint AS drempel,
+       round(100.0 * age(c.relfrozenxid)
+             / current_setting('autovacuum_freeze_max_age')::bigint, 1) AS pct
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema')
+  AND age(c.relfrozenxid) &gt; current_setting('autovacuum_freeze_max_age')::bigint / 2
+ORDER BY 2 DESC;
+</code></pre>
+<p>e) De vier fasen:</p>
+<ol>
+<li>Autovacuum start een agressieve freeze-run — merkbare I/O, vaak op een ongelegen moment.</li>
+<li>Waarschuwingen in de serverlog.</li>
+<li>Bij circa 3 miljoen resterende transacties: een waarschuwing bij elke commit.</li>
+<li><strong>De database weigert nieuwe transacties.</strong> Alleen lezen nog. Herstel vraagt een handmatige vacuum in single-user mode, met downtime.</li>
+</ol>
+<p>f) Omdat dit de enige waarde uit dit dagdeel is waarbij het falen <strong>catastrofaal en niet geleidelijk</strong> is. Bloat maakt de database traag; wraparound legt hem stil. En het is tegelijk de enige waarde die je <strong>maanden van tevoren</strong> ziet aankomen — er is geen excuus om erdoor verrast te worden.</p>
+<hr>
+<h2>Uitwerking 12.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_dn_incl_idx ON mutatie (deelnemer_id) INCLUDE (aangemeld_op);
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS)
+SELECT deelnemer_id, aangemeld_op FROM mutatie WHERE deelnemer_id = 12345;
+</code></pre>
+<p>Er staat <code>Index Only Scan using mutatie_dn_incl_idx</code>.</p>
+<p>c) Direct na een <code>VACUUM</code> (of <code>ANALYZE</code> plus vacuum) is <code>Heap Fetches</code> laag of nul. Is de tabel sinds de laatste vacuum gewijzigd, dan is het hoger.</p>
+<p>d) Na een <code>UPDATE</code> op een willekeurige rij worden de betrokken pagina’s uit de visibility map gehaald. <code>Heap Fetches</code> gaat omhoog voor query’s die die pagina’s raken.</p>
+<p>e) Na <code>VACUUM mutatie;</code> wordt de visibility map bijgewerkt en zakt <code>Heap Fetches</code> weer.</p>
+<p>f) Omdat de index prima is — hij bevat alle gevraagde kolommen. Wat ontbreekt is de <strong>zichtbaarheidsinformatie</strong>: de index weet niet of een rij zichtbaar is voor jouw transactie. Alleen de visibility map kan dat garanderen, en die wordt door vacuum bijgewerkt.</p>
+<p><strong>Dit is de derde plek in de cursus waar vacuum een prestatievraag blijkt te zijn</strong>: eerder waren het de statistieken (deel 8) en de bloat. Een deelnemer die dit patroon herkent, diagnosticeert dit soort problemen voortaan zelf.</p>
+<hr>
+<h2>Uitwerking 12.8</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT attname, n_distinct, correlation
+FROM pg_stats
+WHERE schemaname='meridiaan_prod' AND tablename='mutatie'
+ORDER BY abs(correlation) DESC NULLS LAST;
+</code></pre>
+<p>b) <strong><code>mutatie_id</code></strong> heeft een correlatie van vrijwel exact 1: de identiteitskolom loopt op in dezelfde volgorde waarin de rijen zijn ingevoegd.</p>
+<p>c) Een indexscan over een bereik op die kolom leest <strong>aaneengesloten pagina’s</strong> in plaats van door de tabel te springen. Dat is aanzienlijk goedkoper, en de planner rekent ermee.</p>
+<p>d) <code>deelnemer_id</code> is laag gecorreleerd. Het vulscript voegt de mutaties in per herhaling over alle deelnemers, dus de rijen van één deelnemer liggen verspreid over de hele tabel.</p>
+<p>e) <strong>Goede BRIN-kandidaat:</strong> <code>mutatie_id</code>, en <code>aangemeld_op</code> voor zover die met de invoegvolgorde meeloopt. Een BRIN-index slaat per blokgroep alleen het minimum en maximum op en is daardoor minuscuul — maar hij werkt alleen bij hoge correlatie.</p>
+<p><strong>Absoluut geen BRIN-kandidaat:</strong> <code>deelnemer_id</code>. Bij lage correlatie bevat vrijwel elke blokgroep vrijwel elke waarde, en dan sluit de index niets uit — je leest de hele tabel én de index.</p>
+<p>Dit is de voorbereiding op deel 14.</p>
+<hr>
+<h2>Uitwerking 12.9 — modelantwoord (verkort)</h2>
+<p><strong>Opslagadvies <code>meridiaan_prod</code></strong></p>
+<p><strong>1. Huidige situatie</strong></p>
+<table>
+<thead>
+<tr>
+<th>Tabel</th>
+<th>Totaal</th>
+<th>Waarvan index</th>
+<th>Waarvan TOAST</th>
+<th>Geschatte bloat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mutatie</code></td>
+<td>~600 MB</td>
+<td>~110 MB</td>
+<td>—</td>
+<td>15-25%</td>
+</tr>
+<tr>
+<td><code>aanspraak</code></td>
+<td>~60 MB</td>
+<td>~15 MB</td>
+<td>—</td>
+<td>laag</td>
+</tr>
+<tr>
+<td><code>dienstverband</code></td>
+<td>~50 MB</td>
+<td>~15 MB</td>
+<td>—</td>
+<td>laag</td>
+</tr>
+<tr>
+<td><code>deelnemer</code></td>
+<td>~50 MB</td>
+<td>~20 MB</td>
+<td>—</td>
+<td>laag</td>
+</tr>
+<tr>
+<td><code>premienota</code></td>
+<td>~20 MB</td>
+<td>~10 MB</td>
+<td>—</td>
+<td>laag</td>
+</tr>
+</tbody>
+</table>
+<p><em>(Vul in met je eigen metingen; de verhoudingen zijn wat telt.)</em></p>
+<p><strong>2. Maatregelen</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Maatregel</th>
+<th>Levert op</th>
+<th>Kost</th>
+<th>Downtime</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>fillfactor = 85</code> op <code>mutatie</code> + herschrijven</td>
+<td>HOT-percentage van &lt;20% naar &gt;90%; minder indexbloat op termijn</td>
+<td>Tabel 15% meer pagina’s</td>
+<td>Nee, met <code>pg_repack</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Autovacuum-drempel <code>mutatie</code> verlagen (deel 11)</td>
+<td>Bloat blijft in evenwicht in plaats van op te lopen</td>
+<td>Iets meer I/O</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>pg_repack</code> op <code>mutatie</code></td>
+<td>Eenmalig ~100-150 MB terug</td>
+<td>Tijdelijk dubbele ruimte</td>
+<td>Nee, korte lock</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Kolomvolgorde <code>mutatie</code> herzien</td>
+<td>Klein; hier weinig te winnen</td>
+<td>Migratie van 2,4 mln rijen</td>
+<td>Ja, of meerstaps</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>idle_in_transaction_session_timeout</code></td>
+<td>Voorkomt de belangrijkste bloatoorzaak</td>
+<td>Sessies worden afgebroken</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>REINDEX CONCURRENTLY</code> op de indexen van <code>mutatie</code></td>
+<td>Indexbloat weg</td>
+<td>Tijd, tijdelijk dubbele ruimte</td>
+<td>Nee</td>
+</tr>
+</tbody>
+</table>
+<p><strong>3. Prioritering</strong></p>
+<p><em>Voorkomen dat het terugkomt (eerst!):</em></p>
+<ul>
+<li>Maatregel 5 — lang lopende transacties zijn de meest onderschatte oorzaak</li>
+<li>Maatregel 2 — anders loopt de bloat na elke opruiming opnieuw op</li>
+<li>Maatregel 1 — structureel minder nieuwe bloat</li>
+</ul>
+<p><em>Daarna opruimen:</em></p>
+<ul>
+<li>Maatregel 3 en 6</li>
+</ul>
+<p><strong>De volgorde is het advies.</strong> Wie begint met opruimen zonder de oorzaak weg te nemen, voert dit gesprek over een half jaar opnieuw met dezelfde cijfers.</p>
+<p><strong>4. Afgeraden: maatregel 4 (kolomvolgorde herzien)</strong></p>
+<p>De winst op <code>mutatie</code> is klein, omdat de variabele kolommen al achteraan staan. De kosten zijn een migratie van 2,4 miljoen rijen met bijbehorend risico. <strong>Wél doen</strong> bij het ontwerp van nieuwe tabellen — dan is het gratis. Dit is een maatregel die alleen vooraf loont.</p>
+<p><strong>5. Monitoring</strong></p>
+<table>
+<thead>
+<tr>
+<th>Wat</th>
+<th>Query/bron</th>
+<th>Drempel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bloatpercentage per tabel</td>
+<td><code>pg_stat_user_tables</code>, wekelijks</td>
+<td>Trend belangrijker dan waarde; alarm bij &gt;50%</td>
+</tr>
+<tr>
+<td>Langste openstaande transactie</td>
+<td><code>pg_stat_activity</code></td>
+<td>Waarschuwing bij &gt;10 min</td>
+</tr>
+<tr>
+<td><strong><code>age(relfrozenxid)</code></strong></td>
+<td><code>pg_class</code></td>
+<td><strong>Waarschuwing bij 50% van <code>autovacuum_freeze_max_age</code></strong></td>
+</tr>
+<tr>
+<td>HOT-percentage <code>mutatie</code></td>
+<td><code>pg_stat_user_tables</code></td>
+<td>Alarm als het onder 80% zakt</td>
+</tr>
+<tr>
+<td>Schijfgebruik totaal</td>
+<td>OS-monitoring</td>
+<td>Waarschuwing bij 75%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>De volgorde in punt 3.</strong> Groepen die met <code>pg_repack</code> beginnen, behandelen het symptoom. Vraag: <em>“hoe ziet deze tabel er over zes maanden uit?”</em></li>
+<li><strong>Cijfers bij de maatregelen.</strong> “Levert ruimte op” is geen cijfer.</li>
+<li><strong><code>age(relfrozenxid)</code> in de monitoring.</strong> Dit is de enige waarde waarbij falen catastrofaal is, en hij wordt het vaakst vergeten.</li>
+<li><strong>De afgeraden maatregel.</strong> Groepen die “geen tijd” schrijven, hebben geen afweging gemaakt. Het goede antwoord bij maatregel 4 bevat de nuance dat het vooraf gratis is en achteraf duur.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 12.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">58 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">384 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-11-installatie-configuratie-en-tablespaces/reader.html">&larr; Deel 11 — Installatie, configuratie en tablespaces</a><a class="dbm-prevnext next" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

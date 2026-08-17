@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Installatie, configuratie en tablespaces — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 11 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 11 — Slidedeck</h1>
+<p><strong>Installatie, configuratie en tablespaces</strong>
+Niveau 2, dagdeel 1 (deel 11 van 30) | 38 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Niveau 2</h1>
+<h2>DBA en consultant</h2>
+<h3>Deel 11 — Installatie, configuratie en tablespaces</h3>
+<hr>
+<h2>Slide 2 — Wat er verandert</h2>
+<table>
+<thead>
+<tr>
+<th>Niveau 1</th>
+<th>Niveau 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Werkt het?</td>
+<td>Werkt het <strong>onder belasting, over jaren</strong>?</td>
+</tr>
+<tr>
+<td>Op mijn machine</td>
+<td>Op een server die ik <strong>deel</strong></td>
+</tr>
+<tr>
+<td>Misgaat? Opnieuw laden</td>
+<td>Misgaat? <strong>Herstellen én aantonen</strong></td>
+</tr>
+<tr>
+<td>Ik ben de enige</td>
+<td><strong>Honderd sessies tegelijk</strong></td>
+</tr>
+<tr>
+<td>Standaardinstellingen</td>
+<td>Instellingen die ik <strong>kan verantwoorden</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 3 — De casus: Open Pensioen fase 2</h2>
+<ul>
+<li><strong>340.000</strong> deelnemers, 4.100 werkgevers, <strong>2,4 miljoen</strong> mutaties</li>
+<li>Portaal live: <strong>3.000 gelijktijdige bezoekers</strong> in de piek</li>
+<li>Vier verwerkingsprocessen, continu</li>
+<li>Rapportage tijdens kantooruren, dezelfde database</li>
+<li><strong>Eén server:</strong> 32 GB, 8 cores, SSD</li>
+</ul>
+<hr>
+<h2>Slide 4 — Ruud heeft twee vragen</h2>
+<h1>1. Welke instellingen zet ik waarop,</h1>
+<h1>en waarom?</h1>
+<h1>2. Hoe weet ik dat het geholpen heeft?</h1>
+<p><strong>Notities:</strong> de tweede vergeten deelnemers. Breng hem de hele dag terug.</p>
+<hr>
+<h2>Slide 5 — De waarschuwing van dit niveau</h2>
+<p>Instellingsadvies op internet is vaak:
+verouderd · voor draaiende schijven · van een andere werklast</p>
+<h1>Elke waarde die je overneemt</h1>
+<h1>zonder te weten waaróm, is een gok.</h1>
+<hr>
+<h2>Slide 6 — Opdracht 11.1</h2>
+<h1>Je server leren kennen</h1>
+<p>⚠ Werk je in Docker? Controleer het geheugen <strong>in de container</strong>, niet op je laptop.</p>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 7 — Even iets meten</h2>
+<pre><code class="language-sql">SELECT pg_size_pretty(pg_total_relation_size('mutatie'));
+SELECT n_live_tup, n_dead_tup FROM pg_stat_user_tables
+WHERE relname = 'mutatie';
+</code></pre>
+<p><strong>Notities:</strong> plenair. Bijna één dode rij per levende.</p>
+<hr>
+<h2>Slide 8 — Wat heeft dit veroorzaakt?</h2>
+<p>Het laadscript eindigde met:</p>
+<pre><code class="language-sql">UPDATE mutatie SET verwerkt_op = … WHERE random() &lt; 0.88;
+</code></pre>
+<p>2,1 miljoen rijen bijgewerkt →
+2,1 miljoen <strong>nieuwe rijversies</strong>, de oude staan er nog.</p>
+<p><em>Deel 7, nu met een getal erbij.</em></p>
+<hr>
+<h2>Slide 9 — VACUUM</h2>
+<pre><code class="language-sql">VACUUM (VERBOSE) mutatie;
+</code></pre>
+<p><code>n_dead_tup</code> → 0</p>
+<h1>Maar de tabel wordt niet kleiner.</h1>
+<p>De ruimte is <strong>herbruikbaar binnen de tabel</strong> —
+hij gaat niet terug naar het besturingssysteem.</p>
+<hr>
+<h2>Slide 10 — VACUUM FULL wel</h2>
+<p>Maar:</p>
+<ol>
+<li><code>ACCESS EXCLUSIVE</code> — <strong>alles wacht</strong></li>
+<li>Tijdelijk een <strong>volledige tweede kopie</strong> nodig</li>
+</ol>
+<h1>Dus juist niet mogelijk in de situatie</h1>
+<h1>waarin je eraan denkt: een volle schijf.</h1>
+<hr>
+<h2>Slide 11 — Opdracht 11.2</h2>
+<h1>De bloat van het laadscript</h1>
+<p>Deze meting kun je maar één keer doen.</p>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 12 — Waar komt een waarde vandaan?</h2>
+<pre><code>1. ingebouwde standaard
+2. postgresql.conf
+3. postgresql.auto.conf     (ALTER SYSTEM)
+4. opstartparameters
+5. ALTER DATABASE … SET
+6. ALTER ROLE … SET
+7. SET                       (sessie)
+8. SET LOCAL                 (transactie)
+</code></pre>
+<p><strong>De laatste wint.</strong></p>
+<hr>
+<h2>Slide 13 — Het probleem</h2>
+<p>Rapportage wil <strong>256 MB</strong> om te kunnen sorteren.
+Het portaal heeft <strong>150 sessies</strong>.</p>
+<h1>Welke waarde zet je?</h1>
+<p><strong>Notities:</strong> laat de zaal worstelen voordat je slide 14 toont.</p>
+<hr>
+<h2>Slide 14 — De oplossing</h2>
+<pre><code class="language-sql">ALTER ROLE rapportage  SET work_mem = '256MB';
+ALTER ROLE portaal_app SET work_mem = '8MB';
+</code></pre>
+<h1>Eén globale waarde kan zelden</h1>
+<h1>aan twee eisen voldoen.</h1>
+<p>De belangrijkste instellingstruc van dit dagdeel.</p>
+<hr>
+<h2>Slide 15 — Herstart of herladen?</h2>
+<pre><code class="language-sql">SELECT name, setting, context FROM pg_settings WHERE …;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th><code>context</code></th>
+<th>Vereist</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>postmaster</code></td>
+<td><strong>Herstart</strong></td>
+</tr>
+<tr>
+<td><code>sighup</code></td>
+<td>Herladen</td>
+</tr>
+<tr>
+<td><code>superuser</code> / <code>user</code></td>
+<td>Niets</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 16 — Bundel je herstarts</h2>
+<p><code>shared_buffers</code> · <code>max_connections</code> · <code>wal_level</code> · <code>shared_preload_libraries</code></p>
+<h1>Zet bij een nieuwe server meteen</h1>
+<h1><code>shared_preload_libraries = 'pg_stat_statements'</code>.</h1>
+<p>Kost niets. Je hebt het in deel 13 nodig. En het vraagt een herstart.</p>
+<hr>
+<h2>Slide 17 — Opdracht 11.3 &amp; 11.4</h2>
+<p><strong>11.3</strong> De configuratiebronnen — <em>20 min, tweetallen</em>
+<strong>11.4</strong> Herstart of herladen — <em>10 min</em></p>
+<hr>
+<h2>Slide 18 — Pauze</h2>
+<hr>
+<h2>Slide 19 — shared_buffers</h2>
+<h1>25% van het RAM.</h1>
+<p>Waarom niet meer? <strong>Double buffering</strong> —
+PostgreSQL leunt bewust óók op de OS-cache.
+Een pagina in beide caches kost twee keer geheugen.</p>
+<p>32 GB → <strong>8 GB</strong></p>
+<hr>
+<h2>Slide 20 — work_mem</h2>
+<p><strong>Per bewerking. Per verbinding. Het vermenigvuldigt.</strong></p>
+<pre><code>RAM − shared_buffers − OS
+──────────────────────────  = veilige waarde
+  gelijktijdige bewerkingen
+</code></pre>
+<p>150 sessies × 3 sorteringen × 8 MB = 3,6 GB ✓
+150 × 3 × 256 MB = 115 GB ✗</p>
+<hr>
+<h2>Slide 21 — effective_cache_size</h2>
+<h1>Dit is géén toewijzing.</h1>
+<p>Het is een <strong>schatting die je aan de planner geeft</strong>
+over hoeveel er waarschijnlijk gecachet is.</p>
+<p>Hoger → indexscans aantrekkelijker.</p>
+<p>32 GB → <strong>24 GB</strong>. Kost niets.</p>
+<hr>
+<h2>Slide 22 — maintenance_work_mem</h2>
+<p>Voor <code>VACUUM</code>, <code>CREATE INDEX</code>, <code>ALTER TABLE</code>.
+Mag ruim: er zijn er zelden veel tegelijk. → <strong>1 GB</strong></p>
+<p>⚠ Maar <code>autovacuum_work_mem = -1</code> betekent dat
+<strong>elk</strong> autovacuum-proces deze waarde pakt.</p>
+<p>5 workers × 1 GB = 5 GB. Zet hem apart.</p>
+<hr>
+<h2>Slide 23 — Opdracht 11.5</h2>
+<h1>Geheugen instellen voor Meridiaan</h1>
+<p>32 GB · 8 cores · SSD · 150 gelijktijdige query’s in de piek</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 24 — Pauze</h2>
+<hr>
+<h2>Slide 25 — De planner kent je hardware niet</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Standaard</th>
+<th>SSD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>random_page_cost</code></td>
+<td><strong>4.0</strong></td>
+<td><strong>1.1</strong></td>
+</tr>
+<tr>
+<td><code>effective_io_concurrency</code></td>
+<td>1</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p>4.0 zegt: willekeurig lezen is 4× zo duur als sequentieel.
+Dat klopte op een <strong>draaiende schijf</strong>.</p>
+<hr>
+<h2>Slide 26 — Vaak de goedkoopste winst</h2>
+<p>Eén parameter · geen herstart · geen geheugen</p>
+<h1>En indexen worden ineens gebruikt</h1>
+<h1>waar ze eerst genegeerd werden.</h1>
+<p>Maar: begin bij 1.1 en <strong>meet</strong>. Onder 1.0 draai je de fout om.</p>
+<hr>
+<h2>Slide 27 — Opdracht 11.6</h2>
+<h1>De planner en je opslag</h1>
+<p>Inclusief: zet hem eens op 0.5 en kijk wat er gebeurt.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 28 — Checkpoints</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Richtwaarde</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checkpoint_timeout</code></td>
+<td>15min <em>(standaard 5)</em></td>
+</tr>
+<tr>
+<td><code>max_wal_size</code></td>
+<td>4-8GB <em>(standaard 1)</em></td>
+</tr>
+<tr>
+<td><code>checkpoint_completion_target</code></td>
+<td>0.9</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Signaal dat je te vaak checkpoint:</strong></p>
+<pre><code class="language-sql">SELECT checkpoints_timed, checkpoints_req FROM pg_stat_bgwriter;
+</code></pre>
+<p>Zet <code>log_checkpoints = on</code>, anders gok je.</p>
+<hr>
+<h2>Slide 29 — Autovacuum: de formule</h2>
+<pre><code>drempel = 50 + 0,2 × aantal rijen
+</code></pre>
+<p><code>mutatie</code> = 2,4 miljoen rijen
+→ <strong>478.000 wijzigingen</strong> voordat er iets gebeurt</p>
+<p>Bij 20.000 per dag:</p>
+<h1>24 dagen.</h1>
+<hr>
+<h2>Slide 30 — En intussen?</h2>
+<ul>
+<li>De tabel groeit met dode rijversies</li>
+<li><strong>De statistieken verouderen</strong></li>
+<li>De planner kiest slechtere plannen</li>
+</ul>
+<h1>Dit is melding B uit opdracht 8.7:</h1>
+<h1>*&quot;vorige week 2 seconden, nu 4 minuten,</h1>
+<h1>de query is niet veranderd.&quot;*</h1>
+<hr>
+<h2>Slide 31 — Per tabel bijstellen</h2>
+<pre><code class="language-sql">ALTER TABLE mutatie SET (
+    autovacuum_vacuum_scale_factor  = 0.01,
+    autovacuum_analyze_scale_factor = 0.005
+);
+</code></pre>
+<p><strong>Per tabel, niet globaal.</strong> Op <code>werkgever</code> met 4.100 rijen
+levert vaker vacuümen niets op.</p>
+<hr>
+<h2>Slide 32 — Opdracht 11.7</h2>
+<h1>Autovacuum afstellen</h1>
+<p>Inclusief: een collega wil hem 's nachts uitzetten.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 33 — max_connections is een bovengrens</h2>
+<p><strong>Geen capaciteit.</strong></p>
+<p>Praktische grens: 2-4× het aantal cores aan
+<em>gelijktijdig actieve</em> backends.</p>
+<p>3.000 portaalbezoekers → <strong>geen</strong> 3.000 verbindingen.
+→ PgBouncer (deel 19)</p>
+<hr>
+<h2>Slide 34 — Logging voor productie</h2>
+<pre><code>log_min_duration_statement = 1000
+log_checkpoints = on
+log_lock_waits = on          ← het probleem uit deel 7
+log_temp_files = 0           ← signaal dat work_mem te laag staat
+</code></pre>
+<p>⚠ <strong>Niet</strong> <code>log_min_duration_statement = 0</code> —
+dan staan er persoonsgegevens in je log (deel 9).</p>
+<hr>
+<h2>Slide 35 — Tablespaces</h2>
+<p><strong>Nuttig bij:</strong> verschillende opslagsoorten, of een volle schijf</p>
+<p><strong>Alleen complexiteit bij:</strong> één volume opdelen “voor de overzichtelijkheid”</p>
+<p>⚠ Een filesystem-back-up moet <strong>alle</strong> tablespaces meenemen.
+Vergeet er één → onvolledig herstel, ontdekt op het slechtste moment.</p>
+<hr>
+<h2>Slide 36 — Configuratie als code</h2>
+<ol>
+<li><code>postgresql.conf</code> in <strong>versiebeheer</strong>, met reden per waarde</li>
+<li>Alleen <strong>afwijkingen</strong> vastleggen</li>
+<li><code>ALTER SYSTEM</code> spaarzaam — en daarna alsnog vastleggen</li>
+<li><strong>Acceptatie = productie</strong>, alleen geheugen geschaald</li>
+</ol>
+<pre><code class="language-sql">SELECT name, setting, source FROM pg_settings
+WHERE source NOT IN ('default','override');
+</code></pre>
+<hr>
+<h2>Slide 37 — Terug naar Ruuds tweede vraag</h2>
+<table>
+<thead>
+<tr>
+<th>Wijziging</th>
+<th>Hoe weet je of hij werkte</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>shared_buffers</code></td>
+<td>cachetrefkans in <code>pg_stat_database</code></td>
+</tr>
+<tr>
+<td><code>random_page_cost</code></td>
+<td><code>EXPLAIN ANALYZE</code>, vóór en ná</td>
+</tr>
+<tr>
+<td>checkpoints</td>
+<td><code>pg_stat_bgwriter</code></td>
+</tr>
+<tr>
+<td><code>work_mem</code></td>
+<td><code>log_temp_files</code></td>
+</tr>
+<tr>
+<td>autovacuum</td>
+<td><code>n_dead_tup</code>, <code>last_autovacuum</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reset eerst:</strong> <code>SELECT pg_stat_reset();</code></p>
+<hr>
+<h2>Slide 38 — Opdracht 11.9 &amp; volgende keer</h2>
+<p><strong>11.9</strong> Het configuratievoorstel voor Ruud — <em>35 min, drietallen</em>
+Inclusief: wat je <strong>bewust op standaard laat</strong>, en waarom.</p>
+<p><strong>Deel 12 — Fysiek ontwerp</strong>
+Pagina’s, TOAST, fill factor. De bloat van vanochtend was maar één
+van de redenen waarom een tabel groter is dan wat erin staat.</p>
+<hr>
+<p><em>Einde slidedeck deel 11.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">64 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">412 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../../niveau-1/deel-10-capstone-de-meridiaan-datalaag/opdrachtdocument.html">&larr; Deel 10 — Capstone: de Meridiaan-datalaag</a><a class="dbm-prevnext next" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

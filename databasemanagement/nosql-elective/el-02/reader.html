@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Wide-column en graaf in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; NoSQL-elective &rsaquo; Wide-column en graaf in de praktijk &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>NoSQL-elective, deel 2 — Wide-column en graaf in de praktijk</h1>
+<p><strong>Cursus Databasemanagement — Elective, niveau 2: DBA en consultant</strong>
+Deelnemersreader | Elective-deel 2 van 2 — buiten de dertig-delen-nummering
+Geen aparte certificeringslijn — verdiepend op deel 21</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Terugblik: de twee resterende scenario’s uit deel 21</li>
+<li>Wide-column: het datamodel van Cassandra</li>
+<li>Praktijk: een logtabel ontworpen rond de query</li>
+<li>Graaf: het model van Neo4j</li>
+<li>Praktijk: de relatiequery uit deel 21, uitgewerkt in Cypher</li>
+<li>Grenzen: wat deze twee systemen niet goed kunnen</li>
+<li>Terugblik op de hele elective</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+<li>Verder lezen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>het wide-column-datamodel van Cassandra (partition key, clustering key) toepassen op een schrijfschaal-scenario;</li>
+<li>een tabelontwerp maken dat rond de query is opgebouwd in plaats van rond de entiteit, en het verschil met het relationele ontwerpwerk uit niveau 1 benoemen;</li>
+<li>het graafmodel van Neo4j (nodes, relationships, properties) toepassen op een relatieanalysevraag;</li>
+<li>een Cypher-query lezen en vergelijken met het recursieve-CTE-alternatief uit deel 4 en deel 8;</li>
+<li>voor beide systemen de operationele grenzen benoemen die maken dat ze PostgreSQL niet vervangen, maar aanvullen.</li>
+</ul>
+<hr>
+<h2>2. Terugblik: de twee resterende scenario’s uit deel 21</h2>
+<p>Elective-deel 1 werkte de cache-laag (Redis) en documentopslag (MongoDB) uit. Dit deel werkt de andere twee eerlijke NoSQL-gevallen uit deel 21, paragraaf 13 uit:</p>
+<ul>
+<li><strong>Relatieanalyse die inherent graafvormig is</strong> — “welke deelnemers delen een werkgever binnen twee schakels van een gegeven deelnemer” was daar het voorbeeld, met de constatering dat een recursieve CTE dit mogelijk maakt maar onhandelbaar wordt bij grote, diepe netwerken.</li>
+<li><strong>Logging/telemetrie op zeer grote, ongestructureerde schaal</strong>, waar schrijfschaal over honderden servers de eis is.</li>
+</ul>
+<p>Zoals bij deel 1 van deze elective geldt: PostgreSQL blijft de bron van waarheid voor Meridiaans kernregistratie. Deze twee systemen komen ernaast, voor een specifiek toegangspatroon.</p>
+<hr>
+<h2>3. Wide-column: het datamodel van Cassandra</h2>
+<p>Cassandra organiseert data in tabellen, maar het ontwerp draait om twee sleuteltypen die in het relationele model geen directe tegenhanger hebben:</p>
+<ul>
+<li><strong>Partition key</strong> — bepaalt op welke machine (van de vele in een cluster) een rij terechtkomt. Alle rijen met dezelfde partition key staan bij elkaar.</li>
+<li><strong>Clustering key</strong> — bepaalt de sorteervolgorde van rijen <em>binnen</em> een partition.</li>
+</ul>
+<p><strong>De denk-omkering ten opzichte van niveau 1:</strong> in deel 5 ontwerp je een tabel rond de entiteit (“wat is een deelnemer, wat is een mutatie”) en laat je de query’s daarna volgen. In Cassandra ontwerp je de tabel <strong>rond de query die je erop gaat stellen</strong> — vaak resulteert dat in meerdere tabellen met dezelfde onderliggende data, elk geoptimaliseerd voor één specifieke leesvraag. Dat voelt tegennatuurlijk na tien delen relationeel ontwerpen, en is precies waarom dit een expliciete paragraaf krijgt.</p>
+<p><strong>Waarom dit zo goed schaalt voor schrijven:</strong> omdat de partition key vooraf bepaalt waar een rij naartoe gaat, kan Cassandra schrijven over honderden machines verdelen zonder coördinatie tussen die machines nodig te hebben. De prijs: ad-hoc query’s die niet op de partition key filteren, zijn traag of onmogelijk zonder een aparte tabel voor dat toegangspatroon te bouwen — het omgekeerde van een relationele database, waar je met een nieuwe <code>WHERE</code>-clausule vrijwel altijd verder komt.</p>
+<hr>
+<h2>4. Praktijk: een logtabel ontworpen rond de query</h2>
+<p>Meridiaans portaal genereert per bezoek een telemetrie-record: welke deelnemer, welke pagina, wanneer, vanuit welke sessie. Bij duizenden gelijktijdige gebruikers is dit precies het scenario uit deel 21, paragraaf 13: “logging op zeer grote, ongestructureerde schaal”.</p>
+<p>De vraag die het ontwerp bepaalt: <strong>“laat mij de laatste honderd paginaweergaven van deelnemer X zien, nieuwste eerst.”</strong> Een tabel die daar direct op is ingericht:</p>
+<pre><code class="language-cql">CREATE TABLE portaal_bezoeken_per_deelnemer (
+  deelnemer_id bigint,
+  bezocht_op timestamp,
+  pagina text,
+  sessie_id text,
+  PRIMARY KEY (deelnemer_id, bezocht_op)
+) WITH CLUSTERING ORDER BY (bezocht_op DESC);
+</code></pre>
+<p><code>deelnemer_id</code> is de partition key — alle bezoeken van één deelnemer staan bij elkaar, op één plek in het cluster. <code>bezocht_op</code> is de clustering key met aflopende sortering — de query “laatste honderd” is dan een simpele, snelle range-scan binnen één partition:</p>
+<pre><code class="language-cql">SELECT pagina, bezocht_op FROM portaal_bezoeken_per_deelnemer
+WHERE deelnemer_id = 4821
+LIMIT 100;
+</code></pre>
+<p><strong>Een tweede vraag, “hoeveel bezoeken waren er gisteren over alle deelnemers”, vraagt om een tweede tabel</strong> — bijvoorbeeld met de datum als partition key. Dat is geen omweg maar het normale patroon: in Cassandra bouw je typisch één tabel per belangrijk toegangspatroon, met bewust gedupliceerde data. Vergelijk dit met een gedenormaliseerde rapportagetabel in PostgreSQL (zoals eventueel besproken bij partitionering, deel 16) — het idee is verwant, maar in Cassandra is het de standaard werkwijze, niet de uitzondering.</p>
+<hr>
+<h2>5. Graaf: het model van Neo4j</h2>
+<p>Neo4j slaat data op als <strong>nodes</strong> (knopen, vergelijkbaar met entiteiten), <strong>relationships</strong> (relaties tussen nodes, met een eigen richting en type) en <strong>properties</strong> (attributen op zowel nodes als relationships).</p>
+<p>Het verschil met het relationele model zit niet in <em>wat</em> wordt vastgelegd — een foreign key en een relationship leggen allebei een verband tussen twee dingen vast — maar in <em>hoe</em> het wordt doorlopen. Een relationele join berekent het verband tijdens de query, elke keer opnieuw. In Neo4j is de relatie een fysiek opgeslagen verbinding tussen twee knopen — het doorlopen van een pad kost daardoor een constante tijd per stap, ongeacht hoeveel data er in de rest van de database staat. Dat is de reden dat graafdatabases schalen bij diepe paden waar relationele joins dat niet doen.</p>
+<hr>
+<h2>6. Praktijk: de relatiequery uit deel 21, uitgewerkt in Cypher</h2>
+<p>Deel 21, paragraaf 13 noemde de vraag: <strong>welke deelnemers delen een werkgever binnen twee schakels van een gegeven deelnemer, via welke tussenliggende relaties.</strong></p>
+<p>In Cypher (Neo4j’s querytaal), met <code>Deelnemer</code>-nodes en <code>WERKT_BIJ</code>-relaties naar <code>Werkgever</code>-nodes:</p>
+<pre><code class="language-cypher">MATCH (d1:Deelnemer {id: 4821})-[:WERKT_BIJ]-&gt;(w:Werkgever)&lt;-[:WERKT_BIJ]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN DISTINCT d2.naam, w.naam AS gedeelde_werkgever;
+</code></pre>
+<p>Dit vindt directe collega’s — deelnemers die bij dezelfde werkgever werken. Voor “binnen twee schakels” (bijvoorbeeld: collega’s van collega’s, via een tussenliggende relatie zoals een gezamenlijk project) breid je het pad uit:</p>
+<pre><code class="language-cypher">MATCH path = (d1:Deelnemer {id: 4821})-[:WERKT_BIJ|DEELNEEMT_AAN*1..2]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN DISTINCT d2.naam, [r IN relationships(path) | type(r)] AS via;
+</code></pre>
+<p><strong>Vergelijk met de recursieve CTE uit deel 4/8:</strong> dezelfde vraag in SQL zou een recursieve CTE vragen die bij elke stap opnieuw joint tegen de relatietabellen — werkbaar bij twee schakels, maar de queryplanner heeft geen structurele kennis van “dit is een pad” zoals Cypher dat wel heeft. Naarmate het aantal schakels groeit (vier, vijf, “onbekend hoeveel”), groeit de SQL-vorm in complexiteit en neemt de queryperformance sterker af dan bij Cypher, waar het pad een eersteklas concept is in plaats van een herhaalde join.</p>
+<p><strong>Dit is exact het onderscheid uit deel 21:</strong> bij twee schakels is de recursieve CTE prima werkbaar — geen reden om over te stappen. Bij grote, diepe, onvoorspelbare netwerken (bijvoorbeeld: fraudeorganisaties over meerdere schakels, iets buiten Meridiaans huidige scope maar een reëel scenario in de sector) wordt het verschil beslissend.</p>
+<hr>
+<h2>7. Grenzen: wat deze twee systemen niet goed kunnen</h2>
+<p><strong>Cassandra: eventual consistency.</strong> Bij een gedistribueerd cluster is er geen garantie dat een schrijving op het ene knooppunt onmiddellijk zichtbaar is bij een lezing op een ander knooppunt — het systeem “convergeert” na verloop van tijd naar consistentie, maar niet direct. Voor Meridiaans telemetrie is dat acceptabel (een paginaweergave die een paar seconden later zichtbaar wordt, doet er niet toe). Voor iets als een pensioensaldo zou dit onacceptabel zijn — precies waarom die data in PostgreSQL blijft, met zijn ACID-garanties uit deel 7.</p>
+<p><strong>Cassandra: geen ad-hoc query’s.</strong> Een vraag waar bij het ontwerp niet aan gedacht is, vraagt om een nieuwe tabel en een herschrijfproces om die te vullen — er is geen <code>WHERE</code>-clausule die je zomaar toevoegt zoals in PostgreSQL.</p>
+<p><strong>Neo4j: beperkte aggregatiekracht.</strong> Grote, brede aggregaties (“gemiddeld pensioensaldo per leeftijdscategorie over alle 340.000 deelnemers”) zijn niet waar een graafdatabase sterk in is — dat blijft het domein van het relationele model met zijn <code>GROUP BY</code> en, voor echt grote analytische vragen, de kolomgeoriënteerde platformen uit deel 1, paragraaf 5.7.</p>
+<hr>
+<h2>8. Terugblik op de hele elective</h2>
+<p>Vier systemen, vier scenario’s, telkens dezelfde vraag: is er een concreet, gemeten toegangspatroon dat een gespecialiseerde structuur nodig heeft, en weegt de winst op tegen de operationele meerkost van een extra systeem?</p>
+<table>
+<thead>
+<tr>
+<th>Systeem</th>
+<th>Scenario</th>
+<th>Wat het uniek goed kan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis</td>
+<td>Sessie-cache</td>
+<td>Sub-milliseconde sleutel-opzoeking</td>
+</tr>
+<tr>
+<td>MongoDB</td>
+<td>Documentopslag</td>
+<td>Sterk variërend schema per record</td>
+</tr>
+<tr>
+<td>Cassandra</td>
+<td>Telemetrie/logging</td>
+<td>Schrijfschaal over vele machines</td>
+</tr>
+<tr>
+<td>Neo4j</td>
+<td>Relatieanalyse</td>
+<td>Constante tijd per stap in een diep pad</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wat niet verandert:</strong> Meridiaans kernregistratie — deelnemers, dienstverbanden, aanspraken, mutaties — blijft relationeel, in PostgreSQL, om precies de redenen die de eerste twintig delen van deze cursus hebben opgebouwd: integriteit, transactionele garanties en query-flexibiliteit die generiek genoeg is voor vragen die niemand vooraf heeft bedacht.</p>
+<hr>
+<h2>9. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Vermijd het door</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cassandra-tabel ontwerpen rond de entiteit i.p.v. de query</td>
+<td>Trage of onmogelijke ad-hoc query’s</td>
+<td>Bij elk ontwerp expliciet de query benoemen die de tabel moet bedienen</td>
+</tr>
+<tr>
+<td>Eventual consistency van Cassandra negeren</td>
+<td>Onverwacht gedrag bij tijdgevoelige logica</td>
+<td>Alleen gebruiken waar tijdelijke inconsistentie acceptabel is</td>
+</tr>
+<tr>
+<td>Neo4j inzetten voor brede aggregaties</td>
+<td>Slechte performance, verkeerd gereedschap</td>
+<td>Aggregaties in PostgreSQL houden, paden in Neo4j</td>
+</tr>
+<tr>
+<td>De vier systemen als vervanging van PostgreSQL zien</td>
+<td>Verlies van integriteit waar die nodig is</td>
+<td>Herhaaldelijk terug naar de grondvraag uit deel 21, paragraaf 14</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>10. Kernbegrippen</h2>
+<p><strong>Partition key</strong> — bepaalt op welk knooppunt een Cassandra-rij wordt opgeslagen.
+<strong>Clustering key</strong> — bepaalt de sorteervolgorde van rijen binnen een Cassandra-partition.
+<strong>Eventual consistency</strong> — een gedistribueerd systeem convergeert na verloop van tijd naar consistentie, zonder directe garantie.
+<strong>Node / relationship / property</strong> — de drie bouwstenen van het Neo4j-graafmodel.
+<strong>Cypher</strong> — de querytaal van Neo4j, met paden als eersteklas concept.</p>
+<hr>
+<h2>11. Verder lezen</h2>
+<p>Cassandra-datamodellering (query-first design): <code>cassandra.apache.org/doc/latest/cassandra/data_modeling/</code>.
+Neo4j Cypher-introductie: <code>neo4j.com/docs/getting-started/cypher-intro/</code>.</p>
+<p><em>Einde van de NoSQL-elective. Terug naar de hoofdlijn: deel 22 vervolgt met zero-downtime migraties en de niveau-2-capstone.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">14 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">250 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../el-01/reader.html">&larr; Document en key-value in de praktijk</a><span></span></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

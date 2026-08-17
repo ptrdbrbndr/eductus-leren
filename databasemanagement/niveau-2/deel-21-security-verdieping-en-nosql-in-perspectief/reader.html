@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Security-verdieping en NoSQL in perspectief — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 21 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 21 — Security-verdieping en NoSQL in perspectief</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 13 van 14 (deel 21 van 30)
+Aansluiting: EDB PostgreSQL Professional — domeinen “Security” en “Ecosystem”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waar deel 9 ophield</li>
+<li>Row level security, verdiept: multi-tenant patronen</li>
+<li>RLS en prestaties</li>
+<li>pgcrypto: kolomversleuteling</li>
+<li>Versleuteling onderweg: SSL/TLS</li>
+<li>Versleuteling in rust: het onderscheid dat vaak wordt gemist</li>
+<li>Rolhiërarchie op schaal</li>
+<li>SECURITY DEFINER, herzien met scherpere randen</li>
+<li>Wat we tot nu toe niet bespraken: NoSQL</li>
+<li>De categorieën op een rij</li>
+<li>Wat PostgreSQL al dekt van wat mensen bij NoSQL zoeken</li>
+<li>Wanneer NoSQL wél de juiste keuze is</li>
+<li>Een eerlijke vergelijking, geen wedstrijd</li>
+<li>Examenvoorbereiding: hoe de EDB-certificering is opgebouwd</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>row level security-patronen ontwerpen voor multi-tenant-achtige scenario’s, verder dan de basisregels uit deel 9;</li>
+<li>de prestatie-impact van RLS inschatten en verzachten;</li>
+<li>kolomversleuteling toepassen met <code>pgcrypto</code> en de sleutelbeheervraag herkennen die daarbij hoort;</li>
+<li>SSL/TLS voor databaseverbindingen configureren en verplicht stellen;</li>
+<li>het onderscheid tussen versleuteling onderweg en in rust correct toepassen;</li>
+<li>een rolhiërarchie ontwerpen die schaalt naar tientallen rollen;</li>
+<li>de belangrijkste NoSQL-categorieën benoemen en tegen PostgreSQL’s eigen mogelijkheden afzetten;</li>
+<li>gericht studeren voor de EDB PostgreSQL Professional-certificering.</li>
+</ul>
+<hr>
+<h2>2. Waar deel 9 ophield</h2>
+<p>In niveau 1 bouwde je de basis: rollen, <code>GRANT</code>/<code>REVOKE</code>, een eerste kennismaking met RLS, het PUBLIC-lek, <code>SECURITY DEFINER</code> als patroon. Dat volstond voor een enkele toepassing met een handvol rollen.</p>
+<p><strong>Wat er sindsdien is bijgekomen dat de zaak complexer maakt:</strong> partitionering (deel 16) die rechten per partitie kan compliceren, replicatie (deel 18) waarbij rechten en beleid op elke node moeten kloppen, en <code>pgaudit</code> (deel 20) dat pas zinvol is als de onderliggende rolstructuur al klopt. Dit deel voegt de patronen toe die je nodig hebt zodra een systeem groeit van “één applicatie, een paar rollen” naar “meerdere klantgroepen, tientallen rollen, een auditeis die niet vrijblijvend is”.</p>
+<hr>
+<h2>3. Row level security, verdiept: multi-tenant patronen</h2>
+<p>Uit deel 9: een simpel <code>USING (eigenaar_id = current_user_id())</code>. Bij Meridiaan wordt het patroon rijker zodra er onderscheid moet zijn tussen rollen die <em>binnen</em> een werkgever horen te blijven en rollen die alles mogen zien.</p>
+<pre><code class="language-sql">ALTER TABLE dienstverband ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY werkgever_eigen_data ON dienstverband
+    FOR SELECT
+    USING (werkgever_id = current_setting('app.werkgever_id')::integer);
+
+CREATE POLICY beheer_ziet_alles ON dienstverband
+    FOR ALL
+    TO beheer_rol
+    USING (true);
+</code></pre>
+<p><strong>Meerdere policies op dezelfde tabel worden met OR gecombineerd</strong> binnen dezelfde opdracht-categorie (<code>SELECT</code>, <code>UPDATE</code>, …) — een rij is zichtbaar als <em>minstens één</em> toepasselijke policy hem toelaat. Dat is een makkelijk te vergeten detail: twee restrictieve policies die je bedoelde als AND, werken in werkelijkheid als OR, tenzij je expliciet <code>AS RESTRICTIVE</code> gebruikt:</p>
+<pre><code class="language-sql">CREATE POLICY alleen_binnen_kantooruren ON dienstverband
+    AS RESTRICTIVE
+    FOR ALL
+    USING (extract(hour FROM now()) BETWEEN 8 AND 18);
+</code></pre>
+<p>Een <code>RESTRICTIVE</code>-policy wordt met <strong>AND</strong> gecombineerd bovenop de gewone (permissieve) policies — hij kan alleen verder inperken, nooit verruimen. Voor een eis als “nooit buiten kantooruren, ongeacht wat de rest toestaat” is dat precies het gedrag dat je wilt.</p>
+<p><strong>Het patroon voor Meridiaan’s werkgeverportaal:</strong> elke sessie zet bij het inloggen <code>app.werkgever_id</code> op basis van de geauthenticeerde gebruiker, en alle RLS-policies verwijzen naar die sessie-instelling. Dit is dezelfde <code>current_setting()</code>-truc als in deel 9, nu opgeschaald naar meerdere policies die samen een compleet multi-tenant-model vormen.</p>
+<hr>
+<h2>4. RLS en prestaties</h2>
+<p><strong>RLS is geen gratis beveiliging.</strong> De policy-voorwaarde wordt effectief toegevoegd aan elke query op die tabel, en de planner moet daar rekening mee houden.</p>
+<pre><code class="language-sql">EXPLAIN ANALYZE SELECT * FROM dienstverband WHERE deelnemer_id = 42;
+</code></pre>
+<p>Met RLS aan, verschijnt de policy-voorwaarde als extra filter in het plan. <strong>Zonder een index die bij de policy-kolom past, betekent dat een extra sequentiële doorloop bovenop wat de query zelf al vroeg.</strong></p>
+<pre><code class="language-sql">CREATE INDEX ON dienstverband (werkgever_id);
+</code></pre>
+<p><strong>De valkuil die het meest voorkomt:</strong> een policy die een functie aanroept (bijvoorbeeld een lookup naar een aparte tabel om te bepalen tot welke werkgever de gebruiker hoort) in plaats van een simpele sessie-instelling. Zo’n functie wordt <strong>per rij</strong> aangeroepen tenzij de planner hem kan optimaliseren — een prestatieval die niet in de eerste kennismaking met RLS zichtbaar wordt (een tabel met honderd rijen in deel 9), maar wel bij 466.000 dienstverbanden.</p>
+<pre><code class="language-sql">-- Traag: functie-aanroep per rij
+CREATE POLICY … USING (werkgever_id = huidige_werkgever());
+
+-- Sneller: directe sessie-instelling, geen functieaanroep
+CREATE POLICY … USING (werkgever_id = current_setting('app.werkgever_id')::integer);
+</code></pre>
+<p>Markeer een functie die je toch nodig hebt als <code>STABLE</code> of <code>IMMUTABLE</code> waar dat klopt (deel 8) — dat geeft de planner meer ruimte om hem niet onnodig vaak opnieuw te evalueren.</p>
+<hr>
+<h2>5. pgcrypto: kolomversleuteling</h2>
+<p>RLS regelt <strong>wie een rij mag zien</strong>. Soms wil je dat zelfs een rol met leestoegang de waarde niet in leesbare vorm ziet zonder een aparte sleutel — bijvoorbeeld bij een veld dat nog gevoeliger is dan de rest.</p>
+<pre><code class="language-sql">CREATE EXTENSION pgcrypto;
+
+-- Versleutelen bij het opslaan
+UPDATE deelnemer
+SET rekeningnummer_enc = pgp_sym_encrypt(rekeningnummer, 'sleutel-uit-kluis')
+WHERE deelnemer_id = 42;
+
+-- Ontsleutelen bij het lezen, alleen met de sleutel
+SELECT pgp_sym_decrypt(rekeningnummer_enc, 'sleutel-uit-kluis') FROM deelnemer;
+</code></pre>
+<p><strong>De sleutel hoort nooit in de query zelf, en zeker niet in de applicatiecode als tekst.</strong> Een sleutelbeheersysteem (HashiCorp Vault, of een cloud-eigen equivalent) dat de sleutel op aanvraag levert, is de praktische aanpak — dit is een integratiepunt dat buiten PostgreSQL zelf valt, maar je moet het als DBA kunnen aanwijzen als ontbrekend stuk in een ontwerp.</p>
+<p><strong>De afweging, expliciet:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Zonder kolomversleuteling</th>
+<th>Met kolomversleuteling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Doorzoekbaarheid</td>
+<td>Volledig (indexeerbaar)</td>
+<td><strong>Beperkt</strong> — een versleutelde waarde is niet direct te indexeren op inhoud</td>
+</tr>
+<tr>
+<td>Bescherming bij een gelekte back-up</td>
+<td>Geen</td>
+<td><strong>Ja</strong>, als de sleutel apart blijft</td>
+</tr>
+<tr>
+<td>Complexiteit</td>
+<td>Laag</td>
+<td>Sleutelbeheer, applicatie-aanpassingen</td>
+</tr>
+<tr>
+<td>Prestatie</td>
+<td>Normaal</td>
+<td>Extra CPU-kosten per operatie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer dit de moeite waard is bij Meridiaan:</strong> een klein aantal bijzonder gevoelige velden (rekeningnummers, medische indicaties bij arbeidsongeschiktheid) waarbij zelfs RLS en toegangscontrole onvoldoende zekerheid geven — bijvoorbeeld als eis vanuit een specifieke wettelijke verplichting. <strong>Niet</strong> voor elke kolom met persoonsgegevens: dat zou de doorzoekbaarheid van vrijwel de hele database wegnemen voor weinig extra bescherming boven wat RLS en rolgebonden rechten al geven.</p>
+<hr>
+<h2>6. Versleuteling onderweg: SSL/TLS</h2>
+<p>Verkeer tussen applicatie en database, onversleuteld, is af te luisteren op elk punt onderweg — een ander risico dan wie er in de database zelf mag kijken.</p>
+<pre><code># postgresql.conf
+ssl = on
+ssl_cert_file = 'server.crt'
+ssl_key_file = 'server.key'
+</code></pre>
+<pre><code># pg_hba.conf — dwing SSL af, niet optioneel
+hostssl  meridiaan  all  0.0.0.0/0  scram-sha-256
+</code></pre>
+<p><code>hostssl</code> in plaats van <code>host</code> betekent dat een verbindingspoging zonder SSL wordt geweigerd — niet alleen aangeboden als mogelijkheid. Dit is het verschil tussen “SSL is beschikbaar” en “SSL is verplicht”, en voor productieverkeer met persoonsgegevens hoort het het laatste te zijn.</p>
+<p><strong>Vanaf de clientkant:</strong></p>
+<pre><code>psql &quot;host=... dbname=meridiaan sslmode=verify-full sslrootcert=ca.crt&quot;
+</code></pre>
+<p><code>sslmode=verify-full</code> controleert niet alleen dat er versleuteling is, maar ook dat het certificaat bij de verwachte server hoort — bescherming tegen een man-in-the-middle die zich voordoet als de databaseserver. Lagere niveaus (<code>require</code>, <code>verify-ca</code>) geven geleidelijk minder garantie; voor productieverkeer is <code>verify-full</code> de aanbeveling.</p>
+<hr>
+<h2>7. Versleuteling in rust: het onderscheid dat vaak wordt gemist</h2>
+<p><strong>Versleuteling onderweg</strong> (paragraaf 6) beschermt tegen afluisteren tussen client en server. <strong>Versleuteling in rust</strong> beschermt de bestanden op de schijf zelf — relevant als iemand fysieke toegang tot de schijf krijgt, of een back-up (deel 17) op een onbeveiligde locatie belandt.</p>
+<p>PostgreSQL zelf biedt geen ingebouwde volledige-schijfversleuteling (transparent data encryption zoals sommige andere systemen die kennen). De gangbare aanpak is versleuteling <strong>op besturingssysteemniveau</strong> — een versleuteld bestandssysteem (LUKS op Linux, of het cloud-eigen equivalent bij een beheerde dienst) waarbinnen het datadirectory staat.</p>
+<p><strong>Wat dit wel en niet oplost:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Dreiging</th>
+<th>Versleuteling in rust helpt?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gestolen fysieke schijf</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Onbeveiligde back-up op een externe locatie</td>
+<td>Ja, als de back-up zelf ook versleuteld is (deel 17, <code>pgBackRest</code>-encryptie)</td>
+</tr>
+<tr>
+<td>Een gecompromitteerde databaserol met leesrechten</td>
+<td><strong>Nee</strong> — die rol leest via de draaiende server, die de gegevens ontsleuteld aanbiedt</td>
+</tr>
+<tr>
+<td>SQL-injectie of een kwetsbare applicatie</td>
+<td><strong>Nee</strong> — hetzelfde argument</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De les:</strong> versleuteling in rust is een aanvulling op toegangscontrole (RLS, rollen), niet een vervanging. Een aanvaller met een geldige databaseverbinding en voldoende rechten ziet de gegevens gewoon, versleuteld-op-schijf of niet — de server ontsleutelt voor hem.</p>
+<hr>
+<h2>8. Rolhiërarchie op schaal</h2>
+<p>Uit deel 9: rollen, <code>GRANT</code>, <code>REVOKE</code>. Bij een groeiend aantal rollen (klantenservice, werkgeverportaal per sector, rapportage, beheer, migratie, backup — elk uit een eerder dagdeel) wordt losse toekenning onbeheersbaar.</p>
+<pre><code class="language-sql">-- Groepsrollen: geen LOGIN, alleen een verzameling rechten
+CREATE ROLE lezer_deelnemer NOLOGIN;
+GRANT SELECT ON deelnemer TO lezer_deelnemer;
+
+CREATE ROLE schrijver_mutatie NOLOGIN;
+GRANT SELECT, INSERT, UPDATE ON mutatie TO schrijver_mutatie;
+
+-- Individuele of applicatierollen erven van groepsrollen
+CREATE ROLE klantenservice LOGIN PASSWORD '...';
+GRANT lezer_deelnemer TO klantenservice;
+GRANT schrijver_mutatie TO klantenservice;
+</code></pre>
+<p><strong>Het voordeel:</strong> een recht wijzigen op <code>lezer_deelnemer</code> werkt door naar elke rol die hem heeft geërfd, in plaats van dat je tientallen individuele <code>GRANT</code>-opdrachten moet naspeuren en herhalen.</p>
+<pre><code class="language-sql">-- Overzicht: wie heeft via welke groep welk recht?
+SELECT r.rolname AS rol, g.rolname AS via_groep
+FROM pg_auth_members m
+JOIN pg_roles r ON r.oid = m.member
+JOIN pg_roles g ON g.oid = m.roleid
+ORDER BY r.rolname;
+</code></pre>
+<p><strong><code>DEFAULT PRIVILEGES</code> voor toekomstige objecten</strong> — een detail dat vaak wordt vergeten en dat tot rechtenlekken leidt:</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan_prod
+    GRANT SELECT ON TABLES TO lezer_deelnemer;
+</code></pre>
+<p>Zonder deze instelling krijgt een <strong>nieuwe</strong> tabel in het schema geen automatische rechten voor <code>lezer_deelnemer</code> — iemand moet er expliciet aan denken bij elke nieuwe tabel. Met <code>DEFAULT PRIVILEGES</code> gebeurt dat automatisch, wat het risico van een vergeten <code>GRANT</code> op een gevoelige nieuwe tabel wegneemt (of, omgekeerd, het risico dat een nieuwe tabel onbedoeld toegankelijk is — controleer dus zorgvuldig wélke standaardrechten je instelt).</p>
+<hr>
+<h2>9. SECURITY DEFINER, herzien met scherpere randen</h2>
+<p>Uit deel 9: een functie die met de rechten van de eigenaar draait in plaats van de aanroeper — nuttig om gecontroleerde toegang te geven zonder brede tabelrechten weg te geven.</p>
+<p><strong>De valkuil die in deel 9 nog niet werd uitgewerkt: <code>search_path</code>.</strong> Een <code>SECURITY DEFINER</code>-functie die geen expliciet schema opgeeft, kan door een kwaadwillende aanroeper worden misleid als die zijn eigen <code>search_path</code> zo zet dat een eigen, kwaadaardige functie of tabel met dezelfde naam eerder wordt gevonden dan de bedoelde.</p>
+<pre><code class="language-sql">-- Kwetsbaar: search_path niet vastgezet
+CREATE FUNCTION genereer_rapportage() RETURNS void
+    SECURITY DEFINER
+    LANGUAGE plpgsql AS $$ ... $$;
+
+-- Veilig: search_path expliciet en vast
+CREATE FUNCTION genereer_rapportage() RETURNS void
+    SECURITY DEFINER
+    SET search_path = meridiaan_prod, pg_catalog
+    LANGUAGE plpgsql AS $$ ... $$;
+</code></pre>
+<p><strong>De regel, zonder uitzondering: elke <code>SECURITY DEFINER</code>-functie krijgt een expliciete <code>SET search_path</code>.</strong> Dit is een van de weinige plekken in PostgreSQL waar het weglaten van een instelling een concreet, exploiteerbaar beveiligingslek is in plaats van alleen een prestatie- of correctheidskwestie.</p>
+<hr>
+<h2>10. Wat we tot nu toe niet bespraken: NoSQL</h2>
+<p>Twintig dagdelen lang draaide alles om het relationele model. Terecht — het is nog steeds de juiste standaardkeuze voor de meeste administratieve systemen zoals Meridiaans kernregistratie. Maar de vraag “waarom niet NoSQL” verdient een eerlijk antwoord, niet een ontwijking.</p>
+<p><strong>Wat NoSQL als term dekt, is geen enkel ding.</strong> Het is een verzamelnaam voor datastores die <em>niet</em> het klassieke relationele model met SQL als hoofdinterface volgen — en de motivaties daarachter lopen sterk uiteen per categorie.</p>
+<hr>
+<h2>11. De categorieën op een rij</h2>
+<table>
+<thead>
+<tr>
+<th>Categorie</th>
+<th>Voorbeeld</th>
+<th>Sterk in</th>
+<th>Zwak in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Document</strong></td>
+<td>MongoDB</td>
+<td>Flexibel schema, geneste structuren</td>
+<td>Complexe joins, transactionele garanties over meerdere documenten</td>
+</tr>
+<tr>
+<td><strong>Key-value</strong></td>
+<td>Redis</td>
+<td>Extreme snelheid bij eenvoudige opzoekingen</td>
+<td>Geen querytaal voor complexe vragen</td>
+</tr>
+<tr>
+<td><strong>Wide-column</strong></td>
+<td>Cassandra</td>
+<td>Schrijfschaal over vele servers</td>
+<td>Ad-hoc query’s, consistentiegaranties</td>
+</tr>
+<tr>
+<td><strong>Graaf</strong></td>
+<td>Neo4j</td>
+<td>Relatiepaden, netwerkanalyse</td>
+<td>Grote aggregaties, algemeen gebruik</td>
+</tr>
+<tr>
+<td><strong>Zoek-georiënteerd</strong></td>
+<td>Elasticsearch</td>
+<td>Volledige-tekst-zoeken op schaal</td>
+<td>Als primaire bron van waarheid</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De motivatie is zelden “sneller” in algemene zin.</strong> Het is bijna altijd: een specifiek toegangspatroon (extreem veel simpele opzoekingen, relatiepaden, tekstzoeken) waarvoor een gespecialiseerde structuur beter past dan een algemeen relationeel model — precies dezelfde logica als GIN versus BRIN versus B-tree in deel 14, nu op het niveau van hele datastores in plaats van indextypen.</p>
+<hr>
+<h2>12. Wat PostgreSQL al dekt van wat mensen bij NoSQL zoeken</h2>
+<p>Een groot deel van de historische motivatie voor NoSQL (flexibel schema, snel opzoeken, documentopslag) is inmiddels <strong>binnen PostgreSQL zelf</strong> beschikbaar, en je hebt het al gebruikt:</p>
+<table>
+<thead>
+<tr>
+<th>Wat mensen bij NoSQL zochten</th>
+<th>Wat PostgreSQL biedt</th>
+<th>Waar je het zag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flexibel, schemaloos opslaan</td>
+<td><code>jsonb</code></td>
+<td>Deel 6, 14 (<code>koppelvlakbericht</code>)</td>
+</tr>
+<tr>
+<td>Snel zoeken binnen documenten</td>
+<td>GIN op <code>jsonb</code></td>
+<td>Deel 14</td>
+</tr>
+<tr>
+<td>Key-value opzoeking</td>
+<td>Een tabel met twee kolommen plus een index, of <code>hstore</code></td>
+<td>Deel 8, 14</td>
+</tr>
+<tr>
+<td>Volledige-tekst-zoeken</td>
+<td><code>tsvector</code>/<code>to_tsquery</code>, of <code>pg_trgm</code></td>
+<td>Deel 14</td>
+</tr>
+<tr>
+<td>Horizontale schrijfschaal</td>
+<td>Partitionering (deel 16) plus, op grotere schaal, Citus (niveau 3)</td>
+<td>Deel 16</td>
+</tr>
+<tr>
+<td>Extreme leessnelheid bij eenvoudige queries</td>
+<td>Een goed geïndexeerde tabel, eventueel met een replica (deel 18)</td>
+<td>Deel 8, 18</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De praktische conclusie voor de meeste organisaties:</strong> begin met PostgreSQL en zijn <code>jsonb</code>-mogelijkheden, en stap pas over naar een gespecialiseerde NoSQL-oplossing als er een concreet, gemeten knelpunt is dat PostgreSQL niet oplost — niet omdat NoSQL nieuwer klinkt. Dit is dezelfde discipline als bij BRIN (deel 14) en partitionering (deel 16): kies het gespecialiseerde gereedschap op basis van een gemeten behoefte, niet op basis van enthousiasme.</p>
+<hr>
+<h2>13. Wanneer NoSQL wél de juiste keuze is</h2>
+<p>Eerlijke gevallen waarin een aparte datastore de betere keuze is, ook naast een goed gebruikte PostgreSQL-installatie:</p>
+<p><strong>Een cache-laag met sub-milliseconde eisen op eenvoudige sleutel-opzoekingen</strong> waar zelfs een goed geïndexeerde PostgreSQL-tabel de latency-eis niet haalt: Redis ervoor.</p>
+<p><strong>Relatieanalyse die inherent graafvormig is</strong> — “welke deelnemers delen een werkgever binnen twee schakels van een gegeven deelnemer, via welke tussenliggende relaties” wordt in SQL met recursieve CTE’s (deel 4, 8) mogelijk maar onhandelbaar bij grote, diepe netwerken. Een graafdatabase is daar natuurlijker.</p>
+<p><strong>Volledige-tekst-zoeken op een schaal en met functies (facetten, relevantiescoring, fuzzy op grote schaal) die <code>pg_trgm</code>/<code>tsvector</code> niet meer comfortabel aankunnen:</strong> Elasticsearch naast PostgreSQL, met PostgreSQL als bron van waarheid en Elasticsearch als afgeleide zoekindex.</p>
+<p><strong>Logging/telemetrie op zeer grote, ongestructureerde schaal</strong> waar schrijfschaal over honderden servers de eis is: een wide-column store, met PostgreSQL voor de gestructureerde kant van het systeem.</p>
+<p><strong>Het patroon in alle vier: NoSQL komt er naast PostgreSQL, niet in plaats ervan.</strong> Meridiaans kernregistratie — deelnemers, dienstverbanden, aanspraken, mutaties — blijft relationeel, want de integriteitseisen (deel 6), de transactionele garanties (deel 7) en de query-flexibiliteit (deel 3, 4) die daar nodig zijn, zijn precies waar het relationele model sterk in is.</p>
+<hr>
+<h2>14. Een eerlijke vergelijking, geen wedstrijd</h2>
+<p>De vraag “SQL of NoSQL” is verkeerd gesteld. De juiste vraag, per toegangspatroon:</p>
+<blockquote>
+<p>Heeft dit specifieke stuk van het systeem een toegangspatroon dat een gespecialiseerde structuur vraagt, en is de winst daarvan groot genoeg om de kosten van een tweede systeem (operationeel, consistentie tussen de twee, extra kennis in het team) te rechtvaardigen?</p>
+</blockquote>
+<p>Voor de kern van Meridiaan is het antwoord nee — de administratieve, sterk samenhangende, integriteitsgevoelige aard van pensioengegevens past bij uitstek bij het relationele model. Voor randgevallen (zoeken, caching, toekomstige analysebehoeften) kan het antwoord ja zijn, en dan is de vervolgvraag niet “welk systeem is beter” maar “hoe houd ik de twee systemen consistent” — vaak weer via logische replicatie (deel 18) vanuit PostgreSQL als bron van waarheid.</p>
+<hr>
+<h2>15. Examenvoorbereiding: hoe de EDB-certificering is opgebouwd</h2>
+<p>Na twee niveaus is dit een goed moment om het certificeringstraject zelf te bespreken, los van de inhoud.</p>
+<p><strong>De structuur:</strong> EDB PostgreSQL Associate (niveau 1-stof) en EDB PostgreSQL Professional (niveau 2-stof) zijn afzonderlijke examens, elk met een eigen blauwdruk die periodiek wordt bijgewerkt. <strong>Controleer altijd de actuele blauwdruk vlak vóór je het examen plant</strong> — versies en nadrukpunten verschuiven.</p>
+<p><strong>Hoe te studeren vanaf hier:</strong></p>
+<ol>
+<li>Loop de “aansluiting op de certificering”-paragrafen van elk deel (11 t/m 20) nog eens langs als checklist.</li>
+<li>Vertaal elke praktijkopdracht die je hebt gedaan naar een korte, mondelinge samenvatting — “wat zou ik hierover zeggen zonder de query voor me te hebben” is een betere test dan de query nog eens uittypen.</li>
+<li>Oefen met de officiële voorbeeldvragen van EDB, waar beschikbaar; die tonen het soort scenario-vraag (niet alleen definities) dat het examen gebruikt.</li>
+<li>Herhaal specifiek de onderwerpen waarbij dit niveau een <strong>cijfer of drempel</strong> gaf (deel 12’s wraparound-percentages, deel 19’s <code>ttl</code>, deel 20’s alarmdrempels) — examens toetsen vaak of je weet <em>wanneer</em> iets een probleem wordt, niet alleen <em>dat</em> het een concept is.</li>
+</ol>
+<p><strong>Wat dit deel je niet geeft:</strong> een garantie. Deze cursus is voorbereiding op de inhoud; het examen zelf toetst ook precisie onder tijdsdruk, wat alleen oefenen met een tijdslimiet traint.</p>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Meerdere restrictieve policies bedoeld als AND, maar permissief gemaakt</td>
+<td>Rechten ruimer dan bedoeld</td>
+<td><code>AS RESTRICTIVE</code> waar nodig</td>
+</tr>
+<tr>
+<td>RLS-policy met een functie-aanroep per rij</td>
+<td>Trage query’s op schaal</td>
+<td>Sessie-instelling of <code>STABLE</code>-functie</td>
+</tr>
+<tr>
+<td>Encryptiesleutel in applicatiecode of de query zelf</td>
+<td>Sleutel net zo blootgesteld als de data</td>
+<td>Extern sleutelbeheer</td>
+</tr>
+<tr>
+<td>Versleuteling in rust zien als volledige bescherming</td>
+<td>Vals gevoel van veiligheid tegen gecompromitteerde rollen</td>
+<td>Combineren met RLS/rolrechten</td>
+</tr>
+<tr>
+<td><code>hostssl</code> vergeten, alleen <code>host</code></td>
+<td>Onversleuteld verkeer blijft mogelijk</td>
+<td>Expliciet <code>hostssl</code>, geen <code>host</code> voor gevoelig verkeer</td>
+</tr>
+<tr>
+<td><code>SECURITY DEFINER</code> zonder vaste <code>search_path</code></td>
+<td>Exploiteerbaar beveiligingslek</td>
+<td>Altijd <code>SET search_path</code></td>
+</tr>
+<tr>
+<td><code>DEFAULT PRIVILEGES</code> vergeten</td>
+<td>Nieuwe tabellen onbedoeld ontoegankelijk óf onbedoeld toegankelijk</td>
+<td>Bewust instellen, niet negeren</td>
+</tr>
+<tr>
+<td>NoSQL kiezen zonder gemeten knelpunt</td>
+<td>Twee systemen, extra complexiteit, geen aantoonbare winst</td>
+<td>Eerst PostgreSQL’s eigen mogelijkheden (jsonb, GIN) proberen</td>
+</tr>
+<tr>
+<td>Denken dat NoSQL de kernregistratie moet vervangen</td>
+<td>Verlies van integriteitsgaranties die het domein nodig heeft</td>
+<td>NoSQL naast, niet in plaats van, waar het past</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Kernbegrippen</h2>
+<p><strong>Permissieve/restrictieve policy</strong> — hoe meerdere RLS-policies worden gecombineerd (OR respectievelijk AND).
+<strong><code>pgcrypto</code></strong> — extensie voor kolomversleuteling.
+<strong>Versleuteling onderweg / in rust</strong> — bescherming tijdens transport respectievelijk op de opslaglocatie.
+<strong><code>hostssl</code></strong> — <code>pg_hba.conf</code>-regel die SSL verplicht in plaats van optioneel maakt.
+<strong><code>sslmode=verify-full</code></strong> — strengste clientcontrole op de identiteit van de server.
+<strong>Groepsrol</strong> — een <code>NOLOGIN</code>-rol die rechten bundelt voor overerving.
+<strong><code>DEFAULT PRIVILEGES</code></strong> — vooraf ingestelde rechten voor nog te maken objecten.
+<strong><code>search_path</code>-kaping</strong> — het beveiligingslek dat ontstaat als een <code>SECURITY DEFINER</code>-functie geen vast schema-pad heeft.
+<strong>Document/key-value/wide-column/graaf-datastore</strong> — de belangrijkste NoSQL-categorieën.
+<strong><code>jsonb</code>/GIN</strong> — PostgreSQL’s eigen antwoord op veel document-georiënteerde behoeften.</p>
+<hr>
+<p><em>Volgende deel: het laatste deel van niveau 2 — zero-downtime migratiepatronen, en een capstone die alles uit dit niveau samenbrengt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">314 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">&larr; Deel 20 — Monitoring, logging en pgaudit</a><a class="dbm-prevnext next" href="../deel-22-zero-downtime-migraties-en-capstone/reader.html">Deel 22 — Zero-downtime migraties en capstone &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

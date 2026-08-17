@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Installatie, configuratie en tablespaces — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 11 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 11 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 11: Installatie, configuratie en tablespaces</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Het openingsdeel van niveau 2. Twee dingen tegelijk: de overgang markeren van “werkt het” naar “werkt het onder belasting”, en de configuratievaardigheid neerzetten waar de rest van het niveau op leunt.</p>
+<p><strong>De houding die dit dagdeel moet vestigen:</strong></p>
+<blockquote>
+<p>Elke waarde die je overneemt zonder te weten waaróm, is een gok.</p>
+</blockquote>
+<p>Deelnemers komen binnen met een half onthouden lijstje uit een blog. Dat is precies het probleem: PostgreSQL-instellingsadvies is vaak verouderd (geschreven voor draaiende schijven), overgenomen van een andere werklast, of allebei. De vaardigheid is niet het lijstje kennen maar kunnen redeneren vanuit deze machine en deze werklast — en daarna meten.</p>
+<p><strong>Het tweede doel is subtieler:</strong> deelnemers leren dat één globale waarde zelden aan twee eisen kan voldoen. De rolgebonden <code>work_mem</code> (rapportage 256 MB, portaal 8 MB) is de belangrijkste truc van het dagdeel en wordt zelden zelf gevonden.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong></p>
+<ul>
+<li>Reader deel 11.</li>
+<li><strong>Het opschaalscript gedraaid.</strong> Dit duurt enkele minuten en vraagt ruim een gigabyte. Laat dit vóór de sessie doen; anders zit een kwart van het dagdeel te wachten op een laadscript.</li>
+</ul>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Draai het opschaalscript zelf en noteer je eigen getallen.</strong> Omvang van <code>mutatie</code>, aantal dode rijen, laadtijd. Die cijfers gebruik je in de demonstratie van opdracht 11.2.</li>
+<li><strong>Controleer of deelnemers bij hun <code>postgresql.conf</code> kunnen.</strong> Bij Docker via <code>docker compose exec db bash</code>. Wie op een gedeelde omgeving zit, kan dit dagdeel niet doen — dat is de tweede plek waar de terugvaloptie uit Toolbijlage A tekortschiet.</li>
+<li>⚠ <strong>Waarschuw over Docker-geheugen.</strong> Docker Desktop wijst standaard een fractie van het hostgeheugen toe. Deelnemers die <code>shared_buffers</code> berekenen op basis van hun 32 GB-laptop terwijl de container 4 GB heeft, krijgen een server die niet start. Laat iedereen bij opdracht 11.1a controleren wat de <em>container</em> ziet, niet wat de laptop heeft.</li>
+<li>Heb een tweede terminal klaar voor het herstarten van de server; opdracht 11.4 vraagt erom.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Welkom in niveau 2; de casus fase 2</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:15-0:30</td>
+<td><strong>Opdracht 11.1</strong> — je server leren kennen</td>
+<td>Zelfstandig</td>
+</tr>
+<tr>
+<td>0:30-0:50</td>
+<td><strong>Opdracht 11.2</strong> — de bloat van het laadscript</td>
+<td>Demo + zelfstandig</td>
+</tr>
+<tr>
+<td>0:50-1:15</td>
+<td>Het configuratiesysteem (§6-7) + <strong>opdracht 11.3, 11.4</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-1:55</td>
+<td>Geheugen (§8)</td>
+<td>Presentatie met rekenwerk op het bord</td>
+</tr>
+<tr>
+<td>1:55-2:20</td>
+<td><strong>Opdracht 11.5</strong> — geheugen instellen</td>
+<td>Drietallen</td>
+</tr>
+<tr>
+<td>2:20-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:45</td>
+<td>Planner en opslag (§12) + <strong>opdracht 11.6</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:45-3:05</td>
+<td>Checkpoints (§9) en autovacuum (§10) + <strong>opdracht 11.7</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>3:05-3:15</td>
+<td>Verbindingen (§11), logging (§13), tablespaces (§14)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:15-3:25</td>
+<td>Configuratie als code (§15) + meten (§16)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:25-4:00</td>
+<td><strong>Opdracht 11.9</strong> — het configuratievoorstel</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 11.8 (tablespaces) vervallen als praktijkopdracht — de reader dekt het en het is het minst urgente onderwerp. Kort <strong>nooit</strong> opdracht 11.5 of 11.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Welkom in niveau 2 (0:00)</h3>
+<p>Zet de tabel uit paragraaf 2 van de reader op het bord — wat er verandert tussen niveau 1 en 2. Vraag welke regel deelnemers het meest herkennen uit hun eigen werk.</p>
+<p>Presenteer de casus met de concrete getallen: 340.000 deelnemers, 3.000 gelijktijdige bezoekers op dinsdagavond, één server, vier beheerders. Sluit af met Ruuds twee vragen, die het hele dagdeel dragen:</p>
+<blockquote>
+<p><em>“Welke instellingen zet ik waarop, en waarom?”</em>
+<em>“Hoe weet ik dat het geholpen heeft?”</em></p>
+</blockquote>
+<p>De tweede vraag is degene die deelnemers vergeten, en die je de hele dag terug moet brengen.</p>
+<h3>4.2 Opdracht 11.1 (0:15)</h3>
+<p>Kort en praktisch, maar let op één ding: <strong>het Docker-geheugenprobleem.</strong> Loop rond en vraag wie in een container werkt. Laat hen <code>free -g</code> binnen de container draaien in plaats van op de host. Er is altijd iemand die 32 GB op zijn laptop heeft en 4 GB in zijn container, en die persoon berekent straks een <code>shared_buffers</code> waarmee de server niet meer start.</p>
+<p>Onderdeel e) (welke instellingen wijken af) is de query die ze bij elke overname van een omgeving zullen gebruiken. Benoem dat expliciet.</p>
+<h3>4.3 Opdracht 11.2 (0:30)</h3>
+<p><strong>Het beste demonstratiemoment van het dagdeel</strong>, en het werkt maar één keer — daarna is de bloat weg.</p>
+<p>Doe het plenair: toon de omvang van <code>mutatie</code>, toon <code>n_dead_tup</code>, en laat de zaal de verhouding zien. Bijna één dode rij per levende, en de tabel is bijna twee keer zo groot als de gegevens.</p>
+<p>Vraag dan: <em>“wat heeft dit veroorzaakt?”</em> Iemand komt op de <code>UPDATE</code> aan het eind van het laadscript. Dan is de cirkel met deel 7 rond, en nu met een tastbaar getal in plaats van een principe.</p>
+<p>De belangrijkste nuance in onderdeel d): <strong><code>VACUUM</code> geeft de ruimte niet terug aan het besturingssysteem.</strong> Deelnemers verwachten dat de tabel kleiner wordt en dat gebeurt niet. Laat het gebeuren voordat je het uitlegt.</p>
+<p>Bij <code>VACUUM FULL</code> (e en f): zeg dat het tijdelijk een volledige tweede kopie nodig heeft. Dat is de reden dat het juist níét kan in de situatie waarin mensen eraan denken — een schijf die vol loopt.</p>
+<p>Sluit af met de generalisatie: <em>“dit is geen eigenaardigheid van ons laadscript. Elke grote UPDATE op productie doet dit.”</em></p>
+<h3>4.4 Het configuratiesysteem (0:50)</h3>
+<p>Toon de voorrangsvolgorde en demonstreer hem live in twee sessies. Het effect dat blijft hangen: een <code>SET</code> in sessie 1 verandert niets voor sessie 2.</p>
+<p>De rolgebonden instelling (opdracht 11.3d) moet je expliciet als oplossing presenteren, niet als weetje. Formuleer het probleem eerst:</p>
+<blockquote>
+<p><em>“Rapportage wil 256 MB om te kunnen sorteren. Het portaal heeft 150 sessies. Welke waarde zet je?”</em></p>
+</blockquote>
+<p>Laat de zaal worstelen. Als iemand op de rolgebonden instelling komt, is dat het beste moment van het blok. Anders geef je hem, met de nadruk dat dit de manier is waarop je twee onverenigbare eisen tegelijk bedient.</p>
+<p>Bij <code>ALTER SYSTEM</code> (opdracht 11.3g): wees genuanceerd. Het is niet verboden, het is lastig in een omgeving met configuratiebeheer. Het scenario dat deelnemers herkennen: iemand corrigeert tijdens een incident iets met <code>ALTER SYSTEM</code>, en zes maanden later kan niemand verklaren waarom productie afwijkt van het configuratiebestand.</p>
+<h3>4.5 Geheugen (1:30)</h3>
+<p><strong>Reken dit op het bord uit</strong>, niet op een slide. De rekensom voor <code>work_mem</code> moet deelnemers zien ontstaan, want de vermenigvuldiging is het punt.</p>
+<p>Twee dingen die je expliciet moet maken:</p>
+<p><strong><code>effective_cache_size</code> is geen toewijzing.</strong> Elke groep heeft iemand die denkt dat je 24 GB reserveert. Zeg het twee keer.</p>
+<p><strong>Waarom niet meer <code>shared_buffers</code>.</strong> Opdracht 11.5g (Ruuds vraag) is een goede plenaire afsluiting van dit blok. Laat een groep het antwoord voorlezen en let op of het double buffering noemt.</p>
+<p>Bij <code>autovacuum_work_mem</code>: deze wordt bijna nooit zelf gevonden. Vraag na onderdeel d): <em>“hoeveel autovacuum-processen kunnen er tegelijk draaien, en hoeveel geheugen pakt elk?”</em></p>
+<h3>4.6 De planner en je opslag (2:30)</h3>
+<p><code>random_page_cost</code> is de goedkoopste winst van het dagdeel en tegelijk het punt waar deelnemers doorschieten. Laat opdracht 11.6d echt uitvoeren: op 0.5 wordt willekeurig lezen goedkoper gemodelleerd dan sequentieel, wat fysiek onmogelijk is, en de planner gaat verkeerde keuzes maken.</p>
+<p>Verwacht dat de metingen in a) en b) weinig verschil tonen. Dat is correct en het is een leermoment: de parameter beïnvloedt vooral <strong>grensgevallen</strong>, niet de duidelijke gevallen. Geef desnoods een query met een datumbereik van één maand op <code>mutatie</code> als beter voorbeeld.</p>
+<h3>4.7 Autovacuum (2:45)</h3>
+<p>De rekensom in opdracht 11.7a en b is het hart van dit blok. <strong>24 dagen</strong> voordat autovacuum een tabel van 2,4 miljoen rijen oppakt — dat getal maakt indruk, want het verklaart een probleem dat deelnemers herkennen zonder de oorzaak te kennen.</p>
+<p>Verbind onderdeel c) expliciet met opdracht 8.7 melding B: <em>“draaide vorige week in twee seconden en nu in vier minuten”</em>. Dit is de oorzaak, en nu kunnen ze hem berekenen.</p>
+<p>Onderdeel g) (autovacuum 's nachts uitzetten) is de derde keer dat deze waarschuwing terugkomt in de cursus. Dat is met opzet: het is de meest voorkomende zelfveroorzaakte productiestoring in PostgreSQL. Let erop dat het antwoord het <strong>alternatief</strong> noemt (<code>cost_delay</code> verhogen) en niet alleen “niet doen”.</p>
+<h3>4.8 Opdracht 11.9 (3:25)</h3>
+<p>De opbrengst van het dagdeel. Stuur op drie dingen:</p>
+<ul>
+<li><strong>De “bewust op standaard”-tabel.</strong> Groepen raken graag alles aan. Vraag bij een aangeraakte parameter: <em>“wat heb je gemeten dat dit nodig maakte?”</em></li>
+<li><strong>Het meetplan.</strong> “Monitoren” is geen meetplan. Er moet een query, een view of een logregel staan. Dit is Ruuds tweede vraag en die wordt het vaakst genegeerd.</li>
+<li><strong>Acceptatie.</strong> Het onderscheid tussen wat geschaald mag worden (geheugen) en wat gelijk moet blijven (planner-kosten) wordt zelden zelf gevonden. Als geen enkele groep het heeft, breng het plenair in — het verklaart een groot deel van de “op acceptatie werkte het wel”-meldingen.</li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Er zijn online tools die de configuratie voor je genereren. Kan ik die gebruiken?”</strong>
+Als vertrekpunt prima — ze zijn beter dan een willekeurige blog. Maar ze kennen je werklast niet: ze weten niet dat je rapportage zware sorteringen doet en je portaal 150 sessies heeft. Gebruik het als eerste voorstel en verantwoord daarna elke waarde zelf. En controleer altijd of de tool uitgaat van moderne opslag.</p>
+<p><strong>“Waarom is <code>shared_buffers</code> standaard maar 128 MB?”</strong>
+Omdat PostgreSQL op elke machine moet kunnen starten, inclusief een kleine virtuele machine of een embedded systeem. De standaardwaarden zijn conservatief, niet fout. Dat geldt voor bijna alle parameters in dit deel.</p>
+<p><strong>“Hoeveel <code>work_mem</code> is te veel?”</strong>
+Er is geen absoluut getal. De toets is de vermenigvuldiging: hoeveel gelijktijdige bewerkingen verwacht je, en past dat in het geheugen dat over is na <code>shared_buffers</code> en het OS? Als je onder de piek al aan de grens zit, staat hij te hoog.</p>
+<p><strong>“Wij draaien op een beheerde clouddienst. Kan ik daar deze parameters wel zetten?”</strong>
+De meeste wel, sommige niet — <code>shared_preload_libraries</code> is vaak beperkt tot een lijst die de aanbieder toestaat, en het bestandssysteem is niet toegankelijk. Wat je daar krijgt is een parametergroep in plaats van een bestand. Het redeneerwerk blijft hetzelfde; de uitvoering verschilt. Dit komt terug in niveau 3, deel 25.</p>
+<p><strong>“Moet ik <code>huge_pages</code> aanzetten?”</strong>
+Bij grote <code>shared_buffers</code> (vanaf enkele gigabytes) op Linux kan dat merkbaar schelen in geheugengebruik en prestaties. Het vraagt configuratie op OS-niveau. Verdedigbaar op deze server; buiten het bestek van dit dagdeel, en zoals altijd: meten.</p>
+<p><strong>“Wat is een goede cachetrefkans?”</strong>
+Boven 99% is gebruikelijk voor OLTP. Maar let op: een hoge trefkans betekent niet dat alles goed is — een query die tien keer te veel pagina’s leest uit de cache is nog steeds een slechte query. Het is een signaal, geen doel.</p>
+<p><strong>“Als ik <code>random_page_cost</code> verlaag, gebruikt hij dan altijd indexen?”</strong>
+Nee, en dat is de bedoeling. Je corrigeert een aanname over hardware, je dwingt geen gedrag af. Wie indexgebruik wil afdwingen, zoekt naar <code>enable_seqscan = off</code> — en dat is een diagnosemiddel (deel 8), geen instelling.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controleert bij 11.1a het containergeheugen in plaats van de host</td>
+<td>Let op de omgeving; sterk</td>
+</tr>
+<tr>
+<td>Vindt zelf de rolgebonden <code>work_mem</code></td>
+<td>Ziet dat één waarde niet twee eisen dient</td>
+</tr>
+<tr>
+<td>Noemt bij 11.7g het alternatief in plaats van alleen “niet doen”</td>
+<td>Denkt in oplossingen</td>
+</tr>
+<tr>
+<td>Laat in 11.9 parameters bewust op standaard, met reden</td>
+<td>Maakt keuzes in plaats van alles aanraken</td>
+</tr>
+<tr>
+<td>Denkt dat <code>effective_cache_size</code> geheugen reserveert</td>
+<td>Herhalen; klassieke misvatting</td>
+</tr>
+<tr>
+<td>Wil <code>shared_buffers</code> op 60-80% van het RAM</td>
+<td>Terugbrengen naar double buffering</td>
+</tr>
+<tr>
+<td>Levert een meetplan dat “monitoren” zegt</td>
+<td>Doorvragen naar de concrete query</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 12</h2>
+<p>Brug: <em>“De server staat nu goed ingesteld. Volgende keer kijken we naar hoe de gegevens er fysiek in liggen — en dan blijkt dat de bloat van vanochtend maar één van de redenen is waarom een tabel groter kan zijn dan wat erin staat.”</em></p>
+<p>Geef mee: <em>iedereen noteert de omvang van elke tabel in <code>meridiaan_prod</code> na de VACUUM van vanochtend.</em> Die getallen zijn het uitgangspunt van deel 12.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 11.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">64 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">412 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../../niveau-1/deel-10-capstone-de-meridiaan-datalaag/opdrachtdocument.html">&larr; Deel 10 — Capstone: de Meridiaan-datalaag</a><a class="dbm-prevnext next" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

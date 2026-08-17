@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Foreign data wrappers en federatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 26 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 26: Foreign data wrappers en federatie</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Idealiter werk je met minstens twee zelfstandige databases (of aparte schema’s die je als afzonderlijke “bronnen” behandelt, als een echte multi-server-opzet niet beschikbaar is).</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+</code></pre>
+<p>Tijdsindicatie: circa 120 minuten.</p>
+<hr>
+<h2>Opdracht 26.1 — Het gat herkennen (10 min, individueel)</h2>
+<p>a) In deel 23 werd Baken op patroon 3 (eigen database) geplaatst. Wat is het directe gevolg daarvan voor een gezamenlijk federatie-dashboard?
+b) Noem twee eerdere technieken uit de cursus die dit gat al gedeeltelijk konden dichten, en wat ze elk kostten.
+c) Wat is het nieuwe idee van vandaag ten opzichte van die twee?</p>
+<hr>
+<h2>Opdracht 26.2 — postgres_fdw opzetten (20 min, tweetallen)</h2>
+<p>a) Maak twee (test)databases of -schema’s aan die elk een eenvoudige <code>deelnemer</code>-tabel bevatten, met andere testdata.
+b) Zet <code>postgres_fdw</code> op vanuit een derde, “federatieve” database.
+c) Maak een <code>SERVER</code>- en <code>USER MAPPING</code>-definitie voor beide bronnen.
+d) Importeer met <code>IMPORT FOREIGN SCHEMA</code> de <code>deelnemer</code>-tabel van beide bronnen.
+e) Bevraag beide foreign tables los van elkaar. Werkt het zoals verwacht?</p>
+<hr>
+<h2>Opdracht 26.3 — Pushdown zien werken (20 min, drietallen)</h2>
+<p>a) Draai <code>EXPLAIN</code> op een <code>SELECT ... WHERE deelnemer_id = &lt;waarde&gt;</code> op één foreign table. Bekijk <code>Remote SQL</code>.
+b) Draai <code>EXPLAIN</code> op een join tussen twee tabellen van <strong>dezelfde</strong> bron. Wordt de join doorgeschoven?
+c) Draai <code>EXPLAIN</code> op een join tussen de foreign tables van de <strong>twee verschillende</strong> bronnen. Wat verandert er in het plan?
+d) Meet het verschil in uitvoeringstijd tussen b) en c) bij een vergelijkbare hoeveelheid data.
+e) Verklaar het verschil met paragraaf 6 en 7 van de reader.</p>
+<hr>
+<h2>Opdracht 26.4 — Een federatieve rapportagelaag bouwen (20 min, drietallen)</h2>
+<p>a) Bouw een <code>UNION ALL</code>-view die het aantal deelnemers per bron telt (naar het patroon uit paragraaf 9).
+b) Draai <code>EXPLAIN</code> op deze view. Wordt elke deelquery doorgeschoven naar zijn eigen bron?
+c) Maak van deze view een materialized view.
+d) Meet het verschil in uitvoeringstijd tussen de gewone view (live) en de materialized view (na <code>REFRESH</code>).
+e) Voor welke van deze twee zou je kiezen voor een dashboard dat elke ochtend om 8 uur wordt geopend door tientallen gebruikers?</p>
+<hr>
+<h2>Opdracht 26.5 — Rechten controleren (10 min, individueel)</h2>
+<p>a) Welke kolommen zou je NIET willen opnemen in de foreign tables die de federatieve rapportage importeert vanuit Meridiaan’s <code>deelnemer</code>-tabel?
+b) Schrijf de <code>IMPORT FOREIGN SCHEMA</code>-opdracht zo dat alleen de noodzakelijke tabellen worden meegenomen (gebruik <code>LIMIT TO</code>).
+c) Welk recht zou de <code>fdw_leesrol</code> op de bron minimaal moeten hebben, en welk recht zeker niet?</p>
+<hr>
+<h2>Opdracht 26.6 — FDW, replicatie of Citus (15 min, drietallen)</h2>
+<p>Voor elk scenario: welke van de drie (FDW, logische replicatie, Citus) is het beste gereedschap?</p>
+<p>a) Een jaarlijks, eenmalig rapport dat gegevens van alle drie de fondsen combineert.
+b) Een operationeel dashboard dat binnen enkele seconden na een mutatie moet worden bijgewerkt.
+c) Eén fonds dat zelf horizontaal moet schalen vanwege een aangetoonde capaciteitsgrens.
+d) Een klantenservicemedewerker die incidenteel wil controleren of een deelnemer ooit bij een ander aangesloten fonds heeft gestaan.</p>
+<hr>
+<h2>Opdracht 26.7 — Schrijven via FDW afwegen (10 min, tweetallen)</h2>
+<p>a) Beschrijf een scenario bij de Pensioenfederatie waarin schrijven via een foreign table verleidelijk zou kunnen lijken.
+b) Wat is het risico, concreet voor dat scenario?
+c) Welk alternatief zou je voorstellen?</p>
+<hr>
+<h2>Opdracht 26.8 — Het federatie-ontwerp (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>federatieontwerp</strong> voor de Pensioenfederatie, maximaal twee A4, gericht aan Femke.</p>
+<ol>
+<li><strong>De rapportagebehoeften</strong> die FDW zou dekken, met per behoefte: live view of materialized view.</li>
+<li><strong>De rechten- en toegangsopzet</strong> voor de user mappings, met dataminimalisatie expliciet gemaakt.</li>
+<li><strong>Het onderscheid met de logische-replicatie-rapportagelaag</strong> uit deel 23 — wanneer gebruik je welke, en waarom niet beide voor hetzelfde doel?</li>
+<li><strong>Eén concreet risico van federatieve query’s</strong> (bijvoorbeeld een dure cross-bron-join) met een beheersmaatregel.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is het onderscheid live/materialized per behoefte bewust gemaakt, niet uniform toegepast?</li>
+<li>Is dataminimalisatie concreet (welke kolommen wél/niet), niet alleen genoemd?</li>
+<li>Wordt het verschil met logische replicatie scherp getrokken, niet vaag gehouden?</li>
+<li>Is het risico specifiek, met een meetbare beheersmaatregel (bijvoorbeeld een query-tijdslimiet)?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 26.1</h2>
+<p>a) Baken’s gegevens staan fysiek op een andere database dan Meridiaan en Kompas — een gezamenlijk dashboard kan niet simpelweg <code>JOIN</code> of <code>UNION</code> gebruiken zoals binnen één database.</p>
+<p>b) <strong>Logische replicatie</strong> (deel 18, 22, voorgesteld in deel 23 opdracht 23.7): kost een tweede, vertraagde kopie van de gegevens. <strong>Citus</strong> (deel 24-25): lost horizontale capaciteit op binnen één logisch geheel, maar is niet ontworpen voor los-gekoppelde, zelfstandige databases die federatief moeten samenwerken.</p>
+<p>c) Live, query-tijd-federatie zonder duplicatie — een query gaat rechtstreeks naar de bron op het moment dat hij wordt gesteld, in plaats van een vooraf gekopieerde versie te lezen.</p>
+<hr>
+<h2>Uitwerking 26.2</h2>
+<p>Uitvoering vrij; controleer bij e) dat beide foreign tables onafhankelijk van elkaar bevraagbaar zijn en de juiste (verschillende) testdata tonen.</p>
+<hr>
+<h2>Uitwerking 26.3</h2>
+<p>a) <code>Remote SQL</code> toont de doorgeschoven <code>WHERE</code>-voorwaarde — alleen de relevante rij(en) worden opgehaald.</p>
+<p>b) <strong>Ja</strong>, bij gelijke bron: de join kan (afhankelijk van de PostgreSQL/FDW-versie en de complexiteit) volledig op de bron worden uitgevoerd, zichtbaar als één <code>Foreign Scan</code>-knoop met de join in de <code>Remote SQL</code>.</p>
+<p>c) Het plan toont nu <strong>twee aparte</strong> <code>Foreign Scan</code>-knopen (één per bron) met een lokale join-knoop (bijvoorbeeld <code>Nested Loop</code> of <code>Hash Join</code>) erboven — de coördinerende database voert de join zelf uit na het ophalen van beide kanten.</p>
+<p>d) De cross-bron-join © is aanzienlijk trager, vooral naarmate de hoeveelheid opgehaalde data groeit — bij b) blijft het meeste werk op de bron, bij c) reist alle relevante data eerst over het netwerk.</p>
+<p>e) Dit is exact paragraaf 7: pushdown werkt alleen wanneer alle betrokken data van dezelfde foreign server komt. Tussen verschillende bronnen is er geen mechanisme dat de join kan verplaatsen.</p>
+<hr>
+<h2>Uitwerking 26.4</h2>
+<p>b) Elke tak van de <code>UNION ALL</code> wordt naar zijn eigen bron doorgeschoven (aggregate pushdown voor de <code>count(*)</code> per bron); de coördinerende database voegt alleen de drie eindresultaten samen.</p>
+<p>d) De materialized view is na <code>REFRESH</code> aanzienlijk sneller te bevragen dan de live view, omdat er geen netwerkverkeer naar de bronnen meer nodig is bij elke raadpleging — de kosten zijn allemaal al gemaakt tijdens de <code>REFRESH</code>.</p>
+<p>e) <strong>De materialized view</strong>, met een <code>REFRESH</code> gepland vóór 8 uur — tientallen gelijktijdige gebruikers die allemaal de dure, live federatieve query zouden triggeren, zou onnodige belasting op de drie bronservers leggen op precies het moment dat ze ook hun eigen operationele verkeer moeten verwerken.</p>
+<hr>
+<h2>Uitwerking 26.5</h2>
+<p>a) BSN (of een afgeleide daarvan), volledige adresgegevens, en andere velden die niet strikt nodig zijn voor de beoogde rapportage — dataminimalisatie zoals in deel 9 en 21 al werd toegepast op andere contexten.</p>
+<p>b)</p>
+<pre><code class="language-sql">IMPORT FOREIGN SCHEMA meridiaan_prod
+    LIMIT TO (deelnemer, dienstverband)
+    FROM SERVER meridiaan_server
+    INTO federatie_meridiaan;
+</code></pre>
+<p>En op de bron: een view die alleen de toegestane kolommen toont, met de foreign table daaroverheen (of <code>LIMIT TO</code> gecombineerd met een aparte, beperkte view op de bronserver zelf).</p>
+<p>c) <strong>Minimaal:</strong> <code>SELECT</code> op precies de benodigde kolommen (via een view op de bron indien nodig). <strong>Zeker niet:</strong> <code>INSERT</code>/<code>UPDATE</code>/<code>DELETE</code>-rechten, en zeker geen bredere beheerdersrechten.</p>
+<hr>
+<h2>Uitwerking 26.6</h2>
+<p>a) <strong>FDW</strong> (of zelfs een eenmalige, handmatige export) — eenmalig en niet prestatiekritiek, duplicatie via replicatie is hier overbodige moeite.</p>
+<p>b) <strong>Logische replicatie</strong> — FDW zou bij elke raadpleging een live, mogelijk trage federatieve query vereisen; een continu bijgewerkte lokale kopie is hier passender.</p>
+<p>c) <strong>Citus</strong> — dit is een intern capaciteitsprobleem binnen één fonds, niet een federatieve rapportagebehoefte.</p>
+<p>d) <strong>FDW</strong> — incidenteel, laag volume, geen noodzaak tot een permanente kopie van gevoelige gegevens louter voor een zeldzame controle.</p>
+<hr>
+<h2>Uitwerking 26.7</h2>
+<p>a) Bijvoorbeeld: een federatief onboardingproces waarbij een nieuwe deelnemer die van het ene naar het andere aangesloten fonds overstapt, in één stap in beide databases zou moeten worden bijgewerkt.</p>
+<p>b) Geen transactionele garantie tussen de twee databases — als de tweede schrijfactie faalt (netwerkstoring, constraint-schending), blijft de eerste staan zonder automatische terugdraai-mogelijkheid, hetzelfde probleem als cross-shard-transacties uit deel 24, paragraaf 7, nu tussen volledig onafhankelijke systemen.</p>
+<p>c) Een expliciet ontworpen, applicatiegestuurd proces met eigen foutafhandeling en, waar nodig, een saga-achtig patroon (deel 24, paragraaf 7) met duidelijke compensatiestappen — in plaats van te vertrouwen op een simpele <code>INSERT</code> via een foreign table.</p>
+<hr>
+<h2>Uitwerking 26.8 — modelantwoord (verkort)</h2>
+<p><strong>Federatieontwerp Pensioenfederatie</strong></p>
+<p><strong>1. Rapportagebehoeften</strong></p>
+<table>
+<thead>
+<tr>
+<th>Behoefte</th>
+<th>Live of materialized</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ad-hoc vraag van Femke (“hoeveel deelnemers hebben we samen”)</td>
+<td>Live view</td>
+</tr>
+<tr>
+<td>Kwartaaldashboard, door tientallen gebruikers bekeken</td>
+<td>Materialized, nachtelijke refresh</td>
+</tr>
+<tr>
+<td>Incidentele klantenservicecontrole (opdracht 26.6d)</td>
+<td>Live, met een expliciete query, geen permanente view</td>
+</tr>
+</tbody>
+</table>
+<p><strong>2. Rechten en toegang</strong></p>
+<p>Per bron een specifieke <code>fdw_leesrol</code> met <code>SELECT</code> op alleen de kolommen die de federatieve laag nodig heeft — geen BSN, geen volledige adresgegevens. <code>IMPORT FOREIGN SCHEMA</code> met <code>LIMIT TO</code> op precies de benodigde tabellen. SSL verplicht op elke <code>SERVER</code>-definitie.</p>
+<p><strong>3. Onderscheid met logische replicatie</strong></p>
+<p>FDW voor incidentele en periodiek ververste rapportages waar enige vertraging (materialized view) of query-tijd-kosten (live) acceptabel zijn. Logische replicatie blijft het gereedschap voor een continu, snel bijgewerkt operationeel dashboard — de twee dienen verschillende actualiteitseisen en horen niet allebei voor hetzelfde doel te worden ingezet, wat dubbele complexiteit zonder extra waarde zou geven.</p>
+<p><strong>4. Eén risico</strong></p>
+<p>Een toekomstige, onbedoeld dure cross-bron-join (bijvoorbeeld een rapportageontwikkelaar die per ongeluk een join tussen Meridiaan- en Kompas-foreign-tables schrijft zonder zich te realiseren dat dit niet wordt doorgeschoven) kan de bronservers onnodig belasten. <strong>Beheersmaatregel:</strong> een <code>statement_timeout</code> (deel 15) op de federatieve rapportagerol, en periodieke controle van <code>EXPLAIN</code>-plannen voor nieuwe rapportagequery’s vóór ze in productie gaan.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Bewust onderscheid live/materialized per behoefte</strong>, niet alles hetzelfde behandeld.</li>
+<li><strong>Concrete dataminimalisatie</strong> — welke kolommen expliciet worden uitgesloten.</li>
+<li><strong>Een scherp onderscheid met logische replicatie</strong>, niet “beide kunnen”.</li>
+<li><strong>Een specifiek, meetbaar risico en beheersmaatregel.</strong></li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 26.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">282 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-25-citus-in-de-praktijk/reader.html">&larr; Deel 25 — Citus in de praktijk</a><a class="dbm-prevnext next" href="../deel-27-event-sourcing-fundamenten/reader.html">Deel 27 — Event sourcing: fundamenten &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

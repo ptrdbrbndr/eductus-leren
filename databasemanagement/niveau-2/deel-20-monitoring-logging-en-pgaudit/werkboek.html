@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Monitoring, logging en pgaudit — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 20 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 20 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 20: Monitoring, logging en pgaudit</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+CREATE SCHEMA IF NOT EXISTS monitoring;
+</code></pre>
+<p>Dit dagdeel is zelfstandig leesbaar; als je een eerder dagdeel hebt gemist, gebruik dan de verwijzingen in de reader om de context op te halen — elke query is voorzien van het deel waar hij vandaan komt.</p>
+<p>Voor de opdrachten over <code>pgaudit</code> en Prometheus/Grafana: als deze niet beschikbaar zijn in je omgeving, behandel de bijbehorende opdrachten conceptueel (zie de uitwerkingen, die ook zonder eigen uitvoering te volgen zijn).</p>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 20.1 — De lijst samenbrengen (15 min, individueel)</h2>
+<p>a) Herschrijf de tabel uit paragraaf 2 van de reader in je eigen woorden: per signaal, in welk deel je het leerde en waarom het toen relevant was.
+b) Welke drie signalen uit die lijst had je, vóór dit dagdeel, nog nooit los van de context van dat specifieke dagdeel bekeken?
+c) Draai alle “laag 1”-queries uit paragraaf 4-9 van de reader één keer achter elkaar op je eigen <code>meridiaan_prod</code>. Welke leveren nu (buiten een incident) een interessant resultaat op?</p>
+<hr>
+<h2>Opdracht 20.2 — pg_stat_bgwriter interpreteren (15 min, tweetallen)</h2>
+<p>a) Bekijk <code>pg_stat_bgwriter</code> (of <code>pg_stat_checkpointer</code>, afhankelijk van je versie — controleer welke van de twee bestaat).
+b) Bereken het percentage afgedwongen checkpoints.
+c) Is dat percentage hoog of laag op jouw testomgeving? Is dat representatief voor productie?
+d) Wat zou je concluderen als <code>buffers_backend</code> structureel hoog is ten opzichte van <code>buffers_checkpoint</code> en <code>buffers_clean</code>?
+e) Welke configuratiewijziging uit deel 11 zou je overwegen als <code>checkpoints_req</code> domineert?</p>
+<hr>
+<h2>Opdracht 20.3 — Logging inrichten en de privacyafweging (20 min, drietallen)</h2>
+<p>a) Stel <code>log_min_duration_statement</code> in op 1000 ms en genereer een query die langer duurt (bijvoorbeeld met <code>pg_sleep</code>).
+b) Bekijk de logregel. Staat de volledige querytekst erin, inclusief eventuele letterlijke waarden?
+c) Herformuleer een query met een BSN als letterlijke waarde in de <code>WHERE</code>-clausule en laat hem loggen. Wat staat er nu in het logbestand?
+d) Wie zou in een echte Meridiaan-omgeving toegang moeten hebben tot dit logbestand? Vergelijk met de rollenmatrix uit deel 9.
+e) Zet <code>log_destination = 'csvlog'</code> en herhaal een van de vorige stappen. Wat is het praktische verschil bij het achteraf doorzoeken van de log?
+f) Formuleer een logbeleid in twee zinnen dat het diagnostische nut en het privacyrisico beide erkent.</p>
+<hr>
+<h2>Opdracht 20.4 — auto_explain als permanente voorziening (15 min, tweetallen)</h2>
+<p>a) Zet <code>auto_explain</code> aan met <code>log_min_duration = 2000</code> en <code>sample_rate = 0.3</code>.
+b) Genereer een aantal query’s, waarvan sommige langzamer dan 2 seconden (gebruik <code>pg_sleep</code> in een subquery of een bewust trage query zonder index).
+c) Bekijk de log. Staat elke trage query erin, of maar een deel? Verklaar met <code>sample_rate</code>.
+d) Wat is het verschil tussen wat <code>auto_explain</code> je vertelt en wat <code>pg_stat_statements</code> je vertelt? Geef een voorbeeld van een vraag die alleen het een van de twee kan beantwoorden.
+e) Waarom zou je <code>sample_rate</code> op 1.0 zetten op een testomgeving maar niet op productie?</p>
+<hr>
+<h2>Opdracht 20.5 — pgaudit voor Sanne (25 min, drietallen)</h2>
+<p>Terug naar deel 9: Sanne vroeg of Meridiaan kan aantonen wie het BSN heeft ingezien.</p>
+<p>a) Als <code>pgaudit</code> beschikbaar is: installeer de extensie en configureer <code>pgaudit.log = 'read'</code> voor een specifieke testrol (niet cluster-breed).
+b) Verbind als die rol en lees een rij uit een tabel met een BSN-kolom.
+c) Bekijk de logregel. Welke informatie staat erin die er zonder <code>pgaudit</code> niet had gestaan?
+d) Wat gebeurt er met het logvolume als je <code>pgaudit.log = 'read'</code> cluster-breed zou zetten in plaats van rolgebonden? Maak een ruwe schatting op basis van het aantal leesquery’s dat het portaal per dag genereert (deel 13/19).
+e) Als <code>pgaudit</code> niet beschikbaar is: beschrijf conceptueel, met de configuratie-syntax uit de reader, hoe je dit zou inrichten en welke logregel je zou verwachten.
+f) Schrijf het antwoord dat je nu, mét <code>pgaudit</code>, aan Sanne zou geven — vergelijk met het antwoord dat in deel 9 werd gegeven (“dat kan nu niet betrouwbaar”).</p>
+<hr>
+<h2>Opdracht 20.6 — Van signaal naar drempel (15 min, drietallen)</h2>
+<p>a) Neem de tabel uit paragraaf 14 van de reader. Kies er vijf signalen uit die je bij Meridiaan als <strong>eerste</strong> zou willen laten alarmeren, met een motivering per keuze.
+b) Voor elk van de vijf: schrijf de exacte query die het signaal meet.
+c) Wat zou je bewust <strong>niet</strong> willen alarmeren, om alarmmoeheid te voorkomen? Noem er twee, met reden.
+d) Stel voor één signaal een tweetrapsdrempel voor: een waarschuwing en een kritiek alarm, met verschillende vervolgacties.</p>
+<hr>
+<h2>Opdracht 20.7 — Het eerste-vijf-minuten-protocol toepassen (15 min, drietallen)</h2>
+<p>Drie meldingen komen binnen. Loop voor elk het protocol uit paragraaf 16 van de reader door en bepaal de eerstvolgende stap.</p>
+<p>a) <em>“Het portaal reageert helemaal niet meer, sinds tien minuten.”</em>
+b) <em>“Karins rapport, dat normaal een minuut duurt, loopt nu al een kwartier.”</em>
+c) <em>“We kregen zojuist een mail dat er een failover heeft plaatsgevonden, maar niemand weet waarom.”</em></p>
+<p>d) Voor elk: welke stap uit het protocol zou het snelst tot de kern van het probleem leiden, en waarom die en niet een andere?</p>
+<hr>
+<h2>Opdracht 20.8 — Een dashboardvoorstel (10 min, tweetallen)</h2>
+<p>a) Schets (in tekst of als eenvoudige tabel) het “niveau 1”-scherm uit paragraaf 15 van de reader voor Meridiaan: welke vier categorieën, en welk signaal per categorie bepaalt groen/oranje/rood?
+b) Wat zou Ruud in twee minuten moeten kunnen concluderen uit dit scherm, zonder verder te klikken?</p>
+<hr>
+<h2>Opdracht 20.9 — Het monitoringplan (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>monitoringplan</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>De drie lagen</strong> ingevuld voor Meridiaan: welke ad-hoc queries elke DBA moet kennen, wat structureel wordt vastgelegd, en wat extern verzameld wordt.</li>
+<li><strong>Het logbeleid</strong>, met de privacyafweging expliciet gemaakt en een voorstel voor wie toegang heeft.</li>
+<li><strong>De pgaudit-configuratie</strong> voor de rollen die bij persoonsgegevens kunnen komen.</li>
+<li><strong>De top tien alarmdrempels</strong>, geprioriteerd, met per drempel de vervolgactie.</li>
+<li><strong>Het eerste-vijf-minuten-protocol</strong>, aangepast aan Meridiaans specifieke architectuur (verwijs naar de topologie uit deel 19).</li>
+<li><strong>Wat dit plan niet oplost</strong> — expliciet, met verwijzing naar wat monitoring wél en niet doet (paragraaf 17).</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Zijn de drie lagen elk concreet ingevuld, niet alleen genoemd?</li>
+<li>Is de pgaudit-configuratie rolgebonden in plaats van cluster-breed?</li>
+<li>Zijn de tien drempels een prioritering, geen kopie van de volledige tabel uit de reader?</li>
+<li>Erkent punt 6 expliciet dat monitoring geen vervanging is voor de maatregelen uit deel 12, 16, 17, 18 en 19?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 20.1</h2>
+<p>a) Vrije opdracht — de kern is dat elk signaal een concrete oorzaak had op het moment dat het werd geïntroduceerd (bijvoorbeeld: replicatievertraging leerde je meten omdat het een RPO-schending in wording is, deel 18).</p>
+<p>b) Vaak genoemd: <code>pg_stat_progress_vacuum</code> (alleen gebruikt tijdens een demonstratie), <code>buffers_backend</code> uit <code>pg_stat_bgwriter</code> (in deel 11 kort genoemd, zelden apart bekeken), en de trend van <code>stddev_exec_time</code> (in deel 13 alleen als diagnosemiddel, niet als doorlopend signaal).</p>
+<p>c) Op een gezonde testomgeving zonder actief incident: waarschijnlijk weinig alarmerends, wat op zichzelf een goede oefening is — leren wat “normaal” eruitziet is een voorwaarde om “abnormaal” te herkennen.</p>
+<hr>
+<h2>Uitwerking 20.2</h2>
+<p>b)</p>
+<pre><code class="language-sql">SELECT round(100.0 * checkpoints_req / nullif(checkpoints_timed + checkpoints_req, 0), 1)
+FROM pg_stat_bgwriter;
+</code></pre>
+<p>c) Op een testomgeving met weinig schrijfbelasting: waarschijnlijk laag of zelfs 0% — de meeste checkpoints gebeuren op tijd omdat er weinig WAL wordt gegenereerd. <strong>Niet representatief voor productie</strong>, waar Meridiaans schrijfbelasting (portaal, mutatieverwerking) veel hoger ligt.</p>
+<p>d) Een hoog <code>buffers_backend</code> betekent dat gewone sessies zelf vuile pagina’s naar schijf moeten schrijven omdat de achtergrondprocessen (checkpointer, background writer) het tempo niet bijhouden — dat kost die sessies onnodig extra I/O-latency, wat zich vertaalt in tragere query’s zonder dat er iets mis is met de query zelf.</p>
+<p>e) <code>max_wal_size</code> verhogen (deel 11), zodat checkpoints minder snel worden afgedwongen en meer op het geplande <code>checkpoint_timeout</code>-ritme gebeuren.</p>
+<hr>
+<h2>Uitwerking 20.3</h2>
+<p>b) Ja — de volledige querytekst staat in de logregel, inclusief eventuele letterlijke waarden die niet als parameter zijn meegegeven.</p>
+<p>c) Het BSN staat letterlijk, leesbaar, in het logbestand.</p>
+<p>d) Dezelfde beperkte kring als in de rollenmatrix van deel 9 (beheer, met een gedocumenteerde reden) — bepaald niet de brede groep die normaal applicatielogs mag inzien voor foutopsporing.</p>
+<p>e) CSV-logs zijn direct met <code>COPY</code> in te lezen als tabel en met SQL te doorzoeken (bijvoorbeeld: “alle trage queries van gisteren tussen 14:00 en 15:00”), in plaats van met tekstverwerking (<code>grep</code>, reguliere expressies) door platte tekst te moeten worstelen.</p>
+<p>f) Modelantwoord: <em>“De serverlog is een productiesysteem met potentieel persoonsgegevens en krijgt daarom dezelfde toegangsbeperking als de database zelf; we loggen genoeg om incidenten te kunnen reconstrueren, maar niet onbeperkt, en we vullen het gat voor herleidbaarheid van specifieke inzage met pgaudit in plaats van met een lage <code>log_min_duration_statement</code>.”</em></p>
+<hr>
+<h2>Uitwerking 20.4</h2>
+<p>c) Bij <code>sample_rate = 0.3</code> verschijnt ongeveer 30% van de trage query’s in de log — niet allemaal. Dit is zichtbaar doordat herhaalde uitvoering van dezelfde trage query soms wel, soms niet gelogd wordt.</p>
+<p>d) <code>pg_stat_statements</code> vertelt je <strong>dat</strong> een bepaalde genormaliseerde query gemiddeld 3 seconden duurt en 500 keer is aangeroepen (totale belasting). <code>auto_explain</code> vertelt je <strong>waarom</strong> één specifieke uitvoering 3 seconden duurde — het queryplan van dat moment, met de werkelijke rijaantallen. Een vraag die alleen <code>auto_explain</code> beantwoordt: “welk queryplan werd gebruikt toen deze query traag was, en welke knoop kostte de tijd?” Een vraag die alleen <code>pg_stat_statements</code> beantwoordt: “welke query kost de server over een hele dag het meeste, opgeteld?”</p>
+<p>e) Op een testomgeving is de belasting laag genoeg dat 100% steekproef geen merkbare overhead geeft, en je wilt daar juist elk detail zien. Op productie met veel verkeer zou 100% steekproef een meetbare, onnodige belasting toevoegen aan precies de query’s die je probeert te helpen.</p>
+<hr>
+<h2>Uitwerking 20.5</h2>
+<p>c) Wie (de rol), wanneer (tijdstip), welk object (<code>pgaudit.log_relation</code>), en dat het specifiek een <strong>lees</strong>handeling was — informatie die in een gewone logregel (die alleen de query-tekst en duur toont, indien boven de drempel) niet gestructureerd beschikbaar is.</p>
+<p>d) Cluster-breed zou elke leesquery van elke rol op elke tabel loggen — bij een portaal met duizenden query’s per uur (deel 13, 19) zou dat een veelvoud van het huidige logvolume betekenen, met het merendeel oninteressant voor de herleidbaarheidsvraag. De rolgebonden aanpak beperkt het tot precies de rollen die bij gevoelige gegevens kunnen komen.</p>
+<p>e) Conceptueel antwoord: <code>CREATE EXTENSION pgaudit;</code> in <code>shared_preload_libraries</code> (vereist herstart, deel 11), dan <code>ALTER ROLE klantenservice SET pgaudit.log = 'read';</code>. Bij een <code>SELECT</code> op <code>deelnemer</code> door die rol zou een logregel verschijnen met sessie-identificatie, rolnaam, tijdstip, het statement-type (<code>SELECT</code>), en (met <code>log_relation = on</code>) de betrokken tabel.</p>
+<p>f) Modelantwoord: <em>“In deel 9 konden we niet betrouwbaar aantonen wie het BSN had ingezien — standaardlogging legt dat niet gestructureerd vast. Met pgaudit, rolgebonden ingesteld op de rollen die toegang hebben tot deelnemergegevens, kunnen we nu voor elke leesactie op die tabel vastleggen wie, wanneer, en via welke rol. Dat dekt de herleidbaarheidseis uit de AVG voor deze specifieke vraag.”</em></p>
+<hr>
+<h2>Uitwerking 20.6</h2>
+<p>a) Modelantwoord, vijf keuzes: <code>age(relfrozenxid)</code> (enige catastrofale falen), replicatievertraging (RPO-schending in wording), wachtende sessies op een lock (voelt als “alles traag”, makkelijk verkeerd gediagnosticeerd zonder alarm), archiveringsfouten (stil falen tot het te laat is), Patroni-clusterstatus (fundamentele beschikbaarheidsvraag).</p>
+<p>c) Modelantwoord: cachetrefkans die een paar procent onder 99% zakt tijdens een eenmalige grote batch (normale, verwachte schommeling — geen alarm nodig, wel de moeite waard te monitoren als trend) en incidentele individuele deadlocks (uit deel 15: enkele per week is normaal; pas een structurele toename is een signaal).</p>
+<p>d) Voorbeeld: bloatpercentage — waarschuwing bij 30% (kijk ernaar bij gelegenheid), kritiek bij 50% of een snelle stijging binnen een dag (plan een <code>pg_repack</code> of onderzoek de oorzaak, deel 12).</p>
+<hr>
+<h2>Uitwerking 20.7</h2>
+<p>a) Eerste stap: <code>pg_stat_activity</code>, specifiek op <code>wait_event_type</code>. Bij “reageert helemaal niet” is de kans groot dat het een lockwachtrij is (deel 15) — een enkele blokkerende sessie die alles erachter ophoudt. <code>pg_blocking_pids()</code> is de snelste route naar de oorzaak.</p>
+<p>b) Eerste stap: <code>pg_stat_statements</code> voor deze specifieke query — is de rangorde of het gemiddelde veranderd? Vervolgens: <code>EXPLAIN ANALYZE</code> op de rapportagequery zelf om te zien of het queryplan is omgeslagen (verouderde statistieken, deel 8/13) of dat er vergrendeling meespeelt.</p>
+<p>c) Eerste stap: Patroni-clusterstatus (<code>patronictl list</code> of de REST API) om te zien welke node nu primary is en sinds wanneer, gevolgd door de Patroni-logs op alle nodes om de aanleiding te reconstrueren (deel 19).</p>
+<p>d) a) is het snelst op te lossen via lockdiagnose omdat “helemaal niet reageren” zelden een prestatieprobleem is (dat zou nog wel íéts doorlaten); b) vraagt eerst onderscheid tussen “trager door data” en “trager door plan” vóórdat je verder zoekt; c) is achteraf onderzoek, geen acute diagnose — de failover heeft zichzelf al opgelost, de vraag is nu waarom.</p>
+<hr>
+<h2>Uitwerking 20.8</h2>
+<p>a) Modelantwoord:</p>
+<table>
+<thead>
+<tr>
+<th>Categorie</th>
+<th>Signaal</th>
+<th>Groen</th>
+<th>Oranje</th>
+<th>Rood</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gezondheid</td>
+<td><code>age(relfrozenxid)</code> %</td>
+<td>&lt;50%</td>
+<td>50-90%</td>
+<td>&gt;90%</td>
+</tr>
+<tr>
+<td>Prestatie</td>
+<td>Cachetrefkans</td>
+<td>&gt;99%</td>
+<td>95-99%</td>
+<td>&lt;95%</td>
+</tr>
+<tr>
+<td>Beschikbaarheid</td>
+<td>Patroni-status</td>
+<td>Leider actief, geen recente failover</td>
+<td>Recente switchover</td>
+<td>Geen leider / onverwachte failover</td>
+</tr>
+<tr>
+<td>Capaciteit</td>
+<td>Verbindingsdruk (actief/totaal)</td>
+<td>&lt;50%</td>
+<td>50-80%</td>
+<td>&gt;80%</td>
+</tr>
+</tbody>
+</table>
+<p>b) Ruud moet in twee minuten kunnen zien of er <strong>iets</strong> is dat aandacht vraagt, en zo ja, welke van de vier categorieën — zonder de onderliggende cijfers te hoeven interpreteren. Kleur, niet cijfers, draagt die boodschap het snelst.</p>
+<hr>
+<h2>Uitwerking 20.9 — modelantwoord (verkort)</h2>
+<p><strong>Monitoringplan Meridiaan</strong></p>
+<p><strong>1. Drie lagen</strong></p>
+<p><em>Laag 1 (elke DBA kent uit het hoofd):</em> de <code>pg_stat_activity</code>-diagnosequery uit deel 15, <code>pg_blocking_pids()</code>, <code>EXPLAIN (ANALYZE, BUFFERS)</code>.
+<em>Laag 2 (structureel binnen PostgreSQL):</em> <code>pg_stat_statements</code> (nooit gereset zonder documentatie), <code>auto_explain</code> met <code>sample_rate=0.1</code>, CSV-logging.
+<em>Laag 3 (extern):</em> <code>postgres_exporter</code> + Prometheus + Grafana, scrapend elke 30 seconden, met de dashboards uit punt 4 hieronder als basis.</p>
+<p><strong>2. Logbeleid</strong></p>
+<p><code>log_min_duration_statement = 1000</code>, nooit 0. Toegang tot de serverlog beperkt tot beheer, gelijk aan de toegang tot productiedata zelf (deel 9). CSV-formaat voor doorzoekbaarheid.</p>
+<p><strong>3. pgaudit</strong></p>
+<pre><code class="language-sql">ALTER ROLE klantenservice SET pgaudit.log = 'read, write';
+ALTER ROLE portaal_app    SET pgaudit.log = 'read, write';
+</code></pre>
+<p>Niet cluster-breed — beperkt tot de rollen die bij <code>deelnemer</code> en aanverwante tabellen kunnen komen, om logvolume behapbaar te houden terwijl de herleidbaarheidseis (deel 9, Sanne) wordt gedekt.</p>
+<p><strong>4. Top tien alarmdrempels</strong> (geprioriteerd)</p>
+<ol>
+<li><code>age(relfrozenxid)</code> &gt; 50% — enige catastrofale falen</li>
+<li>Archiveringsfout — elke fout, direct</li>
+<li>Patroni: geen leider — beschikbaarheid</li>
+<li><code>replay_lag</code> &gt; 2 min — RPO-schending in wording</li>
+<li>Sessies wachtend op lock &gt; 5 of &gt;30s</li>
+<li>Inactief replicatieslot &gt; 1 uur</li>
+<li>Bloatpercentage &gt; 40% of snelle stijging</li>
+<li><code>idle in transaction</code> &gt; 1 min</li>
+<li>Deadlocks &gt; 5/dag</li>
+<li>Cachetrefkans &lt; 95% structureel</li>
+</ol>
+<p><strong>5. Eerste-vijf-minuten-protocol</strong> (aangepast aan Meridiaans architectuur uit deel 19)</p>
+<p>Stap 0 toegevoegd vóór de generieke stappen: controleer eerst of er een Patroni-failover heeft plaatsgevonden in de afgelopen 15 minuten — bij een cluster met automatische failover is dat een aannemelijke eerste verklaring vóórdat je in query-diagnose duikt.</p>
+<p><strong>6. Wat dit niet oplost</strong></p>
+<p>Dit plan <strong>detecteert</strong> problemen sneller; het <strong>verhelpt</strong> ze niet automatisch. Bloatalarm vraagt nog steeds de maatregelen uit deel 12; een archiveringsalarm vraagt het herstelprotocol uit deel 17; een verdwenen Patroni-leider vraagt het failoverbegrip uit deel 19. Monitoring maakt bovendien geen enkel van de eerdere maatregelen overbodig — het is de laag die vertelt wanneer je ze moet inzetten.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Elke laag concreet ingevuld</strong>, niet “we gebruiken Prometheus” zonder wat er precies gemeten wordt.</li>
+<li><strong>pgaudit rolgebonden.</strong> Cluster-breed zonder motivering is een gemiste kans om de kosten/baten-afweging uit paragraaf 12 toe te passen.</li>
+<li><strong>Een echte prioritering in punt 4</strong>, niet de volledige tabel uit de reader gekopieerd.</li>
+<li><strong>Punt 6 als serieuze erkenning</strong>, niet een pro-forma zin.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 20.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">339 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-19-hoge-beschikbaarheid/reader.html">&larr; Deel 19 — Hoge beschikbaarheid</a><a class="dbm-prevnext next" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">Deel 21 — Security-verdieping en NoSQL in perspectief &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

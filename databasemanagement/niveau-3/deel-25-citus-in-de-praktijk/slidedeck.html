@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Citus in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 25 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 25 — Slidedeck</h1>
+<p><strong>Citus in de praktijk</strong>
+Niveau 3, deel 3 van 8 (deel 25 van 30) | 34 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Citus in de praktijk</h1>
+<h2>Niveau 3 — Deel 25</h2>
+<p><em>Vandaag bouwen jullie wat deel 24 alleen doordacht heeft.</em></p>
+<hr>
+<h2>Slide 2 — Geruststelling vooraf</h2>
+<h1>Citus is een extensie.</h1>
+<p>Geen ander databasesysteem. Geen fork.</p>
+<p>Alle SQL die je kent, blijft geldig.
+Alle <code>pg_stat_*</code>-weergaven bestaan nog — per node.</p>
+<hr>
+<h2>Slide 3 — De architectuur</h2>
+<pre><code>              Coördinator
+         (weet WAT waar staat)
+       ┌────────┼────────┐
+   Worker 1   Worker 2   Worker 3
+   (shards)   (shards)   (shards)
+</code></pre>
+<p>Elke node: een volwaardige PostgreSQL-server.</p>
+<hr>
+<h2>Slide 4 — Let op</h2>
+<h1>De coördinator kan een</h1>
+<h1>single point of failure zijn.</h1>
+<p>Tenzij hij zelf ook Patroni krijgt (deel 19).</p>
+<hr>
+<h2>Slide 5 — Opdracht 25.1</h2>
+<h1>Het cluster verkennen</h1>
+<p>Verbind rechtstreeks met een worker.
+Is dit “gewoon” PostgreSQL?</p>
+<p><em>10 min, tweetallen</em></p>
+<hr>
+<h2>Slide 6 — Distributed table</h2>
+<pre><code class="language-sql">CREATE TABLE deelnemer ( ... );
+SELECT create_distributed_table('deelnemer', 'deelnemer_id');
+</code></pre>
+<p>De shardsleutel uit deel 24 — nu één functieaanroep.</p>
+<hr>
+<h2>Slide 7 — Reference table</h2>
+<pre><code class="language-sql">CREATE TABLE fonds ( ... );
+SELECT create_reference_table('fonds');
+</code></pre>
+<p>Volledige kopie op <strong>elke</strong> worker.
+Elke join blijft lokaal.</p>
+<hr>
+<h2>Slide 8 — Opdracht 25.2</h2>
+<h1>Distributed tables bouwen</h1>
+<p>fonds, deelnemer, dienstverband, mutatie.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 9 — Wat blijft hetzelfde</h2>
+<pre><code class="language-sql">SELECT * FROM deelnemer WHERE deelnemer_id = 42;
+INSERT INTO mutatie (...) VALUES (...);
+</code></pre>
+<h1>Gewone SQL. De applicatie weet niet</h1>
+<h1>dat de data over servers verspreid is.</h1>
+<hr>
+<h2>Slide 10 — EXPLAIN, nu met Task Count</h2>
+<pre><code>Custom Scan (Citus Adaptive)
+  Task Count: 1
+  -&gt;  Task
+        Node: host=worker2
+</code></pre>
+<p>Eén shard, één worker. Het distributed-equivalent
+van “één partitie in het plan” (deel 16).</p>
+<hr>
+<h2>Slide 11 — Voorspel</h2>
+<p><strong>Notities:</strong> vóór elke EXPLAIN vragen: wat verwacht je?</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer WHERE fonds_id = 2;
+</code></pre>
+<p><code>fonds_id</code> is niet de shardsleutel.</p>
+<h1>Task Count?</h1>
+<hr>
+<h2>Slide 12 — Alle shards</h2>
+<pre><code>Task Count: 32
+</code></pre>
+<p>De coördinator stuurt naar élke worker,
+telt zelf, en sommeert de deelresultaten.</p>
+<p><strong>Geen pruning — dezelfde les als deel 16 §8.</strong></p>
+<hr>
+<h2>Slide 13 — Opdracht 25.3</h2>
+<h1>Task Count zien veranderen</h1>
+<p>Vier queries. Voorspel steeds eerst.</p>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 14 — Pauze</h2>
+<hr>
+<h2>Slide 15 — Een aanname</h2>
+<p>Twee tabellen, dezelfde shardsleutel (<code>deelnemer_id</code>).</p>
+<h1>Zijn ze automatisch co-located?</h1>
+<p><strong>Notities:</strong> laat de zaal antwoorden vóór het experiment.</p>
+<hr>
+<h2>Slide 16 — Nee.</h2>
+<pre><code class="language-sql">SELECT create_distributed_table('aanspraak', 'deelnemer_id');
+-- géén colocate_with
+</code></pre>
+<h1>Cross-shard join, ondanks</h1>
+<h1>dezelfde sleutel.</h1>
+<hr>
+<h2>Slide 17 — De correctie</h2>
+<pre><code class="language-sql">SELECT create_distributed_table('aanspraak', 'deelnemer_id',
+    colocate_with =&gt; 'deelnemer');
+</code></pre>
+<h1>Co-locatie is nooit impliciet.</h1>
+<h1>Altijd expliciet.</h1>
+<hr>
+<h2>Slide 18 — Opdracht 25.4</h2>
+<h1>De co-locatie-valkuil</h1>
+<p>Zie het zelf misgaan. Corrigeer het. Meet het verschil.</p>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 19 — Opdracht 25.5</h2>
+<h1>Reference tables in de praktijk</h1>
+<p>Wat als <code>fonds</code> per ongeluk gedistribueerd was?</p>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 20 — Rebalancing</h2>
+<pre><code class="language-sql">SELECT citus_add_node('worker4-host', 5432);
+SELECT rebalance_table_shards('deelnemer');
+</code></pre>
+<p>Expand-migrate-contract (deel 24) — <strong>grotendeels automatisch.</strong></p>
+<hr>
+<h2>Slide 21 — Wat automatisering niet wegneemt</h2>
+<p>Het kopieerwerk: weg.
+De <strong>noodzaak tot verificatie</strong>: blijft.</p>
+<p>Zelfde discipline als deel 6, 16, 22 —
+automatisering verkleint het risico, elimineert het niet.</p>
+<hr>
+<h2>Slide 22 — Opdracht 25.6</h2>
+<h1>Rebalancing</h1>
+<p>Indien mogelijk: uitvoeren. Anders: conceptueel doordenken.</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 23 — Pauze</h2>
+<hr>
+<h2>Slide 24 — Wat Citus niet automatisch oplost</h2>
+<ul>
+<li>Cross-shard-transacties — nog steeds bewust ontwerp nodig</li>
+<li>Globale uniciteit buiten de shardsleutel</li>
+<li><strong>HA per node</strong> — elke worker heeft zijn eigen Patroni nodig</li>
+<li>Back-up — nu gecoördineerd over coördinator + workers</li>
+</ul>
+<hr>
+<h2>Slide 25 — Citus lost horizontale capaciteit op.</h2>
+<h1>Niet beschikbaarheid.</h1>
+<p>Twee orthogonale eisen — allebei nog nodig.</p>
+<hr>
+<h2>Slide 26 — Migreren: de synthese</h2>
+<p>Gepartitioneerd (deel 16) → gedistribueerd (vandaag)</p>
+<p><strong>Niet</strong> de partitiesleutel hergebruiken als shardsleutel.
+Nieuwe tabel, <strong>logische replicatie</strong> (deel 18),
+expand-contract (deel 22).</p>
+<hr>
+<h2>Slide 27 — Drie eerdere delen, één operatie</h2>
+<p>Deel 16 + Deel 18 + Deel 22 + vandaag’s syntax
+= <strong>één concrete migratie</strong></p>
+<p>Geen nieuwe techniek. Hergebruik.</p>
+<hr>
+<h2>Slide 28 — Opdracht 25.7</h2>
+<h1>Migreren van gepartitioneerd naar Citus</h1>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 29 — Wanneer Citus NIET</h2>
+<p>Geen natuurlijke co-locatie-sleutel →
+coördinatiekosten eten de winst op.</p>
+<p>Team worstelt al met één HA-cluster →
+sharding vermenigvuldigt de last.</p>
+<hr>
+<h2>Slide 30 — Voor de Pensioenfederatie, vandaag</h2>
+<h1>Drie fondsen. Ruim onder de</h1>
+<h1>capaciteitsgrens.</h1>
+<p><strong>Citus is nu niet nodig.</strong></p>
+<p>Wat wél gewonnen is: de kennis om er klaar voor te zijn.</p>
+<hr>
+<h2>Slide 31 — Geen anticlimax</h2>
+<p>Na een dagdeel vol krachtige mogelijkheden:</p>
+<h1>Dezelfde discipline als BRIN (14),</h1>
+<h1>partitionering (16), patroon 3 (23).</h1>
+<p>Kies op gemeten noodzaak. Niet op enthousiasme.</p>
+<hr>
+<h2>Slide 32 — Opdracht 25.8</h2>
+<h1>Wel of niet Citus</h1>
+<p>Vier scenario’s.</p>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 33 — Opdracht 25.9</h2>
+<h1>Het implementatievoorstel</h1>
+<p>Tabellen + distributie · clusterarchitectuur ·
+migratiepad met juiste techniek ·
+<strong>alle vier niveau-2-onderwerpen</strong> herzien ·
+één query met blijvend hoge Task Count</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 34 — Volgende keer</h2>
+<h1>Deel 26</h1>
+<p>Vandaag: horizontale capaciteit. Het sharding-tweeluik is af.</p>
+<p>Volgende keer verlaat de architectuur een andere as —
+niet “hoeveel data kan één systeem aan” maar
+“hoe bewaar je de volledige geschiedenis van hoe de
+huidige stand is ontstaan”.</p>
+<hr>
+<p><em>Einde slidedeck deel 25.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">297 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-24-sharding-fundamenten/reader.html">&larr; Deel 24 — Sharding-fundamenten</a><a class="dbm-prevnext next" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">Deel 26 — Foreign data wrappers en federatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

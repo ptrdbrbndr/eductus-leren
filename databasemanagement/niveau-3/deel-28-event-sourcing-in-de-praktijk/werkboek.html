@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Event sourcing in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 28 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 28 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 28: Event sourcing in de praktijk</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">CREATE SCHEMA IF NOT EXISTS oefening28;
+SET search_path TO oefening28, public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+</code></pre>
+<p>Bouw voort op de <code>events</code>-tabel uit deel 27 (of maak hem hier opnieuw aan).</p>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 28.1 — Een command handler bouwen (20 min, drietallen)</h2>
+<p>a) Bouw de functie <code>verwerk_salariswijziging</code> naar het patroon uit paragraaf 3.
+b) Test hem met een geldige wijziging (binnen de 50%-regel). Verschijnt het event?
+c) Test hem met een ongeldige wijziging (boven de 50%-regel). Wordt de fout correct geworpen, en blijft de stream ongewijzigd?
+d) Waarom moet de validatie vóór de <code>INSERT</code> gebeuren en niet erna?</p>
+<hr>
+<h2>Opdracht 28.2 — Optimistic concurrency botsen (20 min, drietallen)</h2>
+<p>a) Open twee sessies. Laat beide het huidige volgnummer van hetzelfde aggregaat lezen.
+b) Laat sessie A een event toevoegen met <code>volgnummer + 1</code>.
+c) Laat sessie B hetzelfde proberen met hetzelfde volgnummer. Wat gebeurt er?
+d) Implementeer (in pseudocode of een script) de retry-lus uit paragraaf 4.
+e) Vergelijk dit patroon expliciet met de retry-logica uit deel 15, opdracht 15.11. Wat is identiek, wat verschilt?</p>
+<hr>
+<h2>Opdracht 28.3 — Snapshotting meten (20 min, drietallen)</h2>
+<p>a) Genereer voor één aggregaat een stream van minstens 500 events (een lus met kleine salariswijzigingen volstaat als oefenmateriaal).
+b) Meet hoe lang het duurt om de huidige stand te berekenen door de hele stream af te spelen.
+c) Maak een snapshot op het huidige volgnummer.
+d) Voeg tien nieuwe events toe.
+e) Meet hoe lang het nu duurt om de huidige stand te berekenen met snapshot + de laatste tien events. Vergelijk met b).
+f) Bij welke streamlengte zou jij, gebaseerd op deze meting, een snapshotstrategie invoeren?</p>
+<hr>
+<h2>Opdracht 28.4 — Projecties automatiseren (15 min, tweetallen)</h2>
+<p>a) Bouw een trigger die bij elke nieuwe event een eenvoudige projectietabel bijwerkt (niet een materialized view — een gewone tabel met UPSERT-logica).
+b) Voeg een event toe en controleer of de projectie direct is bijgewerkt.
+c) Wat zou het kosten (in schrijfoverhead) als deze trigger op een tabel staat die duizenden events per seconde ontvangt? Verwijs naar de indexoverhead-discussie uit deel 14.
+d) Noem één scenario waarin je toch voor de periodieke (<code>pg_cron</code>) aanpak zou kiezen in plaats van een trigger.</p>
+<hr>
+<h2>Opdracht 28.5 — Het AVG-vraagstuk (25 min, drietallen)</h2>
+<p>Dit is de kernopdracht van het dagdeel.</p>
+<p>a) Bouw een kleine tabel <code>deelnemer_sleutels</code> en genereer voor een fictieve deelnemer een sleutel.
+b) Leg twee events vast waarvan een deel van de payload versleuteld is met die sleutel (gebruik <code>pgp_sym_encrypt</code>).
+c) Ontsleutel de payload en controleer dat de oorspronkelijke waarde klopt.
+d) Verwijder de sleutel uit <code>deelnemer_sleutels</code>.
+e) Probeer de payload opnieuw te ontsleutelen. Wat gebeurt er?
+f) Is het event zelf nog aanwezig in de <code>events</code>-tabel? Is de <strong>structuur</strong> van de geschiedenis (dat er een wijziging plaatsvond, op welk moment) nog intact?
+g) Wat zou er gebeuren als er een oude back-up van <code>deelnemer_sleutels</code> bestaat van vóór stap d)? Verwijs naar deel 17.</p>
+<hr>
+<h2>Opdracht 28.6 — Schema-evolutie toepassen (15 min, tweetallen)</h2>
+<p>a) Leg een <code>SalarisGewijzigd</code>-event vast zonder <code>_version</code>-veld (het “oude” formaat).
+b) Leg een tweede vast mét <code>_version: 2</code> en een <code>reden</code>-veld.
+c) Schrijf de <code>upcast_salariswijziging</code>-functie uit paragraaf 11 en pas hem toe op beide events.
+d) Bouw een projectiequery die met behulp van deze upcast-functie correct omgaat met beide versies tegelijk.</p>
+<hr>
+<h2>Opdracht 28.7 — Monitoring-signalen herkennen (10 min, individueel)</h2>
+<p>Voor elk signaal uit paragraaf 13: schrijf de query (of het idee van de query) waarmee je het zou meten.</p>
+<p>a) Groei van de event store per week.
+b) Aantal <code>unique_violation</code>-conflicten (stel je voor dat je ze logt in een aparte tabel bij elke retry).
+c) Snapshot-leeftijd versus streamlengte voor het aggregaat met de langste stream.</p>
+<hr>
+<h2>Opdracht 28.8 — Het implementatieplan (20 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>implementatieplan</strong> voor het event-sourced maken van Meridiaans aanspraakopbouw (het domein dat in deel 27, opdracht 27.9, werd gekozen), maximaal twee A4.</p>
+<ol>
+<li><strong>De command handlers</strong> die nodig zijn, met per handler de belangrijkste bedrijfsregel die hij bewaakt.</li>
+<li><strong>De snapshotstrategie</strong>: wanneer een snapshot wordt gemaakt, gebaseerd op een geschatte streamlengte.</li>
+<li><strong>Het AVG-ontwerp</strong>: welke velden versleuteld worden, waar de sleutels leven, en hoe dit aansluit bij het back-upbeleid uit deel 17.</li>
+<li><strong>De projectie-update-strategie</strong>: periodiek, trigger, of <code>LISTEN</code>/<code>NOTIFY</code>, met reden.</li>
+<li><strong>Eén monitoringalarm</strong> dat je specifiek voor dit event-sourced systeem zou toevoegen aan het dashboard uit deel 20.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Bevatten de command handlers echte, specifieke bedrijfsregels (niet alleen “valideert de invoer”)?</li>
+<li>Is de snapshotstrategie onderbouwd met een geschat getal, geen slag in de lucht?</li>
+<li>Is het AVG-ontwerp expliciet gekoppeld aan het back-upbeleid uit deel 17?</li>
+<li>Is het monitoringalarm specifiek voor event sourcing, niet een kopie uit deel 20?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 28.1</h2>
+<p>b) en c) De geldige wijziging levert een nieuw <code>SalarisGewijzigd</code>-event op; de ongeldige wijziging werpt de <code>RAISE EXCEPTION</code> en er wordt <strong>geen</strong> event toegevoegd — de transactie rond de functie-aanroep rolt terug.</p>
+<p>d) Omdat een event, eenmaal vastgelegd, onveranderlijk is (deel 27). Zou de validatie ná de <code>INSERT</code> gebeuren, dan zou een ongeldig feit al deel uitmaken van de onveranderlijke geschiedenis vóór de fout wordt opgemerkt — het enige correcte moment om een commando af te wijzen is vóórdat het een event wordt.</p>
+<hr>
+<h2>Uitwerking 28.2</h2>
+<p>c) Sessie B krijgt een <strong><code>unique_violation</code></strong>-foutmelding (SQLSTATE 23505) — de constraint voorkomt het dubbele volgnummer.</p>
+<p>d) en e) Het patroon is nagenoeg identiek aan deel 15’s retry-logica: lees de actuele stand opnieuw, probeer opnieuw met een vernieuwd volgnummer, met oplopende en gespreide wachttijd, en een bovengrens aan het aantal pogingen. <strong>Identiek:</strong> de noodzaak om na een conflict de hele operatie (niet alleen de laatste stap) opnieuw te doen, en spreiding om gelijktijdige herhaalde botsingen te voorkomen. <strong>Verschil:</strong> hier is het conflict specifiek gebonden aan één aggregaat (het volgnummer van die ene stream), terwijl een serialisatiefout in deel 15 clusterbreed kon optreden.</p>
+<hr>
+<h2>Uitwerking 28.3</h2>
+<p>b) Bij 500 events kan de berekening al merkbaar zijn (afhankelijk van de complexiteit van de projectiequery) — orde van grootte tientallen tot honderden milliseconden, afhankelijk van de query.</p>
+<p>e) Met snapshot + tien events: aanzienlijk sneller — de berekening hoeft slechts tien rijen te verwerken in plaats van 500+.</p>
+<p>f) Een redelijk antwoord ligt rond enkele honderden events, afhankelijk van hoe vaak de stand wordt opgevraagd en hoe duur de berekening per event is — precies het soort afweging die je ook bij checkpoint-frequentie (deel 11) maakte: vaker snapshotten kost meer schrijfoverhead, minder snapshotten kost meer leesvertraging.</p>
+<hr>
+<h2>Uitwerking 28.4</h2>
+<p>c) Elke <code>INSERT</code> op de event store zou nu ook de trigger-overhead dragen — vergelijkbaar met hoe elke extra index een <code>INSERT</code> duurder maakt (deel 14). Bij een zeer hoog schrijftempo kan dit een merkbare bottleneck worden.</p>
+<p>d) Bijvoorbeeld: een projectie die een dure, samengestelde aggregatie vereist die niet efficiënt per-event kan worden bijgewerkt (zoals een lopend gemiddelde over de hele historie) — daar is een periodieke, volledige herberekening soms eenvoudiger en robuuster dan een incrementele trigger-update.</p>
+<hr>
+<h2>Uitwerking 28.5</h2>
+<p>e) De ontsleuteling <strong>faalt</strong> (of geeft onzinnige data terug, afhankelijk van de gebruikte functie) — zonder de sleutel is de versleutelde waarde niet meer te herstellen.</p>
+<p>f) <strong>Ja, het event zelf bestaat nog</strong> — alleen de versleutelde velden in de payload zijn onleesbaar geworden. De structuur (event-type, tijdstip, dat er een wijziging plaatsvond) blijft volledig intact en bevraagbaar.</p>
+<p>g) Als een oudere back-up van <code>deelnemer_sleutels</code> (van vóór de verwijdering) bestaat en ooit wordt teruggezet, zou de sleutel daarin nog aanwezig zijn — het verwijderingsverzoek zou dan met terugwerkende kracht ondermijnd worden. Dit is precies waarom het bewaarbeleid voor back-ups (deel 17, paragraaf 15) consistent moet zijn met de crypto-shredding-aanpak: de bewaartermijn van back-ups van de sleuteltabel bepaalt hoe lang een “verwijderd” record eigenlijk nog theoretisch herstelbaar is.</p>
+<hr>
+<h2>Uitwerking 28.6</h2>
+<p>c) en d) De upcast-functie zorgt dat beide events, ongeacht hun oorspronkelijke formaat, door dezelfde projectielogica kunnen worden verwerkt — de projectiequery hoeft zelf geen kennis te hebben van de historische formaatverschillen, want die complexiteit is in de upcast-functie geconcentreerd.</p>
+<hr>
+<h2>Uitwerking 28.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT date_trunc('week', occurred_at) AS week, count(*), pg_size_pretty(sum(pg_column_size(payload)))
+FROM events GROUP BY 1 ORDER BY 1;
+</code></pre>
+<p>b) Een aparte <code>retry_log</code>-tabel die bij elke opgevangen <code>unique_violation</code> een rij toevoegt, met <code>aggregate_id</code> en tijdstip — vergelijkbaar met hoe je in deel 15 deadlocks via <code>pg_stat_database</code> bijhield, nu specifiek per aggregaat.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT s.aggregate_id, s.volgnummer AS snapshot_volgnummer,
+       max(e.volgnummer) AS laatste_volgnummer,
+       max(e.volgnummer) - s.volgnummer AS events_sinds_snapshot
+FROM snapshots s JOIN events e ON e.aggregate_id = s.aggregate_id
+GROUP BY s.aggregate_id, s.volgnummer
+ORDER BY events_sinds_snapshot DESC LIMIT 10;
+</code></pre>
+<hr>
+<h2>Uitwerking 28.8 — modelantwoord (verkort)</h2>
+<p><strong>Implementatieplan: event-sourced aanspraakopbouw</strong></p>
+<p><strong>1. Command handlers</strong></p>
+<ul>
+<li><code>verwerk_premieontvangst</code>: bewaakt dat het bedrag positief is en het dienstverband actief is op het moment van ontvangst.</li>
+<li><code>verwerk_aanspraakcorrectie</code>: vereist een reden en (boven een drempelbedrag) een tweede goedkeuring — een corrigerend event, nooit een wijziging van het oorspronkelijke.</li>
+<li><code>verwerk_waardeoverdracht</code>: bewaakt de saldogrenzen; complexer bij een toekomstige cross-shard-variant (deel 24, paragraaf 7).</li>
+</ul>
+<p><strong>2. Snapshotstrategie</strong></p>
+<p>Geschat: een actief dienstverband van dertig jaar genereert enkele honderden events (jaarlijkse premie-events plus incidentele wijzigingen). Snapshot elke 200 events, of jaarlijks voor actieve aggregaten — ruim binnen de marge waarbij herberekening merkbaar traag zou worden (opdracht 28.3).</p>
+<p><strong>3. AVG-ontwerp</strong></p>
+<p>Versleuteld: naam, adres, BSN-gerelateerde velden in de payload. Niet versleuteld: bedragen, data, event-type (nodig voor rapportage en analyse zonder herleidbaarheid tot een persoon). Sleutels in een aparte tabel met een eigen, <strong>kortere</strong> back-upbewaartermijn dan de event store zelf, zodat een verwijderingsverzoek niet via een oude back-up van de sleuteltabel kan worden ondermijnd (expliciete aansluiting bij deel 17, paragraaf 15).</p>
+<p><strong>4. Projectie-update-strategie</strong></p>
+<p><code>LISTEN</code>/<code>NOTIFY</code> voor de “huidige stand”-projectie die het portaal direct nodig heeft (lage latency gewenst), met een permanente, niet-gepoolde verbinding voor de luisterende dienst (deel 19’s valkuil vermeden). Periodieke (<code>pg_cron</code>, nachtelijk) verversing voor rapportage-projecties waar enige vertraging acceptabel is.</p>
+<p><strong>5. Eén monitoringalarm</strong></p>
+<p>Alarm bij een aggregaat met meer dan 50 events sinds de laatste snapshot — een vroeg signaal dat de snapshotstrategie voor dat specifieke, ongewoon actieve aggregaat moet worden herzien, vóórdat de herberekeningstijd een merkbaar probleem wordt.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Specifieke bedrijfsregels per handler</strong>, geen generieke validatie-uitspraken.</li>
+<li><strong>Een onderbouwd getal in de snapshotstrategie.</strong></li>
+<li><strong>Expliciete koppeling met deel 17</strong> in het AVG-ontwerp — dit is het meest over het hoofd geziene punt.</li>
+<li><strong>Een specifiek, niet-generiek monitoringalarm.</strong></li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 28.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">279 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-27-event-sourcing-fundamenten/reader.html">&larr; Deel 27 — Event sourcing: fundamenten</a><a class="dbm-prevnext next" href="../deel-29-geo-distributie/reader.html">Deel 29 — Geo-distributie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

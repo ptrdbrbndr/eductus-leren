@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Fysiek ontwerp: pagina&#39;s, TOAST en bloat — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 12 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 12: Fysiek ontwerp</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Deel 11 eindigde met een waarneming: <code>mutatie</code> was bijna twee keer zo groot als de gegevens erin. Vandaag wordt dat een compleet verhaal.</p>
+<p>Twee dingen die moeten landen:</p>
+<ol>
+<li>
+<p><strong>Fysiek ontwerp is een prestatiemaatregel, geen ruimtebesparing.</strong> Een tabel die 30% kleiner is, past 30% vaker in de bufferpool. Dát is het argument, en het is sterker dan “we besparen schijfruimte”.</p>
+</li>
+<li>
+<p><strong>Vacuum is drie keer een prestatievraag.</strong> Statistieken (deel 8), bloat (vandaag), en de visibility map bij index-only scans (vandaag). Deelnemers die dat patroon zien, diagnosticeren voortaan zelfstandig — en dat is de opbrengst van niveau 2.</p>
+</li>
+</ol>
+<p>Daarnaast is dit het dagdeel waar de meest onderschatte productieoorzaak wordt gedemonstreerd: <strong>één openstaande transactie blokkeert het opruimen in de hele database.</strong> Opdracht 12.5f maakt dat tastbaar.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 12; de tabelomvangen die ze in deel 11 hebben genoteerd.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Draai opdracht 12.1 t/m 12.4 zelf vooraf en noteer je eigen getallen.</strong> Deze opdrachten leveren concrete cijfers op die per machine verschillen; je moet weten wat je zaal ongeveer zal zien.</li>
+<li>Controleer dat <code>pgstattuple</code> beschikbaar is (<code>CREATE EXTENSION pgstattuple;</code>). Zit het contrib-pakket niet in de installatie, dan valt opdracht 12.5b weg — zie Toolbijlage A, paragraaf 4.</li>
+<li>⚠ <strong>Let op schijfruimte.</strong> De opdrachten maken meerdere tabellen van een miljoen rijen plus een kopie van <code>mutatie</code>. Reken op 1 tot 1,5 GB extra bovenop wat er al staat. Waarschuw deelnemers met een krappe laptop, en laat opdracht 12.5 de kopie daarna weer opruimen.</li>
+<li><code>pg_repack</code> is niet in de standaardinstallatie beschikbaar. Voor dit dagdeel volstaat het het te <strong>noemen</strong> als het juiste gereedschap; installeren is niet nodig.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:10</td>
+<td>Terugblik deel 11; de vijf redenen (§2)</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:10-0:25</td>
+<td>Pagina en rijopbouw (§3-4) + <strong>opdracht 12.1</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>0:25-0:50</td>
+<td><strong>Uitlijning (§5) + opdracht 12.2</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>0:50-1:15</td>
+<td>TOAST (§6) + <strong>opdracht 12.3</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-2:00</td>
+<td><strong>HOT en fill factor (§7) + opdracht 12.4</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>2:00-2:20</td>
+<td>Bloat (§8-10) + <strong>opdracht 12.5a-e</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:20-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:45</td>
+<td><strong>Opdracht 12.5f-g</strong> — de openstaande transactie</td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:45-3:00</td>
+<td>Freeze en wraparound (§11) + <strong>opdracht 12.6</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>3:00-3:20</td>
+<td>Visibility map (§12), indexbloat (§13), correlatie (§14) + <strong>opdracht 12.7, 12.8</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>3:20-3:30</td>
+<td>Wat je meeneemt in een ontwerp (§15)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:30-4:00</td>
+<td><strong>Opdracht 12.9</strong> — het opslagadvies</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 12.8 (correlatie) vervallen als praktijkopdracht en behandel hem als demonstratie van twee minuten — hij is vooral voorbereiding op deel 14. Kort <strong>nooit</strong> opdracht 12.4 (HOT), 12.5f (openstaande transactie) of 12.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Begin met de meting van vorige keer. Vraag: <em>“we hebben één oorzaak gevonden. Wie kan er nog een noemen?”</em></p>
+<p>Zet de vijf redenen op het bord en laat ze de hele dag staan; elke opdracht vult er één in.</p>
+<p>Geef meteen het argument dat het dagdeel draagt:</p>
+<blockquote>
+<p><em>“Een tabel die 30% kleiner is, past 30% vaker in je bufferpool. Dit gaat niet over schijfruimte — het gaat over hoe vaak je van schijf moet lezen.”</em></p>
+</blockquote>
+<p>Zonder dat argument vinden deelnemers dit een boekhoudkundig dagdeel.</p>
+<h3>4.2 Rijopbouw en opdracht 12.1 (0:10)</h3>
+<p>De 24 bytes header zijn abstract tot je ze deelt door de gegevens. Laat opdracht 12.1 uitvoeren en vraag daarna het percentage: <strong>78% overhead</strong> op een tabel met twee integers.</p>
+<p>Onderdeel f) is het inhoudelijke punt: dit is een argument tegen het opsplitsen van tabellen “voor de netheid”. Verbind met deel 5 — je splitst omdat het model erom vraagt, niet omdat het er netter uitziet.</p>
+<h3>4.3 Uitlijning (0:25)</h3>
+<p><strong>Dit is het onderwerp waarvan de meeste deelnemers niet weten dat het bestaat.</strong> Doe opdracht 12.2a plenair: laat de zaal voorspellen wélke van de twee groter is en met hoeveel. Vrijwel niemand voorspelt 12 bytes.</p>
+<p>Twee dingen om te sturen bij de bespreking:</p>
+<ul>
+<li><strong>Onderdeel e) levert een teleurstelling op:</strong> <code>mutatie</code> is al vrijwel optimaal. Dat is met opzet. Zeg het expliciet: <em>“niet elke tabel heeft dit probleem, en dat vaststellen is ook een resultaat.”</em> Deelnemers die net een nieuw gereedschap hebben geleerd, willen het overal toepassen.</li>
+<li><strong>Onderdeel g) is de eerlijke tegenkant.</strong> Een geoptimaliseerde kolomvolgorde die niemand documenteert, wordt door de volgende ontwikkelaar “netjes” teruggezet. Vraag de zaal hoe je dat voorkomt.</li>
+</ul>
+<h3>4.4 TOAST (0:50)</h3>
+<p>Het belangrijkste praktische punt is <strong>onderdeel e</strong>: <code>SELECT *</code> op een tabel met TOAST-kolommen kost extra leesbewerkingen. Dat is het argument uit deel 3, nu met een mechanisme.</p>
+<p>Waarschuw voor de compressieverrassing bij onderdeel a: <code>repeat('c', 100000)</code> comprimeert tot vrijwel niets, waardoor de TOAST-tabel klein blijft en deelnemers denken dat het niet werkt. Het werkboek geeft een alternatief met willekeurige tekst — wijs erop vóór ze beginnen, anders verliezen ze tien minuten aan verwarring.</p>
+<h3>4.5 HOT en fill factor (1:30)</h3>
+<p><strong>Het inhoudelijk rijkste blok van het dagdeel.</strong> Bouw het op in de volgorde van de opdracht:</p>
+<ol>
+<li>Update op een niet-geïndexeerde kolom, fillfactor 100 → laag HOT-percentage. <em>Waarom?</em></li>
+<li>Update op een geïndexeerde kolom → nul. <em>Waarom?</em></li>
+<li>Zelfde experiment met fillfactor 85 → hoog percentage.</li>
+</ol>
+<p>Laat de zaal na stap 1 zelf zoeken. De twee voorwaarden voor HOT komen dan vanzelf boven.</p>
+<p>Onderdeel e) is subtiel en de moeite waard: de tabel met fillfactor 85 is <strong>groter</strong>, en toch is de maatregel goed. Vraag: <em>“waar zit de winst dan?”</em> Antwoord: minder indexbijwerking en minder indexbloat — en dat zie je niet in de tabelomvang.</p>
+<p>Onderdeel g) (werkt niet met terugwerkende kracht) verrast bijna iedereen. Het is ook praktisch relevant: iemand zet fillfactor om, meet niets, en concludeert dat het niet werkt.</p>
+<h3>4.6 Bloat en de openstaande transactie (2:00 en 2:30)</h3>
+<p>De meting zelf is routine. <strong>Opdracht 12.5f is het moment waar het om gaat.</strong></p>
+<p>Doe het plenair in twee vensters, zoals in deel 7:</p>
+<ul>
+<li>Sessie 2: <code>BEGIN; SELECT count(*) FROM mutatie;</code> — en verder niets.</li>
+<li>Sessie 1: rijen bijwerken, dan <code>VACUUM (VERBOSE)</code>.</li>
+</ul>
+<p>Laat de uitvoer zien: er kunnen rijen niet verwijderd worden. Vraag dan: <em>“welke tabel heeft sessie 2 aangeraakt?”</em> Eén. <em>“En in welke tabellen kan vacuum nu niets opruimen?”</em> Alle.</p>
+<p>Dat is het moment. Zeg erbij dat dit de meest onderschatte oorzaak van een volle schijf is, en verbind terug met <code>idle_in_transaction_session_timeout</code> uit deel 11 — die instelling krijgt hier zijn rechtvaardiging.</p>
+<p>De volgorde-van-aanpak uit paragraaf 10 (eerst oorzaak, dan opruimen) moet je expliciet maken. Het is de kern van opdracht 12.9.</p>
+<h3>4.7 Freeze en wraparound (2:45)</h3>
+<p>Kort en stellig. De vier fasen uit paragraaf 11 op een slide, met nadruk op fase 4.</p>
+<p>Het argument dat blijft hangen:</p>
+<blockquote>
+<p><em>“Dit is de enige waarde uit dit hele dagdeel waarbij falen niet geleidelijk is maar catastrofaal. En het is tegelijk de enige die je maanden van tevoren ziet aankomen. Er is geen excuus om hierdoor verrast te worden.”</em></p>
+</blockquote>
+<p>Laat opdracht 12.6d (de monitoringquery) echt schrijven. Die query nemen deelnemers mee naar hun eigen werk, en het is de enige uit dit dagdeel waarvan je dat met zekerheid kunt zeggen.</p>
+<h3>4.8 Visibility map (3:00)</h3>
+<p>Opdracht 12.7 is kort en het effect is duidelijk zichtbaar. Het punt in onderdeel f:</p>
+<blockquote>
+<p><em>“De index is prima. Wat ontbreekt is de zichtbaarheidsinformatie — en die komt van vacuum.”</em></p>
+</blockquote>
+<p>Tel hardop mee: dit is de <strong>derde</strong> keer dat vacuum een prestatievraag blijkt. Statistieken, bloat, visibility map. Als deelnemers dat patroon benoemen, is het dagdeel geslaagd.</p>
+<h3>4.9 Correlatie (3:10)</h3>
+<p>Twee minuten, als voorbereiding op deel 14. Het enige dat moet landen: BRIN werkt bij hoge correlatie en is waardeloos bij lage. <code>mutatie_id</code> versus <code>deelnemer_id</code> maakt dat in één query duidelijk.</p>
+<h3>4.10 Opdracht 12.9 (3:30)</h3>
+<p>Stuur op drie dingen:</p>
+<ul>
+<li><strong>De volgorde.</strong> Groepen beginnen met <code>pg_repack</code> — dat is het zichtbaarste gereedschap. Vraag: <em>“hoe ziet deze tabel er over zes maanden uit?”</em> Dat verplaatst de preventieve maatregelen naar boven.</li>
+<li><strong>Cijfers.</strong> “Levert ruimte op” is geen cijfer. Elke maatregel moet een geschat effect hebben.</li>
+<li><strong><code>age(relfrozenxid)</code> in de monitoring.</strong> Dit wordt het vaakst vergeten. Vraag ernaar als het ontbreekt.</li>
+</ul>
+<p>De afgeraden maatregel (kolomvolgorde herzien) is didactisch aardig omdat het antwoord genuanceerd is: vooraf gratis, achteraf duur. Groepen die “geen tijd” schrijven, hebben geen afweging gemaakt.</p>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Moet ik altijd de kolomvolgorde optimaliseren?”</strong>
+Nee. Alleen bij tabellen met miljoenen rijen, en alleen als er werkelijk iets te winnen is — meet het met <code>pg_column_size</code>. Bij het ontwerp van een nieuwe tabel is het gratis en doe je het gewoon; achteraf wijzigen kost een migratie en loont zelden.</p>
+<p><strong>“Hoeveel bloat is acceptabel?”</strong>
+Er is geen absoluut getal. Onder 20% is normaal, boven 50% is een probleem, en de trend zegt meer dan de waarde. Een tabel die stabiel op 25% zit, is in evenwicht — vacuum ruimt evenveel op als er bijkomt. Dat is precies wat je wilt.</p>
+<p><strong>“Waarom geeft <code>VACUUM</code> de ruimte niet terug aan het besturingssysteem?”</strong>
+Omdat je hem vrijwel zeker weer nodig hebt. Teruggeven en opnieuw opvragen kost I/O en fragmenteert het bestandssysteem. De ruimte binnen de tabel houden is de goedkopere keuze. Alleen als een tabel eenmalig sterk gekrompen is, wil je hem terug — en dan is <code>pg_repack</code> het gereedschap.</p>
+<p><strong>“Is <code>pg_repack</code> veilig op productie?”</strong>
+Het wordt breed gebruikt en is daarvoor gemaakt. Voorwaarden: een primaire sleutel of unieke index, en tijdelijk ruimte voor een tweede kopie. Test hem op acceptatie, en draai hem niet tijdens een piek — het kopieerwerk kost I/O.</p>
+<p><strong>“Kan ik een tabel partitioneren om bloat te beperken?”</strong>
+Gedeeltelijk, en dat is deel 16. Het voordeel is dat je een oude partitie in één keer kunt weggooien in plaats van rijen te verwijderen — en <code>DROP TABLE</code> laat geen bloat achter. Voor een tabel als <code>mutatie</code> met historie is dat een sterk argument.</p>
+<p><strong>“Wat als <code>pgstattuple</code> niet beschikbaar is?”</strong>
+Dan gebruik je de schatting uit <code>pg_stat_user_tables</code>. Die is ruwer maar voor het signaleren van een trend voldoende. De exacte meting heb je alleen nodig om een beslissing over herschrijven te onderbouwen.</p>
+<p><strong>“Wij zitten op een beheerde clouddienst — kan ik daar <code>pg_repack</code> draaien?”</strong>
+Afhankelijk van de aanbieder; sommige bieden hem aan, andere niet. Zonder <code>pg_repack</code> blijft alleen <code>VACUUM FULL</code> in een venster over, of partitionering zodat je hele partities kunt vervangen. Dit is een reëel argument bij de platformkeuze — en het komt terug in niveau 3, deel 25.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Benoemt zelf dat vacuum voor de derde keer een prestatievraag is</td>
+<td>Ziet het patroon; sterk</td>
+</tr>
+<tr>
+<td>Concludeert bij 12.2e dat <code>mutatie</code> al goed is</td>
+<td>Gebruikt het gereedschap oordeelkundig</td>
+</tr>
+<tr>
+<td>Zet in 12.9 preventie boven opruiming</td>
+<td>Denkt in oorzaken</td>
+</tr>
+<tr>
+<td>Vraagt bij 12.4e waar de winst dan zit</td>
+<td>Kijkt verder dan de tabelomvang</td>
+</tr>
+<tr>
+<td>Wil overal de kolomvolgorde optimaliseren</td>
+<td>Terugbrengen naar meetbaarheid</td>
+</tr>
+<tr>
+<td>Vergeet <code>age(relfrozenxid)</code> in de monitoring</td>
+<td>Actief corrigeren; dit is de catastrofale</td>
+</tr>
+<tr>
+<td>Stelt <code>VACUUM FULL</code> voor als routineonderhoud</td>
+<td>Terugbrengen naar het lock-gedrag</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 13</h2>
+<p>Brug: <em>“Je weet nu hoe de gegevens er fysiek liggen en waarom een tabel groter is dan hij lijkt. Volgende keer gaan we meten wélke query’s er werkelijk toe doen — en dat blijkt zelden de query te zijn waarover iemand klaagt.”</em></p>
+<p>Geef mee: <strong>controleer of <code>pg_stat_statements</code> in <code>shared_preload_libraries</code> staat.</strong> Wie dat in deel 11 heeft vergeten, moet vóór deel 13 een herstart plannen — en dat is precies het leermoment uit opdracht 11.4.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 12.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">58 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">384 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-11-installatie-configuratie-en-tablespaces/reader.html">&larr; Deel 11 — Installatie, configuratie en tablespaces</a><a class="dbm-prevnext next" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

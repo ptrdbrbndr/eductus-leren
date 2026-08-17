@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Zero-downtime migraties en capstone — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 22 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 22 — Slidedeck</h1>
+<p><strong>Zero-downtime migraties en capstone</strong>
+Niveau 2, dagdeel 14 (deel 22 van 30) | 38 slides — laatste dagdeel van niveau 2</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Zero-downtime migraties</h1>
+<h2>en de niveau-2 capstone</h2>
+<h3>Niveau 2 — Deel 22 — Laatste dagdeel</h3>
+<hr>
+<h2>Slide 2 — Alles al eerder gezien</h2>
+<table>
+<thead>
+<tr>
+<th>Waar</th>
+<th>Wat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deel 15</td>
+<td><code>NOT VALID</code> + <code>VALIDATE</code>, <code>lock_timeout</code></td>
+</tr>
+<tr>
+<td>Deel 16</td>
+<td>Nieuwe structuur naast de oude bouwen</td>
+</tr>
+<tr>
+<td>Deel 18</td>
+<td>Logische replicatie als migratieroute</td>
+</tr>
+<tr>
+<td>Deel 14</td>
+<td><code>CREATE INDEX CONCURRENTLY</code></td>
+</tr>
+</tbody>
+</table>
+<h1>Vandaag: één patroon dat ze allemaal verklaart.</h1>
+<hr>
+<h2>Slide 3 — Expand — Migrate — Contract</h2>
+<pre><code>[oud actief]
+    [nieuw toegevoegd — EXPAND]
+        [beide in gebruik — MIGRATE]
+            [oud verwijderd — CONTRACT]
+</code></pre>
+<p>Spreidt de overgang uit over tijd.
+Op elk moment: een werkende toestand.</p>
+<hr>
+<h2>Slide 4 — Al bekend</h2>
+<p><code>NOT VALID</code> (deel 15) = <strong>expand</strong>
+<em>(nieuwe rijen voldoen al)</em> = <strong>migrate</strong>
+<code>VALIDATE</code> (deel 15) = <strong>contract</strong></p>
+<p>Een miniatuurversie van vandaag.</p>
+<hr>
+<h2>Slide 5 — Opdracht 22.1</h2>
+<h1>Een kolom hernoemen</h1>
+<p>Nieuwe kolom, trigger, backfill, contract.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 6 — Het hoofdvoorbeeld</h2>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN deelnemer_id TYPE bigint;
+</code></pre>
+<p><code>ACCESS EXCLUSIVE</code>. Volledige herschrijving.
+Op 2,4 miljoen rijen: <strong>minuten</strong>, alles blokkeert.</p>
+<hr>
+<h2>Slide 7 — Voorspel</h2>
+<p><strong>Notities:</strong> meet het eerst zelf, live, met een hangende tweede sessie.</p>
+<h1>Hoe lang duurt dit écht?</h1>
+<hr>
+<h2>Slide 8 — Het patroon</h2>
+<pre><code class="language-sql">-- Expand: nieuwe kolom + trigger
+ALTER TABLE mutatie ADD COLUMN deelnemer_id_nieuw bigint;
+
+-- Migrate: backfill in batches, dan index
+
+-- Omschakelmoment: korte transactie
+BEGIN;
+ALTER TABLE mutatie DROP COLUMN deelnemer_id;
+ALTER TABLE mutatie RENAME COLUMN deelnemer_id_nieuw TO deelnemer_id;
+COMMIT;
+</code></pre>
+<hr>
+<h2>Slide 9 — Meet het verschil</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Directe route</th>
+<th>Expand-contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lock-duur</td>
+<td>Minuten</td>
+<td><strong>Milliseconden</strong></td>
+</tr>
+<tr>
+<td>Wat er gebeurt</td>
+<td>Alles in één ademteug</td>
+<td>Dure stap eruit geknipt</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De backfill verdwijnt niet. Hij gebeurt alleen niet meer onder één lock.</strong></p>
+<hr>
+<h2>Slide 10 — Opdracht 22.2</h2>
+<h1>Kolomtype wijzigen zonder lange lock</h1>
+<p>Meet beide routes. Zelf.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 11 — Pauze</h2>
+<hr>
+<h2>Slide 12 — Backfill: de verkeerde manier</h2>
+<pre><code class="language-sql">UPDATE mutatie SET deelnemer_id_nieuw = deelnemer_id::bigint;
+</code></pre>
+<p>Eén enorme transactie. Lange locks. Bloat.
+Fout halverwege → alles terug naar af.</p>
+<hr>
+<h2>Slide 13 — Backfill: in batches</h2>
+<pre><code class="language-sql">LOOP
+    UPDATE ... WHERE ... LIMIT 5000;
+    EXIT WHEN aangepast = 0;
+    COMMIT;
+    PERFORM pg_sleep(0.1);
+END LOOP;
+</code></pre>
+<p>Korte transacties. Adempauze. Fout kost alleen de laatste batch.</p>
+<hr>
+<h2>Slide 14 — Opdracht 22.3</h2>
+<h1>Backfill in batches</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 15 — Dubbel schrijven</h2>
+<pre><code>Applicatie → schrijft naar oude tabel
+          → schrijft naar nieuwe tabel
+</code></pre>
+<p>Krachtig. <strong>Foutgevoelig.</strong></p>
+<hr>
+<h2>Slide 16 — Vier valkuilen</h2>
+<ol>
+<li>Gedeeltelijke schrijffout → <strong>één transactie</strong></li>
+<li>Vergeten schrijfpad → <strong>trigger, niet applicatielogica</strong></li>
+<li>Race met de backfill</li>
+<li>Vergeten dat <strong>lezen</strong> ook moet overschakelen</li>
+</ol>
+<hr>
+<h2>Slide 17 — Opdracht 22.4</h2>
+<h1>Dubbel schrijven en zijn valkuilen</h1>
+<p>Laat het echt mislukken.</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 18 — Waarom een trigger vaak wint</h2>
+<p>Een trigger zit op <strong>databaseniveau</strong>.</p>
+<h1>Hij kan niet “vergeten” worden</h1>
+<h1>per schrijfpad — in tegenstelling</h1>
+<h1>tot applicatielogica.</h1>
+<hr>
+<h2>Slide 19 — Logische replicatie als migratiegereedschap</h2>
+<p><em>(Herhaling, deel 18 — nu volledig toegepast)</em></p>
+<p>Werkt op <strong>WAL-niveau</strong> — vangt automatisch elk schrijfpad af.</p>
+<p>⚠ Sequenties lopen niet mee. DDL wordt niet gerepliceerd.</p>
+<hr>
+<h2>Slide 20 — Pauze</h2>
+<hr>
+<h2>Slide 21 — Het omschakelmoment</h2>
+<ul>
+<li>Kort</li>
+<li>Met <code>lock_timeout</code></li>
+<li><strong>Omkeerbaar, of met een duidelijk terugvalpad</strong></li>
+<li>Gemeten, niet alleen gepland</li>
+</ul>
+<hr>
+<h2>Slide 22 — Terugval per fase</h2>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Terugval</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Expand</td>
+<td>Triviaal</td>
+</tr>
+<tr>
+<td>Migrate</td>
+<td>Eenvoudig — schakel terug</td>
+</tr>
+<tr>
+<td><strong>Contract</strong></td>
+<td><strong>De oude structuur is al weg</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 23 — Waarom contract wacht</h2>
+<h1>Niet uit voorzichtigheid.</h1>
+<h1>Uit noodzaak.</h1>
+<p>Contract is het enige punt waarna
+terugdraaien niet meer triviaal is.</p>
+<hr>
+<h2>Slide 24 — Opdracht 22.5</h2>
+<h1>Terugvalplannen</h1>
+<p>Drie migraties. Welke fase is het lastigst?</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 25 — De migratiechecklist</h2>
+<ol>
+<li>Expand-contract nodig, of licht genoeg direct?</li>
+<li>Welke lock, hoe lang?</li>
+<li><code>lock_timeout</code> op elke stap?</li>
+<li>Backfill in batches?</li>
+<li><strong>Alle schrijfpaden gedekt?</strong></li>
+<li>Terugvalplan per fase?</li>
+<li>Omschakelmoment gemeten?</li>
+<li>Indexen/RLS/rechten kloppen nog?</li>
+<li>AVG opnieuw beoordeeld?</li>
+<li>Periode “bewezen stabiel” vóór contract?</li>
+</ol>
+<hr>
+<h2>Slide 26 — Opdracht 22.6</h2>
+<h1>De migratiechecklist toepassen</h1>
+<p>Op een migratie die je al eerder deed.</p>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 27 — De capstone</h2>
+<p>Acht gebeurtenissen. Vier bekende personages.</p>
+<h1>Je krijgt geen hint welk deel</h1>
+<h1>elke melding raakt.</h1>
+<p>Precies zoals in het echt.</p>
+<hr>
+<h2>Slide 28 — Gebeurtenis 1</h2>
+<p><strong>Ruud, 03:14 uur:</strong>
+<em>“Het portaal reageert niet. CPU ziet er normaal uit.”</em></p>
+<hr>
+<h2>Slide 29 — Gebeurtenis 2 &amp; 3</h2>
+<p><strong>Karin:</strong> <em>“Onze deeltotalen tellen niet op tot het totaal.”</em></p>
+<p><strong>Sanne:</strong> <em>“Kun je aantonen dat oude back-ups echt niet meer bruikbaar zijn?”</em></p>
+<hr>
+<h2>Slide 30 — Gebeurtenis 4 &amp; 5</h2>
+<p><strong>Tarik:</strong> <em>“Een aparte microservice voor klik-logging — nodig?”</em></p>
+<p><strong>Ruud:</strong> <em>“De premienotarun duurt sinds gisteren dubbel zo lang.”</em></p>
+<hr>
+<h2>Slide 31 — Gebeurtenis 6</h2>
+<p><strong>Karin:</strong> <em>“Werkgevers zien soms elkaars gegevens even flitsen
+voordat de juiste data laadt.”</em></p>
+<p><strong>Notities:</strong> laat groepen eerst hun eerste indruk geven vóór je de richting onthult.</p>
+<hr>
+<h2>Slide 32 — Niet “een applicatiebugje”</h2>
+<h1>Een datalek tussen tenants.</h1>
+<p>RLS-sessie-instelling + connection pooling (deel 19, 21)
+— exact de valkuil uit <code>SET</code> versus <code>SET LOCAL</code> (deel 15).</p>
+<hr>
+<h2>Slide 33 — Gebeurtenis 7 &amp; 8</h2>
+<p><strong>Tarik:</strong> <em>“mutatie_id naar bigint, zonder downtime — hoe?”</em></p>
+<p><strong>Ruud:</strong> <em>“De failover werkte, maar voelde traag. Kun je dat objectief vaststellen?”</em></p>
+<hr>
+<h2>Slide 34 — De opdracht per gebeurtenis</h2>
+<ol>
+<li>Eerste diagnosestap — met exacte query/actie</li>
+<li>Wat verwacht je te leren?</li>
+<li>De vervolgmaatregel</li>
+<li>Antwoord aan de afzender, in hun toon</li>
+</ol>
+<hr>
+<h2>Slide 35 — De dekkingstoets</h2>
+<h1>Raken je acht antwoorden samen</h1>
+<h1>minstens zes van de tien delen?</h1>
+<p>Zo niet: waarschijnlijk stof gemist.</p>
+<hr>
+<h2>Slide 36 — Terugblik</h2>
+<h1>Van &quot;waarom is deze tabel groter</h1>
+<h1>dan de data erin&quot; (deel 12)</h1>
+<h1>tot &quot;hoe overtuig ik mezelf dat onze</h1>
+<h1>failover echt werkt&quot; (deel 19)</h1>
+<p><strong>Meten. Grenzen kennen. Bedrijfsbeslissingen bij wie ze horen.</strong></p>
+<hr>
+<h2>Slide 37 — Wat blijft</h2>
+<p><code>mutatie</code> als rode draad door bijna elk deel.
+Karin, Tarik, Ruud, Sanne — de hele reis.</p>
+<p>En het besef: elke techniek was een instantie
+van hetzelfde patroon — <strong>verander iets, ongemerkt.</strong></p>
+<hr>
+<h2>Slide 38 — Niveau 3</h2>
+<h1>Van één server naar systemen</h1>
+<h1>van meerdere, samenwerkende databases.</h1>
+<p>Pensioenfederatie · sharding met Citus ·
+een verdieping richting event sourcing.</p>
+<p><strong>Dezelfde discipline. Grotere schaal.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 22 — einde niveau 2.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">363 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">&larr; Deel 21 — Security-verdieping en NoSQL in perspectief</a><a class="dbm-prevnext next" href="../../niveau-3/deel-23-architectuur-voor-meerdere-fondsen/reader.html">Deel 23 — Architectuur voor meerdere fondsen &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

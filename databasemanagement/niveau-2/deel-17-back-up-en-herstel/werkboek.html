@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Back-up en herstel — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 17 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 17 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 17: Back-up en herstel</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+</code></pre>
+<p>Je hebt vandaag schrijftoegang tot het bestandssysteem nodig, zoals in deel 11 en 12. Maak een map voor je oefeningen:</p>
+<pre><code class="language-bash">mkdir -p ~/oefening17/backups ~/oefening17/wal_archive
+</code></pre>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 17.1 — RPO en RTO vaststellen (15 min, drietallen)</h2>
+<p>Voor elk van deze vier situaties bij Meridiaan: bepaal een redelijk RPO en RTO, en licht toe wie dat zou moeten goedkeuren.</p>
+<p>a) De deelnemersgegevens in productie.
+b) De onverwerkte mutaties van vandaag.
+c) Een testomgeving voor ontwikkelaars.
+d) De rapportagedatabase (een kopie, ververst per nacht).</p>
+<p>e) Vertaal elk RPO/RTO-paar naar een technische keuze uit paragraaf 3 van de reader.
+f) Welke van de vier rechtvaardigt op basis van RTO alleen al een investering in een staande replica (vooruitwijzend naar deel 18/19)?</p>
+<hr>
+<h2>Opdracht 17.2 — pg_dump in de praktijk (15 min, individueel)</h2>
+<p>a) Maak een custom-format dump van <code>meridiaan_prod</code>.
+b) Bekijk de inhoudsopgave met <code>pg_restore -l</code> zonder iets te herstellen.
+c) Herstel alleen de tabel <code>werkgever</code> naar een nieuwe, lege testdatabase.
+d) Controleer of de rijen kloppen, en of de indexen zijn meegekomen.
+e) Maak een dump met alleen het schema (<code>-s</code>) en bekijk het resultaat. Waarvoor is dit bruikbaar?
+f) Wat gebeurt er als je vergeet <code>pg_dumpall --globals-only</code> mee te nemen bij een volledig herstel op een verse server?</p>
+<hr>
+<h2>Opdracht 17.3 — pg_basebackup (15 min, tweetallen)</h2>
+<p>a) Maak een rol met alleen het <code>REPLICATION</code>-recht.
+b) Voer een <code>pg_basebackup</code> uit naar <code>~/oefening17/backups</code>.
+c) Bekijk de omvang van de back-up. Hoe verhoudt die zich tot <code>pg_database_size</code>?
+d) Wat gebeurt er als je <code>-Xs</code> weglaat en tijdens de back-up een <code>INSERT</code> uitvoert? (Bespreek conceptueel als je dit niet veilig kunt reproduceren op je omgeving.)
+e) Waarom heeft deze rol geen superuser-rechten nodig, in tegenstelling tot wat je misschien zou verwachten?</p>
+<hr>
+<h2>Opdracht 17.4 — Continuous archiving inrichten (20 min, drietallen)</h2>
+<p>a) Zet <code>archive_mode = on</code> en een eenvoudig <code>archive_command</code> dat WAL-segmenten naar <code>~/oefening17/wal_archive</code> kopieert. Herlaad de configuratie.
+b) Forceer een WAL-segmentwissel met <code>SELECT pg_switch_wal();</code> en controleer of het segment in de archiefmap verschijnt.
+c) Wat gebeurt er als de doelmap niet bestaat of niet beschrijfbaar is? Test het, en kijk wat er in de serverlog staat.
+d) Waarom stapelen WAL-segmenten zich op in <code>pg_wal/</code> als <code>archive_command</code> faalt, en wat is het uiteindelijke risico als niemand dat opmerkt?
+e) Schrijf een monitoringquery die het aantal WAL-bestanden in <code>pg_wal/</code> telt als vroeg signaal.</p>
+<hr>
+<h2>Opdracht 17.5 — Point-in-time recovery (30 min, drietallen)</h2>
+<p>Dit is de kernopdracht van het dagdeel. Reproduceer het scenario uit paragraaf 2 van de reader, volledig.</p>
+<p>a) Zorg dat er een basisback-up is (uit 17.3) en continuous archiving loopt (uit 17.4).
+b) Voeg een testrij toe aan een tabel in <code>oefening16</code> of een eigen testschema, en noteer het tijdstip.
+c) Wacht een minuut, en voer dan een “ongeluk” uit: <code>DROP TABLE</code> op een testtabel.
+d) Noteer het tijdstip van de <code>DROP TABLE</code> zo precies mogelijk.
+e) Herstel de basisback-up naar een <strong>nieuwe, aparte</strong> datadirectory.
+f) Stel <code>recovery_target_time</code> in op een moment tussen b) en c).
+g) Start de herstelde instantie. Controleer: bestaat de tabel weer? Staat de testrij erin?
+h) Hoe lang duurde het hele traject, van “ongeluk” tot “hersteld en geverifieerd”? Dat getal is je gemeten RTO voor dit scenario.</p>
+<hr>
+<h2>Opdracht 17.6 — Gedeeltelijk herstel (15 min, tweetallen)</h2>
+<p>a) Vanuit de herstelde instantie uit 17.5: maak een <code>pg_dump -t</code> van alleen de teruggehaalde tabel.
+b) Herstel die tabel in je oorspronkelijke (niet-herstelde) omgeving.
+c) Waarom is dit vaak te verkiezen boven de hele productieomgeving vervangen door de herstelde versie?
+d) Wat zou je missen als je tussen het moment van de <code>DROP TABLE</code> en nu andere, legitieme wijzigingen in productie had gehad en toch de hele database had teruggezet?</p>
+<hr>
+<h2>Opdracht 17.7 — Een back-up die niet werkt (15 min, drietallen)</h2>
+<p>a) Maak een basisback-up en corrumpeer er bewust één bestand in (bijvoorbeeld door er wat bytes aan toe te voegen).
+b) Probeer te herstellen. Wat gebeurt er, en op welk moment ontdek je het probleem?
+c) Stel dat dit de enige back-up was en niemand hem ooit had getest — wanneer was dit ontdekt in een echte situatie?
+d) Formuleer in twee zinnen waarom “het back-upscript draait elke nacht zonder foutmelding” geen garantie is dat de back-up bruikbaar is.
+e) Wat zou je in een testprocedure opnemen om dit soort problemen vóór een noodgeval te ontdekken?</p>
+<hr>
+<h2>Opdracht 17.8 — Bewaarbeleid (10 min, tweetallen)</h2>
+<p>a) Stel een bewaarschema voor back-ups op voor Meridiaan: dagelijks, wekelijks, maandelijks — met termijnen.
+b) Bereken de ruwe opslagbehoefte bij een database van 5 GB en jouw schema (versimpel: elke back-up kost ongeveer de volledige omvang, tenzij je incrementeel rekent).
+c) Een deelnemer heeft een verwijderingsverzoek ingediend en is uit productie verwijderd. Hij staat nog in back-ups van de laatste twee maanden. Is dat een probleem? Voor wie moet je die vraag beantwoorden?
+d) Stel een regel voor die dit spanningsveld praktisch oplost.</p>
+<hr>
+<h2>Opdracht 17.9 — Het back-up- en hersteldraaiboek (20 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>back-up- en hersteldraaiboek</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>RPO en RTO</strong> per gegevenscategorie (productie, mutaties, testomgeving), met wie ze heeft goedgekeurd.</li>
+<li><strong>De strategie:</strong> welke combinatie van volledig/differentieel/incrementeel/continuous archiving, met onderbouwing.</li>
+<li><strong>Het herstelprotocol</strong>, stap voor stap, bruikbaar door iemand die niet jij is, om 3 uur 's nachts.</li>
+<li><strong>Het testschema:</strong> frequentie, en wat er precies gecontroleerd wordt (niet alleen “het liep zonder fouten”).</li>
+<li><strong>Het bewaarbeleid</strong>, inclusief de AVG-afweging.</li>
+<li><strong>Eén gemeten RTO</strong> uit je eigen experiment vandaag, met het getal.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is RPO/RTO een bedrijfsbeslissing met een naam erbij, of een technische aanname?</li>
+<li>Is het herstelprotocol uitvoerbaar door iemand anders, zonder aanvullende kennis?</li>
+<li>Bevat het testschema een inhoudelijke controle, niet alleen “geen foutmelding”?</li>
+<li>Staat er een echt gemeten getal, niet een schatting?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 17.1</h2>
+<p>a) RPO: enkele minuten (wettelijke/financiële context). RTO: enkele uren. Goedkeuring: stuurgroep/Ruud namens beheer, met input van compliance.
+b) RPO: minuten (verlies van mutaties raakt deelnemers direct). RTO: uren.
+c) RPO: een dag is vaak acceptabel — het is reproduceerbaar uit productie. RTO: een dag, laag risico.
+d) RPO: een dag (het is al een ververste kopie, geen bron van waarheid). RTO: uren, want een gemiste nachtelijke verversing is vervelend maar niet kritiek.</p>
+<p>e) a/b vragen om continuous archiving (paragraaf 7); c/d volstaan met periodieke volledige back-ups of zelfs een verse kopie vanuit productie.</p>
+<p>f) <strong>a en b</strong> rechtvaardigen op RTO-gronden een staande replica als het portaal en de verwerking geen uren stilstand mogen hebben — dat is precies het argument voor deel 18/19, en het is een investering die je nu al kunt onderbouwen zonder de techniek te kennen.</p>
+<hr>
+<h2>Uitwerking 17.2</h2>
+<p>a) <code>pg_dump -Fc -d meridiaan -f meridiaan.dump</code></p>
+<p>b) <code>pg_restore -l meridiaan.dump</code> toont een lijst van alle objecten — tabellen, indexen, constraints — zonder iets uit te voeren.</p>
+<p>c)</p>
+<pre><code class="language-bash">createdb meridiaan_test
+pg_restore -d meridiaan_test -n meridiaan_prod -t werkgever meridiaan.dump
+</code></pre>
+<p>d)</p>
+<pre><code class="language-sql">SELECT count(*) FROM meridiaan_prod.werkgever;   -- vergelijk met origineel
+\d meridiaan_prod.werkgever                       -- indexen zichtbaar?
+</code></pre>
+<p>e) Een schema-only dump is bruikbaar voor documentatie, voor het opzetten van een lege testomgeving met de juiste structuur, en als basis voor een migratiescript zonder de productiedata mee te slepen.</p>
+<p>f) Rollen en tablespace-definities ontbreken. Bij herstel op een verse server krijg je foutmeldingen over onbekende eigenaren (<code>role &quot;meridiaan_eigenaar&quot; does not exist</code>), of objecten die stilzwijgend eigendom worden van de herstellende rol in plaats van de bedoelde rol — een subtiele fout die pas bij een rechtencontrole opvalt.</p>
+<hr>
+<h2>Uitwerking 17.3</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE ROLE backup_rol LOGIN REPLICATION PASSWORD 'wachtwoord';
+</code></pre>
+<p>En in <code>pg_hba.conf</code> een regel die deze rol toestaat te verbinden.</p>
+<p>b)</p>
+<pre><code class="language-bash">pg_basebackup -D ~/oefening17/backups/basis1 -Ft -z -Xs -P -U backup_rol -h localhost
+</code></pre>
+<p>c) De back-up (gecomprimeerd, <code>-z</code>) is doorgaans kleiner dan <code>pg_database_size</code>, al is het verschil afhankelijk van hoe comprimeerbaar de gegevens zijn.</p>
+<p>d) Zonder <code>-Xs</code> bevat de kopie geen WAL uit de periode van het kopiëren zelf. Een <code>INSERT</code> die tijdens het kopiëren gebeurt, kan in een deels-gekopieerde toestand terechtkomen — sommige bestanden zijn al gekopieerd voordat de wijziging plaatsvond, andere pas erna. Zonder de bijbehorende WAL kan PostgreSQL dat bij het opstarten niet meer consistent maken, en de back-up is onbruikbaar of corrupt.</p>
+<p>e) Omdat <code>REPLICATION</code> een specifiek, afgebakend recht is: het staat toe de WAL-stroom te lezen en een basisback-up te initiëren, en niets meer. Dat is precies het minste-rechtenbeginsel uit deel 9 toegepast op een operationele taak — een gecompromitteerd back-upscript kan met dit recht geen tabellen lezen of wijzigen.</p>
+<hr>
+<h2>Uitwerking 17.4</h2>
+<p>a)</p>
+<pre><code>archive_mode = on
+archive_command = 'test ! -f /home/gebruiker/oefening17/wal_archive/%f &amp;&amp; cp %p /home/gebruiker/oefening17/wal_archive/%f'
+</code></pre>
+<pre><code class="language-sql">SELECT pg_reload_conf();
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT pg_switch_wal();
+</code></pre>
+<pre><code class="language-bash">ls ~/oefening17/wal_archive
+</code></pre>
+<p>c) Zonder schrijfbare doelmap faalt <code>archive_command</code> telkens. In de serverlog verschijnt herhaaldelijk:</p>
+<pre><code>LOG: archive command failed with exit code ...
+</code></pre>
+<p>PostgreSQL blijft het proberen — hij geeft nooit stilzwijgend op.</p>
+<p>d) PostgreSQL houdt WAL-segmenten vast totdat ze <strong>succesvol gearchiveerd</strong> zijn, want zonder dat zou een crash tussen twee back-ups een gat in de keten betekenen. Blijft archiveren mislukken, dan groeit <code>pg_wal/</code> onbegrensd. Uiteindelijk loopt de schijf vol — en een volle schijf bij de WAL-locatie brengt de hele database tot stilstand, want er kan dan niet eens meer worden gecommit. Dit is een andere, snellere route naar hetzelfde soort ramp als de wraparound-waarschuwing uit deel 12.</p>
+<p>e)</p>
+<pre><code class="language-sql">SELECT count(*) FROM pg_ls_waldir();
+</code></pre>
+<p>Of via het besturingssysteem: <code>ls pg_wal/ | wc -l</code>, met een drempel die past bij je normale segmentomloop.</p>
+<hr>
+<h2>Uitwerking 17.5</h2>
+<p>Dit experiment levert per groep andere exacte tijden op; de structuur is wat telt.</p>
+<p>e) t/m g)</p>
+<pre><code class="language-bash">pg_ctl -D ~/oefening17/backups/basis1 -o &quot;-p 5433&quot; start
+</code></pre>
+<p>(of, afhankelijk van je installatiewijze, een equivalente manier om een tweede instantie te starten op een andere poort)</p>
+<p>Zet in het datadirectory van die instantie:</p>
+<pre><code>restore_command = 'cp /home/gebruiker/oefening17/wal_archive/%f &quot;%p&quot;'
+recovery_target_time = '&lt;tijdstip tussen b en c&gt;'
+recovery_target_action = 'promote'
+</code></pre>
+<p>En maak <code>recovery.signal</code> aan (of, op oudere versies, gebruik <code>recovery.conf</code>).</p>
+<pre><code class="language-sql">-- na het opstarten, op poort 5433
+SELECT * FROM oefening_tabel;   -- de testrij hoort er te zijn
+\d oefening_tabel               -- de tabel bestaat weer
+</code></pre>
+<p>h) Het gemeten getal omvat: tijd om de back-up te kopiëren/klaar te zetten, tijd om WAL af te spelen tot het doelmoment, en tijd om te verifiëren. Bij een kleine testopstelling is dat orde van grootte enkele minuten; op productieschaal met grotere back-ups aanzienlijk meer. <strong>Dit getal, niet een schatting op papier, is je werkelijke RTO</strong> — precies het punt van paragraaf 12 in de reader.</p>
+<hr>
+<h2>Uitwerking 17.6</h2>
+<p>a)</p>
+<pre><code class="language-bash">pg_dump -Fc -p 5433 -t oefening_schema.oefening_tabel -f teruggehaald.dump
+</code></pre>
+<p>b)</p>
+<pre><code class="language-bash">pg_restore -p 5432 -d meridiaan --schema=oefening_schema teruggehaald.dump
+</code></pre>
+<p>c) Omdat de rest van de productieomgeving intussen is doorgegaan — nieuwe deelnemers, nieuwe mutaties, betalingen. De hele database vervangen door een versie van een uur geleden zou al dat werk ongedaan maken om één tabel terug te halen. Een gericht herstel raakt alleen wat nodig is.</p>
+<p>d) Je zou alle wijzigingen kwijtraken die tussen het hersteldoel en nu in productie zijn gebeurd — nieuwe deelnemers, nieuwe mutaties, betalingen die na de <code>DROP TABLE</code> maar vóór je herstel zijn verwerkt. Dat is precies waarom een volledige omwisseling een laatste redmiddel is, geen standaardaanpak.</p>
+<hr>
+<h2>Uitwerking 17.7</h2>
+<p>b) Bij het herstellen faalt PostgreSQL met een foutmelding over een beschadigd bestand — bijvoorbeeld een checksumfout (als <code>data_checksums</code> aanstaat, deel 11) of een leesfout tijdens het opstarten. <strong>Het probleem wordt ontdekt op het moment van herstellen</strong>, niet op het moment van back-uppen.</p>
+<p>c) In een echte situatie: pas op het moment van een echte storing, wanneer het te laat is om nog iets anders te proberen. Dat is precies het scenario dat paragraaf 12 wil voorkomen.</p>
+<p>d) Modelantwoord: <em>“Een back-upscript dat zonder foutmelding eindigt, bewijst alleen dat het schrijfproces is gelukt — niet dat de resulterende bestanden compleet, consistent en leesbaar zijn. Corruptie door een schijffout, een onderbroken overdracht, of een verkeerd geconfigureerde tool laat het script vaak gewoon doorlopen.”</em></p>
+<p>e) Een testprocedure moet minstens: het herstel daadwerkelijk uitvoeren (niet alleen bestanden controleren), de herstelde database opstarten, en een inhoudelijke steekproef doen (rijtellingen én een paar concrete waarden vergelijken met wat bekend is).</p>
+<hr>
+<h2>Uitwerking 17.8</h2>
+<p>a) Modelantwoord: dagelijkse back-ups 14 dagen, wekelijkse 13 weken (een kwartaal), maandelijkse 24 maanden.</p>
+<p>b) Bij 5 GB per volledige back-up: 14 dagelijkse + 13 wekelijkse + 24 maandelijkse ≈ 51 volledige kopieën × 5 GB ≈ 255 GB, als je geen incrementeel/differentieel gebruikt. Met incrementele dagback-ups (paragraaf 11) is dat aanzienlijk minder — dit is het rekenvoorbeeld dat het verschil tussen de back-uptypen concreet maakt.</p>
+<p>c) <strong>Ja, potentieel een probleem</strong> in AVG-termen: het verwijderingsverzoek is niet volledig afgehandeld zolang de gegevens nog ergens bestaan, ook al is dat “maar” een back-up. Dit is een vraag voor de <strong>privacyfunctionaris</strong>, niet iets wat een DBA zelfstandig beoordeelt.</p>
+<p>d) Modelantwoord: <em>“Back-ups ouder dan de bewaartermijn worden automatisch vervangen (niet actief ‘schoongemaakt’ van individuele records — dat is bij back-ups praktisch onhaalbaar). Zolang de bewaartermijn van back-ups korter is dan wat compliance acceptabel acht als maximale nasleep van een verwijderingsverzoek, is het probleem tijdelijk en begrensd in plaats van permanent — en dat moet expliciet met de privacyfunctionaris worden afgestemd, niet stilzwijgend worden aangenomen.”</em></p>
+<hr>
+<h2>Uitwerking 17.9 — modelantwoord (verkort)</h2>
+<p><strong>Back-up- en hersteldraaiboek Meridiaan</strong></p>
+<p><strong>1. RPO/RTO</strong></p>
+<table>
+<thead>
+<tr>
+<th>Categorie</th>
+<th>RPO</th>
+<th>RTO</th>
+<th>Goedgekeurd door</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Productie (deelnemers, aanspraken)</td>
+<td>5 min</td>
+<td>4 uur</td>
+<td>Stuurgroep</td>
+</tr>
+<tr>
+<td>Mutaties (onverwerkt)</td>
+<td>5 min</td>
+<td>4 uur</td>
+<td>Stuurgroep</td>
+</tr>
+<tr>
+<td>Testomgeving</td>
+<td>24 uur</td>
+<td>1 dag</td>
+<td>Beheer (Ruud)</td>
+</tr>
+<tr>
+<td>Rapportagekopie</td>
+<td>24 uur</td>
+<td>4 uur</td>
+<td>Beheer (Ruud)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>2. Strategie</strong></p>
+<p>Continuous archiving via <code>pgBackRest</code> met wekelijkse volledige, dagelijkse incrementele back-ups, en doorlopende WAL-archivering voor het laatste stuk RPO. Onderbouwing: op de huidige omvang (~1 GB) is een volledige back-up goedkoop genoeg om wekelijks te doen; WAL-archivering is nodig omdat het RPO van 5 minuten anders onhaalbaar is met alleen periodieke dumps.</p>
+<p><strong>3. Herstelprotocol</strong> <em>(verkort; het volledige document bevat exacte commando’s)</em></p>
+<ol>
+<li>Stop niet in productie — herstel altijd eerst naar een aparte instantie.</li>
+<li>Haal de laatste basisback-up en WAL-archief op via <code>pgbackrest restore</code>.</li>
+<li>Bepaal het hersteldoel (tijdstip, of <code>recovery_target_name</code> als er een herstelpunt is gezet vóór een riskante operatie).</li>
+<li>Start de herstelde instantie, verifieer (rijtellingen + inhoudelijke steekproef uit paragraaf 12).</li>
+<li>Bij een gedeeltelijk probleem: exporteer alleen het benodigde object en importeer in productie.</li>
+<li>Bij een volledige ramp: promoveer de herstelde instantie tot nieuwe productie, na verificatie.</li>
+<li>Documenteer: hersteldoel, duur, en wat er is gecontroleerd.</li>
+</ol>
+<p><strong>4. Testschema</strong></p>
+<p>Elk kwartaal een volledige restore-test naar een geïsoleerde testomgeving, met: rijtelling per kerntabel vergeleken met productie, een inhoudelijke steekproef van tien willekeurige deelnemers vergeleken op naam en BSN-aanwezigheid (niet de waarde zelf, zie deel 9), en meting van de duur. Na elke wijziging aan de back-upconfiguratie: een extra test binnen een week.</p>
+<p><strong>5. Bewaarbeleid</strong></p>
+<p>14 dagen dagelijks, 13 weken wekelijks, 24 maanden maandelijks. <strong>Afgestemd met de privacyfunctionaris:</strong> een verwijderingsverzoek is compleet afgehandeld in productie; de nasleep in back-ups vervalt vanzelf binnen de bewaartermijn, wat is besproken en geaccepteerd als redelijke grens.</p>
+<p><strong>6. Gemeten RTO</strong></p>
+<p>Uit opdracht 17.5: point-in-time recovery naar een specifiek moment kostte [x] minuten van “ongeluk” tot geverifieerd hersteld, op een testschaal van enkele tabellen. Op productieschaal (1 GB, groeiend) is een realistische inschatting [y] — <strong>te bevestigen met een echte kwartaaltest</strong>, niet aan te nemen.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>RPO/RTO met een naam erbij.</strong> Groepen die dit als eigen technische keuze presenteren, hebben paragraaf 3 gemist.</li>
+<li><strong>Uitvoerbaar door een ander.</strong> Het protocol moet werken voor iemand die niet de auteur is, om 3 uur 's nachts — vaag taalgebruik (“herstel de back-up”) is onvoldoende.</li>
+<li><strong>Inhoudelijke test, geen “geen foutmelding”.</strong> Dit is het scherpste beoordelingspunt en het meest gemiste.</li>
+<li><strong>Een echt getal in punt 6.</strong> Een schatting zonder eigen meting toont dat de groep paragraaf 12 niet heeft toegepast.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 17.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">295 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-16-partitionering/reader.html">&larr; Deel 16 — Partitionering</a><a class="dbm-prevnext next" href="../deel-18-replicatie/reader.html">Deel 18 — Replicatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

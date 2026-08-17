@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Partitionering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 16 — Slidedeck</h1>
+<p><strong>Partitionering</strong>
+Niveau 2, dagdeel 7 (deel 16 van 30) | 36 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Partitionering</h1>
+<h2>Niveau 2 — Deel 16</h2>
+<p><em>Vier dagdelen lang was mutatie het probleemkind.</em></p>
+<hr>
+<h2>Slide 2 — Vijf problemen, één tabel</h2>
+<table>
+<thead>
+<tr>
+<th>Deel</th>
+<th>Wat er misging</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td>Autovacuum pas na 24 dagen</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Na het laden bijna 2× zo groot als de data</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Bovenaan de belasting in <code>pg_stat_statements</code></td>
+</tr>
+<tr>
+<td>14</td>
+<td>B-tree 50 MB; BRIN kleiner maar trager</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Pakketgrootte vraagt precisie</td>
+</tr>
+</tbody>
+</table>
+<h1>Wat hebben deze vijf gemeen?</h1>
+<p><strong>Notities:</strong> laat de zaal het antwoord vinden.</p>
+<hr>
+<h2>Slide 3 — Onbegrensde groei, tijdgebonden bevraging</h2>
+<p><code>mutatie</code> groeit <strong>eindeloos</strong>.</p>
+<p>Hij wordt vrijwel altijd bevraagd op <strong>tijd</strong>:
+recent, dit kwartaal, dit jaar.</p>
+<h1>Precies het profiel voor partitionering.</h1>
+<hr>
+<h2>Slide 4 — Wat er verandert</h2>
+<ul>
+<li>Autovacuum werkt <strong>per partitie</strong> — dagen, niet weken</li>
+<li>Oude data weg = <code>DROP TABLE</code>, geen bloat</li>
+<li>Query’s op één maand doorzoeken <strong>één</strong> partitie</li>
+<li>BRIN per partitie: kleiner, hogere correlatie</li>
+</ul>
+<hr>
+<h2>Slide 5 — De toetsvraag</h2>
+<h1>Bevraag ik dit langs een as die ook</h1>
+<h1>de groei bepaalt, en wil ik oude delen</h1>
+<h1>in bulk kunnen verwijderen of verplaatsen?</h1>
+<p>Twee keer ja bij <code>mutatie</code>.
+Twee keer nee bij <code>werkgever</code> en <code>deelnemer</code>.</p>
+<hr>
+<h2>Slide 6 — Wat het NIET oplost</h2>
+<ul>
+<li>Een enkele query die de hele tabel nodig heeft</li>
+<li>Een slecht datamodel</li>
+<li>Ontbrekende indexen — elke partitie heeft zijn eigen</li>
+<li>Archivering — de data staat er nog, alleen anders ingedeeld</li>
+</ul>
+<hr>
+<h2>Slide 7 — Opdracht 16.1</h2>
+<h1>Is dit een kandidaat?</h1>
+<p>Vijf tabellen. Toets ze allemaal.</p>
+<p><em>10 min</em></p>
+<hr>
+<h2>Slide 8 — Declaratief</h2>
+<pre><code class="language-sql">CREATE TABLE mutatie (
+    mutatie_id   bigint GENERATED ALWAYS AS IDENTITY,
+    …
+    aangemeld_op timestamptz NOT NULL,
+    PRIMARY KEY (mutatie_id, aangemeld_op)
+) PARTITION BY RANGE (aangemeld_op);
+</code></pre>
+<hr>
+<h2>Slide 9 — De verrassing</h2>
+<h1>De primaire sleutel moet</h1>
+<h1>de partitiesleutel bevatten.</h1>
+<p>PostgreSQL kan uniciteit niet over partities
+heen garanderen — elke partitie heeft
+zijn eigen, onafhankelijke index.</p>
+<hr>
+<h2>Slide 10 — Zonder partities: onbruikbaar</h2>
+<pre><code class="language-sql">CREATE TABLE mutatie_2026_01 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+</code></pre>
+<p>Inclusief onderaan, <strong>exclusief</strong> bovenaan.
+Zelfde patroon als datumfilters (deel 3) en rangetypen (deel 6).</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-16-1.png" alt="Figuur 16-1" loading="lazy"><figcaption>Figuur 16-1</figcaption></figure>
+<hr>
+<h2>Slide 11 — Partitiegrootte</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Voordeel</th>
+<th>Nadeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Per dag</td>
+<td>Fijne pruning</td>
+<td>Veel partities</td>
+</tr>
+<tr>
+<td><strong>Per maand</strong></td>
+<td>Goede balans</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Per kwartaal</td>
+<td>Weinig partities</td>
+<td>Grovere pruning</td>
+</tr>
+</tbody>
+</table>
+<p><code>mutatie</code>: 2,4 mln rijen / 4 jaar → <strong>~50.000 per maand</strong>. Goede maat.</p>
+<hr>
+<h2>Slide 12 — Opdracht 16.2</h2>
+<h1>De gepartitioneerde structuur bouwen</h1>
+<p><em>25 min, tweetallen</em></p>
+<p><strong>Notities:</strong> generatiescript delen zodra iemand 50× CREATE TABLE gaat typen.</p>
+<hr>
+<h2>Slide 13 — Opdracht 16.3</h2>
+<h1>Data migreren en verifiëren</h1>
+<p>Niet alleen tellen — <strong>vergelijken</strong>. (Deel 6, opdracht 6.8.)</p>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 14 — Pauze</h2>
+<hr>
+<h2>Slide 15 — Partition pruning</h2>
+<pre><code class="language-sql">WHERE aangemeld_op &gt;= '2026-01-01' AND aangemeld_op &lt; '2026-02-01'
+</code></pre>
+<pre><code>Seq Scan on mutatie_2026_01
+</code></pre>
+<h1>Eén partitie in het plan.</h1>
+<h1>De andere 47 zijn niet eens overwogen.</h1>
+<hr>
+<h2>Slide 16 — Voorspel</h2>
+<pre><code class="language-sql">-- werkt pruning?
+WHERE extract(year FROM aangemeld_op) = 2026
+</code></pre>
+<p><strong>Notities:</strong> laat de zaal voorspellen voordat je het plan toont.</p>
+<hr>
+<h2>Slide 17 — Nee.</h2>
+<pre><code>Append
+  -&gt;  Seq Scan on mutatie_2022_01  Filter: ...
+  -&gt;  Seq Scan on mutatie_2022_02  Filter: ...
+  … (46 meer)
+</code></pre>
+<h1>Exact dezelfde fout als een functie</h1>
+<h1>om een gewone kolom (deel 8, 13).</h1>
+<h1>Nu met 48× de gevolgen.</h1>
+<hr>
+<h2>Slide 18 — Opdracht 16.4</h2>
+<h1>Partition pruning zien werken</h1>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 19 — Indexen op partities</h2>
+<pre><code class="language-sql">CREATE INDEX ON mutatie (deelnemer_id);
+</code></pre>
+<p><strong>Eén</strong> opdracht → een index op <strong>elke</strong> partitie.
+En op elke partitie die je <strong>later</strong> toevoegt.</p>
+<hr>
+<h2>Slide 20 — Opdracht 16.5</h2>
+<h1>Indexen op partities</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 21 — Pauze</h2>
+<hr>
+<h2>Slide 22 — De kernbelofte</h2>
+<p>Meet zelf:</p>
+<p><strong>A.</strong> <code>DELETE</code> van één maand op de gewone tabel
+<strong>B.</strong> <code>DETACH … CONCURRENTLY</code> + <code>DROP TABLE</code> op een partitie</p>
+<hr>
+<h2>Slide 23 — Opdracht 16.6</h2>
+<h1>Een partitie weggooien</h1>
+<p><em>15 min, individueel</em></p>
+<p><strong>Notities:</strong> verzamel de getallen plenair op het bord na afloop.</p>
+<hr>
+<h2>Slide 24 — Het verschil</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Tijd</th>
+<th>Nazorg</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DELETE</code></td>
+<td>Seconden</td>
+<td>Bloat → <code>VACUUM</code> nodig</td>
+</tr>
+<tr>
+<td><code>DROP TABLE</code> op partitie</td>
+<td><strong>Milliseconden</strong></td>
+<td><strong>Niets</strong></td>
+</tr>
+</tbody>
+</table>
+<h1>Er is niets op te ruimen.</h1>
+<h1>De hele structuur is weg.</h1>
+<hr>
+<h2>Slide 25 — Het veilige patroon</h2>
+<pre><code class="language-sql">ALTER TABLE mutatie DETACH PARTITION mutatie_2022_01 CONCURRENTLY;
+-- controleer, archiveer indien nodig
+DROP TABLE mutatie_2022_01;
+</code></pre>
+<p>Loskoppelen is <strong>omkeerbaar</strong>. Verwijderen niet.</p>
+<hr>
+<h2>Slide 26 — List &amp; hash: kort</h2>
+<p><strong>List</strong> — kleine set categorieën, vaak op één gefilterd
+<em>(bij Meridiaan: niet nu — relevant bij multi-tenant, niveau 3)</em></p>
+<p><strong>Hash</strong> — spreiding zonder natuurlijke as
+<em>(verliest pruning voor de meeste query’s)</em></p>
+<hr>
+<h2>Slide 27 — pg_partman</h2>
+<pre><code class="language-sql">SELECT partman.create_parent(
+    p_parent_table =&gt; 'mutatie', p_control =&gt; 'aangemeld_op',
+    p_type =&gt; 'range', p_interval =&gt; 'monthly', p_premake =&gt; 3);
+
+UPDATE partman.part_config SET retention = '4 years' …;
+</code></pre>
+<p>Automatiseert <strong>wanneer</strong>. Niet <strong>hoelang</strong>.</p>
+<hr>
+<h2>Slide 28 — De bewaartermijn</h2>
+<h1>Is geen technische instelling.</h1>
+<p>Het is een AVG-vraag (deel 9) — vaak met een
+wettelijke bewaarplicht erbovenop.</p>
+<p><strong>Compliance en de privacyfunctionaris beslissen, jij implementeert.</strong></p>
+<hr>
+<h2>Slide 29 — Opdracht 16.7</h2>
+<h1>pg_partman</h1>
+<p><em>15 min, tweetallen — of demonstratie</em></p>
+<hr>
+<h2>Slide 30 — En nu het tegendeel</h2>
+<p>Net als deel 14 eindigde met “wat een index niet oplost”:</p>
+<h1>Wanneer is partitioneren</h1>
+<h1>de verkeerde keuze?</h1>
+<hr>
+<h2>Slide 31 — Vijf redenen om het niet te doen</h2>
+<ul>
+<li>Te kleine tabel (&lt; enkele miljoenen rijen)</li>
+<li>Geen natuurlijke as</li>
+<li>Query’s die structureel <strong>alle</strong> partities raken</li>
+<li>Verspreide updates die de sleutel niet raken</li>
+<li><strong>Het probleem is eigenlijk bloat</strong> → fill factor, niet partities</li>
+</ul>
+<hr>
+<h2>Slide 32 — Opdracht 16.8</h2>
+<h1>Wanneer niet partitioneren</h1>
+<p>Vier voorstellen. Bij elk: welk deel van de toets faalt?</p>
+<p><em>10 min, drietallen</em></p>
+<hr>
+<h2>Slide 33 — Het patroon</h2>
+<p>Elk van de vier voorstellen komt van iemand
+die het <strong>nieuwe gereedschap</strong> wil gebruiken —</p>
+<h1>niet van een tabel die de toetsvraag</h1>
+<h1>positief beantwoordt.</h1>
+<hr>
+<h2>Slide 34 — Drie verbanden met dit niveau</h2>
+<p><strong>Deel 12 (bloat):</strong> <code>DROP TABLE</code> laat er geen achter
+<strong>Deel 14 (BRIN):</strong> per partitie hogere correlatie, kleinere index
+<strong>Deel 15 (hotspot):</strong> invoegen i.p.v. bijwerken — partities sluiten daar naadloos op aan</p>
+<hr>
+<h2>Slide 35 — Opdracht 16.9</h2>
+<h1>Het partitioneringsvoorstel</h1>
+<p>Structuur met berekening · migratieplan · onderhoudsplan ·
+bewaartermijn als bedrijfsbeslissing ·
+<strong>gevolgen voor de partiële index (14) en de wachtrij (15)</strong></p>
+<p><em>40 min, drietallen</em></p>
+<hr>
+<h2>Slide 36 — Volgende keer</h2>
+<h1>Deel 17 — Back-up en herstel</h1>
+<p>Jullie kunnen nu oude stukken in milliseconden weggooien.</p>
+<p>Volgende keer: wat als je het <strong>verkeerde</strong> stuk weggooit,
+of de schijf valt uit? Dan blijkt er een verschil te zijn
+tussen een back-up die klaarstaat en een back-up die werkt.</p>
+<p><strong>Bewaar je gepartitioneerde <code>oefening16.mutatie</code>.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 16.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">55 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-15-concurrency-en-locking/reader.html">&larr; Deel 15 — Concurrency en locking</a><a class="dbm-prevnext next" href="../deel-17-back-up-en-herstel/reader.html">Deel 17 — Back-up en herstel &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Fysiek ontwerp: pagina&#39;s, TOAST en bloat — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 12 — Fysiek ontwerp: pagina’s, TOAST en bloat</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 2 van 12 (deel 12 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Storage &amp; maintenance”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom een tabel groter is dan wat erin staat</li>
+<li>De pagina van 8 kilobyte</li>
+<li>Hoe een rij eruitziet</li>
+<li>Uitlijning: de kolomvolgorde die bytes kost</li>
+<li>TOAST: wat er gebeurt met grote waarden</li>
+<li>HOT-updates en fill factor</li>
+<li>Bloat: waar het vandaan komt</li>
+<li>Bloat meten</li>
+<li>Bloat opruimen</li>
+<li>Freeze en wraparound</li>
+<li>De visibility map en index-only scans</li>
+<li>Indexen worden ook opgeblazen</li>
+<li>Fysieke volgorde en correlatie</li>
+<li>Wat je hiervan in een ontwerp meeneemt</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de opbouw van een pagina en een rijversie beschrijven en de vaste overhead per rij benoemen;</li>
+<li>uitleggen hoe uitlijning werkt en een kolomvolgorde kiezen die ruimte bespaart;</li>
+<li>vertellen wanneer een waarde naar TOAST gaat en welke gevolgen dat heeft voor prestaties;</li>
+<li>fill factor instellen en uitleggen wanneer HOT-updates optreden en wanneer niet;</li>
+<li>bloat meten met de systeemweergaven en de omvang ervan inschatten;</li>
+<li>de drie manieren om bloat op te ruimen tegen elkaar afwegen, inclusief hun lock-gedrag;</li>
+<li>uitleggen wat freeze doet en waarom wraparound een productieomgeving stil kan leggen;</li>
+<li>de rol van de visibility map bij index-only scans benoemen;</li>
+<li>de correlatie van een tabel opvragen en zeggen wat die betekent voor je queryplannen.</li>
+</ul>
+<hr>
+<h2>2. Waarom een tabel groter is dan wat erin staat</h2>
+<p>In deel 11 zag je het al: <code>mutatie</code> was na het laden bijna twee keer zo groot als de gegevens erin. De oorzaak was toen bloat door de grote <code>UPDATE</code>.</p>
+<p>Dat is één van vijf redenen. De volledige lijst:</p>
+<ol>
+<li><strong>Overhead per rij</strong> — elke rijversie draagt 23 bytes administratie plus uitlijning.</li>
+<li><strong>Uitlijning tussen kolommen</strong> — de volgorde van je kolommen bepaalt hoeveel bytes er verloren gaan aan opvulling.</li>
+<li><strong>Bloat</strong> — dode rijversies die nog niet zijn opgeruimd (deel 7).</li>
+<li><strong>Fill factor</strong> — bewust vrijgelaten ruimte per pagina.</li>
+<li><strong>Indexen</strong> — die tellen mee in de totale omvang en hebben hun eigen bloat.</li>
+</ol>
+<p>Vandaag maak je alle vijf zichtbaar en meetbaar. Dat is geen boekhoudkundige oefening: op 2,4 miljoen mutaties is het verschil tussen een goed en een slecht fysiek ontwerp honderden megabytes, en daarmee ook het verschil in hoeveel er in je bufferpool past.</p>
+<p><strong>Dat laatste is het echte argument.</strong> Een tabel die 30% kleiner is, past 30% vaker in het geheugen. Dan is fysiek ontwerp geen ruimtebesparing maar een prestatiemaatregel.</p>
+<hr>
+<h2>3. De pagina van 8 kilobyte</h2>
+<p>PostgreSQL leest en schrijft altijd in <strong>pagina’s van 8 kB</strong> (instelbaar bij compileren, maar dat doet vrijwel niemand). Alles in dit deel gaat over wat er in zo’n pagina past.</p>
+<p>De opbouw van een pagina:</p>
+<table>
+<thead>
+<tr>
+<th>Onderdeel</th>
+<th>Grootte</th>
+<th>Bevat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Page header</td>
+<td>24 bytes</td>
+<td>Checksum, vrije ruimte, LSN</td>
+</tr>
+<tr>
+<td>Item pointers</td>
+<td>4 bytes per rij</td>
+<td>Verwijzingen naar de rijen</td>
+</tr>
+<tr>
+<td><em>Vrije ruimte</em></td>
+<td>variabel</td>
+<td>Waar nieuwe rijen komen</td>
+</tr>
+<tr>
+<td>Rijversies</td>
+<td>variabel</td>
+<td>Van achter naar voren gevuld</td>
+</tr>
+<tr>
+<td>Special space</td>
+<td>0 bytes bij tabellen</td>
+<td>Bij indexen wel gebruikt</td>
+</tr>
+</tbody>
+</table>
+<p>De rijen worden <strong>van achteren naar voren</strong> in de pagina geschreven, de pointers van voren naar achteren. Ze groeien naar elkaar toe; als ze elkaar raken, is de pagina vol.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-12-1.png" alt="Opbouw van een 8 kB-pagina met header, item pointers, vrije ruimte en rijversies" loading="lazy"><figcaption>Figuur 12-1 — Opbouw van een 8 kB-pagina met header, item pointers, vrije ruimte en rijversies</figcaption></figure>
+<p><strong>Praktisch gevolg:</strong> een rij kan nooit groter zijn dan een pagina. Wat niet past, gaat naar TOAST (paragraaf 6).</p>
+<hr>
+<h2>4. Hoe een rij eruitziet</h2>
+<p>Elke rijversie begint met een header van <strong>23 bytes</strong>, opgevuld tot 24 door uitlijning:</p>
+<table>
+<thead>
+<tr>
+<th>Veld</th>
+<th>Bytes</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>t_xmin</code></td>
+<td>4</td>
+<td>Transactie die deze versie maakte (deel 7)</td>
+</tr>
+<tr>
+<td><code>t_xmax</code></td>
+<td>4</td>
+<td>Transactie die hem beëindigde</td>
+</tr>
+<tr>
+<td><code>t_cid</code> / <code>t_xvac</code></td>
+<td>4</td>
+<td>Command-id binnen de transactie</td>
+</tr>
+<tr>
+<td><code>t_ctid</code></td>
+<td>6</td>
+<td>Fysieke locatie; verwijst bij een update naar de nieuwe versie</td>
+</tr>
+<tr>
+<td><code>t_infomask2</code></td>
+<td>2</td>
+<td>Aantal attributen plus vlaggen</td>
+</tr>
+<tr>
+<td><code>t_infomask</code></td>
+<td>2</td>
+<td>Statusvlaggen</td>
+</tr>
+<tr>
+<td><code>t_hoff</code></td>
+<td>1</td>
+<td>Waar de gegevens beginnen</td>
+</tr>
+<tr>
+<td><strong>NULL-bitmap</strong></td>
+<td>1 bit per kolom</td>
+<td>Alleen aanwezig als er NULL-waarden zijn</td>
+</tr>
+</tbody>
+</table>
+<p>Dat is <strong>24 bytes overhead per rij</strong>, plus 4 bytes voor de item pointer in de pagina. Op een tabel met smalle rijen is dat aanzienlijk: een tabel met alleen twee <code>integer</code>-kolommen (8 bytes gegevens) verbruikt per rij ruim 36 bytes.</p>
+<p><strong>De les:</strong> heel smalle tabellen met heel veel rijen zijn relatief duur. Dat is een argument tegen het opsplitsen van een tabel “voor de netheid” wanneer de kolommen altijd samen worden opgehaald.</p>
+<p>Merk op dat de NULL-bitmap alleen bestaat als er in die rij minstens één NULL staat. Een kolom <code>NOT NULL</code> maken bespaart dus soms werkelijk ruimte — al is het effect klein.</p>
+<hr>
+<h2>5. Uitlijning: de kolomvolgorde die bytes kost</h2>
+<p>Dit is het onderwerp waarvan deelnemers meestal niet weten dat het bestaat.</p>
+<p>PostgreSQL lijnt waarden uit op hun natuurlijke grens: een <code>integer</code> (4 bytes) begint op een veelvoud van 4, een <code>bigint</code> of <code>timestamptz</code> (8 bytes) op een veelvoud van 8. Ruimte die daarvoor moet worden overgeslagen, is <strong>verloren</strong>.</p>
+<p>Vergelijk deze twee definities, met exact dezelfde kolommen:</p>
+<pre><code class="language-sql">-- Ongunstig
+CREATE TABLE slecht (
+    a smallint,     -- 2 bytes, dan 6 bytes opvulling
+    b bigint,       -- 8
+    c smallint,     -- 2, dan 6 opvulling
+    d bigint,       -- 8
+    e integer       -- 4
+);                  -- totaal 36 bytes
+
+-- Gunstig
+CREATE TABLE goed (
+    b bigint,       -- 8
+    d bigint,       -- 8
+    e integer,      -- 4
+    a smallint,     -- 2
+    c smallint      -- 2
+);                  -- totaal 24 bytes
+</code></pre>
+<p><strong>Twaalf bytes verschil per rij</strong>, op identieke gegevens. Op 2,4 miljoen rijen is dat bijna 29 MB — en dat is dan alleen deze vijf kolommen.</p>
+<p><strong>De vuistregel:</strong> zet kolommen op aflopende grootte. Eerst de 8-bytestypen (<code>bigint</code>, <code>timestamptz</code>, <code>double precision</code>), dan de 4-bytestypen (<code>integer</code>, <code>date</code>, <code>real</code>), dan de 2-bytestypen (<code>smallint</code>), dan <code>boolean</code> en <code>char</code>, en als laatste de variabele types (<code>text</code>, <code>numeric</code>, <code>jsonb</code>).</p>
+<p><strong>Wanneer dit ertoe doet:</strong> bij tabellen met miljoenen rijen en veel smalle kolommen. Bij <code>werkgever</code> met 4.100 rijen is het verspilde moeite. Bij <code>mutatie</code> met 2,4 miljoen rijen is het meetbaar.</p>
+<p><strong>Wanneer je het niet doet:</strong> als het de leesbaarheid van je <code>CREATE TABLE</code> onwerkbaar maakt. Een logische groepering van kolommen heeft ook waarde. Optimaliseer waar het meetbaar is, en documenteer waarom de volgorde is zoals hij is — anders zet de volgende ontwikkelaar hem “netjes” terug.</p>
+<p>Meten kan direct:</p>
+<pre><code class="language-sql">SELECT pg_column_size(ROW(1::smallint, 1::bigint, 1::smallint, 1::bigint, 1::integer)) AS slecht,
+       pg_column_size(ROW(1::bigint, 1::bigint, 1::integer, 1::smallint, 1::smallint)) AS goed;
+</code></pre>
+<hr>
+<h2>6. TOAST: wat er gebeurt met grote waarden</h2>
+<p>Een rij past niet in meer dan één pagina. Wat doet PostgreSQL met een <code>text</code>-veld van 50 kB?</p>
+<p><strong>TOAST</strong> — The Oversized-Attribute Storage Technique. Zodra een rij groter dreigt te worden dan ongeveer 2 kB (een kwart pagina), gaat PostgreSQL waarden comprimeren en zo nodig verplaatsen naar een aparte TOAST-tabel. In de hoofdtabel blijft dan een verwijzing van 18 bytes achter.</p>
+<p>De vier opslagstrategieën per kolom:</p>
+<table>
+<thead>
+<tr>
+<th>Strategie</th>
+<th>Comprimeren</th>
+<th>Verplaatsen</th>
+<th>Standaard voor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PLAIN</code></td>
+<td>Nee</td>
+<td>Nee</td>
+<td>Vaste types (<code>integer</code>, <code>date</code>)</td>
+</tr>
+<tr>
+<td><code>EXTENDED</code></td>
+<td>Ja</td>
+<td>Ja</td>
+<td><code>text</code>, <code>jsonb</code>, <code>bytea</code></td>
+</tr>
+<tr>
+<td><code>EXTERNAL</code></td>
+<td>Nee</td>
+<td>Ja</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>MAIN</code></td>
+<td>Ja</td>
+<td>Zo laat mogelijk</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Wijzigen kan:</p>
+<pre><code class="language-sql">ALTER TABLE koppelvlakbericht ALTER COLUMN inhoud SET STORAGE EXTERNAL;
+</code></pre>
+<p><strong>Waarom je dat zou willen:</strong> <code>EXTERNAL</code> slaat ongecomprimeerd op. Dat kost schijfruimte maar maakt deelbewerkingen (<code>substring</code>, of <code>jsonb</code>-toegang tot één sleutel) veel sneller, omdat er niet eerst gedecomprimeerd hoeft te worden.</p>
+<p><strong>Wat je moet weten voor de praktijk:</strong></p>
+<ul>
+<li><strong>TOAST is grotendeels onzichtbaar.</strong> Je merkt het niet in je query’s — behalve in prestaties.</li>
+<li><strong><code>pg_relation_size</code> telt de TOAST-tabel niet mee.</strong> Dat verklaart waarom een tabel “klein” lijkt en toch veel ruimte inneemt. Gebruik <code>pg_total_relation_size</code>.</li>
+<li><strong>Een TOAST-waarde ophalen kost een extra leesbewerking.</strong> Een <code>SELECT *</code> op een tabel met een groot <code>jsonb</code>-veld is daarom veel duurder dan een <code>SELECT</code> van alleen de kolommen die je nodig hebt. Dit is het concrete argument tegen <code>SELECT *</code> uit deel 3, nu met een mechanisme erbij.</li>
+<li><strong>TOAST-tabellen krijgen hun eigen bloat</strong> en worden apart gevacuümd.</li>
+</ul>
+<p>Bij Meridiaan speelt dit bij de <code>koppelvlakbericht</code>-tabel uit deel 6: ruwe berichten in <code>jsonb</code>. Die tabel is in de hoofdstructuur klein en in werkelijkheid de grootste van het schema.</p>
+<hr>
+<h2>7. HOT-updates en fill factor</h2>
+<p>Uit deel 7: een <code>UPDATE</code> schrijft een nieuwe rijversie. Wat er daarna gebeurt met de <strong>indexen</strong>, is het onderwerp van deze paragraaf.</p>
+<p>Normaal moet elke index die naar die rij wijst, een nieuwe verwijzing krijgen. Tien indexen betekent tien indexbijwerkingen voor één <code>UPDATE</code>.</p>
+<p><strong>HOT — Heap-Only Tuple</strong> — is de optimalisatie die dat voorkomt. Als aan twee voorwaarden is voldaan:</p>
+<ol>
+<li><strong>geen enkele geïndexeerde kolom wordt gewijzigd</strong>, en</li>
+<li><strong>de nieuwe rijversie past op dezelfde pagina</strong>,</li>
+</ol>
+<p>dan hoeft geen enkele index te worden bijgewerkt. De oude rijversie krijgt een verwijzing naar de nieuwe, binnen dezelfde pagina.</p>
+<p>Voorwaarde 1 is een ontwerpkeuze: indexeer geen kolommen die vaak wijzigen als dat niet nodig is.</p>
+<p>Voorwaarde 2 is waar <strong>fill factor</strong> binnenkomt:</p>
+<pre><code class="language-sql">ALTER TABLE mutatie SET (fillfactor = 85);
+</code></pre>
+<p>De standaard is 100: pagina’s worden volledig gevuld. Bij een <code>UPDATE</code> is er dan geen ruimte op de pagina en moet de nieuwe versie ergens anders heen — geen HOT.</p>
+<p>Met <code>fillfactor = 85</code> blijft 15% van elke pagina vrij voor toekomstige updates.</p>
+<p><strong>De afruil:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Fill factor</th>
+<th>Voordeel</th>
+<th>Nadeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100 (standaard)</td>
+<td>Compact; minder pagina’s te lezen</td>
+<td>Geen HOT-updates</td>
+</tr>
+<tr>
+<td>85-90</td>
+<td>HOT-updates mogelijk</td>
+<td>10-15% meer pagina’s</td>
+</tr>
+<tr>
+<td>70 of lager</td>
+<td>Zelden zinvol</td>
+<td>Veel verspilde ruimte</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer verlagen:</strong> bij tabellen die veel worden bijgewerkt op niet-geïndexeerde kolommen. <code>mutatie</code> is het schoolvoorbeeld: elke rij wordt precies één keer bijgewerkt (<code>verwerkt_op</code> vullen), en die kolom is niet geïndexeerd.</p>
+<p><strong>Wanneer niet:</strong> bij tabellen die alleen groeien en nooit wijzigen. Daar is een lagere fill factor pure verspilling.</p>
+<p><strong>Let op:</strong> <code>ALTER TABLE … SET (fillfactor = …)</code> geldt alleen voor <strong>nieuwe</strong> pagina’s. Bestaande pagina’s blijven vol tot ze herschreven worden — bijvoorbeeld door <code>VACUUM FULL</code> of <code>pg_repack</code>.</p>
+<p>Controleren of HOT werkt:</p>
+<pre><code class="language-sql">SELECT relname, n_tup_upd, n_tup_hot_upd,
+       round(100.0 * n_tup_hot_upd / nullif(n_tup_upd, 0), 1) AS pct_hot
+FROM pg_stat_user_tables
+WHERE n_tup_upd &gt; 0
+ORDER BY n_tup_upd DESC;
+</code></pre>
+<p>Een laag percentage bij een tabel die veel wordt bijgewerkt, is een concrete verbeterkans.</p>
+<hr>
+<h2>8. Bloat: waar het vandaan komt</h2>
+<p>Bloat is ruimte die is ingenomen door rijversies die niemand meer kan zien. Drie bronnen:</p>
+<p><strong>Updates en deletes.</strong> Elke <code>UPDATE</code> laat de oude versie achter; elke <code>DELETE</code> markeert alleen. Dat is MVCC (deel 7).</p>
+<p><strong>Lang lopende transacties.</strong> Zolang een transactie openstaat, moeten alle rijversies bewaard blijven die zij nog zou kunnen zien — in de <strong>hele database</strong>. Vacuum kan dan niets opruimen, ook niet in tabellen waar die transactie nooit is geweest. Dit is de meest onderschatte oorzaak, en de reden dat <code>idle in transaction</code> uit deel 7 een productieprobleem is en geen netheidskwestie.</p>
+<p><strong>Autovacuum die het niet bijhoudt.</strong> De drempelformule uit deel 11: op een grote tabel duurt het lang voordat er iets gebeurt.</p>
+<p>Er is ook <strong>onvermijdbare bloat</strong>: een zekere hoeveelheid vrije ruimte is normaal en zelfs nuttig, want daar landen de volgende rijen. Het doel is niet nul. Vuistregel: onder 20% is prima, boven 50% is een probleem, en de trend zegt meer dan het getal.</p>
+<hr>
+<h2>9. Bloat meten</h2>
+<p>Het eerlijke antwoord: <strong>PostgreSQL heeft geen ingebouwde bloatmeting.</strong> Wat er is, zijn schattingen en een exacte maar dure meting.</p>
+<p><strong>Schatting uit de statistieken</strong> — goedkoop, ruw, prima als signaal:</p>
+<pre><code class="language-sql">SELECT relname,
+       n_live_tup, n_dead_tup,
+       round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 1) AS pct_dood,
+       pg_size_pretty(pg_total_relation_size(relid)) AS omvang,
+       last_autovacuum
+FROM pg_stat_user_tables
+WHERE schemaname = 'meridiaan_prod'
+ORDER BY n_dead_tup DESC;
+</code></pre>
+<p>Let op: <code>n_dead_tup</code> is een <strong>schatting</strong> die door autovacuum wordt bijgewerkt, niet een telling.</p>
+<p><strong>Exacte meting met <code>pgstattuple</code></strong> — nauwkeurig, maar scant de hele tabel:</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pgstattuple;
+
+SELECT * FROM pgstattuple('mutatie');
+-- of goedkoper, met steekproef:
+SELECT * FROM pgstattuple_approx('mutatie');
+</code></pre>
+<p>De kolom <code>free_percent</code> is wat je zoekt. <code>pgstattuple_approx</code> gebruikt een steekproef en is op grote tabellen ordes van grootte sneller.</p>
+<p><strong>Draai de exacte meting niet routinematig op productie tijdens kantooruren</strong> — hij leest de hele tabel en verdringt daarmee je bufferpool.</p>
+<p><strong>De vraag die je stelt is niet “hoeveel bloat is er” maar “groeit het”.</strong> Een tabel die stabiel op 25% zit, is in evenwicht: vacuum ruimt evenveel op als er bijkomt. Een tabel die van 10% naar 40% is gegaan in een maand, heeft een probleem — en dat probleem is meestal een lang lopende transactie of een te hoge autovacuum-drempel.</p>
+<hr>
+<h2>10. Bloat opruimen</h2>
+<p>Drie gereedschappen, met sterk verschillende kosten.</p>
+<table>
+<thead>
+<tr>
+<th>Gereedschap</th>
+<th>Geeft ruimte terug aan OS</th>
+<th>Lock</th>
+<th>Extra ruimte nodig</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>VACUUM</code></td>
+<td>Nee</td>
+<td>Licht; tabel blijft bruikbaar</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code></td>
+<td>Ja</td>
+<td><code>ACCESS EXCLUSIVE</code> — alles wacht</td>
+<td>Ja, volledige kopie</td>
+</tr>
+<tr>
+<td><code>pg_repack</code></td>
+<td>Ja</td>
+<td>Kort, alleen aan begin en eind</td>
+<td>Ja, volledige kopie</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>VACUUM</code></strong> is de normale gang van zaken en gebeurt vanzelf. De ruimte blijft in de tabel en wordt hergebruikt. In verreweg de meeste gevallen is dit genoeg — en het is wat je wilt, want teruggeven aan het OS betekent dat je hem straks weer moet opvragen.</p>
+<p><strong><code>VACUUM FULL</code></strong> herschrijft de tabel volledig. Alleen na een eenmalige grote opruiming, in een onderhoudsvenster. Onthoud de valkuil uit deel 11: hij heeft tijdelijk een volledige tweede kopie nodig, dus juist niet bruikbaar op een schijf die vol loopt.</p>
+<p><strong><code>pg_repack</code></strong> is een extensie die hetzelfde doet als <code>VACUUM FULL</code> maar <strong>online</strong>: hij bouwt een kopie op terwijl de tabel in gebruik blijft, houdt hem bij met triggers, en wisselt aan het eind om onder een korte lock.</p>
+<pre><code class="language-bash">pg_repack -d meridiaan --table meridiaan_prod.mutatie
+</code></pre>
+<p>Voorwaarden: de tabel heeft een primaire sleutel of unieke index nodig, en je hebt tijdelijk ruimte voor een tweede kopie. Voor een productieomgeving die niet uit mag, is dit het gereedschap — niet <code>VACUUM FULL</code>.</p>
+<p><strong>De volgorde waarin je te werk gaat bij een bloatprobleem:</strong></p>
+<ol>
+<li><strong>Zoek de oorzaak.</strong> Lang lopende transacties? Autovacuum-drempel te hoog? Een replicatieslot dat achterloopt (deel 18)?</li>
+<li><strong>Los de oorzaak op.</strong> Anders is de tabel over twee maanden weer opgeblazen.</li>
+<li><strong>Ruim daarna pas op</strong>, met <code>pg_repack</code> of in een venster met <code>VACUUM FULL</code>.</li>
+</ol>
+<p>Wie stap 1 en 2 overslaat, staat elk kwartaal opnieuw een tabel te herschrijven.</p>
+<hr>
+<h2>11. Freeze en wraparound</h2>
+<p>Uit deel 7, nu volledig.</p>
+<p>Elke rijversie draagt de transactie-ID die hem maakte (<code>xmin</code>). Die teller is <strong>32 bits</strong>: ongeveer 4 miljard waarden, en hij loopt rond. Zou een oude rij een <code>xmin</code> houden die na het rondlopen “in de toekomst” ligt, dan wordt hij onzichtbaar — gegevensverlies zonder foutmelding.</p>
+<p>Om dat te voorkomen <strong>bevriest</strong> vacuum oude rijen: hij markeert ze als “altijd zichtbaar”, waarna hun <code>xmin</code> niet meer relevant is.</p>
+<p>De parameters:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vacuum_freeze_min_age</code></td>
+<td>Vanaf welke leeftijd rijen bevroren mogen worden</td>
+</tr>
+<tr>
+<td><code>autovacuum_freeze_max_age</code></td>
+<td>Wanneer een agressieve vacuum wordt afgedwongen</td>
+</tr>
+<tr>
+<td><code>vacuum_failsafe_age</code></td>
+<td>Wanneer alle rem eraf gaat om erger te voorkomen</td>
+</tr>
+</tbody>
+</table>
+<p>Volgen hoe ver je bent:</p>
+<pre><code class="language-sql">SELECT relname,
+       age(relfrozenxid) AS transacties_sinds_freeze,
+       round(100.0 * age(relfrozenxid) / 2000000000, 1) AS pct_naar_wraparound
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE relkind = 'r' AND n.nspname = 'meridiaan_prod'
+ORDER BY age(relfrozenxid) DESC;
+</code></pre>
+<p><strong>Wat er gebeurt als je dit negeert</strong>, in oplopende ernst:</p>
+<ol>
+<li>Autovacuum start een agressieve freeze-run — merkbare I/O op een ongelegen moment.</li>
+<li>PostgreSQL begint te waarschuwen in de log.</li>
+<li>Bij ongeveer 3 miljoen resterende transacties: waarschuwingen bij elke commit.</li>
+<li>Uiteindelijk: <strong>de database weigert nieuwe transacties</strong> en gaat alleen nog lezen. Herstel vraagt een handmatige vacuum in single-user mode, met downtime.</li>
+</ol>
+<p>Dat vierde punt haalt het nieuws elke paar jaar bij een grote organisatie. Het is altijd hetzelfde verhaal: autovacuum stond uit of kwam er niet doorheen, en niemand keek naar <code>age(relfrozenxid)</code>.</p>
+<p><strong>Zet dit in je monitoring</strong> (deel 20). Het is een van de weinige waarden waarbij je maanden van tevoren kunt zien dat er iets misgaat.</p>
+<hr>
+<h2>12. De visibility map en index-only scans</h2>
+<p>Bij elke tabel hoort een <strong>visibility map</strong>: één bit per pagina dat zegt “alle rijen op deze pagina zijn zichtbaar voor iedereen”.</p>
+<p>Waar dat voor dient:</p>
+<p><strong>Vacuum kan pagina’s overslaan</strong> die sinds de vorige keer niet zijn gewijzigd. Dat maakt vacuum op grote, stabiele tabellen goedkoop.</p>
+<p><strong>Index-only scans worden mogelijk</strong> (deel 8). Een index bevat de waarde maar niet de zichtbaarheidsinformatie. Normaal moet de database dus alsnog de tabel raadplegen. Staat de pagina in de visibility map als volledig zichtbaar, dan hoeft dat niet — en dan is de scan werkelijk index-only.</p>
+<p><strong>Het gevolg dat je moet kennen:</strong> een index-only scan werkt alleen goed als de tabel <strong>recent gevacuümd</strong> is. Zie je in <code>EXPLAIN ANALYZE</code> een <code>Index Only Scan</code> met een hoog aantal <code>Heap Fetches</code>, dan is de visibility map verouderd:</p>
+<pre><code>Index Only Scan using ... (actual rows=1000 loops=1)
+  Heap Fetches: 987
+</code></pre>
+<p>987 van de 1000 rijen moesten alsnog uit de tabel worden gehaald. De oplossing is niet een andere index maar <code>VACUUM</code>.</p>
+<p>Dit is de derde plek in deze cursus waar vacuum een prestatievraag blijkt te zijn in plaats van een opruimkwestie. De eerste was statistieken (deel 8), de tweede bloat, en dit is de derde.</p>
+<hr>
+<h2>13. Indexen worden ook opgeblazen</h2>
+<p>Een B-tree-index krijgt bloat op zijn eigen manier: pagina’s raken deels leeg wanneer rijen verdwijnen, en PostgreSQL voegt halflege indexpagina’s niet automatisch samen.</p>
+<p>Meten:</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pgstattuple;
+SELECT * FROM pgstatindex('mutatie_deelnemer_idx');
+</code></pre>
+<p>Let op <code>avg_leaf_density</code>. Rond 90% is gezond; onder 50% is de index opgeblazen.</p>
+<p>Opruimen kan <strong>online</strong>:</p>
+<pre><code class="language-sql">REINDEX INDEX CONCURRENTLY mutatie_deelnemer_idx;
+</code></pre>
+<p><code>CONCURRENTLY</code> bouwt een nieuwe index naast de oude en wisselt om. Duurt langer, blokkeert geen schrijvers, en kan mislukken — dan blijft er een ongeldige index achter die je moet opruimen. Controleer na afloop met <code>\d</code>.</p>
+<p>Voor een tabel met veel indexen: <code>REINDEX TABLE CONCURRENTLY mutatie;</code></p>
+<p><strong>Wanneer dit nodig is:</strong> na een grote opruimactie, of bij een index waarvan de sleutels sterk gewijzigd zijn. Niet als routineonderhoud — dat is meestal een oplossing zoekende naar een probleem.</p>
+<hr>
+<h2>14. Fysieke volgorde en correlatie</h2>
+<p>De <strong>correlatie</strong> geeft aan in hoeverre de fysieke volgorde van de rijen overeenkomt met de logische volgorde van een kolom. Een waarde tussen −1 en 1.</p>
+<pre><code class="language-sql">SELECT attname, correlation
+FROM pg_stats
+WHERE schemaname = 'meridiaan_prod' AND tablename = 'mutatie'
+ORDER BY abs(correlation) DESC NULLS LAST;
+</code></pre>
+<p><strong>Waarom dit ertoe doet:</strong> bij een correlatie dicht bij 1 liggen rijen met opeenvolgende waarden fysiek naast elkaar. Een indexscan over een bereik leest dan aaneengesloten pagina’s in plaats van door de hele tabel te springen — veel goedkoper. De planner weet dit en rekent ermee.</p>
+<p>Bij <code>mutatie</code> is <code>aangemeld_op</code> sterk gecorreleerd als de rijen in chronologische volgorde zijn ingevoegd. Dat is precies de eigenschap waarop een <strong>BRIN-index</strong> leunt (deel 14): die slaat per blokgroep alleen het minimum en maximum op en is daardoor minuscuul — maar hij werkt alleen bij hoge correlatie.</p>
+<p>Je kunt de fysieke volgorde afdwingen:</p>
+<pre><code class="language-sql">CLUSTER mutatie USING mutatie_aangemeld_idx;
+</code></pre>
+<p><strong>Maar let op:</strong> <code>CLUSTER</code> neemt een <code>ACCESS EXCLUSIVE</code>-lock en de volgorde blijft <strong>niet</strong> vanzelf behouden. Nieuwe en bijgewerkte rijen komen gewoon waar plaats is. Het is een eenmalige herordening, geen eigenschap.</p>
+<p><strong>Praktische afweging:</strong> voor een tabel die van nature chronologisch groeit — zoals <code>mutatie</code> — is de correlatie vanzelf goed en heb je <code>CLUSTER</code> niet nodig. Voor een tabel die willekeurig wordt bijgewerkt, keert de wanorde na <code>CLUSTER</code> snel terug. Er is een reden dat je dit commando zelden ziet.</p>
+<hr>
+<h2>15. Wat je hiervan in een ontwerp meeneemt</h2>
+<p>Concreet, in volgorde van opbrengst:</p>
+<ol>
+<li><strong>Kolomvolgorde op aflopende grootte</strong> bij tabellen met miljoenen rijen. Gratis, meetbaar, en alleen bij het ontwerp te doen.</li>
+<li><strong>Fill factor verlagen</strong> bij tabellen die veel worden bijgewerkt op niet-geïndexeerde kolommen. Eén instelling, maar alleen effectief voor nieuwe pagina’s.</li>
+<li><strong>Niet indexeren wat vaak wijzigt</strong>, tenzij nodig — dat blokkeert HOT-updates.</li>
+<li><strong><code>SELECT *</code> vermijden</strong> bij tabellen met grote TOAST-kolommen. Hier is het geen stijlkwestie maar een extra leesbewerking per rij.</li>
+<li><strong>Autovacuum per tabel afstellen</strong> (deel 11) in plaats van achteraf herstellen.</li>
+<li><strong><code>age(relfrozenxid)</code> monitoren.</strong> Van alle waarden in dit deel is dit de enige waarbij falen catastrofaal is.</li>
+</ol>
+<p>En de houding uit deel 8, opnieuw: <strong>meet voor en na.</strong> Een kolomvolgorde die 12 bytes per rij bespaart, is een aardig verhaal; 29 MB op een tabel van 600 MB is een resultaat.</p>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>VACUUM FULL</code> als routineonderhoud</td>
+<td>Downtime, en de bloat komt terug</td>
+<td>Oorzaak zoeken; <code>pg_repack</code> als het echt moet</td>
+</tr>
+<tr>
+<td>Bloat opruimen zonder de oorzaak weg te nemen</td>
+<td>Elk kwartaal opnieuw</td>
+<td>Eerst lang lopende transacties en drempels</td>
+</tr>
+<tr>
+<td><code>pg_relation_size</code> gebruiken bij TOAST-kolommen</td>
+<td>Onderschatting van de omvang</td>
+<td><code>pg_total_relation_size</code></td>
+</tr>
+<tr>
+<td>Fill factor verlagen op een append-only tabel</td>
+<td>Verspilde ruimte, geen baat</td>
+<td>Alleen bij veel updates</td>
+</tr>
+<tr>
+<td>Fill factor wijzigen en verwachten dat het meteen werkt</td>
+<td>Bestaande pagina’s blijven vol</td>
+<td>Herschrijven of afwachten</td>
+</tr>
+<tr>
+<td>Kolomvolgorde optimaliseren op een tabel met duizend rijen</td>
+<td>Verspilde moeite</td>
+<td>Alleen bij miljoenen rijen</td>
+</tr>
+<tr>
+<td><code>age(relfrozenxid)</code> niet monitoren</td>
+<td>Kans op een database die stopt met schrijven</td>
+<td>In je monitoring (deel 20)</td>
+</tr>
+<tr>
+<td><code>Heap Fetches</code> negeren bij een index-only scan</td>
+<td>Trage query, verkeerde diagnose</td>
+<td><code>VACUUM</code></td>
+</tr>
+<tr>
+<td><code>CLUSTER</code> als permanente oplossing</td>
+<td>De volgorde vervaagt weer</td>
+<td>Eenmalig, of niet</td>
+</tr>
+<tr>
+<td><code>pgstattuple</code> op productie tijdens piekuren</td>
+<td>Bufferpool verdrongen</td>
+<td><code>pgstattuple_approx</code>, buiten de piek</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>de opbouw van een pagina en de vaste overhead per rijversie;</li>
+<li>uitlijning en het effect van kolomvolgorde;</li>
+<li>wanneer TOAST optreedt, de vier opslagstrategieën, en dat TOAST apart wordt meegeteld;</li>
+<li>HOT-updates: de twee voorwaarden, en de rol van fill factor;</li>
+<li>de drie manieren om bloat op te ruimen en hun lock-gedrag;</li>
+<li>freeze, <code>age(relfrozenxid)</code> en de gevolgen van wraparound;</li>
+<li>de visibility map en de relatie met index-only scans en <code>Heap Fetches</code>;</li>
+<li><code>REINDEX CONCURRENTLY</code>;</li>
+<li>correlatie en de betekenis daarvan voor queryplannen.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>18. Kernbegrippen</h2>
+<p><strong>Pagina</strong> — de eenheid van 8 kB waarin PostgreSQL leest en schrijft.
+<strong>Tuple header</strong> — 24 bytes administratie per rijversie.
+<strong>Uitlijning (alignment)</strong> — opvulling zodat waarden op hun natuurlijke grens beginnen.
+<strong>TOAST</strong> — mechanisme voor waarden die niet in een pagina passen.
+<strong>HOT-update</strong> — update zonder indexbijwerking; vereist een niet-geïndexeerde kolom en ruimte op de pagina.
+<strong>Fill factor</strong> — percentage van een pagina dat bij het vullen wordt gebruikt.
+<strong>Bloat</strong> — ruimte ingenomen door niet-opgeruimde rijversies.
+<strong>Freeze</strong> — rijen markeren als altijd zichtbaar, om wraparound te voorkomen.
+<strong>Wraparound</strong> — het omlopen van de transactie-ID-teller.
+<strong>Visibility map</strong> — bit per pagina dat volledige zichtbaarheid aangeeft.
+<strong>Heap Fetches</strong> — tabelbezoeken tijdens een index-only scan; hoog betekent verouderde visibility map.
+<strong>Correlatie</strong> — mate waarin de fysieke rijvolgorde overeenkomt met de waardevolgorde van een kolom.</p>
+<hr>
+<p><em>Volgende deel: query-optimalisatie. Je weet nu hoe de gegevens er fysiek liggen; volgende keer lees je queryplannen op productieschaal en vind je de query’s die er werkelijk toe doen.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">58 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">384 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-11-installatie-configuratie-en-tablespaces/reader.html">&larr; Deel 11 — Installatie, configuratie en tablespaces</a><a class="dbm-prevnext next" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Monitoring, logging en pgaudit — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 20 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 20 — Monitoring, logging en pgaudit</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 12 van 14 (deel 20 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Monitoring &amp; auditing”</p>
+<blockquote>
+<p><strong>Dit deel is zelfstandig leesbaar.</strong> Het consolideert monitoringsignalen uit de hele cursus tot één samenhangend systeem. Ben je een dagdeel misgelopen, dan kun je dit deel toch volgen — elke verwijzing naar eerdere stof staat er met genoeg context bij.</p>
+</blockquote>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>De lijst die je hebt opgebouwd</li>
+<li>Van query naar systeem: drie lagen van monitoring</li>
+<li>pg_stat_activity: wat er nu gebeurt</li>
+<li>pg_stat_statements: wat er structureel gebeurt</li>
+<li>pg_stat_user_tables en pg_stat_user_indexes: de staat van je objecten</li>
+<li>pg_stat_bgwriter en checkpointing</li>
+<li>pg_stat_replication en pg_stat_wal_receiver</li>
+<li>Systeemweergaven die vaak worden vergeten</li>
+<li>Logging: wat, waarom en hoeveel</li>
+<li>auto_explain in productie</li>
+<li>pgaudit: de belofte uit deel 9 ingelost</li>
+<li>Extern gereedschap: Prometheus en Grafana</li>
+<li>Alarmering: drempels die ertoe doen</li>
+<li>Een dashboard bouwen: van signaal naar overzicht</li>
+<li>De eerste vijf minuten van een incident</li>
+<li>Wat monitoring niet oplost</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de systeemweergaven van PostgreSQL doelgericht raadplegen voor een specifieke vraag;</li>
+<li>onderscheid maken tussen wat je nu bekijkt, wat je structureel bijhoudt, en wat je extern verzamelt;</li>
+<li>een logconfiguratie opzetten die bruikbaar is zonder een privacyrisico te worden;</li>
+<li><code>auto_explain</code> inzetten als permanente monitoringlaag in plaats van eenmalig hulpmiddel;</li>
+<li><code>pgaudit</code> inrichten voor de herleidbaarheidseis uit deel 9;</li>
+<li>Prometheus en Grafana positioneren ten opzichte van de ingebouwde weergaven;</li>
+<li>concrete alarmdrempels vaststellen voor de belangrijkste risico’s uit dit niveau;</li>
+<li>een eerste-vijf-minuten-protocol volgen bij een onbekend incident.</li>
+</ul>
+<hr>
+<h2>2. De lijst die je hebt opgebouwd</h2>
+<p>Negen dagdelen niveau 2 lang is er telkens een signaal genoemd dat je “zou moeten monitoren”. Hier is de volledige lijst, ter herinnering:</p>
+<table>
+<thead>
+<tr>
+<th>Deel</th>
+<th>Signaal</th>
+<th>Waarom het ertoe doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td>Cachetrefkans, checkpointfrequentie, verbindingsdruk</td>
+<td>Basisgezondheid van de configuratie</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Bloatpercentage, <code>age(relfrozenxid)</code></td>
+<td>Het enige catastrofale falen in dit niveau</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>pg_stat_statements</code>-rangorde, <code>stddev_exec_time</code></td>
+<td>Wat werkelijk de server belast</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>idx_scan = 0</code>, indexbloat</td>
+<td>Kosten zonder baten</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Wachtende sessies, deadlocks, <code>idle in transaction</code></td>
+<td>Vergrendeling die niet als traagheid oogt</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Default-partitie-omvang</td>
+<td>Stil gegroeide vangnetten</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Archiveringsfouten, restore-testresultaten</td>
+<td>Een back-up die niet werkt</td>
+</tr>
+<tr>
+<td>18</td>
+<td>Replicatievertraging, inactieve slots</td>
+<td>Een RPO-schending in wording</td>
+</tr>
+<tr>
+<td>19</td>
+<td>Clusterstatus, failoverfrequentie</td>
+<td>Of de bescherming nog intact is</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dit deel doet twee dingen met die lijst.</strong> Het brengt de losse queries samen tot een samenhangend systeem, en het voegt twee onderwerpen toe die nog niet aan bod kwamen: gestructureerde logging en <code>pgaudit</code> — de auditinguitbreiding die in deel 9 werd beloofd voor “niveau 2, deel 20”.</p>
+<hr>
+<h2>3. Van query naar systeem: drie lagen van monitoring</h2>
+<p><strong>Laag 1 — Ad-hoc bevragen.</strong> Een <code>SELECT</code> op een systeemweergave, getypt op het moment dat je een vraag hebt. Dit is wat je de hele cursus hebt gedaan. Onmisbaar voor diagnose, ongeschikt als enige verdediging — je moet weten dát er een probleem is vóór je de query typt.</p>
+<p><strong>Laag 2 — Historisch vastleggen.</strong> <code>pg_stat_statements</code> en de log houden dingen bij die je later kunt raadplegen, ook over gebeurtenissen die je niet live hebt gezien. Beter, maar nog steeds passief: iemand moet er actief naar kijken.</p>
+<p><strong>Laag 3 — Continue verzameling met alarmering.</strong> Een extern systeem (Prometheus) dat periodiek alle relevante weergaven uitleest, historie bijhoudt, en <strong>automatisch waarschuwt</strong> zodra een drempel wordt overschreden. Dit is waar “iemand ziet het vóórdat een gebruiker het meldt” werkelijkheid wordt.</p>
+<p>De rest van dit deel bouwt deze drie lagen op, in die volgorde.</p>
+<hr>
+<h2>4. pg_stat_activity: wat er nu gebeurt</h2>
+<p>De weergave die je al uit deel 7, 12 en 15 kent, nu als volledig overzicht:</p>
+<pre><code class="language-sql">SELECT pid, usename, application_name, state,
+       wait_event_type, wait_event,
+       now() - xact_start AS transactieduur,
+       now() - query_start AS queryduur,
+       left(query, 80) AS query
+FROM pg_stat_activity
+WHERE backend_type = 'client backend'
+ORDER BY xact_start;
+</code></pre>
+<p><strong>Wat je hierin zoekt, per situatie:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Vraag</th>
+<th>Kolom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wacht iemand op een lock?</td>
+<td><code>wait_event_type = 'Lock'</code></td>
+</tr>
+<tr>
+<td>Staat er een sessie in <code>idle in transaction</code>?</td>
+<td><code>state = 'idle in transaction'</code></td>
+</tr>
+<tr>
+<td>Draait er een verdacht lang lopende query?</td>
+<td><code>queryduur</code></td>
+</tr>
+<tr>
+<td>Hoeveel verbindingen zijn er werkelijk actief?</td>
+<td><code>count(*) GROUP BY state</code></td>
+</tr>
+</tbody>
+</table>
+<p>Dit is je <strong>laag 1</strong>: het eerste dat je opent bij een melding, precies zoals in deel 15 bij de lockwachtrij.</p>
+<hr>
+<h2>5. pg_stat_statements: wat er structureel gebeurt</h2>
+<p>Uit deel 13, nu als permanente monitoringbron in plaats van eenmalig diagnosemiddel.</p>
+<pre><code class="language-sql">SELECT substr(query, 1, 80) AS query, calls,
+       round(total_exec_time::numeric, 0) AS totaal_ms,
+       round(mean_exec_time::numeric, 2) AS gem_ms,
+       round(stddev_exec_time::numeric, 2) AS stddev_ms,
+       rows
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC LIMIT 20;
+</code></pre>
+<p><strong>Het verschil met deel 13:</strong> daar gebruikte je dit om één keer een probleem te vinden. Als monitoringbron bekijk je de <strong>trend</strong> — is de rangorde deze week anders dan vorige week? Is er een query die plotseling in de top 10 is verschenen?</p>
+<pre><code class="language-sql">-- Snapshot bewaren voor trendvergelijking
+CREATE TABLE monitoring.stat_statements_snapshot AS
+SELECT now() AS vastgelegd_op, * FROM pg_stat_statements;
+</code></pre>
+<p>Een eenvoudige dagelijkse snapshot (of, beter, opname in Prometheus, paragraaf 13) maakt het mogelijk om te zien wanneer een query begon te verslechteren, in plaats van alleen dat hij nu slecht is.</p>
+<p><strong>Reset-discipline:</strong> <code>pg_stat_statements_reset()</code> wist de geschiedenis. Doe dit bewust en gedocumenteerd (bijvoorbeeld na een grote release), niet per ongeluk — anders verlies je precies de trendinformatie die de reden was om dit bij te houden.</p>
+<hr>
+<h2>6. pg_stat_user_tables en pg_stat_user_indexes: de staat van je objecten</h2>
+<p>Uit deel 8, 12 en 14, samengebracht:</p>
+<pre><code class="language-sql">SELECT relname,
+       n_live_tup, n_dead_tup,
+       round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 1) AS pct_dood,
+       last_autovacuum, last_autoanalyze,
+       n_tup_upd, n_tup_hot_upd,
+       round(100.0 * n_tup_hot_upd / nullif(n_tup_upd, 0), 1) AS pct_hot
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC;
+</code></pre>
+<p>Dit is de tabel die in deel 12 werd gebruikt om bloat te ontdekken, in deel 12 opnieuw voor HOT-updates, en die nu een vaste plek in je dashboard verdient — niet alleen bij een incident.</p>
+<pre><code class="language-sql">SELECT schemaname, relname, indexrelname, idx_scan,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS omvang
+FROM pg_stat_user_indexes
+ORDER BY idx_scan, pg_relation_size(indexrelid) DESC;
+</code></pre>
+<p><strong>Herinnering uit deel 18:</strong> deze weergave is <strong>per server</strong>. Op een omgeving met replica’s (Karins rapportage) moet je haar op elke node apart raadplegen, anders concludeer je ten onrechte dat een index overbodig is.</p>
+<hr>
+<h2>7. pg_stat_bgwriter en checkpointing</h2>
+<p>Uit deel 11, nu met de volledige interpretatie:</p>
+<pre><code class="language-sql">SELECT checkpoints_timed, checkpoints_req,
+       round(100.0 * checkpoints_req / nullif(checkpoints_timed + checkpoints_req, 0), 1)
+           AS pct_afgedwongen,
+       buffers_checkpoint, buffers_clean, buffers_backend
+FROM pg_stat_bgwriter;
+</code></pre>
+<p><strong><code>pct_afgedwongen</code> is het getal dat ertoe doet.</strong> Checkpoints die “op tijd” gebeuren (<code>checkpoints_timed</code>) zijn gepland en voorspelbaar. Checkpoints die worden afgedwongen omdat <code>max_wal_size</code> is bereikt (<code>checkpoints_req</code>) betekenen dat je schrijfbelasting de geplande cyclus inhaalt — een signaal om <code>max_wal_size</code> te verhogen (deel 11).</p>
+<p><strong><code>buffers_backend</code></strong> — pagina’s die een gewone sessie zelf moest wegschrijven omdat de achtergrondprocessen het niet op tijd deden — hoort laag te zijn. Een hoog aantal betekent dat gewone query’s onnodig I/O-werk doen dat eigenlijk bij de achtergrondprocessen hoort.</p>
+<p><em>(Let op: deze weergave is in recente PostgreSQL-versies deels herschikt naar <code>pg_stat_checkpointer</code>; controleer de exacte naam voor je versie in de Toolbijlage.)</em></p>
+<hr>
+<h2>8. pg_stat_replication en pg_stat_wal_receiver</h2>
+<p>Uit deel 18 en 19, nu structureel bijgehouden in plaats van tijdens een experiment bekeken:</p>
+<pre><code class="language-sql">-- Op de primary: voor elke verbonden replica
+SELECT client_addr, state, sync_state, replay_lag, write_lag, flush_lag
+FROM pg_stat_replication;
+
+-- Op een replica: de eigen kant van het verhaal
+SELECT status, last_msg_receipt_time, latest_end_lsn
+FROM pg_stat_wal_receiver;
+</code></pre>
+<p><strong>Wat je hier structureel bijhoudt:</strong> de trend van <code>replay_lag</code> (deel 18, paragraaf 6) — een geleidelijk oplopende lag over dagen is een ander signaal dan een kortstondige piek tijdens een batchrun, en alleen historische opname onderscheidt de twee.</p>
+<p>En vanuit deel 19: de status van elke Patroni-node via zijn REST API hoort in hetzelfde dashboard als deze database-interne weergaven — het is één systeem, ook al komen de gegevens uit verschillende bronnen.</p>
+<hr>
+<h2>9. Systeemweergaven die vaak worden vergeten</h2>
+<p>Drie die niet eerder in de cursus centraal stonden maar in een volwassen monitoringopzet thuishoren:</p>
+<p><strong><code>pg_stat_database</code></strong> — samenvattend per database:</p>
+<pre><code class="language-sql">SELECT datname, numbackends, xact_commit, xact_rollback,
+       blks_read, blks_hit,
+       round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) AS cache_pct,
+       deadlocks, temp_files, temp_bytes
+FROM pg_stat_database WHERE datname = current_database();
+</code></pre>
+<p><code>temp_files</code>/<code>temp_bytes</code> is het databasebrede signaal voor wat je in deel 11 en 13 al zag als <code>log_temp_files</code>: sorteringen die naar schijf gaan omdat <code>work_mem</code> te laag staat.</p>
+<p><strong><code>pg_stat_progress_vacuum</code></strong> en <strong><code>pg_stat_progress_create_index</code></strong> — voortgang van lopende, langdurige operaties:</p>
+<pre><code class="language-sql">SELECT phase, heap_blks_total, heap_blks_scanned,
+       round(100.0 * heap_blks_scanned / nullif(heap_blks_total, 0), 1) AS pct_klaar
+FROM pg_stat_progress_vacuum;
+</code></pre>
+<p>Nuttig tijdens de migraties uit deel 16 en de indexbouw uit deel 14 — in plaats van te gissen hoe ver een <code>CREATE INDEX CONCURRENTLY</code> is gevorderd.</p>
+<p><strong><code>pg_replication_slots</code></strong> — uit deel 18, met de waarschuwing herhaald: een inactief slot met groeiende <code>ophoping</code> hoort een alarm te zijn, niet iets dat je toevallig een keer opmerkt.</p>
+<hr>
+<h2>10. Logging: wat, waarom en hoeveel</h2>
+<p>Uit deel 11, nu volledig uitgewerkt.</p>
+<pre><code>log_min_duration_statement = 1000     # query's boven 1 seconde
+log_checkpoints = on
+log_lock_waits = on
+log_temp_files = 0
+log_autovacuum_min_duration = 0
+log_connections = on
+log_disconnections = on
+log_line_prefix = '%m [%p] %q%u@%d '
+</code></pre>
+<p><strong>De spanning die in deel 9 en 11 al werd genoemd, nu expliciet:</strong> meer logging betekent meer diagnostisch vermogen, maar ook meer kans dat er persoonsgegevens in terechtkomen. <code>log_min_duration_statement</code> logt de <strong>query tekst</strong>, inclusief letterlijke waarden in <code>WHERE</code>-clausules — een BSN in een <code>WHERE bsn = '123456789'</code> staat dan gewoon in de log.</p>
+<p><strong>Het antwoord is niet “log minder” maar “behandel de log als wat hij is”: een bestand met mogelijk persoonsgegevens, met dezelfde toegangsbeperkingen als de database zelf</strong> (deel 9). Wie leesrechten op de serverlog heeft, moet even zorgvuldig gekozen worden als wie leesrechten op <code>deelnemer</code> heeft.</p>
+<p><strong>Gestructureerd loggen</strong> maakt latere analyse werkbaar:</p>
+<pre><code>log_destination = 'csvlog'
+</code></pre>
+<p>CSV-logs zijn direct in te lezen als tabel (<code>COPY</code> of een foreign data wrapper) in plaats van met tekstverwerking te moeten worden ontleed — een aanzienlijk verschil bij het achteraf analyseren van een incident.</p>
+<hr>
+<h2>11. auto_explain in productie</h2>
+<p>Uit deel 13, nu als permanente voorziening in plaats van eenmalig hulpmiddel.</p>
+<pre><code>shared_preload_libraries = 'pg_stat_statements,auto_explain'
+auto_explain.log_min_duration = 3000
+auto_explain.log_analyze = on
+auto_explain.log_buffers = on
+auto_explain.log_timing = on
+auto_explain.sample_rate = 0.1
+</code></pre>
+<p><strong>De reden dat dit in dit deel terugkeert:</strong> <code>pg_stat_statements</code> vertelt je <strong>welke</strong> query structureel traag is; <code>auto_explain</code> legt <strong>het plan van een specifieke, werkelijk opgetreden trage uitvoering</strong> vast. Samen vormen ze het paar dat je nodig hebt om een incident achteraf te reconstrueren zonder het te hoeven reproduceren.</p>
+<p><code>sample_rate = 0.1</code> blijft essentieel — zonder steekproef meet je elke query, met meetbare overhead op de snelle meerderheid.</p>
+<hr>
+<h2>12. pgaudit: de belofte uit deel 9 ingelost</h2>
+<p>In deel 9 kwam de vraag van Sanne, de privacyfunctionaris: <em>“kunnen jullie aantonen wie het BSN heeft ingezien?”</em> Het eerlijke antwoord toen was: niet met standaardlogging. Hier is het gereedschap dat het wél kan.</p>
+<pre><code>shared_preload_libraries = 'pg_stat_statements,auto_explain,pgaudit'
+pgaudit.log = 'read, write, role'
+pgaudit.log_relation = on
+</code></pre>
+<p><strong>Wat <code>pgaudit</code> toevoegt ten opzichte van gewone logging:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Gewone logging</th>
+<th>pgaudit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logt trage query’s, of alles (kostbaar)</td>
+<td>Logt <strong>categorieën van handelingen</strong>, ongeacht snelheid</td>
+</tr>
+<tr>
+<td>Eén regel per query, moeilijk te filteren op object</td>
+<td><strong>Eén regel per geraakt object</strong> (<code>pgaudit.log_relation</code>)</td>
+</tr>
+<tr>
+<td>Geen onderscheid DDL/DML/rechten</td>
+<td>Aparte categorieën: <code>read</code>, <code>write</code>, <code>ddl</code>, <code>role</code>, <code>misc</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Voor Sannes vraag specifiek:</strong></p>
+<pre><code>pgaudit.log = 'read'
+pgaudit.log_relation = on
+</code></pre>
+<p>gecombineerd met rolgebonden instellingen (alleen aanzetten voor de rol die toegang heeft tot <code>deelnemer</code>, niet voor het hele cluster — anders verzuip je in logvolume):</p>
+<pre><code class="language-sql">ALTER ROLE klantenservice SET pgaudit.log = 'read, write';
+</code></pre>
+<p>Nu staat er voor elke keer dat de rol <code>klantenservice</code> een rij uit <code>deelnemer</code> leest, een regel in de log: wie, wanneer, welke tabel. <strong>Dit is precies wat er in deel 9 ontbrak.</strong></p>
+<p><strong>De prijs, eerlijk benoemd:</strong> logvolume. <code>pgaudit.log = 'read'</code> op een druk bevraagde tabel genereert veel regels. Dit is waarom de rolgebonden aanpak (alleen loggen voor rollen die het aangaat) de praktische keuze is boven een cluster-brede instelling.</p>
+<hr>
+<h2>13. Extern gereedschap: Prometheus en Grafana</h2>
+<p>Alles tot hier is laag 1 en 2 — bevragen en historisch vastleggen binnen PostgreSQL zelf. <strong>Laag 3</strong> vraagt een systeem dat er los van staat.</p>
+<pre><code>┌──────────────┐     scrape      ┌────────────┐     query      ┌─────────┐
+│ postgres_     │ ←────────────  │ Prometheus  │ ←────────────  │ Grafana │
+│ exporter      │   elke 15-30s  │ (opslag +   │                │(dashboard)
+│ (leest de     │                │  alarmering)│                │         │
+│ pg_stat_*     │                └────────────┘                └─────────┘
+│ views uit)   │
+└──────────────┘
+        │
+   PostgreSQL
+</code></pre>
+<p><strong><code>postgres_exporter</code></strong> is een klein programma dat de systeemweergaven uit paragraaf 4-9 periodiek uitleest en in een formaat zet dat Prometheus begrijpt. Je hoeft er geen queries voor te herschrijven — de gangbare metrics (cachetrefkans, bloat, replicatievertraging, lockwachttijden) zijn al ingebouwd of eenvoudig toe te voegen als aangepaste query.</p>
+<p><strong>Prometheus</strong> slaat de historie op (tijdreeksen) en evalueert continu of een waarde een ingestelde drempel overschrijdt.</p>
+<p><strong>Grafana</strong> visualiseert — de dashboards die Ruud 's ochtends bekijkt, en waarop tijdens een incident wordt ingezoomd.</p>
+<p><strong>Waarom dit meer is dan “mooie grafieken”:</strong> het verschil tussen “we hebben ooit met een query gezien dat de bloat 40% was” en “we zien in een grafiek precies wanneer de bloat van 10% naar 40% liep, en dat het samenviel met het uitschakelen van autovacuum op die tabel” is het verschil tussen een diagnose en een vermoeden.</p>
+<hr>
+<h2>14. Alarmering: drempels die ertoe doen</h2>
+<p>Niet alles hoeft een alarm te zijn — te veel alarmen leidt tot het negeren van alle alarmen. Onderstaande lijst is de samenvatting van wat in dit niveau al eerder als “monitor dit” is genoemd, nu als concrete drempel.</p>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Drempel</th>
+<th>Bron</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>age(relfrozenxid)</code></td>
+<td>&gt; 50% van <code>autovacuum_freeze_max_age</code></td>
+<td>Deel 12 — het enige catastrofale falen</td>
+</tr>
+<tr>
+<td>Bloatpercentage</td>
+<td>&gt; 40%, of een snelle stijging</td>
+<td>Deel 12</td>
+</tr>
+<tr>
+<td>Sessies wachtend op een lock</td>
+<td>&gt; 5, of langer dan 30s</td>
+<td>Deel 15</td>
+</tr>
+<tr>
+<td>Langste transactieduur</td>
+<td>&gt; 5 minuten</td>
+<td>Deel 7, 12, 15</td>
+</tr>
+<tr>
+<td><code>idle in transaction</code></td>
+<td>&gt; 2, of langer dan 1 minuut</td>
+<td>Deel 7, 12</td>
+</tr>
+<tr>
+<td>Deadlocks per dag</td>
+<td>&gt; 5</td>
+<td>Deel 15</td>
+</tr>
+<tr>
+<td><code>replay_lag</code></td>
+<td>&gt; 2 minuten (of een fractie van je RPO)</td>
+<td>Deel 18</td>
+</tr>
+<tr>
+<td>Inactief replicatieslot</td>
+<td>&gt; 1 uur</td>
+<td>Deel 18</td>
+</tr>
+<tr>
+<td>Default-partitie omvang</td>
+<td>&gt; 0, aanhoudend</td>
+<td>Deel 16</td>
+</tr>
+<tr>
+<td>Archiveringsfout</td>
+<td>Elke fout, direct</td>
+<td>Deel 17</td>
+</tr>
+<tr>
+<td>Cachetrefkans</td>
+<td>&lt; 99% structureel</td>
+<td>Deel 11</td>
+</tr>
+<tr>
+<td><code>stddev_exec_time</code> op een topquery</td>
+<td>&gt; 3× het gemiddelde</td>
+<td>Deel 13</td>
+</tr>
+<tr>
+<td>Patroni-clusterstatus</td>
+<td>Geen leider, of onverwachte rolwisseling</td>
+<td>Deel 19</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Het principe achter deze tabel:</strong> elke rij is een les die je in dit niveau hebt geleerd, teruggebracht tot één meetbaar getal. Dat is precies het doel van monitoring — niet nieuwe kennis, maar het operationaliseren van kennis die je al hebt.</p>
+<hr>
+<h2>15. Een dashboard bouwen: van signaal naar overzicht</h2>
+<p>Drie niveaus van een dashboard, van grof naar fijn:</p>
+<p><strong>Niveau 1 — Is alles in orde?</strong> Eén scherm, groen/oranje/rood per categorie: gezondheid (wraparound, bloat), prestatie (topquery’s, cachetrefkans), beschikbaarheid (Patroni-status, replicatievertraging), capaciteit (schijfruimte, verbindingsdruk).</p>
+<p><strong>Niveau 2 — Waar zit het probleem?</strong> Per categorie een detailscherm — bijvoorbeeld de bloat-tabel per object, of de replicatievertraging per node over tijd.</p>
+<p><strong>Niveau 3 — Wat is de oorzaak?</strong> Hier val je terug op laag 1 (paragraaf 3): een live <code>EXPLAIN ANALYZE</code>, <code>pg_blocking_pids()</code>, de serverlog. Een dashboard vervangt dit niet — het vertelt je wélke vraag je moet stellen.</p>
+<p><strong>Voor Ruud specifiek:</strong> een dashboard dat 's ochtends in twee minuten te doorlopen is, met kleur in plaats van cijfers waar mogelijk, en met precies genoeg detail om te weten of hij verder moet kijken. Meer detail dan dat verdrinkt het signaal.</p>
+<hr>
+<h2>16. De eerste vijf minuten van een incident</h2>
+<p>Een protocol, samengesteld uit de diagnosevaardigheden van dit hele niveau:</p>
+<ol>
+<li><strong>Wat meldt de gebruiker?</strong> (“Traag” kan alles betekenen, deel 13.)</li>
+<li><strong><code>pg_stat_activity</code></strong> — is het CPU/I/O-druk (echt traag) of <code>wait_event_type = 'Lock'</code> (vergrendeld)?</li>
+<li><strong>Bij vergrendeling:</strong> <code>pg_blocking_pids()</code>, zoek de wortel (deel 15).</li>
+<li><strong>Bij trage query’s:</strong> <code>pg_stat_statements</code> gesorteerd op <code>total_exec_time</code> sinds de laatste reset — is de rangorde veranderd?</li>
+<li><strong>Bij een structurele verandering:</strong> <code>age(relfrozenxid)</code>, bloatpercentages, replicatievertraging — is er iets in de achtergrond gaan haperen (autovacuum uit, een replicatieslot vast)?</li>
+<li><strong>Bij twijfel over de infrastructuur:</strong> Patroni-clusterstatus, of er recent een failover was.</li>
+</ol>
+<p><strong>Dit protocol is niets nieuws.</strong> Het is een samenvatting van deel 7, 8, 12, 13, 15, 18 en 19, geordend als checklist. Dat is precies het punt van dit deel: je hebt de kennis al; monitoring is die kennis toegankelijk maken vóór en tijdens het moment dat je hem nodig hebt.</p>
+<hr>
+<h2>17. Wat monitoring niet oplost</h2>
+<p>De vertrouwde tegenhanger, voor de laatste keer in dit niveau.</p>
+<p><strong>Het lost geen enkel onderliggend probleem op.</strong> Een dashboard dat oplopende bloat toont, ruimt niets op — het vertelt je dat er iets is om op te ruimen (deel 12).</p>
+<p><strong>Het vervangt geen back-up, geen replicatie, geen HA.</strong> Een perfect dashboard dat een <code>DROP TABLE</code> keurig rapporteert, heeft de tabel nog steeds niet terug.</p>
+<p><strong>Het genereert vals vertrouwen als het ongebruikt blijft.</strong> Een dashboard dat niemand bekijkt, of alarmen die worden genegeerd omdat er te veel zijn, is erger dan geen monitoring — het geeft het gevoel van controle zonder de werkelijkheid ervan.</p>
+<p><strong>Het is geen vervanging voor het testen uit deel 17 en 19.</strong> Een dashboard dat “alles groen” toont, bewijst niet dat een herstel of een failover werkt — alleen dat er op dit moment geen bekend probleem is.</p>
+<hr>
+<h2>18. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alleen laag 1 (ad-hoc queries), nooit laag 3</td>
+<td>Problemen ontdekt door gebruikers, niet door het systeem</td>
+<td>Continue verzameling met alarmering</td>
+</tr>
+<tr>
+<td><code>log_min_duration_statement = 0</code> op productie</td>
+<td>Persoonsgegevens massaal in de log</td>
+<td>Boven een zinvolle drempel, plus pgaudit gericht</td>
+</tr>
+<tr>
+<td><code>pgaudit.log = 'all'</code> cluster-breed</td>
+<td>Enorme logvolumes, kosten zonder gerichte waarde</td>
+<td>Rolgebonden, alleen waar het aangaat</td>
+</tr>
+<tr>
+<td>Te veel alarmen, geen prioritering</td>
+<td>Alarmmoeheid; échte incidenten gemist</td>
+<td>De tabel uit paragraaf 14, niet meer</td>
+</tr>
+<tr>
+<td>Ongebruikte-index-check alleen op de primary</td>
+<td>Verkeerde conclusie in een omgeving met replica’s</td>
+<td>Elke server apart (deel 18)</td>
+</tr>
+<tr>
+<td><code>pg_stat_statements_reset()</code> per ongeluk of ongedocumenteerd</td>
+<td>Trendinformatie kwijt</td>
+<td>Bewust en gelogd</td>
+</tr>
+<tr>
+<td>Een dashboard bouwen en nooit meer aankijken</td>
+<td>Vals gevoel van veiligheid</td>
+<td>Een vast moment (dagelijks/wekelijks) om het te doorlopen</td>
+</tr>
+<tr>
+<td>Alleen dashboards, nooit de onderliggende queries kennen</td>
+<td>Hulpeloos zodra het dashboard zelf uitvalt of het probleem niet dekt</td>
+<td>Laag 1 blijft nodig, ook met laag 3 aanwezig</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>19. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>alle behandelde <code>pg_stat_*</code>-weergaven en wat elk laat zien;</li>
+<li><code>pg_stat_progress_vacuum</code> en verwante voortgangsweergaven;</li>
+<li>logginginstellingen en de afweging tussen diagnostisch vermogen en privacyrisico;</li>
+<li><code>auto_explain</code> als permanente voorziening;</li>
+<li><code>pgaudit</code>: categorieën, <code>log_relation</code>, rolgebonden instelling;</li>
+<li>de architectuur van een extern monitoringsysteem (exporter/verzamelaar/dashboard), conceptueel;</li>
+<li>het onderscheid tussen ad-hoc bevragen, historisch vastleggen, en continue alarmering.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>20. Kernbegrippen</h2>
+<p><strong><code>pg_stat_activity</code></strong> — momentopname van alle huidige sessies.
+<strong><code>pg_stat_statements</code></strong> — genormaliseerde, structurele querystatistieken.
+<strong><code>pg_stat_bgwriter</code></strong> — checkpoint- en achtergrondschrijfstatistieken.
+<strong><code>pg_stat_progress_*</code></strong> — voortgang van langlopende operaties.
+<strong>Gestructureerd loggen</strong> — logformaat (zoals CSV) dat machinaal te verwerken is.
+<strong><code>auto_explain</code></strong> — legt plannen van trage uitvoeringen automatisch vast.
+<strong><code>pgaudit</code></strong> — categorische, herleidbare auditlogging.
+<strong><code>postgres_exporter</code></strong> — leest PostgreSQL-statistieken uit voor Prometheus.
+<strong>Prometheus</strong> — tijdreeksopslag met alarmeringsregels.
+<strong>Grafana</strong> — visualisatielaag voor dashboards.
+<strong>Alarmdrempel</strong> — een vooraf vastgesteld getal waarboven een signaal actie vereist.</p>
+<hr>
+<p><em>Volgende deel: security-verdieping — row level security-patronen, encryptie in de praktijk, en de laatste voorbereiding op het examen. Je kunt nu zien wat er gebeurt. Volgende keer maak je waar wie er precies bij mag, tot in het laatste detail.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">339 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-19-hoge-beschikbaarheid/reader.html">&larr; Deel 19 — Hoge beschikbaarheid</a><a class="dbm-prevnext next" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">Deel 21 — Security-verdieping en NoSQL in perspectief &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

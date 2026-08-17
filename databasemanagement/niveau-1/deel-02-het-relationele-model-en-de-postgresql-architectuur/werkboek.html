@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Het relationele model en de PostgreSQL-architectuur — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 2 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 2 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 2: Het relationele model en de PostgreSQL-architectuur</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Vanaf dit deel werk je met een draaiende PostgreSQL-installatie. Klopt er iets niet, raadpleeg dan eerst de Toolbijlage; die bevat de installatie- en padinformatie per besturingssysteem.</p>
+<p>Controleer voor je begint:</p>
+<pre><code class="language-sql">SELECT version();
+SHOW data_directory;
+</code></pre>
+<p>Krijg je hier geen antwoord op, meld het dan vóór opdracht 2.5 — daar heb je een werkende server nodig.</p>
+<p>Tijdsindicatie: circa 110 minuten.</p>
+<hr>
+<h2>Opdracht 2.1 — Modeltermen (10 min, individueel)</h2>
+<p>Hieronder een fragment van de beoogde Meridiaan-tabel <code>deelnemer</code>.</p>
+<table>
+<thead>
+<tr>
+<th>deelnemer_id</th>
+<th>bsn</th>
+<th>achternaam</th>
+<th>geboortedatum</th>
+<th>einddatum_deelname</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1001</td>
+<td>123456782</td>
+<td>De Wolff</td>
+<td>1978-04-12</td>
+<td>NULL</td>
+</tr>
+<tr>
+<td>1002</td>
+<td>NULL</td>
+<td>Bousaid</td>
+<td>1985-11-30</td>
+<td>NULL</td>
+</tr>
+<tr>
+<td>1003</td>
+<td>987654321</td>
+<td>Slager</td>
+<td>1961-02-08</td>
+<td>2024-07-01</td>
+</tr>
+</tbody>
+</table>
+<p>a) Wat is de cardinaliteit? Wat is de graad?
+b) Benoem één attribuut, één tupel en één domein.
+c) <code>bsn</code> is voor rij 1002 NULL. Waarom is dat een argument tegen <code>bsn</code> als primaire sleutel?
+d) Welke kandidaatsleutels herken je? Welke zou je als primaire sleutel kiezen en waarom?
+e) Wat betekent NULL in <code>einddatum_deelname</code> hier — en is dat gebruik van NULL verdedigbaar?</p>
+<hr>
+<h2>Opdracht 2.2 — Sleutelkeuze verdedigen (15 min, tweetallen)</h2>
+<p>Tarik (enterprise-architect) stelt voor om overal het burgerservicenummer als primaire sleutel te gebruiken: <em>“Dan hebben we tenminste geen betekenisloze nummers en kunnen we systemen makkelijk koppelen.”</em></p>
+<p>Schrijf een reactie van maximaal 120 woorden met minstens drie argumenten, waarvan er minstens één over privacy gaat. Sluit af met een concreet alternatief voorstel.</p>
+<hr>
+<h2>Opdracht 2.3 — Referentiële integriteit en verwijdergedrag (15 min, individueel)</h2>
+<p>Meridiaan krijgt drie tabellen: <code>werkgever</code>, <code>deelnemer</code> en <code>aanspraak</code> (een aanspraak hoort bij precies één deelnemer).</p>
+<p>Kies per situatie het juiste gedrag bij verwijderen (<code>RESTRICT</code>, <code>CASCADE</code>, <code>SET NULL</code>) en motiveer.</p>
+<p>a) Iemand probeert een werkgever te verwijderen waaraan nog 800 deelnemers gekoppeld zijn.
+b) Een deelnemer wordt verwijderd; er hangen aanspraken aan.
+c) Een deelnemer had een optionele koppeling aan een adviseur; die adviseur verlaat de organisatie en zijn rij wordt verwijderd.
+d) Wat is er mis met de gedachte “we zetten overal CASCADE, dan hebben we nooit foutmeldingen”?</p>
+<hr>
+<h2>Opdracht 2.4 — NULL-vallen (20 min, individueel, achter de machine)</h2>
+<p>Voer uit en verklaar het resultaat. Schrijf per onderdeel één zin uitleg.</p>
+<pre><code class="language-sql">-- a
+SELECT NULL = NULL AS gelijk, NULL IS NULL AS is_null;
+
+-- b
+CREATE TEMP TABLE premie (id int, bedrag numeric);
+INSERT INTO premie VALUES (1, 100), (2, 200), (3, NULL);
+SELECT COUNT(*) AS sterretje, COUNT(bedrag) AS kolom, AVG(bedrag) AS gemiddelde FROM premie;
+
+-- c
+SELECT * FROM premie WHERE bedrag &lt;&gt; 100;
+
+-- d
+SELECT * FROM premie WHERE bedrag IS DISTINCT FROM 100;
+
+-- e
+SELECT * FROM premie WHERE id NOT IN (SELECT id FROM premie WHERE bedrag IS NULL);
+
+-- f
+SELECT * FROM premie p WHERE NOT EXISTS (
+  SELECT 1 FROM premie q WHERE q.bedrag IS NULL AND q.id = p.id
+);
+</code></pre>
+<p>g) Bij Meridiaan blijkt een maandrapport 340.000 deelnemers te tellen terwijl een tweede rapport op 338.412 uitkomt. Beide gebruiken <code>COUNT</code>. Wat is de meest waarschijnlijke oorzaak?</p>
+<hr>
+<h2>Opdracht 2.5 — De architectuur zichtbaar maken (20 min, individueel, achter de machine)</h2>
+<p>Beantwoord elke vraag mét het commando dat je gebruikte.</p>
+<p>a) Welke achtergrondprocessen draaien er nu op jouw machine? (Hint: procesoverzicht van het besturingssysteem, filter op <code>postgres</code>. Per platform: zie Toolbijlage.)
+b) Waar staat het datadirectory, en welke drie mappen uit de reader herken je erin?
+c) Hoe groot is <code>shared_buffers</code> op jouw installatie? En <code>work_mem</code>?
+d) Welke databases bestaan er in jouw cluster? Welke schema’s in de database waarmee je verbonden bent?
+e) Wie is er op dit moment verbonden en wat doet die verbinding? (Gebruik <code>pg_stat_activity</code>.)
+f) Hoeveel WAL-segmenten staan er in <code>pg_wal/</code>, en hoe groot is een segment?</p>
+<hr>
+<h2>Opdracht 2.6 — Cluster, database of schema? (15 min, drietallen)</h2>
+<p>Meridiaan moet de indeling van de nieuwe datalaag vastleggen. Er zijn vier gegevensverzamelingen:</p>
+<ol>
+<li><strong>Deelnemergegevens</strong> — kern, privacygevoelig.</li>
+<li><strong>Werkgevergegevens</strong> — kern, wordt vaak samen met deelnemers bevraagd.</li>
+<li><strong>Portaal-sessiegegevens</strong> — kortlevend, hoog volume, geen bewaarplicht.</li>
+<li><strong>Testgegevens voor het ontwikkelteam</strong> — moeten volledig gescheiden zijn van productie.</li>
+</ol>
+<p>Bepaal per verzameling of die in hetzelfde cluster, dezelfde database en/of hetzelfde schema thuishoort als de andere. Motiveer, en benoem expliciet welke afweging je maakt tussen isolatie en bruikbaarheid.</p>
+<hr>
+<h2>Opdracht 2.7 — WAL en crashherstel uitleggen (10 min, individueel)</h2>
+<p>Ruud (beheerhoofd) vraagt: <em>“Als de stroom uitvalt precies op het moment dat er honderd mutaties bezig zijn, wat is er dan kwijt?”</em></p>
+<p>Schrijf een antwoord van maximaal 120 woorden dat:</p>
+<ul>
+<li>WAL uitlegt zonder het woord “write-ahead log” in de eerste zin te gebruiken;</li>
+<li>benoemt wat er met bevestigde en met onbevestigde transacties gebeurt;</li>
+<li>uitlegt waarom deze aanpak niet alleen veiliger maar ook sneller is;</li>
+<li>één ding noemt dat Meridiaan zélf moet regelen om deze belofte waar te maken.</li>
+</ul>
+<hr>
+<h2>Opdracht 2.8 — De reis van een query (10 min, tweetallen)</h2>
+<p>Voor elk van de volgende vier problemen: in welke fase van de query-pijplijn gaat het mis, en welk gereedschap gebruik je?</p>
+<p>a) <code>ERROR: syntax error at or near &quot;FORM&quot;</code>
+b) <code>ERROR: column &quot;achternam&quot; does not exist</code>
+c) De query levert het juiste antwoord, maar duurt sinds vorige week 40 seconden in plaats van 0,2 seconde.
+d) <code>ERROR: permission denied for table deelnemer</code></p>
+<p>e) Verklaar in twee zinnen waarom probleem © kan optreden zonder dat de query, de data of de hardware is gewijzigd.</p>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 2.1</h2>
+<p>a) <strong>Cardinaliteit 3</strong> (drie rijen), <strong>graad 5</strong> (vijf kolommen).</p>
+<p>b) Attribuut: bijvoorbeeld <code>geboortedatum</code>. Tupel: de hele rij van De Wolff. Domein van <code>geboortedatum</code>: geldige datums, in de praktijk begrensd tot een plausibel bereik (bijvoorbeeld niet in de toekomst — af te dwingen met een <code>CHECK</code>-constraint, deel 6).</p>
+<p>c) Omdat de <strong>entiteitsintegriteitsregel</strong> eist dat geen enkel attribuut van de primaire sleutel NULL is. Een deelnemer zonder BSN (grensarbeider, deelnemer in het buitenland) zou dan niet vastgelegd kunnen worden — en dat is geen randgeval maar dagelijkse praktijk bij een pensioenuitvoerder.</p>
+<p>d) Kandidaatsleutels: <code>deelnemer_id</code> en — voor zover gevuld en werkelijk uniek — <code>bsn</code>. Kies <code>deelnemer_id</code> (surrogaat) als primaire sleutel: stabiel, altijd aanwezig, niet privacygevoelig, verspreidt zich zonder bezwaar via foreign keys door het model. Leg <code>bsn</code> vast als <code>UNIQUE</code>-constraint, die meerdere NULL’s toestaat — precies wat we hier nodig hebben.</p>
+<p>e) NULL betekent hier “de deelname is nog niet beëindigd”, ofwel <em>niet van toepassing</em>. Dat is een verdedigbaar gebruik van NULL. Let wel op het gevolg: <code>WHERE einddatum_deelname &gt; '2024-01-01'</code> sluit de actieve deelnemers stilzwijgend uit. Bespreek in de groep of een expliciete statuskolom hier de voorkeur zou verdienen; beide keuzes zijn te verdedigen, mits bewust gemaakt.</p>
+<hr>
+<h2>Uitwerking 2.2 — modelantwoord (118 woorden)</h2>
+<blockquote>
+<p>Het koppelvoordeel is echt, maar de kosten wegen niet op.</p>
+<p>Ten eerste: niet elke deelnemer heeft een BSN. Grensarbeiders en deelnemers in het buitenland kunnen we dan niet vastleggen, terwijl entiteitsintegriteit eist dat een primaire sleutel nooit NULL is.</p>
+<p>Ten tweede: het BSN is een bijzonder identificerend gegeven. Als primaire sleutel verspreidt het zich via elke foreign key door het hele model, tot in tabellen waar niemand het nodig heeft. Dataminimalisatie wordt dan onhaalbaar, en elke export lekt.</p>
+<p>Ten derde: het kan in uitzonderingsgevallen wijzigen, en dan moet elke verwijzing mee.</p>
+<p>Voorstel: <code>deelnemer_id</code> als surrogaatsleutel, en het BSN als <code>UNIQUE</code>-kolom in de deelnemertabel, waar het één keer staat en gericht geautoriseerd kan worden.</p>
+</blockquote>
+<p><strong>Beoordelingspunten:</strong> minstens drie argumenten; privacyargument aanwezig én uitgewerkt tot de verspreiding via foreign keys; concreet alternatief; erkenning van Tariks punt in plaats van afwijzing.</p>
+<hr>
+<h2>Uitwerking 2.3</h2>
+<p>a) <strong><code>RESTRICT</code></strong> (of <code>NO ACTION</code>). Een werkgever met 800 gekoppelde deelnemers verdwijnt niet zomaar; de bewerking moet worden geweigerd, zodat iemand een bewuste keuze maakt over de deelnemers.</p>
+<p>b) <strong><code>RESTRICT</code></strong>, en in de praktijk: deelnemers hoor je helemaal niet te verwijderen. Aanspraken zijn de kern van het bedrijf en er geldt een bewaarplicht. Gebruik in plaats van verwijderen een status of einddatum (“soft delete”). Dit is een goed moment om de groep te wijzen op het verschil tussen “verwijderen” als handeling en “beëindigen” als bedrijfsgebeurtenis.</p>
+<p>c) <strong><code>SET NULL</code>.</strong> De relatie is optioneel; de deelnemer bestaat prima zonder adviseur. De foreign key gaat op NULL en de deelnemer blijft ongewijzigd.</p>
+<p>d) Twee dingen. Ten eerste verandert <code>CASCADE</code> foutmeldingen niet in correct gedrag, maar in <strong>stille gegevensvernietiging</strong>: één verwijderde werkgever kan de hele keten van deelnemers en aanspraken meenemen zonder waarschuwing. Ten tweede is de foutmelding het <em>doel</em> — het systeem beschermt tegen een handeling die iemand niet had moeten doen. <code>CASCADE</code> hoort alleen thuis waar het kind zonder de ouder werkelijk geen bestaansrecht heeft (bijvoorbeeld regels van een factuur bij die factuur).</p>
+<hr>
+<h2>Uitwerking 2.4</h2>
+<p>a) <code>gelijk</code> is NULL (niet <code>false</code>), <code>is_null</code> is <code>true</code>. NULL is onbekend; of twee onbekende waarden gelijk zijn, is zelf onbekend. Alleen <code>IS NULL</code> toetst het bestaan van de onbekendheid.</p>
+<p>b) <code>sterretje</code> = 3, <code>kolom</code> = 2, <code>gemiddelde</code> = 150. <code>COUNT(*)</code> telt rijen; <code>COUNT(kolom)</code> telt niet-NULL waarden; <code>AVG</code> deelt de som (300) door het aantal niet-NULL waarden (2), niet door 3.</p>
+<p>c) Alleen rij 2 (bedrag 200). Rij 3 valt weg: <code>NULL &lt;&gt; 100</code> is onbekend, en <code>WHERE</code> laat alleen <code>true</code> door.</p>
+<p>d) Rij 2 én rij 3. <code>IS DISTINCT FROM</code> behandelt NULL als een waarde die van 100 verschilt, en levert dus altijd <code>true</code> of <code>false</code>, nooit onbekend.</p>
+<p>e) <strong>Geen enkele rij.</strong> De subquery levert <code>id = 3</code> maar het geheel is een <code>NOT IN</code> met… let op: hier levert de subquery <code>id</code>-waarden op, en <code>id</code> is nooit NULL, dus dit werkt wél en geeft rij 1 en 2. De klassieke val treedt op zodra de subquery zélf NULL kan opleveren — vervang <code>SELECT id</code> door <code>SELECT bedrag</code> en vergelijk met <code>bedrag NOT IN (...)</code>: dan komt er niets terug, omdat <code>x NOT IN (…, NULL)</code> nooit <code>true</code> kan worden.
+<em>Docentnotitie: laat deelnemers deze variant zelf uitproberen; het inzicht landt pas als ze het lege resultaat zien.</em></p>
+<p>f) Rij 1 en 2. <code>NOT EXISTS</code> heeft dit probleem niet, omdat het bestaan toetst in plaats van waarden vergelijkt. <strong>Vuistregel: gebruik <code>NOT EXISTS</code> in plaats van <code>NOT IN</code> zodra NULL mogelijk is.</strong></p>
+<p>g) Vrijwel zeker gebruikt het ene rapport <code>COUNT(*)</code> en het andere <code>COUNT(kolom)</code> op een kolom met NULL-waarden — of er zit een <code>WHERE</code>-voorwaarde in die met <code>&lt;&gt;</code> of <code>NOT IN</code> werkt en daardoor NULL-rijen stil wegfiltert. Dit is exact het “drie afdelingen, drie aantallen”-probleem uit deel 1, nu met een technische oorzaak.</p>
+<hr>
+<h2>Uitwerking 2.5</h2>
+<p>Antwoorden verschillen per installatie; hieronder de commando’s en waar je op let.</p>
+<p>a) Op Linux/macOS: <code>ps -ef | grep postgres</code>. Je verwacht de postmaster plus onder andere checkpointer, background writer, walwriter, autovacuum launcher en logical replication launcher. Op Windows via Taakbeheer of <code>tasklist</code>. Klikpaden en verschillen per platform: Toolbijlage.</p>
+<p>b) <code>SHOW data_directory;</code> Daarin herken je <code>base/</code>, <code>global/</code> en <code>pg_wal/</code>.</p>
+<p>c)</p>
+<pre><code class="language-sql">SHOW shared_buffers;
+SHOW work_mem;
+</code></pre>
+<p>Standaardwaarden zijn bewust laag — bij een verse installatie vaak 128 MB en 4 MB. Bespreekpunt: <code>shared_buffers</code> geldt voor het hele cluster, <code>work_mem</code> <strong>per sorteer-/hashbewerking per verbinding</strong>. Dat verschil verklaart waarom <code>work_mem</code> verhogen gevaarlijker is dan het lijkt.</p>
+<p>d)</p>
+<pre><code class="language-sql">\l                                   -- databases
+\dn                                  -- schema's
+SELECT datname FROM pg_database;
+SELECT nspname FROM pg_namespace;
+</code></pre>
+<p>Je vindt in ieder geval <code>postgres</code>, <code>template0</code> en <code>template1</code>, en het schema <code>public</code>.</p>
+<p>e)</p>
+<pre><code class="language-sql">SELECT pid, usename, datname, state, query
+FROM pg_stat_activity
+WHERE backend_type = 'client backend';
+</code></pre>
+<p>Je ziet minstens je eigen verbinding, met als <code>query</code> deze query zelf. Benoem dat dit het eerste commando is dat je uitvoert bij een melding “de database is traag”.</p>
+<p>f) Tel de bestanden in <code>pg_wal/</code>. Een segment is standaard 16 MB. Bij een verse installatie staan er enkele.</p>
+<hr>
+<h2>Uitwerking 2.6 — modelantwoord</h2>
+<table>
+<thead>
+<tr>
+<th>Verzameling</th>
+<th>Plaatsing</th>
+<th>Motivering</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deelnemergegevens</td>
+<td>Productiecluster, database <code>meridiaan</code>, schema <code>deelnemer</code></td>
+<td>Kern; moet joinbaar zijn met werkgever</td>
+</tr>
+<tr>
+<td>Werkgevergegevens</td>
+<td>Zelfde database, schema <code>werkgever</code></td>
+<td>Wordt structureel samen met deelnemers bevraagd; verschillende databases zou joins onmogelijk maken en transacties over beide heen uitsluiten</td>
+</tr>
+<tr>
+<td>Portaal-sessies</td>
+<td>Aparte database in hetzelfde cluster, of buiten PostgreSQL (Redis)</td>
+<td>Hoog volume, kortlevend, geen bewaarplicht, geen joinbehoefte met de kern; in de kerndatabase zou het onnodige bloat en back-upvolume opleveren</td>
+</tr>
+<tr>
+<td>Testgegevens</td>
+<td><strong>Apart cluster</strong>, op andere infrastructuur</td>
+<td>Harde isolatie-eis: geen enkel scenario waarin een ontwikkelfout productie kan raken. Schema- of databasescheiding is hier onvoldoende, want binnen één cluster deel je rollen, resources en beheerhandelingen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Kernafweging die genoemd moet worden:</strong> schema’s geven scheiding mét bruikbaarheid (joins, één transactie, één back-up); aparte databases geven meer isolatie maar kosten joinbaarheid; aparte clusters geven volledige isolatie maar verdubbelen het beheer. Kies het lichtste niveau dat de eis afdekt.</p>
+<p><strong>Veelgemaakte fout:</strong> deelnemers en werkgevers in aparte databases zetten “omdat dat netter is”. Bij het eerste rapport dat beide combineert, betaal je die keuze terug met foreign data wrappers of applicatiecode die zelf joint.</p>
+<hr>
+<h2>Uitwerking 2.7 — modelantwoord (116 woorden)</h2>
+<blockquote>
+<p>Er gaat niets kwijt dat we bevestigd hebben. Voordat een wijziging in de gegevensbestanden terechtkomt, schrijft PostgreSQL hem eerst als klein logrecord weg en dwingt af dat dat record fysiek op schijf staat. Pas daarna krijgt de applicatie een bevestiging.</p>
+<p>Valt de stroom uit, dan leest de database bij het opstarten dat logboek terug vanaf het laatste ijkpunt: alles wat bevestigd was, wordt opnieuw toegepast; alles wat nog liep, verdwijnt volledig — halve mutaties bestaan niet.</p>
+<p>Het is bovendien sneller, omdat het logboek achter elkaar wordt weggeschreven, terwijl het bijwerken van de gegevensbestanden verspreid over de schijf gebeurt en rustig mag volgen.</p>
+<p>Wat wij moeten regelen: schijven en eventuele controllers die een schrijfbevestiging niet mogen liegen — anders is de belofte waardeloos.</p>
+</blockquote>
+<p><strong>Beoordelingspunten:</strong> correcte volgorde (eerst log, dan bevestiging); onderscheid bevestigd/onbevestigd; snelheidsargument via sequentieel schrijven; het laatste punt (hardware die <code>fsync</code> niet mag negeren) is het onderscheidende antwoord — wie dat noemt, heeft het mechanisme werkelijk begrepen.</p>
+<hr>
+<h2>Uitwerking 2.8</h2>
+<p>a) <strong>Parser</strong> — syntaxisfout. Gereedschap: de foutmelding zelf, inclusief positieaanduiding.</p>
+<p>b) <strong>Analyzer/rewriter</strong> — de syntaxis klopt, maar het object bestaat niet in de catalogus. Gereedschap: <code>\d tabelnaam</code> of een query op <code>pg_attribute</code> / <code>information_schema.columns</code>.</p>
+<p>c) <strong>Planner</strong> — het plan is veranderd, niet de query. Gereedschap: <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code> (deel 8, uitgebreid in niveau 2 deel 13).</p>
+<p>d) <strong>Analyzer/rewriter</strong> — rechtencontrole vindt daar plaats, vóór planning. Gereedschap: <code>\dp</code> voor de rechten op de tabel (deel 9).</p>
+<p>e) Modelantwoord: <em>“De planner kiest zijn plan op basis van statistieken over de gegevensverdeling. Als die statistieken verouderd zijn — bijvoorbeeld doordat autovacuum achterloopt terwijl de tabel sterk is gegroeid — schat hij de kosten verkeerd in en kiest hij bijvoorbeeld een sequentiële scan waar een indexscan beter was. Dezelfde query, dezelfde data, ander plan.”</em></p>
+<p>Dit is het inzicht dat autovacuum (paragraaf 14) verbindt met de planner (paragraaf 15). Wie dat verband ziet, heeft de kern van dit deel te pakken.</p>
+<hr>
+<p><em>Einde werkboek deel 2.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">262 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">666 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-01-databases-en-het-dbms-landschap-waarom-postgresql/reader.html">&larr; Deel 1 — Databases en het DBMS-landschap: waarom PostgreSQL</a><a class="dbm-prevnext next" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

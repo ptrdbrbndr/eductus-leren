@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Concurrency en locking — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 15 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 15: Concurrency en locking</strong>
+Twee dagdelen van elk 4 klokuren, inclusief pauzes</p>
+<hr>
+<h2>1. Doel van dit deel</h2>
+<p>Twee dagdelen, één inzicht dat ze verbindt:</p>
+<blockquote>
+<p>Snelheid is niet het probleem. Wachten is het probleem.</p>
+</blockquote>
+<p><strong>Dagdeel A</strong> vestigt dat onderscheid diagnostisch: vergrendeling ziet er niet uit als traagheid — lage CPU, lage I/O, en toch reageert niets. De kernscène is opdracht 15.2: een portaalquery van 0,3 ms die twintig minuten wacht, niet omdat hij conflicteert met de blokkerende sessie, maar omdat hij achter een wachtende <code>ALTER TABLE</code> in de rij staat. Dat is het incident dat vrijwel elke organisatie één keer meemaakt, en de docentenhandleiding is erop gebouwd dat deelnemers het zelf reproduceren voordat ze de uitleg krijgen.</p>
+<p><strong>Dagdeel B</strong> bouwt daarop voort met isolatie en gelijktijdige werklast op schaal: wanneer serializable de enige juiste keuze is, hoe retry-logica er werkelijk uitziet, en het hotspot-probleem dat met geen enkele index of instelling op te lossen is.</p>
+<p><strong>De praktische vaardigheid die blijft hangen:</strong> <code>pg_blocking_pids()</code> gebruiken om de wortel van een blokkade te vinden, en <code>lock_timeout</code> bij elke DDL zonder uitzondering.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf (beide dagdelen):</strong> reader deel 15; drie psql-sessies moeten werken (zoals in deel 7, nu met een derde erbij).</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li>⚠ <strong>Dit is het enige deel met drie gelijktijdige sessies.</strong> Controleer ruim vooraf dat dit bij iedereen lukt — drie terminalvensters, of drie tabs, met duidelijke prompts. Wie dit niet werkend heeft, mist het grootste deel van beide dagdelen.</li>
+<li>Zet <code>log_lock_waits = on</code> op je eigen server vóór dagdeel A begint, en laat deelnemers dat ook doen — de opdrachten leunen erop.</li>
+<li><strong>Draai opdracht 15.2 zelf</strong> en oefen de choreografie (welke sessie wanneer wat typt) voordat je hem klassikaal doet. Het is de belangrijkste demonstratie van dagdeel A en moet vlekkeloos lopen.</li>
+<li>Voor dagdeel B: controleer dat <code>oefening15</code>-tabellen uit dagdeel A zijn opgeruimd, of maak een vers schema.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema — Dagdeel A</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:10</td>
+<td>Snelheid is niet het probleem (§2)</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:10-0:15</td>
+<td>Het lockmodel (§3)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:15-0:35</td>
+<td><strong>Opdracht 15.1</strong> — de conflictmatrix ervaren</td>
+<td>Drietallen</td>
+</tr>
+<tr>
+<td>0:35-1:00</td>
+<td><strong>De lockwachtrij (§4) + opdracht 15.2</strong></td>
+<td>Choreografie + drietallen</td>
+</tr>
+<tr>
+<td>1:00-1:15</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:15-1:35</td>
+<td>Diagnose (§6) + <strong>opdracht 15.3</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>1:35-1:55</td>
+<td>De vier timeouts (§7) + <strong>opdracht 15.4</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>1:55-2:10</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:10-2:35</td>
+<td>Deadlocks op schaal (§8) + <strong>opdracht 15.5</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>2:35-2:55</td>
+<td>Advisory locks (§9) + <strong>opdracht 15.6</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:55-3:15</td>
+<td>DDL en locks (§10) + <strong>opdracht 15.7</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>3:15-4:00</td>
+<td><strong>Opdracht 15.8</strong> — het veilige migratiepatroon</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<h2>Tijdschema — Dagdeel B</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Terugblik dagdeel A; isolatieniveaus herzien (§14)</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:15-0:30</td>
+<td><strong>Opdracht 15.9</strong> — isolatieniveau kiezen</td>
+<td>Drietallen</td>
+</tr>
+<tr>
+<td>0:30-1:00</td>
+<td><strong>SSI (§15) + opdracht 15.10</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>1:00-1:15</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:15-1:45</td>
+<td>Retry-logica (§16) + <strong>opdracht 15.11</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>1:45-2:15</td>
+<td>Wachtrijpatronen (§17) + <strong>opdracht 15.12</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>2:15-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-3:00</td>
+<td><strong>Hotspots (§18) + opdracht 15.13</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>3:00-3:10</td>
+<td>Verbindingen en pooling (§19)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:10-3:20</td>
+<td>Monitoring (§20)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:20-4:00</td>
+<td><strong>Opdracht 15.14</strong> — het gelijktijdigheidsplan</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek dagdeel A:</strong> laat opdracht 15.6 (advisory locks) vervallen als praktijkopdracht en behandel als demonstratie van tien minuten. Kort <strong>nooit</strong> opdracht 15.2 of 15.8 in.</p>
+<p><strong>Bij tijdgebrek dagdeel B:</strong> laat opdracht 15.11 (retry-logica in code) vervallen als schrijfopdracht en bespreek het patroon plenair. Kort <strong>nooit</strong> opdracht 15.10, 15.13 of 15.14 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen — Dagdeel A</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Open met de tabel uit paragraaf 2: trage query versus vergrendeling, met CPU en I/O ernaast. Vraag de zaal:</p>
+<blockquote>
+<p><em>“Ruud belt: het portaal reageert niet, maar de server-monitoring toont niets bijzonders. Wat is jullie eerste hypothese?”</em></p>
+</blockquote>
+<p>De meeste deelnemers noemen prestatieoorzaken uit deel 13. Zeg dat dit dagdeel over het andere scenario gaat — en dat het diagnostisch lastiger is omdat alle vertrouwde signalen normaal blijven.</p>
+<h3>4.2 De conflictmatrix (0:15)</h3>
+<p>Laat opdracht 15.1 zelfstandig in drietallen. Dit is opbouwwerk voor de grote demonstratie; het hoeft niet uitgebreid nabesproken te worden. Eén ding wel benoemen: onderdeel h) — <code>ACCESS SHARE</code> en <code>ACCESS EXCLUSIVE</code> als tegenpolen — is de kern die de rest van de dag draagt.</p>
+<h3>4.3 De lockwachtrij (0:35)</h3>
+<p><strong>Dit is het belangrijkste kwartier van beide dagdelen samen.</strong> Doe de choreografie eerst zelf voor, langzaam, met drie vensters op het grote scherm:</p>
+<ol>
+<li>S1: <code>BEGIN; SELECT count(*) FROM deelnemer;</code> — laat expliciet zien dat dit “maar een SELECT” is.</li>
+<li>S2: <code>ALTER TABLE deelnemer ADD COLUMN ...;</code> — laat hem hangen.</li>
+<li>S3: een simpele <code>SELECT ... WHERE deelnemer_id = 42;</code> — normaal 0,3 ms.</li>
+</ol>
+<p>Vraag vóór je S3 uitvoert:</p>
+<blockquote>
+<p><em>“S3 conflicteert niet met S1 — twee keer ACCESS SHARE. Gaat hij snel zijn?”</em></p>
+</blockquote>
+<p>De meerderheid zegt ja. Voer uit. S3 hangt.</p>
+<p>Laat de stilte even zitten en zeg dan de kernzin uit de reader:</p>
+<blockquote>
+<p><em>“Niet de duur van de opdracht bepaalt de schade, maar de duur van het wachten.”</em></p>
+</blockquote>
+<p>Laat het daarna zelf reproduceren in drietallen — het effect is sterker met eigen handen.</p>
+<p>Sluit dit onderdeel af met onderdeel g) van de opdracht: <code>lock_timeout</code> in S2 lost het meteen op. Dat is de brug naar paragraaf 7.</p>
+<h3>4.4 Diagnose (1:15)</h3>
+<p>Opdracht 15.3f (<code>idle in transaction</code> en <code>pg_cancel_backend</code> werkt niet) is een detail dat deelnemers moeten meemaken om te onthouden. Laat het gebeuren voordat je het uitlegt.</p>
+<h3>4.5 De vier timeouts (1:35)</h3>
+<p>Deelnemers verwarren <code>statement_timeout</code> en <code>lock_timeout</code> structureel. Laat opdracht 15.4f echt uitvoeren — het verschil wordt pas concreet bij een opdracht die de lock <strong>krijgt</strong> en daarna lang werkt. Zonder dat experiment blijft het verschil abstract.</p>
+<p>Geef de vuistregel als geheugensteun:</p>
+<blockquote>
+<p><strong><code>lock_timeout</code> begrenst het wachten. <code>statement_timeout</code> begrenst het werken.</strong></p>
+</blockquote>
+<h3>4.6 Deadlocks op schaal (2:10)</h3>
+<p>Onderdeel d) en e) (deadlock via foreign keys) is het meest verrassende punt van dit blok. Laat de zaal eerst raden waarom twee sessies die alleen <em>invoegen</em> — geen van beide wijzigt de ouderrij — toch kunnen vastlopen. Het antwoord zit in <code>FOR KEY SHARE</code>, en het is contra-intuïtief genoeg dat het de moeite waard is er tijd aan te besteden.</p>
+<h3>4.7 Advisory locks (2:35)</h3>
+<p>Het scherpste punt: onderdeel e), waarom <code>pg_advisory_lock</code> in een gepoolde omgeving gevaarlijk is. Dit is vooruitwijzend naar deel 19 en wordt in dagdeel B (paragraaf 19) herhaald — herhaling is hier bewust, want het is een fout die “willekeurig” lijkt als hij optreedt.</p>
+<h3>4.8 DDL en locks (2:55)</h3>
+<p>Opdracht 15.7h (CONCURRENTLY die wacht op een openstaande transactie) verbindt drie dagdelen tegelijk: deel 7 (<code>idle in transaction</code>), deel 12 (vacuum die niet opschiet) en vandaag. Maak die verbinding expliciet als niemand hem zelf legt.</p>
+<h3>4.9 Opdracht 15.8 (3:15)</h3>
+<p>De opbrengst van dagdeel A. Stuur op:</p>
+<ul>
+<li><strong>Het tweestapspatroon.</strong> Groepen die één <code>ADD CONSTRAINT</code> doen zonder <code>NOT VALID</code>, hebben zojuist gedemonstreerd wat ze niet moeten doen.</li>
+<li><strong>Bewijs, geen bewering.</strong> Punt 4 vraagt om een lopende meting tijdens de migratie. “Het portaal bleef beschikbaar” zonder cijfers is onvoldoende.</li>
+<li><strong>Het foutscenario.</strong> Groepen die geen plan hebben voor het geval de lock niet lukt, hebben de helft van paragraaf 11 gemist.</li>
+</ul>
+<hr>
+<h2>5. Didactische aanwijzingen — Dagdeel B</h2>
+<h3>5.1 Terugblik en isolatieniveaus (0:00)</h3>
+<p>Vat dagdeel A in één zin samen en maak de brug:</p>
+<blockquote>
+<p><em>“Vandaag hebben we gezorgd dat query’s elkaar niet onnodig blokkeren. Vandaag gaat het over het andere probleem: hoe zorg je dat gelijktijdige transacties elkaar niet stiekem tegenspreken?”</em></p>
+</blockquote>
+<p>Bij opdracht 15.9 is de scherpste vraag onderdeel f — de “maximaal drie dienstverbanden”-regel. Laat de zaal eerst de andere vijf doen en kom dan terug op f. Vraag: <em>“welke rij zou je vergrendelen om dit op te lossen?”</em> Er ís geen rij — dat is het punt, en het opent paragraaf 15.</p>
+<h3>5.2 SSI (0:30)</h3>
+<p>Opdracht 15.10 is de kernervaring van dagdeel B. Laat de zaal <strong>eerst</strong> onder read committed draaien en het foute resultaat zien (vier dienstverbanden in plaats van maximaal drie). Pas daarna serializable.</p>
+<p>Het onderscheid dat moet landen, en dat in de uitwerking expliciet staat:</p>
+<blockquote>
+<p><strong>Repeatable read voorkomt een inconsistent beeld. Serializable voorkomt een besluit dat door een gelijktijdige transactie ongeldig wordt.</strong></p>
+</blockquote>
+<p>Test dat onderscheid door onderdeel f) te laten uitvoeren: ook onder repeatable read gaat het mis, want beide transacties schrijven verschillende rijen en er is dus geen zichtbaar schrijfconflict.</p>
+<h3>5.3 Retry-logica (1:15)</h3>
+<p>Als er geen tijd is voor eigen code (zie tijdschema), bespreek het patroon dan aan de hand van de pseudocode in de reader en laat één groep hem hardop doorlopen bij een bord. De drie details die er echt toe doen: de <strong>hele</strong> transactie opnieuw, <strong>spreiding</strong> in de wachttijd, en een <strong>bovengrens</strong>.</p>
+<p>Onderdeel g) (een collega wil alleen loggen) is een goede plenaire vraag — het scherpt het onderscheid tussen “we weten dat het misging” en “het is opgelost”.</p>
+<h3>5.4 Wachtrijpatronen (1:45)</h3>
+<p>Bouw dit voort op deel 7 en 14 (de partiële index). Onderdeel g) en h) — de externe aanroep binnen versus buiten de transactie — is het belangrijkste punt: de doorvoer stort in zodra er iets buiten de database in de lus zit terwijl de locks nog vast zitten.</p>
+<h3>5.5 Hotspots (2:30)</h3>
+<p><strong>Het meest verrassende resultaat van beide dagdelen.</strong> Laat opdracht 15.13b echt meten: drie sessies op één tellerrij zijn <em>niet</em> drie keer zo snel, vaak nauwelijks sneller dan één. Dat weerspreekt de intuïtie dat meer verwerkers altijd meer doorvoer geven.</p>
+<p>Zeg het scherp:</p>
+<blockquote>
+<p><em>“Dit is niet op te lossen met een index, met meer geheugen, of met snellere schijven. Het probleem zit niet in de machine — het zit in het ontwerp: iedereen wil dezelfde rij.”</em></p>
+</blockquote>
+<p>Laat de drie oplossingen echt bouwen en meten (d en e), niet alleen bespreken. Het verschil tussen “opdelen” en “invoegen” in doorvoer is het cijfer waarmee groepen hun keuze in opdracht 15.14 onderbouwen.</p>
+<h3>5.6 Verbindingen en pooling (3:00)</h3>
+<p>Kort, en een herhaling van dagdeel A paragraaf 9 met opzet — dit is een fout die deelnemers pas maanden later in productie tegenkomen en die dan “willekeurig” lijkt. Twee keer horen helpt.</p>
+<h3>5.7 Opdracht 15.14 (3:20)</h3>
+<p>De opbrengst van beide dagdelen samen. Stuur op:</p>
+<ul>
+<li><strong>Elke isolatiekeuze met een reden</strong>, niet een voorkeur. Groepen die overal <code>SERIALIZABLE</code> kiezen “voor de zekerheid”: vraag wie de retry-logica schrijft en wat het aan doorvoer kost — de cijfers uit opdracht 15.10g liggen er al.</li>
+<li><strong>Het ontwerpvoorstel met een gemeten cijfer.</strong> Groepen die “de teller anders inrichten” voorstellen zonder de meting uit 15.13, hebben een mening in plaats van een advies.</li>
+<li><strong>Concrete drempels</strong> in de monitoring, geen “in de gaten houden”.</li>
+</ul>
+<hr>
+<h2>6. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Waarom detecteert PostgreSQL geen wachtrijblokkades zoals bij deadlocks?”</strong>
+Omdat het geen deadlock is — er is geen cyclus, alleen een rij. Dat is precies waarom het zo lang onopgemerkt kan blijven: er komt geen foutmelding, alleen stilte. <code>log_lock_waits</code> is het enige dat het zichtbaar maakt.</p>
+<p><strong>“Kunnen we niet gewoon altijd <code>CONCURRENTLY</code> gebruiken?”</strong>
+Voor indexen bijna altijd ja. Voor andere DDL bestaat die optie niet — een <code>ALTER TABLE ALTER TYPE</code> heeft geen concurrent variant. Vandaar het <code>NOT VALID</code>/<code>VALIDATE</code>-patroon voor wat wel kan worden opgesplitst.</p>
+<p><strong>“Is <code>SERIALIZABLE</code> niet gewoon altijd de veilige keuze?”</strong>
+Nee, om twee redenen: de doorvoerkosten (opdracht 15.10g), en de verplichting tot retry-logica. Een applicatie die dat niet heeft, toont gebruikers technische foutmeldingen. Gebruik het gericht, niet overal.</p>
+<p><strong>“Hoe vaak treedt een valse afbreking op bij SSI?”</strong>
+Afhankelijk van de werklast — bij korte, smalle transacties zeldzaam, bij lange transacties die veel lezen vaker. Vandaar het advies om serializable-transacties kort en smal te houden, en leestransacties als <code>READ ONLY DEFERRABLE</code> te markeren waar mogelijk.</p>
+<p><strong>“Wat als we geen tijd hebben om alles met <code>NOT VALID</code> te doen?”</strong>
+Dan neem je bewust een korte <code>ACCESS EXCLUSIVE</code>-lock, buiten de piek, met <code>lock_timeout</code>. Dat is voor kleine tabellen vaak prima. Het tweestapspatroon is voor tabellen waar een volledige scan onder exclusieve lock te lang duurt — en dat “te lang” is een meting, geen aanname.</p>
+<p><strong>“Bestaat er een manier om te zien welke query een hotspot veroorzaakt vóórdat het een incident wordt?”</strong>
+Ja: <code>pg_stat_user_tables.n_tup_upd</code> in verhouding tot het aantal rijen in de tabel. Een tabel met tien rijen en honderdduizend updates per dag is een voorspelbare hotspot, ruim voordat hij een probleem wordt.</p>
+<p><strong>“Werkt <code>SKIP LOCKED</code> ook met andere isolatieniveaus dan read committed?”</strong>
+Technisch wel, maar het is bedoeld voor read committed werkverdeling. Onder repeatable read of serializable krijg je andere garanties en andere afwegingen — voor een wachtrijpatroon is read committed vrijwel altijd de juiste keuze.</p>
+<hr>
+<h2>7. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vindt bij 15.2 de wortel via <code>pg_blocking_pids</code> zonder hint</td>
+<td>De kernvaardigheid van dagdeel A</td>
+</tr>
+<tr>
+<td>Herkent bij 15.3f dat <code>pg_cancel_backend</code> niets doet</td>
+<td>Begrijpt het verschil tussen query en transactie</td>
+</tr>
+<tr>
+<td>Kiest bij 15.9f serializable zonder een rij te willen vergrendelen</td>
+<td>Begrijpt SSI conceptueel</td>
+</tr>
+<tr>
+<td>Meet bij 15.13 daadwerkelijk dat drie sessies niet drie keer sneller zijn</td>
+<td>Laat zich niet leiden door intuïtie</td>
+</tr>
+<tr>
+<td>Onderbouwt 15.14 met cijfers uit eerdere opdrachten</td>
+<td>Denkt in metingen, niet in voorkeuren</td>
+</tr>
+<tr>
+<td>Verwart <code>lock_timeout</code> met <code>statement_timeout</code></td>
+<td>Terugbrengen naar de vuistregel</td>
+</tr>
+<tr>
+<td>Kiest overal <code>SERIALIZABLE</code> “voor de zekerheid”</td>
+<td>Doorvragen naar retry-logica en doorvoerkosten</td>
+</tr>
+<tr>
+<td>Vergeet retry helemaal bij serializable</td>
+<td>Kernfout; corrigeren</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>8. Aansluiting op deel 16</h2>
+<p>Brug: <em>“Jullie weten nu wat er gebeurt als honderdvijftig sessies tegelijk werken. Volgende keer maken we de grootste tabel hanteerbaar met partitionering — en dan blijkt dat de hotspot-oplossing van vanmiddag, gebeurtenissen invoegen in plaats van bijwerken, precies het patroon is waar partitionering op aansluit: oude perioden gooi je straks niet meer rij voor rij weg, maar in één keer, met <code>DROP TABLE</code> op een partitie.”</em></p>
+<p>Geef mee: <strong>bewaar het gelijktijdigheidsplan uit opdracht 15.14.</strong> De teamafspraken over benaderingsvolgorde en transactieduur gelden onverkort voor het partitioneringswerk van deel 16.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 15.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">69 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">32 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">540 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-14-geavanceerde-indexering/reader.html">&larr; Deel 14 — Geavanceerde indexering</a><a class="dbm-prevnext next" href="../deel-16-partitionering/reader.html">Deel 16 — Partitionering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

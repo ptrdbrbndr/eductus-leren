@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Query-optimalisatie: EXPLAIN ANALYZE en de planner — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 13 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 13 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 13: Query-optimalisatie</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\timing on
+</code></pre>
+<p><strong>Controleer eerst dat <code>pg_stat_statements</code> beschikbaar is:</strong></p>
+<pre><code class="language-sql">SHOW shared_preload_libraries;          -- moet pg_stat_statements bevatten
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+SELECT count(*) FROM pg_stat_statements;
+</code></pre>
+<p>Staat de extensie niet in <code>shared_preload_libraries</code>, dan is een herstart nodig — zie deel 11, opdracht 11.4. Zonder deze extensie kun je opdracht 13.1 en 13.2 niet doen.</p>
+<p><strong>Zorg dat de statistieken vers zijn</strong> voordat je gaat meten:</p>
+<pre><code class="language-sql">VACUUM ANALYZE;
+</code></pre>
+<p>Tijdsindicatie: circa 140 minuten. Dit is het langste dagdeel van niveau 2.</p>
+<hr>
+<h2>Opdracht 13.1 — Werklast opwekken (10 min, individueel)</h2>
+<p>Om iets te meten heb je belasting nodig. Draai dit script; het bootst een uur portaalgebruik en één rapportagerun na.</p>
+<pre><code class="language-sql">SELECT pg_stat_statements_reset();
+
+-- Portaalverkeer: veel kleine query's
+DO $$
+DECLARE i integer;
+BEGIN
+  FOR i IN 1..3000 LOOP
+    PERFORM * FROM deelnemer WHERE deelnemer_id = 1 + (random()*339999)::int;
+    PERFORM count(*) FROM mutatie
+      WHERE deelnemer_id = 1 + (random()*339999)::int;
+  END LOOP;
+END $$;
+
+-- Eén rapportagerun
+SELECT w.sector, count(*), sum(p.bedrag)
+FROM premienota p JOIN werkgever w USING (werkgever_id)
+WHERE p.periode_jaar = 2025
+GROUP BY w.sector;
+
+-- Eén trage query
+SELECT count(*) FROM mutatie WHERE kanaal = 'portaal';
+</code></pre>
+<p>a) Hoe lang duurde het hele script?
+b) Welke van de drie soorten query’s voelde het traagst?</p>
+<hr>
+<h2>Opdracht 13.2 — Wat doet er werkelijk toe (20 min, tweetallen)</h2>
+<p>a) Draai de standaardquery op <code>pg_stat_statements</code>, gesorteerd op <code>total_exec_time</code>. Welke query staat bovenaan?
+b) Sorteer nu op <code>mean_exec_time</code>. Welke query staat er nu bovenaan?
+c) Verschillen die twee? Verklaar met de formule uit de reader.
+d) Welke query zou Ruud noemen als je hem vraagt wat traag is? En welke zou jij als eerste aanpakken?
+e) Sorteer op <code>calls</code>. Valt er iets op?
+f) Sorteer op <code>stddev_exec_time</code>. Wat betekent een hoge waarde daar?
+g) Bereken voor de bovenste drie query’s hun aandeel in de totale uitvoeringstijd.</p>
+<hr>
+<h2>Opdracht 13.3 — Vier vragen aan een plan (20 min, individueel)</h2>
+<p>Neem deze query:</p>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS, SETTINGS)
+SELECT d.achternaam, count(m.mutatie_id) AS aantal
+FROM deelnemer d
+JOIN mutatie m ON m.deelnemer_id = d.deelnemer_id
+WHERE d.woonplaats = 'Utrecht'
+  AND m.kanaal = 'portaal'
+GROUP BY d.deelnemer_id, d.achternaam
+ORDER BY aantal DESC
+LIMIT 20;
+</code></pre>
+<p>a) <strong>Waar gaat de tijd heen?</strong> Welke knoop kost het meest, ná aftrek van zijn kinderen?
+b) <strong>Waar klopt de schatting niet?</strong> Bij welke knoop wordt het verschil tussen <code>rows</code> en <code>actual rows</code> voor het eerst een factor tien of meer?
+c) <strong>Hoeveel wordt er weggegooid?</strong> Zoek <code>Rows Removed by Filter</code>.
+d) <strong>Wat komt er van schijf?</strong> Kijk naar <code>Buffers</code>.
+e) Welke joinsoort is gekozen, en past die bij de aantallen?
+f) Toont <code>SETTINGS</code> iets? Zo ja, wat betekent dat voor de vergelijkbaarheid met acceptatie?
+g) Formuleer in één zin wat je als eerste zou aanpakken.</p>
+<hr>
+<h2>Opdracht 13.4 — De rij-estimatiefout (25 min, drietallen)</h2>
+<p>a) Draai <code>EXPLAIN ANALYZE</code> op:</p>
+<pre><code class="language-sql">SELECT * FROM mutatie
+WHERE kanaal = 'portaal' AND soort = 'adreswijziging';
+</code></pre>
+<p>Vergelijk <code>rows</code> met <code>actual rows</code>. Hoe groot is de fout?</p>
+<p>b) Bereken zelf wat de planner deed: kijk in <code>pg_stats</code> naar de frequentie van <code>kanaal = 'portaal'</code> en van <code>soort = 'adreswijziging'</code>, vermenigvuldig ze, en vermenigvuldig met het aantal rijen. Komt dat overeen met <code>rows</code>?</p>
+<p>c) Klopt de aanname van onafhankelijkheid hier? Controleer met een echte telling.</p>
+<p>d) Maak nu een tabel waarin de kolommen wél afhankelijk zijn:</p>
+<pre><code class="language-sql">CREATE TABLE oefening13.afhankelijk AS
+SELECT g AS id,
+       (ARRAY['Utrecht','Amsterdam','Rotterdam'])[1+(g%3)] AS plaats,
+       (ARRAY['UT','NH','ZH'])[1+(g%3)] AS provincie
+FROM generate_series(1, 500000) g;
+ANALYZE oefening13.afhankelijk;
+</code></pre>
+<p>e) Draai <code>EXPLAIN ANALYZE</code> op een query met beide voorwaarden. Hoe groot is de schattingsfout nu?
+f) Maak uitgebreide statistieken aan, draai <code>ANALYZE</code>, en meet opnieuw.
+g) Verklaar in twee zinnen waarom de planner er zonder die statistieken naast zat.
+h) Bij welke kolommen in <code>meridiaan_prod</code> zou dit ook kunnen spelen?</p>
+<hr>
+<h2>Opdracht 13.5 — Statistieken bijstellen (20 min, tweetallen)</h2>
+<p>a) Bekijk <code>n_distinct</code> voor alle kolommen van <code>mutatie</code>. Welke waarden zijn negatief, en wat betekent dat?
+b) Klopt <code>n_distinct</code> voor <code>kanaal</code>? Controleer met een echte telling.
+c) Klopt hij voor <code>deelnemer_id</code>? En voor <code>aangemeld_op</code>?
+d) Verhoog de statistiekresolutie voor <code>aangemeld_op</code> naar 1000 en draai <code>ANALYZE</code>. Verandert <code>n_distinct</code>? En het histogram?
+e) Meet een query met een datumbereik van één week, vóór en ná de verhoging. Verandert de schatting?
+f) Zet <code>n_distinct</code> voor <code>kanaal</code> vast op 5. Wanneer is dat verdedigbaar en wanneer gevaarlijk?
+g) Bekijk <code>most_common_vals</code> voor <code>soort</code>. Is de verdeling scheef? Wat zou er veranderen als 80% van de mutaties van één soort was?</p>
+<hr>
+<h2>Opdracht 13.6 — De ontbrekende indexen vinden (20 min, drietallen)</h2>
+<p>Het opschaalscript heeft bewust een aantal indexen weggelaten.</p>
+<p>a) Zoek de foreign keys zonder index op de verwijzende kolom. Gebruik de systeemcatalogus, niet je geheugen.
+b) Meet een join tussen <code>dienstverband</code> en <code>werkgever</code> vóór het toevoegen van een index.
+c) Voeg de index toe en meet opnieuw. Wat is de winst?
+d) Meet een <code>DELETE</code> van één werkgever zonder dienstverbanden (id 4001-4100) vóór en ná de index op <code>dienstverband (werkgever_id)</code>. Verklaar het verschil.
+e) Meet de verwerkingsquery uit deel 7 (onverwerkte mutaties, gesorteerd op aanmelddatum, <code>LIMIT 10</code>). Voeg een partiële index toe en meet opnieuw.
+f) Vergelijk de omvang van een volledige index op <code>aangemeld_op</code> met de partiële variant.
+g) Welke index zou je op basis van <code>pg_stat_statements</code> als eerste toevoegen, en waarom die?</p>
+<hr>
+<h2>Opdracht 13.7 — Herschrijven (20 min, drietallen)</h2>
+<p>a) Meet deze query en noteer de tijd:</p>
+<pre><code class="language-sql">SELECT * FROM mutatie ORDER BY mutatie_id LIMIT 20 OFFSET 2000000;
+</code></pre>
+<p>b) Herschrijf hem met keyset-paginering en meet opnieuw. Wat is de winst?
+c) Waarom groeit het verschil naarmate de gebruiker verder bladert?</p>
+<p>d) Meet deze query:</p>
+<pre><code class="language-sql">SELECT w.naam,
+       (SELECT max(p.betaaldatum) FROM premienota p
+        WHERE p.werkgever_id = w.werkgever_id) AS laatste_betaling
+FROM werkgever w;
+</code></pre>
+<p>e) Herschrijf hem verzamelingsgericht (aggregeren in een CTE, dan joinen) en meet.
+f) Herschrijf hem met <code>LATERAL</code> en meet.
+g) Welke van de drie zou je kiezen, en op welke grond?</p>
+<p>h) Schrijf een query die per werkgever de meest recente premienota toont, met <code>LATERAL</code>. Meet met en zonder de bijpassende index.</p>
+<hr>
+<h2>Opdracht 13.8 — Prepared statements (15 min, tweetallen)</h2>
+<p>a) Maak een tabel met een sterk scheve verdeling:</p>
+<pre><code class="language-sql">CREATE TABLE oefening13.scheef AS
+SELECT g AS id,
+       CASE WHEN g % 100 = 0 THEN 'zeldzaam' ELSE 'vaak' END AS soort
+FROM generate_series(1, 1000000) g;
+CREATE INDEX ON oefening13.scheef (soort);
+ANALYZE oefening13.scheef;
+</code></pre>
+<p>b) Draai <code>EXPLAIN ANALYZE</code> op een query met <code>soort = 'zeldzaam'</code> en op één met <code>soort = 'vaak'</code>. Verschillen de plannen?
+c) Maak een prepared statement met een parameter en voer hem zes keer uit — drie keer met elke waarde. Bekijk het plan met <code>EXPLAIN EXECUTE</code>.
+d) Wat gebeurt er bij de zesde uitvoering?
+e) Zet <code>plan_cache_mode = 'force_custom_plan'</code> en herhaal. Wat verandert er?
+f) Hoe zou je dit probleem herkennen in <code>pg_stat_statements</code>, zonder te weten dat het speelt?</p>
+<hr>
+<h2>Opdracht 13.9 — Het optimalisatierapport (30 min, drietallen)</h2>
+<p>Hoofdopdracht. Ruud en Karin vragen allebei aandacht. Jij bepaalt de volgorde.</p>
+<p>Lever een <strong>optimalisatierapport</strong> van maximaal twee A4:</p>
+<ol>
+<li><strong>De top vijf uit <code>pg_stat_statements</code></strong>, met per query het aandeel in de totale belasting.</li>
+<li><strong>Per query uit de top drie:</strong> de diagnose (welke van de vier vragen leverde het antwoord), de maatregel, en de gemeten winst — vóór en ná.</li>
+<li><strong>Eén query die je bewust níét optimaliseert</strong>, met reden.</li>
+<li><strong>Wat je aan Karin antwoordt</strong> over haar maandrapport van vier minuten.</li>
+<li><strong>Wat er in de monitoring moet</strong> om dit gesprek over een half jaar niet opnieuw te voeren.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Staat er bij elke maatregel een <strong>gemeten</strong> winst, of alleen een bewering?</li>
+<li>Is de diagnose herleidbaar tot een concrete waarneming in een plan?</li>
+<li>Is er per query maar één ding veranderd?</li>
+<li>Is het antwoord aan Karin eerlijk zonder haar af te schepen?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 13.1</h2>
+<p>a) Enkele tientallen seconden tot een paar minuten, afhankelijk van je machine.</p>
+<p>b) De laatste (<code>count(*)</code> over <code>kanaal = 'portaal'</code>) voelt het traagst — één query van honderden milliseconden tot enkele seconden. <strong>Dat is precies het punt van opdracht 13.2:</strong> dat gevoel klopt niet met wat de server het meeste kost.</p>
+<hr>
+<h2>Uitwerking 13.2</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT substr(query,1,80) AS query, calls,
+       round(total_exec_time::numeric,0) AS totaal_ms,
+       round(mean_exec_time::numeric,2)  AS gem_ms,
+       round(100*total_exec_time/sum(total_exec_time) OVER (),1) AS pct
+FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
+</code></pre>
+<p>Bovenaan staat vrijwel zeker één van de twee <strong>portaalquery’s</strong> uit de lus — 3.000 aanroepen tellen op.</p>
+<p>b) Op <code>mean_exec_time</code> staat de <code>count(*) FROM mutatie WHERE kanaal = 'portaal'</code> bovenaan: één aanroep, maar veruit de langste.</p>
+<p>c) <code>totale belasting = aantal aanroepen × gemiddelde tijd</code>. De portaalquery is individueel onopvallend maar wordt duizenden keren aangeroepen; de scan-query is individueel opvallend maar draait één keer.</p>
+<p>d) <strong>Ruud noemt de scan-query</strong> — die voelt hij. <strong>Jij pakt de portaalquery aan</strong> — die kost de server het meest. En dat is geen theoretisch onderscheid: tien procent winst op de bovenste query levert meer op dan de onderste halveren.</p>
+<p>e) Op <code>calls</code> valt op dat de portaalquery’s elk 3.000 keer draaien. In een echte omgeving is dit de kolom waar je applicatieproblemen vindt: een query die per pagina honderd keer wordt aangeroepen in plaats van één keer (het N+1-probleem).</p>
+<p>f) Een hoge <code>stddev_exec_time</code> betekent dat dezelfde query soms snel en soms traag is. Drie mogelijke oorzaken: een plan dat omslaat bij verschillende parameterwaarden (opdracht 13.8), vergrendeling (deel 7), of sterk wisselende gegevenshoeveelheden. <strong>Dit is de meest onderbenutte kolom in <code>pg_stat_statements</code>.</strong></p>
+<p>g) De kolom <code>pct</code> uit de query bij a). Meestal nemen de bovenste drie query’s samen ruim de helft van de totale tijd — dat is het argument om daar te beginnen en niet bij nummer twaalf.</p>
+<hr>
+<h2>Uitwerking 13.3</h2>
+<p>a) Meestal de scan op <code>mutatie</code> met het filter op <code>kanaal</code>, of de join daarboven. Trek de tijd van de kinderen af: een knoop die 4.800 ms toont met een kind van 4.700 ms kost zelf maar 100 ms.</p>
+<p>b) Kijk waar de eerste grote afwijking zit. Vaak bij de join: de planner schat het aantal deelnemers in Utrecht maal het aandeel portaalmutaties, en die schatting is te laag omdat hij onafhankelijkheid aanneemt.</p>
+<p>c) <code>Rows Removed by Filter</code> bij de scan op <code>mutatie</code> is hoog — circa 80% van 2,4 miljoen wordt gelezen en weggegooid, want er is geen index op <code>kanaal</code>.</p>
+<p>d) Bij <code>Buffers</code> zie je een hoog aantal <code>read</code> als de tabel niet in de bufferpool past. Op een machine met 8 GB <code>shared_buffers</code> en een tabel van 600 MB past hij er na één keer lezen wél in; dan zie je vooral <code>hit</code>.</p>
+<p>e) Bij deze aantallen is een <strong>Hash Join</strong> passend: beide kanten leveren veel rijen. Zie je een Nested Loop met een hoge <code>loops</code>, dan is de rijschatting fout gegaan.</p>
+<p>f) <code>SETTINGS</code> toont afwijkende planner-instellingen, bijvoorbeeld <code>random_page_cost = 1.1</code> uit deel 11. Voor acceptatie betekent dat: <strong>dezelfde waarde daar, anders zijn de plannen niet vergelijkbaar</strong> — precies het punt uit opdracht 11.9.</p>
+<p>g) Modelantwoord: <em>“Een index op <code>mutatie (kanaal)</code> of beter een samengestelde index die ook <code>deelnemer_id</code> dekt, zodat het filter niet 2,4 miljoen rijen hoeft te lezen om er 20% van te houden.”</em></p>
+<p>Nuance die je mag maken: bij 20% selectiviteit is een index op <code>kanaal</code> alleen vaak níét de oplossing (deel 8). De betere maatregel is een index die de join ondersteunt.</p>
+<hr>
+<h2>Uitwerking 13.4</h2>
+<p>a) De schatting is meestal te <strong>laag</strong>, met een factor 2 tot 5. Reden: de planner vermenigvuldigt de selectiviteiten van beide voorwaarden.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT attname, most_common_vals, most_common_freqs
+FROM pg_stats WHERE tablename='mutatie' AND attname IN ('kanaal','soort');
+</code></pre>
+<p>Beide zijn gelijk verdeeld: <code>kanaal</code> over 5 waarden (0,2 elk), <code>soort</code> over 6 (0,167 elk).
+Schatting: 2.393.600 × 0,2 × 0,167 ≈ <strong>79.900</strong>.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT count(*) FROM mutatie WHERE kanaal='portaal' AND soort='adreswijziging';
+</code></pre>
+<p>In de casus zijn <code>kanaal</code> en <code>soort</code> <strong>onafhankelijk gegenereerd</strong>, dus de aanname klopt hier en de schatting is redelijk. <strong>Dat is een eerlijk resultaat en het punt van onderdeel d:</strong> je hebt afhankelijke kolommen nodig om het probleem te zien.</p>
+<p>d) en e) In <code>oefening13.afhankelijk</code> bepaalt <code>plaats</code> de <code>provincie</code> volledig. De planner schat: 500.000 × ⅓ × ⅓ ≈ 55.500. In werkelijkheid: 166.667. <strong>Een factor 3 te laag.</strong></p>
+<p>f)</p>
+<pre><code class="language-sql">CREATE STATISTICS afh_plaats_prov (dependencies, ndistinct, mcv)
+    ON plaats, provincie FROM oefening13.afhankelijk;
+ANALYZE oefening13.afhankelijk;
+</code></pre>
+<p>Na het opnieuw meten klopt de schatting vrijwel exact.</p>
+<p>g) Modelantwoord: <em>“De planner gaat er standaard van uit dat kolommen onafhankelijk zijn en vermenigvuldigt daarom hun selectiviteiten. Als de tweede voorwaarde in werkelijkheid niets uitsluit — want elke plaats hoort bij precies één provincie — is die vermenigvuldiging een systematische onderschatting.”</em></p>
+<p>h) In <code>meridiaan_prod</code>: <code>werkgever (sector, plaats)</code> als bepaalde sectoren in bepaalde steden geconcentreerd zijn, en in een uitgebreider model <code>deelnemer (postcode, woonplaats)</code>. In het echte Meridiaan-model zou ook <code>dienstverband (werkgever_id, ...)</code> kandidaat zijn.</p>
+<p><strong>Praktische toets:</strong> vermoed je afhankelijkheid, meet dan de werkelijke telling tegen de geschatte. Zit er structureel een factor tussen, dan zijn uitgebreide statistieken het antwoord.</p>
+<hr>
+<h2>Uitwerking 13.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT attname, n_distinct, null_frac, correlation
+FROM pg_stats WHERE schemaname='meridiaan_prod' AND tablename='mutatie';
+</code></pre>
+<p><code>mutatie_id</code> heeft <code>n_distinct = -1</code> (elke rij uniek). Negatieve waarden zijn een <strong>verhouding tot het aantal rijen</strong>; positieve zijn absolute aantallen.</p>
+<p>b) <code>kanaal</code> hoort 5 te zijn. Controleer met <code>SELECT count(DISTINCT kanaal) FROM mutatie;</code>. Bij een kolom met weinig waarden schat <code>ANALYZE</code> doorgaans exact.</p>
+<p>c) <code>deelnemer_id</code> wordt geschat op basis van een steekproef en kan er behoorlijk naast zitten — vaak wordt het aantal onderschat. <code>aangemeld_op</code> heeft zeer veel unieke waarden en krijgt meestal een negatieve waarde dicht bij −1.</p>
+<p>d)</p>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN aangemeld_op SET STATISTICS 1000;
+ANALYZE mutatie;
+</code></pre>
+<p><code>n_distinct</code> verandert meestal licht; het <strong>histogram</strong> wordt veel fijner (1000 buckets in plaats van 100), en dat is de winst.</p>
+<p>e) Bij een datumbereik van één week is het effect zichtbaar: met 100 buckets bestrijkt één bucket ongeveer twee weken van de vier jaar, dus een week is een ruwe interpolatie. Met 1000 buckets is de schatting aanzienlijk preciezer.</p>
+<p>f)</p>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN kanaal SET (n_distinct = 5);
+ANALYZE mutatie;
+</code></pre>
+<p><strong>Verdedigbaar</strong> als het aantal kanalen door een <code>CHECK</code>-constraint of referentietabel vastligt — dan is het geen gok maar een feit dat de planner niet kende.
+<strong>Gevaarlijk</strong> als er ooit een kanaal bijkomt: je hebt de werkelijkheid overschreven met een bewering, en de planner blijft rekenen met 5. Documenteer het, en koppel het aan de plek waar de lijst wordt beheerd.</p>
+<p>g) In de casus is <code>soort</code> gelijk verdeeld over zes waarden. Was 80% van één soort, dan zou die waarde in <code>most_common_vals</code> staan met frequentie 0,8, en de planner zou voor die waarde een heel ander plan kiezen dan voor een zeldzame. <strong>Dat is precies het scenario van opdracht 13.8</strong> — en de reden dat prepared statements bij scheve verdelingen misgaan.</p>
+<hr>
+<h2>Uitwerking 13.6</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT c.conrelid::regclass AS tabel,
+       a.attname AS kolom
+FROM pg_constraint c
+JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+WHERE c.contype = 'f'
+  AND c.connamespace = 'meridiaan_prod'::regnamespace
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_index i
+      WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1]
+  );
+</code></pre>
+<p>Verwacht: <code>dienstverband (werkgever_id)</code> en <code>premienota (werkgever_id)</code>.</p>
+<p>b) en c)</p>
+<pre><code class="language-sql">EXPLAIN ANALYZE
+SELECT w.naam, count(*) FROM werkgever w
+JOIN dienstverband dv USING (werkgever_id) GROUP BY w.werkgever_id, w.naam;
+
+CREATE INDEX dienstverband_werkgever_idx ON dienstverband (werkgever_id);
+</code></pre>
+<p>Voor een aggregatie over álle werkgevers verandert er weinig — een Hash Join over de hele tabel blijft passend. <strong>Dat is een eerlijk resultaat.</strong> De winst zit bij een query die <em>één</em> werkgever opvraagt; test dat ook.</p>
+<p>d) <strong>Hier is het effect groot.</strong> Bij een <code>DELETE</code> op <code>werkgever</code> moet PostgreSQL controleren of er nog verwijzingen zijn in <code>dienstverband</code>. Zonder index betekent dat een sequentiële scan over 466.000 rijen — per verwijderde rij.</p>
+<pre><code class="language-sql">BEGIN;
+EXPLAIN ANALYZE DELETE FROM werkgever WHERE werkgever_id = 4050;
+ROLLBACK;
+</code></pre>
+<p>Dit is het argument uit deel 6 dat deelnemers zelden overtuigt tot ze het meten: een foreign key zonder index maakt niet alleen joins traag, maar vooral verwijderingen op de oudertabel.</p>
+<p>e)</p>
+<pre><code class="language-sql">EXPLAIN ANALYZE
+SELECT * FROM mutatie WHERE verwerkt_op IS NULL
+ORDER BY aangemeld_op LIMIT 10;
+
+CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op) WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>Van een sequentiële scan plus sortering over 2,4 miljoen rijen naar een indexscan die na tien rijen stopt. Dit is de grootste winst van de hele opdracht.</p>
+<p>f)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_vol_idx ON mutatie (aangemeld_op);
+SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes WHERE relname='mutatie';
+</code></pre>
+<p>De partiële index is ongeveer <strong>een achtste</strong> van de volledige — hij bevat alleen de circa 12% onverwerkte mutaties. En hij groeit niet mee met de historie, want verwerkte rijen verdwijnen eruit (deel 8).</p>
+<p>g) Op basis van de meting in opdracht 13.2 is dat de index die de <strong>portaalquery</strong> ondersteunt — die staat bovenaan op <code>total_exec_time</code>. In de casus bestaat <code>mutatie (deelnemer_id)</code> al; controleer of hij gebruikt wordt en of een <code>INCLUDE</code> de query index-only kan maken (deel 12).</p>
+<hr>
+<h2>Uitwerking 13.7</h2>
+<p>a) <code>OFFSET 2000000</code> produceert twee miljoen rijen om er twintig te tonen. Orde van grootte: honderden milliseconden tot seconden.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT * FROM mutatie WHERE mutatie_id &gt; 2000000 ORDER BY mutatie_id LIMIT 20;
+</code></pre>
+<p>Vrijwel onmiddellijk — de index brengt je direct op de juiste plek.</p>
+<p>c) Bij <code>OFFSET n</code> moet de database altijd <code>n + limit</code> rijen produceren. Dat groeit lineair met het paginanummer. Bij keyset-paginering is de kosten constant, ongeacht hoe ver je bent.</p>
+<p><strong>Het praktische gevolg:</strong> met <code>OFFSET</code> wacht de gebruiker die het diepst zoekt het langst — precies de gebruiker die het meest gemotiveerd is.</p>
+<p>d) De gecorreleerde subquery draait per werkgever. Op 4.100 werkgevers is dat 4.100 keer een scan of indexlookup op <code>premienota</code>.</p>
+<p>e)</p>
+<pre><code class="language-sql">WITH laatste AS (
+    SELECT werkgever_id, max(betaaldatum) AS laatste_betaling
+    FROM premienota GROUP BY werkgever_id
+)
+SELECT w.naam, l.laatste_betaling
+FROM werkgever w LEFT JOIN laatste l USING (werkgever_id);
+</code></pre>
+<p>Eén scan over <code>premienota</code>, dan een hash join. Doorgaans sneller.</p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT w.naam, l.laatste_betaling
+FROM werkgever w
+LEFT JOIN LATERAL (
+    SELECT max(betaaldatum) AS laatste_betaling
+    FROM premienota p WHERE p.werkgever_id = w.werkgever_id
+) l ON true;
+</code></pre>
+<p>g) <strong>Meet het.</strong> Op deze aantallen zijn e) en f) vergelijkbaar en is d) het traagst. De keuze gaat daarna over leesbaarheid.</p>
+<p>Belangrijke nuance: PostgreSQL herschrijft gecorreleerde subquery’s soms zelf naar een join. Dat verklaart waarom d) minder slecht presteert dan verwacht — en waarom “gecorreleerde subquery’s zijn traag” ook prestatiefolklore is (deel 8). Meten, niet aannemen.</p>
+<p>h)</p>
+<pre><code class="language-sql">CREATE INDEX premienota_wg_periode_idx
+    ON premienota (werkgever_id, periode_jaar DESC, periode_maand DESC);
+
+SELECT w.naam, l.*
+FROM werkgever w
+CROSS JOIN LATERAL (
+    SELECT periode_jaar, periode_maand, bedrag FROM premienota p
+    WHERE p.werkgever_id = w.werkgever_id
+    ORDER BY periode_jaar DESC, periode_maand DESC LIMIT 1
+) l;
+</code></pre>
+<p>Zonder index: per werkgever alle nota’s sorteren. Met index: per werkgever één rij ophalen. Het verschil is een factor.</p>
+<hr>
+<h2>Uitwerking 13.8</h2>
+<p>b) Voor <code>soort = 'zeldzaam'</code> (1% van de rijen) kiest de planner een <strong>indexscan</strong>. Voor <code>soort = 'vaak'</code> (99%) kiest hij een <strong>sequentiële scan</strong>. Twee volstrekt verschillende plannen voor dezelfde query.</p>
+<p>c)</p>
+<pre><code class="language-sql">PREPARE p(text) AS SELECT count(*) FROM oefening13.scheef WHERE soort = $1;
+EXECUTE p('zeldzaam');   -- 1
+EXECUTE p('vaak');       -- 2
+EXECUTE p('zeldzaam');   -- 3
+EXECUTE p('vaak');       -- 4
+EXECUTE p('zeldzaam');   -- 5
+EXPLAIN EXECUTE p('zeldzaam');   -- 6
+</code></pre>
+<p>d) Bij de zesde uitvoering kan PostgreSQL overschakelen op een <strong>generic plan</strong>: één plan voor alle parameterwaarden. In het plan zie je dan <code>$1</code> in plaats van de waarde. Dat plan is voor minstens één van de twee waarden verkeerd.</p>
+<p>e)</p>
+<pre><code class="language-sql">SET plan_cache_mode = 'force_custom_plan';
+</code></pre>
+<p>Nu wordt elke uitvoering opnieuw gepland met de werkelijke waarde, en krijg je per waarde het juiste plan. Kosten: planningstijd bij elke aanroep — klein vergeleken met een sequentiële scan die niet nodig was.</p>
+<p>f) Aan een hoge <strong><code>stddev_exec_time</code></strong> in <code>pg_stat_statements</code>. Dezelfde genormaliseerde query is soms snel en soms traag, zonder dat de gegevens veranderen.</p>
+<p><strong>Dit is de reden dat die kolom in de reader wordt genoemd</strong>, en het is een diagnose die je niet vindt door naar gemiddelden te kijken.</p>
+<p>Praktisch punt: veel ORM’s gebruiken prepared statements zonder dat de ontwikkelaar dat weet. Als een query in <code>psql</code> snel is en in de applicatie traag, is dit een van de eerste dingen om te controleren.</p>
+<hr>
+<h2>Uitwerking 13.9 — modelantwoord (verkort)</h2>
+<p><strong>Optimalisatierapport <code>meridiaan_prod</code></strong>
+<em>Meetperiode: [datum], na <code>pg_stat_statements_reset()</code></em></p>
+<p><strong>1. Top vijf naar totale belasting</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+<th>Aanroepen</th>
+<th>Gem. ms</th>
+<th>Totaal ms</th>
+<th>%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>SELECT count(*) FROM mutatie WHERE deelnemer_id = $1</code></td>
+<td>3.000</td>
+<td>12,4</td>
+<td>37.200</td>
+<td>41%</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>SELECT * FROM deelnemer WHERE deelnemer_id = $1</code></td>
+<td>3.000</td>
+<td>0,3</td>
+<td>900</td>
+<td>1%</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>SELECT count(*) FROM mutatie WHERE kanaal = $1</code></td>
+<td>1</td>
+<td>2.100</td>
+<td>2.100</td>
+<td>2%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Rapportagequery per sector</td>
+<td>1</td>
+<td>480</td>
+<td>480</td>
+<td>1%</td>
+</tr>
+<tr>
+<td>…</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><em>(Vul in met je eigen metingen.)</em></p>
+<p><strong>2. Diagnose en maatregel per query</strong></p>
+<p><strong>Query 1 — 41% van de belasting.</strong>
+<em>Diagnose (vraag 1: waar gaat de tijd heen):</em> een Bitmap Heap Scan die per deelnemer circa 7 rijen ophaalt maar daarvoor de tabelpagina’s moet bezoeken. <code>Buffers</code> toont veel <code>read</code>.
+<em>Maatregel:</em> index uitbreiden naar <code>mutatie (deelnemer_id) INCLUDE (mutatie_id)</code> zodat de telling index-only kan.
+<em>Winst:</em> 12,4 → 1,8 ms gemiddeld. <strong>Totale belasting van 37.200 naar 5.400 ms.</strong>
+<em>Let op:</em> <code>Heap Fetches</code> moet laag blijven — dus <code>VACUUM</code> bijhouden (deel 12).</p>
+<p><strong>Query 3 — de query waarover geklaagd wordt.</strong>
+<em>Diagnose (vraag 3: hoeveel wordt er weggegooid):</em> <code>Rows Removed by Filter</code> is 1,9 miljoen; 20% van de tabel voldoet.
+<em>Maatregel:</em> <strong>geen.</strong> Bij 20% selectiviteit is een sequentiële scan de juiste keuze (deel 8). Een index zou genegeerd worden.
+<em>Alternatief als dit vaker moet:</em> een materialized view met tellingen per kanaal, ververst per nacht (deel 8).</p>
+<p><strong>Query 4 — Karins rapport.</strong>
+<em>Diagnose:</em> Hash Join met <code>Batches: 4</code> — de hashtabel paste niet in <code>work_mem</code>.
+<em>Maatregel:</em> <code>ALTER ROLE rapportage SET work_mem = '256MB'</code> (deel 11).
+<em>Winst:</em> 480 → 190 ms.</p>
+<p><strong>3. Bewust niet geoptimaliseerd: query 3</strong></p>
+<p>De scan over <code>kanaal</code> is de query waarover Ruud belt, en het is de query waar het minst te halen valt. Bij 20% selectiviteit is sequentieel lezen goedkoper dan een index; een index toevoegen kost schrijfsnelheid op 2,4 miljoen rijen en levert niets op. Als deze telling structureel nodig is, hoort hij in een materialized view en niet in een index.</p>
+<p><strong>4. Antwoord aan Karin</strong></p>
+<blockquote>
+<p>Je rapport ging van vier minuten naar ruim een minuut, door de sorteerruimte voor de rapportagefunctie te vergroten. Verder terugbrengen kan, maar dan komen we bij een vooraf berekende versie die 's nachts wordt bijgewerkt — dat betekent dat je cijfers van de vorige dag ziet in plaats van live. Dat is een keuze die jij maakt, niet ik: is een rapport van gisteravond bruikbaar voor waar je het voor gebruikt?</p>
+</blockquote>
+<p><em>Waarom dit het antwoord is:</em> Karin wordt niet afgescheept, ze krijgt gemeten winst, en de vervolgkeuze wordt bij haar gelegd omdat het een bedrijfsvraag is en geen technische.</p>
+<p><strong>5. Monitoring</strong></p>
+<table>
+<thead>
+<tr>
+<th>Wat</th>
+<th>Bron</th>
+<th>Drempel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Top vijf op <code>total_exec_time</code></td>
+<td><code>pg_stat_statements</code>, wekelijks</td>
+<td>Verandert de rangorde?</td>
+</tr>
+<tr>
+<td><code>stddev_exec_time</code></td>
+<td>idem</td>
+<td>Alarm bij &gt;3× de gemiddelde tijd</td>
+</tr>
+<tr>
+<td>Plannen van trage query’s</td>
+<td><code>auto_explain</code>, <code>log_min_duration = 3000</code>, <code>sample_rate = 0.1</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Ongebruikte indexen</td>
+<td><code>pg_stat_user_indexes</code>, <code>idx_scan = 0</code></td>
+<td>Kwartaalcontrole</td>
+</tr>
+<tr>
+<td><code>Heap Fetches</code> bij de index-only query</td>
+<td><code>auto_explain</code>-uitvoer</td>
+<td>Vacuum-achterstand</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Gemeten winst.</strong> “Sneller” is geen resultaat. Er moet een getal vóór en ná staan.</li>
+<li><strong>Eén ding per query.</strong> Groepen die tegelijk een index toevoegen én <code>work_mem</code> verhogen, weten niet wat werkte.</li>
+<li><strong>De niet-geoptimaliseerde query.</strong> Dit is de belangrijkste alinea van het rapport: het toont dat de groep het verschil kent tussen “kan sneller” en “is de moeite waard”.</li>
+<li><strong>Het antwoord aan Karin.</strong> Groepen die schrijven “dat kan niet sneller” of juist alles beloven, missen het punt. Het goede antwoord legt de afruil bij haar.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 13.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">73 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">466 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">&larr; Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat</a><a class="dbm-prevnext next" href="../deel-14-geavanceerde-indexering/reader.html">Deel 14 — Geavanceerde indexering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

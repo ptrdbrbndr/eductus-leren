@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Partitionering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 16 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 16: Partitionering</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\timing on
+CREATE SCHEMA IF NOT EXISTS oefening16;
+</code></pre>
+<p>Je bouwt vandaag een gepartitioneerde kopie van <code>mutatie</code> — het origineel blijft ongemoeid, want dat heb je in latere delen nog nodig.</p>
+<pre><code class="language-sql">SELECT min(aangemeld_op), max(aangemeld_op) FROM mutatie;
+</code></pre>
+<p>Noteer de uitkomst; die bepaalt hoeveel maandpartities je nodig hebt.</p>
+<p>Tijdsindicatie: circa 140 minuten.</p>
+<hr>
+<h2>Opdracht 16.1 — Is dit een kandidaat? (10 min, individueel)</h2>
+<p>Beoordeel elke tabel uit <code>meridiaan_prod</code> met de vraag uit paragraaf 3 van de reader.</p>
+<p>a) <code>mutatie</code> (2,4 miljoen rijen, groeit continu, historie van vier jaar)
+b) <code>werkgever</code> (4.100 rijen, groeit langzaam, zelden verwijderd)
+c) <code>premienota</code> (181.000 rijen, per werkgever per maand, oude jaren zelden bevraagd)
+d) <code>deelnemer</code> (340.000 rijen, groeit, nooit in bulk verwijderd)
+e) Een fictieve <code>sessielog</code>-tabel die elke portaalinteractie vastlegt en na 90 dagen verwijderd mag worden</p>
+<p>f) Voor elke “ja”: welke as, en welke bewaarhandeling?
+g) Voor elke “nee”: welke van de twee voorwaarden ontbreekt?</p>
+<hr>
+<h2>Opdracht 16.2 — De gepartitioneerde structuur bouwen (25 min, tweetallen)</h2>
+<p>a) Maak in <code>oefening16</code> een gepartitioneerde versie van <code>mutatie</code> met range-partitionering per maand, voor de volledige periode die je in de vooraf-stap hebt genoteerd plus twee maanden vooruit.
+b) Waarom moet de primaire sleutel <code>(mutatie_id, aangemeld_op)</code> zijn in plaats van alleen <code>mutatie_id</code>? Probeer het andersom en noteer de foutmelding.
+c) Voeg een default-partitie toe.
+d) Probeer een rij in te voegen met een datum die twee jaar in de toekomst ligt. Wat gebeurt er?
+e) Verwijder de default-partitie weer en herhaal d). Wat verandert er?
+f) Zet de default-partitie terug. Wat is de afweging tussen wel en geen default?</p>
+<hr>
+<h2>Opdracht 16.3 — Data migreren en verifiëren (20 min, tweetallen)</h2>
+<p>a) Kopieer alle rijen uit <code>meridiaan_prod.mutatie</code> naar je gepartitioneerde tabel.
+b) Hoeveel rijen zitten er in de default-partitie na het kopiëren? Verklaar.
+c) Los eventuele default-rijen op: voeg de ontbrekende partitie(s) toe en verplaats de rijen.
+d) Verifieer: is het aantal rijen in de gepartitioneerde tabel gelijk aan het origineel?
+e) Verifieer inhoudelijk: zijn er rijen waarvan een kernwaarde (bijvoorbeeld <code>soort</code>) is veranderd tijdens het kopiëren? Schrijf een query die dat aantoont, niet alleen telt (deel 6, opdracht 6.8).
+f) Vergelijk de totale omvang van de gepartitioneerde tabel met het origineel. Verschilt die noemenswaardig?</p>
+<hr>
+<h2>Opdracht 16.4 — Partition pruning zien werken (20 min, drietallen)</h2>
+<p>a) Draai <code>EXPLAIN (ANALYZE, BUFFERS)</code> op een query die filtert op één maand met een bereik op <code>aangemeld_op</code>. Hoeveel partities staan er in het plan?
+b) Draai dezelfde vraag met <code>extract(year FROM aangemeld_op) = ...</code> in plaats van een bereik. Wat verandert er in het plan?
+c) Verklaar b) met wat je in deel 8 en 13 leerde over functies op een kolom.
+d) Draai een query zonder enige voorwaarde op <code>aangemeld_op</code> (bijvoorbeeld filteren op <code>kanaal</code>). Wat zie je in het plan?
+e) Draai een query met een <code>IN</code>-lijst van drie specifieke maanden als bereiken. Werkt pruning?
+f) Vergelijk de uitvoeringstijd van a) met dezelfde query op de <strong>niet</strong>-gepartitioneerde <code>mutatie</code>. Wat is de winst, en waarom is die er?</p>
+<hr>
+<h2>Opdracht 16.5 — Indexen op partities (15 min, tweetallen)</h2>
+<p>a) Maak een index op <code>deelnemer_id</code> op de gepartitioneerde tabel als geheel.
+b) Controleer: hoeveel fysieke indexen zijn hierdoor ontstaan?
+c) Voeg een nieuwe maandpartitie toe. Heeft die automatisch de index?
+d) Maak een partiële index (<code>WHERE verwerkt_op IS NULL</code>) op de gepartitioneerde tabel. Werkt dat?
+e) Vergelijk de omvang van de index op één partitie met de omvang van de index op de hele oude, niet-gepartitioneerde tabel gedeeld door het aantal partities. Wat verwacht je, en klopt het?
+f) Controleer of alle partitie-indexen geldig zijn.</p>
+<hr>
+<h2>Opdracht 16.6 — Een partitie weggooien (15 min, individueel)</h2>
+<p>Dit is de kernbelofte van dit deel — meet hem zelf.</p>
+<p>a) Meet hoe lang een <code>DELETE</code> van alle rijen uit één maand duurt op de <strong>niet</strong>-gepartitioneerde <code>mutatie</code> (gebruik een kopie, niet het origineel).
+b) Meet de bloat die dat achterlaat.
+c) Meet hoe lang <code>DETACH PARTITION ... CONCURRENTLY</code> gevolgd door <code>DROP TABLE</code> duurt voor dezelfde hoeveelheid data op je gepartitioneerde tabel.
+d) Wat is het verschil in tijd? Wat is het verschil in nazorg (vacuum nodig of niet)?
+e) Koppel een partitie los zonder hem te verwijderen. Bestaat hij nog? Kun je hem nog bevragen?
+f) Koppel hem weer aan met <code>ATTACH PARTITION</code>. Wat controleert PostgreSQL daarbij?</p>
+<hr>
+<h2>Opdracht 16.7 — pg_partman (15 min, tweetallen, of demonstratie als de extensie ontbreekt)</h2>
+<p>a) Controleer of <code>pg_partman</code> beschikbaar is. Zo niet: lees deze opdracht door en beantwoord b, d en e conceptueel.
+b) Wat doet <code>p_premake =&gt; 3</code> precies, en wat gebeurt er als je hem op 0 zet?
+c) Stel een bewaartermijn van twee jaar in voor je oefeningtabel.
+d) Wat is het verschil tussen <code>retention_keep_table = true</code> en <code>false</code>?
+e) Wie bepaalt de bewaartermijn bij Meridiaan — jij, of iemand anders? Verwijs naar deel 9.
+f) Wat automatiseert <code>pg_partman</code> niet, en blijft dus jouw verantwoordelijkheid?</p>
+<hr>
+<h2>Opdracht 16.8 — Wanneer niet partitioneren (10 min, drietallen)</h2>
+<p>Beoordeel elk voorstel met paragraaf 16 van de reader.</p>
+<p>a) “Laten we <code>werkgever</code> partitioneren op sector, dat is toch een natuurlijke indeling?”
+b) “Onze <code>deelnemer</code>-tabel is traag door bloat, zullen we hem partitioneren?”
+c) “We partitioneren <code>premienota</code> per dag, dan hebben we maximale controle.”
+d) “De kwartaalrapportage die altijd over de volle vier jaar sommeert, wordt vast sneller met partitionering.”</p>
+<p>e) Voor elk: welk deel van de toetsvraag (as, bulkverwijdering) faalt, of welk ander argument geldt?</p>
+<hr>
+<h2>Opdracht 16.9 — Het partitioneringsvoorstel (30 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>partitioneringsvoorstel</strong> voor <code>mutatie</code> in productie, maximaal twee A4.</p>
+<ol>
+<li><strong>De structuur:</strong> partitietype, sleutel, grootte per partitie, met onderbouwing.</li>
+<li><strong>Het migratieplan:</strong> de stappen, en of het in één venster kan of gefaseerd moet — met een inschatting waarom.</li>
+<li><strong>Het onderhoudsplan:</strong> hoe nieuwe partities ontstaan en oude verdwijnen, met of zonder <code>pg_partman</code>.</li>
+<li><strong>De bewaartermijn:</strong> je voorstel, en wie het moet goedkeuren.</li>
+<li><strong>Wat er verandert in de query’s</strong> van deel 13 en de verwerkingslogica van deel 15 — moeten die worden aangepast?</li>
+<li><strong>Gemeten winst:</strong> minstens twee cijfers uit je eigen experimenten vandaag.</li>
+<li><strong>Eén risico van de migratie zelf</strong>, met een beheersmaatregel.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is de partitiegrootte onderbouwd met een berekening, niet een gevoel?</li>
+<li>Is het onderscheid tussen “kan in één venster” en “moet gefaseerd” gemotiveerd?</li>
+<li>Wordt de bewaartermijn expliciet als bedrijfsbeslissing neergelegd, niet als technische keuze?</li>
+<li>Bevat punt 5 een concrete constatering over de partiële index uit deel 14 en de <code>SKIP LOCKED</code>-query uit deel 15?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 16.1</h2>
+<p>a) <strong>Ja.</strong> As: <code>aangemeld_op</code>. Bulkverwijdering: oude mutaties na de bewaartermijn.
+b) <strong>Nee.</strong> Geen natuurlijke as waarlangs je zou opdelen en tegelijk in bulk verwijderen; werkgevers verdwijnen individueel, niet in blokken.
+c) <strong>Twijfelgeval, kantelt naar ja bij groei.</strong> As: <code>periode_jaar</code>/<code>periode_maand</code>. Bulkverwijdering: alleen als er een bewaarbeleid voor oude nota’s komt — vaak niet, want financiële gegevens hebben juist lange bewaarplichten. Op 181.000 rijen bovendien nog te klein om de moeite waard te zijn (zie f).
+d) <strong>Nee.</strong> Deelnemers verdwijnen nooit in bulk (bewaarplicht, deel 5) en er is geen bevragingspatroon dat structureel op een deel van de deelnemers is gericht.
+e) <strong>Ja, sterke kandidaat.</strong> As: tijdstip. Bulkverwijdering: exact de 90-dagen bewaartermijn — dit is het schoolvoorbeeld.</p>
+<p>f) <code>mutatie</code>: maandelijks, <code>DROP</code> na de bewaartermijn. <code>sessielog</code>: dagelijks, <code>DROP</code> na 90 dagen — bij zo’n korte termijn is dagpartitionering logischer dan maand.</p>
+<p>g) <code>werkgever</code>: geen van beide voorwaarden. <code>deelnemer</code>: geen van beide. <code>premienota</code>: de bulkverwijdering ontbreekt (financiële bewaarplicht) én de tabel is nog klein — twee redenen om het nu niet te doen, ook al is er wel een as.</p>
+<hr>
+<h2>Uitwerking 16.2</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE TABLE oefening16.mutatie (
+    mutatie_id   bigint GENERATED ALWAYS AS IDENTITY,
+    deelnemer_id integer NOT NULL,
+    soort        text NOT NULL,
+    kanaal       text NOT NULL,
+    aangemeld_op timestamptz NOT NULL,
+    verwerkt_op  timestamptz,
+    PRIMARY KEY (mutatie_id, aangemeld_op)
+) PARTITION BY RANGE (aangemeld_op);
+</code></pre>
+<p>Praktische tip die het werkboek beloont: gebruik een <code>DO</code>-blok of <code>generate_series</code> om de tientallen <code>CREATE TABLE</code>-opdrachten te genereren in plaats van ze met de hand te typen.</p>
+<p>b) Zonder de partitiesleutel in de primaire sleutel:</p>
+<pre><code>ERROR: unique constraint on partitioned table must include all partitioning columns
+</code></pre>
+<p>PostgreSQL kan uniciteit niet over partities heen garanderen zonder de sleutel waarlangs die partities zijn opgedeeld — elke partitie heeft zijn eigen, onafhankelijke index.</p>
+<p>c)</p>
+<pre><code class="language-sql">CREATE TABLE oefening16.mutatie_default PARTITION OF oefening16.mutatie DEFAULT;
+</code></pre>
+<p>d) De rij wordt geaccepteerd en belandt in de <strong>default-partitie</strong> — er bestaat nog geen partitie voor die toekomstige maand.</p>
+<p>e) Zonder default:</p>
+<pre><code>ERROR: no partition of relation &quot;mutatie&quot; found for row
+DETAIL: Partition key of the failing row contains (aangemeld_op) = (...).
+</code></pre>
+<p>De invoeging <strong>faalt volledig</strong> in plaats van ergens te belanden.</p>
+<p>f) <strong>Met default:</strong> geen dataverlies bij een onvoorziene datum, maar risico dat de default stilletjes groeit en onopgemerkt blijft (paragraaf 11). <strong>Zonder default:</strong> expliciete, onmiddellijke foutmelding — dwingt tot correct partitiebeheer, maar een vergeten partitie betekent een productiestoring in plaats van een opruimtaak. Bij Meridiaan: default aanhouden, met actieve monitoring op <code>count(*)</code>.</p>
+<hr>
+<h2>Uitwerking 16.3</h2>
+<p>a)</p>
+<pre><code class="language-sql">INSERT INTO oefening16.mutatie
+    (mutatie_id, deelnemer_id, soort, kanaal, aangemeld_op, verwerkt_op)
+OVERRIDING SYSTEM VALUE
+SELECT mutatie_id, deelnemer_id, soort, kanaal, aangemeld_op, verwerkt_op
+FROM meridiaan_prod.mutatie;
+</code></pre>
+<p>b) Hangt af van of alle benodigde partities al bestonden. Als de vroegste of laatste maand van de werkelijke data buiten je gemaakte reeks viel, staan die rijen in de default.</p>
+<p>c) Voeg de ontbrekende partitie(s) toe en verplaats:</p>
+<pre><code class="language-sql">CREATE TABLE oefening16.mutatie_2021_12 PARTITION OF oefening16.mutatie
+    FOR VALUES FROM ('2021-12-01') TO ('2022-01-01');
+
+WITH te_verplaatsen AS (
+    DELETE FROM oefening16.mutatie_default
+    WHERE aangemeld_op &gt;= '2021-12-01' AND aangemeld_op &lt; '2022-01-01'
+    RETURNING *
+)
+INSERT INTO oefening16.mutatie SELECT * FROM te_verplaatsen;
+</code></pre>
+<p>PostgreSQL verplaatst bestaande default-rijen niet automatisch naar een nieuw toegevoegde partitie; dat vereist een handmatige verplaatsing zoals hierboven.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT (SELECT count(*) FROM oefening16.mutatie) AS nieuw,
+       (SELECT count(*) FROM meridiaan_prod.mutatie) AS oud;
+</code></pre>
+<p>e)</p>
+<pre><code class="language-sql">SELECT count(*) FROM meridiaan_prod.mutatie m
+JOIN oefening16.mutatie p USING (mutatie_id)
+WHERE m.soort &lt;&gt; p.soort OR m.aangemeld_op &lt;&gt; p.aangemeld_op;
+-- moet 0 zijn
+</code></pre>
+<p>Dit is de controle die <strong>iets bewijst</strong>, in tegenstelling tot alleen tellen (deel 6, opdracht 6.8) — die les komt hier terug op een nieuw onderwerp.</p>
+<p>f) De totale omvang is vergelijkbaar of iets groter: dezelfde gegevens, nu verdeeld over vijftig kleine tabellen elk met hun eigen kleine overhead (page headers, minimale vrije ruimte per partitie). Het verschil is klein; de winst zit niet in totale omvang maar in <strong>behapbaarheid per stuk</strong>.</p>
+<hr>
+<h2>Uitwerking 16.4</h2>
+<p>a) Eén partitie in het plan: <code>Seq Scan on mutatie_2026_01</code>. Geen <code>Append</code> over vijftig tabellen.</p>
+<p>b) Het plan toont een <code>Append</code> met <strong>alle</strong> partities eronder, elk met een <code>Filter</code> op de expressie. Geen pruning.</p>
+<p>c) Zelfde mechanisme als bij een gewone index (deel 8) of BRIN (deel 14): de planner kan pruning alleen toepassen als hij de voorwaarde rechtstreeks tegen de partitiegrenzen kan leggen. Een functie om de kolom verbergt die relatie.</p>
+<p>d) Een <code>Append</code> met alle partities — logisch, want er is geen voorwaarde op de partitiesleutel die iets zou kunnen uitsluiten. Dit is geen falen van pruning maar correct gedrag: de query heeft data uit elke partitie nodig.</p>
+<p>e) <strong>Ja.</strong> Drie expliciete bereiken worden elk apart tegen de partitiegrenzen gelegd; alleen de drie overeenkomende partities blijven over.</p>
+<p>f) De gepartitioneerde versie is sneller, in de orde van grootte van het aantal partities dat wordt overgeslagen (vijftig naar één betekent ruwweg een factor vijftig minder data om te doorzoeken, al is het effect op de tijd meestal minder dan lineair door vaste kosten). De winst komt puur door <strong>niet lezen wat je niet nodig hebt</strong> — geen andere maatregel is aangebracht.</p>
+<hr>
+<h2>Uitwerking 16.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_dn_idx ON oefening16.mutatie (deelnemer_id);
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT count(*) FROM pg_indexes
+WHERE schemaname = 'oefening16' AND indexname LIKE '%dn_idx%';
+</code></pre>
+<p>Eén per partitie (plus de “ouder” die geen eigen fysieke opslag heeft) — bij vijftig partities dus vijftig fysieke indexen.</p>
+<p>c) <strong>Ja, automatisch.</strong> Elke nieuwe partitie erft de indexdefinities van de ouder.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_open_idx ON oefening16.mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>Werkt, en wordt eveneens per partitie aangemaakt — elke partitie krijgt zijn eigen kleine partiële index over alleen zijn eigen onverwerkte mutaties.</p>
+<p>e) Verwachting: de index op één partitie is ongeveer 1/50e van de index op de hele oude tabel. In de praktijk vaak iets grover door vaste overhead per index, maar de orde van grootte klopt.</p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT indexrelid::regclass, indisvalid FROM pg_index
+WHERE indrelid IN (SELECT oid FROM pg_class WHERE relnamespace = 'oefening16'::regnamespace);
+</code></pre>
+<hr>
+<h2>Uitwerking 16.6</h2>
+<p>a) Een <code>DELETE</code> van ongeveer 50.000 rijen (één maand) op een kopie van <code>mutatie</code>: orde van grootte honderden milliseconden tot enkele seconden, afhankelijk van indexen.</p>
+<p>b) Na de <code>DELETE</code>: <code>n_dead_tup</code> stijgt met het aantal verwijderde rijen. Zonder <code>VACUUM</code> blijft die ruimte bezet.</p>
+<p>c)</p>
+<pre><code class="language-sql">ALTER TABLE oefening16.mutatie DETACH PARTITION oefening16.mutatie_2022_01 CONCURRENTLY;
+DROP TABLE oefening16.mutatie_2022_01;
+</code></pre>
+<p>Beide stappen samen: <strong>milliseconden.</strong></p>
+<p>d) Het verschil is ordes van grootte — een <code>DELETE</code> op 50.000 rijen kost seconden en laat bloat achter die pas na <code>VACUUM</code> verdwijnt; <code>DROP TABLE</code> op een partitie kost vrijwel niets en laat <strong>niets</strong> achter, want de hele fysieke structuur verdwijnt in één keer. Er is geen nazorg nodig.</p>
+<p>e) Na <code>DETACH</code> (zonder <code>DROP</code>) bestaat de tabel nog zelfstandig, onder zijn eigen naam, buiten de gepartitioneerde structuur. Je kunt hem gewoon bevragen — hij is alleen niet meer gekoppeld.</p>
+<p>f) <code>ATTACH PARTITION</code> controleert of de bestaande gegevens in de tabel <strong>binnen het opgegeven bereik passen</strong>. Bij een grote tabel kan dat een scan betekenen, tenzij er al een <code>CHECK</code>-constraint bestaat die het bereik bevestigt — dan mag PostgreSQL die gebruiken in plaats van te scannen. Dat is een optimalisatie die het werkboek van deel 22 verder uitwerkt.</p>
+<hr>
+<h2>Uitwerking 16.7</h2>
+<p>b) <code>p_premake =&gt; 3</code> zorgt dat er altijd drie toekomstige partities klaarstaan, zodat nieuwe rijen nooit in de default belanden door een ontbrekende partitie. Op 0 gezet, wordt er geen enkele partitie vooruit gemaakt — je loopt dan het risico dat de huidige periode volloopt zonder dat de volgende al bestaat.</p>
+<p>c)</p>
+<pre><code class="language-sql">UPDATE partman.part_config
+   SET retention = '2 years', retention_keep_table = false
+ WHERE parent_table = 'oefening16.mutatie';
+</code></pre>
+<p>d) <code>retention_keep_table = true</code>: partities worden losgekoppeld maar niet verwijderd — ze blijven bestaan als losse tabellen (nuttig als terugvaloptie of voor archivering). <code>false</code>: ze worden na het loskoppelen ook meteen verwijderd.</p>
+<p>e) <strong>Niet jij alleen.</strong> De bewaartermijn is een AVG-vraagstuk (deel 9, opslagbeperking) en bij een pensioenuitvoerder bovendien vaak wettelijk voorgeschreven. Dit hoort in overleg met de privacyfunctionaris en compliance te worden vastgesteld; jij implementeert de gekozen termijn.</p>
+<p>f) <code>pg_partman</code> automatiseert het <strong>aanmaken en verwijderen op basis van tijd</strong>. Het automatiseert niet: de beslissing over de bewaartermijn, het controleren of oude gegevens al gearchiveerd zijn voordat ze verdwijnen, en het bijhouden of de default-partitie leeg blijft.</p>
+<hr>
+<h2>Uitwerking 16.8</h2>
+<p>a) <strong>Nee.</strong> <code>werkgever</code> heeft 4.100 rijen — ver onder de omvang waarbij partitionering iets oplevert. De “natuurlijke indeling” op sector voldoet bovendien niet aan de tweede voorwaarde: er is geen bulkverwijdering per sector.</p>
+<p>b) <strong>Nee, niet als eerste stap.</strong> Bloat is een symptoom dat je met fill factor en autovacuum-afstelling aanpakt (deel 12). Partitioneren zou de vacuum-eenheden kleiner maken en dus indirect helpen, maar het lost de onderliggende oorzaak niet op en is een zware ingreep voor wat een instellingswijziging kan zijn.</p>
+<p>c) <strong>Waarschijnlijk overdreven.</strong> Bij 181.000 rijen over meerdere jaren is dagpartitionering duizenden partities — veel plannerkosten voor weinig winst. Maandelijks (of zelfs helemaal niet, zie 16.1c) past beter bij het volume.</p>
+<p>d) <strong>Nee.</strong> Een rapportage die structureel de volle historie nodig heeft, profiteert niet van pruning — hij doorzoekt sowieso alle partities, nu met de extra overhead van een plan over vijftig stukken in plaats van één scan over een enkele tabel. Voor dit soort rapportage is een materialized view (deel 8) de betere maatregel.</p>
+<p>e) Zie hierboven per onderdeel — het terugkerende patroon is dat groepen partitionering voorstellen omdat het nieuw geleerd is, niet omdat de toetsvraag positief beantwoord wordt.</p>
+<hr>
+<h2>Uitwerking 16.9 — modelantwoord (verkort)</h2>
+<p><strong>Partitioneringsvoorstel <code>mutatie</code></strong></p>
+<p><strong>1. Structuur</strong></p>
+<p>Range-partitionering op <code>aangemeld_op</code>, per maand. Onderbouwing: 2,4 miljoen rijen over 4 jaar geeft ongeveer 50.000 rijen per maand — groot genoeg om zinvol te zijn, klein genoeg om vacuum en indexbouw per partitie snel te houden. Bij het huidige groeitempo blijft dat de komende jaren een goede maat; heroverwegen bij een sterk hoger tempo.</p>
+<p>Primaire sleutel: <code>(mutatie_id, aangemeld_op)</code> — verplicht vanuit paragraaf 4.</p>
+<p><strong>2. Migratieplan</strong></p>
+<p>Op de huidige omvang (2,4 miljoen rijen, ~600 MB) kan de migratie <strong>in één onderhoudsvenster</strong> buiten de piek: nieuwe structuur bouwen, kopiëren (gemeten in de opdracht), verifiëren, omwisselen. Een gefaseerde aanpak met dubbel schrijven is bij dit volume niet nodig — de kopieerstap duurt volgens meting ruim onder een minuut.</p>
+<p><em>Heroverwegen bij een toekomstige omvang van tientallen miljoenen rijen</em>, waar de kopieertijd het venster zou overschrijden.</p>
+<p><strong>3. Onderhoudsplan</strong></p>
+<p><code>pg_partman</code> met <code>p_premake =&gt; 3</code> en een geplande aanroep van <code>run_maintenance()</code> via <code>pg_cron</code>, dagelijks. Default-partitie blijft als vangnet, met een dagelijkse monitoringquery op <code>count(*)</code>.</p>
+<p><strong>4. Bewaartermijn</strong></p>
+<p>Voorstel: vijf jaar, aansluitend bij gangbare bewaartermijnen voor administratieve mutatiegegevens. <strong>Behoeft goedkeuring van de privacyfunctionaris en compliance</strong> voordat het wordt geïmplementeerd — geen technische keuze.</p>
+<p><strong>5. Gevolgen voor bestaande query’s en processen</strong></p>
+<ul>
+<li>De <strong>partiële index</strong> uit deel 14 blijft nodig en werkt per partitie — hij wordt zelfs kleiner en effectiever.</li>
+<li>De <strong><code>SKIP LOCKED</code>-verwerkingsquery</strong> uit deel 15 blijft ongewijzigd werken.</li>
+<li>Rapportagequery’s die op datumbereik filteren profiteren direct van pruning zonder wijziging.</li>
+<li><strong>Eén query moet worden nagelopen:</strong> een eventuele rapportage die een functie op <code>aangemeld_op</code> gebruikt in plaats van een bereik verliest pruning en moet herschreven worden.</li>
+</ul>
+<p><strong>6. Gemeten winst</strong></p>
+<p><code>DROP TABLE</code> op een partitie: milliseconden, tegenover een <code>DELETE</code> op dezelfde hoeveelheid rijen: seconden plus bloat. Query op één maand met pruning: een fractie van de tijd op de ongepartitioneerde tabel.</p>
+<p><strong>7. Risico van de migratie</strong></p>
+<p>De kopieerstap loopt in één transactie; mislukt hij halverwege, dan rolt alles terug en is er niets veranderd. Het reële risico zit in <strong>verificatie</strong>: wordt de inhoudelijke controle overgeslagen, dan wordt een discrepantie pas veel later ontdekt. Beheersmaatregel: rijtelling én inhoudelijke vergelijking zijn beide verplicht vóór de omwisseling, en de oude tabel blijft twee weken bewaard als terugvaloptie.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>De partitiegrootte moet een berekening zijn</strong>, geen gevoel.</li>
+<li><strong>Het onderscheid één venster / gefaseerd</strong> moet uit een gemeten kopieertijd volgen.</li>
+<li><strong>De bewaartermijn als bedrijfsbeslissing</strong>, niet als eigen keuze.</li>
+<li><strong>Punt 5 is de scherpste toets.</strong> Groepen die niet nagaan wat er met de partiële index en de wachtrijquery gebeurt, behandelen partitionering geïsoleerd in plaats van als onderdeel van het geheel.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 16.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">55 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-15-concurrency-en-locking/reader.html">&larr; Deel 15 — Concurrency en locking</a><a class="dbm-prevnext next" href="../deel-17-back-up-en-herstel/reader.html">Deel 17 — Back-up en herstel &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

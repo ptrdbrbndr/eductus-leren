@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Datamodellering en normalisatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 5 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 5 — Datamodellering en normalisatie</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 5 van 10
+Aansluiting: EDB PostgreSQL Associate (beperkt) — dit deel is vooral vakinhoudelijk fundament</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom modelleren</li>
+<li>Drie modelniveaus</li>
+<li>Entiteiten, attributen en relaties</li>
+<li>Notatie: kraaienpoot</li>
+<li>Cardinaliteit en optionaliteit</li>
+<li>Van gesprek naar model</li>
+<li>Veel-op-veel: de koppeltabel</li>
+<li>Afhankelijke entiteiten</li>
+<li>Functionele afhankelijkheid</li>
+<li>Eerste normaalvorm</li>
+<li>Tweede normaalvorm</li>
+<li>Derde normaalvorm</li>
+<li>BCNF en verder</li>
+<li>Denormalisatie: wanneer bewust afwijken</li>
+<li>Historie: het probleem dat modellen breekt</li>
+<li>Supertype en subtype</li>
+<li>Het model van de casus, beoordeeld</li>
+<li>Veelgemaakte modelleerfouten</li>
+<li>Kernbegrippen</li>
+<li>Verder lezen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de drie modelniveaus onderscheiden en zeggen welk niveau bij welk gesprek hoort;</li>
+<li>een ERD lezen en tekenen in kraaienpootnotatie, met correcte cardinaliteit en optionaliteit;</li>
+<li>uit een gesprek met de business een conceptueel model afleiden;</li>
+<li>een veel-op-veel-relatie oplossen en uitleggen waarom de koppeltabel vaak zelf een entiteit blijkt;</li>
+<li>functionele afhankelijkheden benoemen en een model normaliseren tot de derde normaalvorm;</li>
+<li>uitleggen wat er misgaat bij schending van elke normaalvorm;</li>
+<li>beargumenteren wanneer denormalisatie verdedigbaar is;</li>
+<li>historie in een model opnemen en de gevolgen daarvan overzien;</li>
+<li>het model van de casusdatabase beoordelen en concrete verbeteringen voorstellen.</li>
+</ul>
+<p><strong>Over de certificering:</strong> modellering weegt licht in het EDB Associate-examen; dat toetst vooral SQL en beheer. Dit deel staat er niet voor het examen, maar omdat je zonder deze stof geen bruikbare database kunt ontwerpen — en omdat het bij Meridiaan het verschil maakt tussen een datalaag die twintig jaar meegaat en een nieuwe versie van de schil uit deel 1.</p>
+<hr>
+<h2>2. Waarom modelleren</h2>
+<p>De schil bij Meridiaan is niet ontstaan doordat mensen slecht waren in SQL. Hij is ontstaan doordat niemand ooit heeft vastgelegd wat een deelnemer <em>is</em>, en dus iedereen zijn eigen versie bouwde.</p>
+<p>Een datamodel doet drie dingen tegelijk:</p>
+<ol>
+<li><strong>Het legt betekenis vast.</strong> Wat is een deelnemer? Telt een gepensioneerde mee? Is iemand met twee dienstverbanden één deelnemer of twee?</li>
+<li><strong>Het legt regels vast</strong> die de database kan afdwingen — niet in een handleiding, maar in de structuur zelf.</li>
+<li><strong>Het is een gespreksinstrument.</strong> Een plaat op tafel waarbij de business kan zeggen: “nee, dat kan ook andersom.”</li>
+</ol>
+<p>Dat derde punt wordt onderschat. Het grootste rendement van modelleren zit niet in het model maar in de vragen die je moest stellen om het te tekenen. Bij Meridiaan is de vraag “kan een deelnemer twee gelijktijdige dienstverbanden hebben?” een modelleervraag die niemand ooit gesteld had — en het antwoord (ja) verklaart waarom drie afdelingen op drie aantallen uitkwamen.</p>
+<hr>
+<h2>3. Drie modelniveaus</h2>
+<table>
+<thead>
+<tr>
+<th>Niveau</th>
+<th>Beantwoordt</th>
+<th>Publiek</th>
+<th>Bevat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Conceptueel</strong> (CDM)</td>
+<td>Wat bestaat er in ons vakgebied?</td>
+<td>Business</td>
+<td>Entiteiten en relaties, geen techniek</td>
+</tr>
+<tr>
+<td><strong>Logisch</strong> (LDM)</td>
+<td>Hoe leggen we dat relationeel vast?</td>
+<td>Analisten, architecten</td>
+<td>Attributen, sleutels, genormaliseerd</td>
+</tr>
+<tr>
+<td><strong>Fysiek</strong> (PDM)</td>
+<td>Hoe bouwen we dat in PostgreSQL?</td>
+<td>Ontwikkelaars, DBA</td>
+<td>Datatypen, indexen, partities, constraints</td>
+</tr>
+</tbody>
+</table>
+<p>De volgorde is niet vrijblijvend. Wie meteen in het fysieke model begint — en dat is de neiging van vrijwel iedereen die SQL kent — maakt technische keuzes vóórdat de betekenis vaststaat. Dat gaat lang goed en dan ineens niet meer.</p>
+<p>Praktische scheiding: <strong>op het conceptuele niveau komen geen sleutels voor.</strong> “Deelnemer heeft een deelnemer_id” is een implementatiekeuze, geen feit over de wereld. Zodra je dat op tafel legt bij de business, gaat het gesprek over techniek in plaats van over betekenis.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-5-1.png" alt="Dezelfde entiteit &quot;deelnemer&quot; op conceptueel, logisch en fysiek niveau, met toenemend detail" loading="lazy"><figcaption>Figuur 5-1 — Dezelfde entiteit &quot;deelnemer&quot; op conceptueel, logisch en fysiek niveau, met toenemend detail</figcaption></figure>
+<hr>
+<h2>4. Entiteiten, attributen en relaties</h2>
+<p><strong>Entiteit</strong> — iets waarover we gegevens willen vastleggen en dat zelfstandig bestaat. Deelnemer, werkgever, dienstverband.</p>
+<p><strong>Attribuut</strong> — een eigenschap van een entiteit. Geboortedatum, naam, deeltijdfactor.</p>
+<p><strong>Relatie</strong> — een verband tussen entiteiten. Een deelnemer <em>heeft</em> dienstverbanden; een dienstverband <em>is bij</em> een werkgever.</p>
+<p>Twee hulpmiddelen om entiteiten van attributen te onderscheiden:</p>
+<ul>
+<li><strong>Kun je er meerdere van hebben?</strong> Meerdere telefoonnummers per deelnemer → telefoonnummer is een entiteit, geen attribuut.</li>
+<li><strong>Wil je er meer over vastleggen?</strong> Wil je bij de woonplaats ook de provincie en de gemeentecode? Dan is plaats een entiteit.</li>
+</ul>
+<p>Bij Meridiaan is <code>woonplaats</code> in de huidige database een attribuut, en de vijf schrijfwijzen van Den Haag uit deel 3 zijn precies de prijs daarvan.</p>
+<hr>
+<h2>5. Notatie: kraaienpoot</h2>
+<p>De kraaienpootnotatie (crow’s foot) is de meest gebruikte in de praktijk. Elk uiteinde van een relatielijn krijgt twee symbolen: één voor het minimum, één voor het maximum.</p>
+<table>
+<thead>
+<tr>
+<th>Symbool</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>`</td>
+<td>` (streepje)</td>
+</tr>
+<tr>
+<td><code>O</code> (rondje)</td>
+<td>Nul — dus optioneel</td>
+</tr>
+<tr>
+<td><code>&lt;</code> (kraaienpoot)</td>
+<td>Veel</td>
+</tr>
+</tbody>
+</table>
+<p>Combinaties, gelezen als “minimum, maximum”:</p>
+<ul>
+<li><code>||</code> — precies één (verplicht, één)</li>
+<li><code>O|</code> — nul of één (optioneel, één)</li>
+<li><code>|&lt;</code> — één of meer (verplicht, veel)</li>
+<li><code>O&lt;</code> — nul of meer (optioneel, veel)</li>
+</ul>
+<figure class="dbm-figure"><img src="../../figuren/figuur-5-2.png" alt="De vier cardinaliteitscombinaties in kraaienpootnotatie" loading="lazy"><figcaption>Figuur 5-2 — De vier cardinaliteitscombinaties in kraaienpootnotatie</figcaption></figure>
+<p>Andere notaties bestaan — UML, IE, Chen, ORM. Welke je gebruikt maakt minder uit dan dat je hem consequent gebruikt en dat je lezers hem kennen. Deze cursus gebruikt kraaienpoot.</p>
+<hr>
+<h2>6. Cardinaliteit en optionaliteit</h2>
+<p>De cardinaliteit lees je <strong>per richting</strong>, en je moet beide richtingen hardop uitspreken:</p>
+<blockquote>
+<p>“Een werkgever heeft nul of meer dienstverbanden.”
+“Een dienstverband is bij precies één werkgever.”</p>
+</blockquote>
+<p>Dat hardop uitspreken is geen formaliteit. Het is de manier waarop je fouten vindt, want de business hoort meteen of het klopt.</p>
+<p><strong>Optionaliteit is waar de discussie zit.</strong> Vraag bij elke relatie: <em>kan dit er niet zijn?</em></p>
+<ul>
+<li>Kan een deelnemer bestaan zonder dienstverband? Ja — slapers en gepensioneerden.</li>
+<li>Kan een dienstverband bestaan zonder deelnemer? Nee, nooit.</li>
+<li>Kan een werkgever bestaan zonder deelnemers? Ja — pas aangesloten, of alles uitgestroomd.</li>
+</ul>
+<p>Die antwoorden vertalen zich rechtstreeks naar <code>NOT NULL</code> en naar de vraag of een foreign key verplicht is (deel 6). Optionaliteit is dus geen tekenwerk maar een ontwerpbeslissing met directe technische gevolgen.</p>
+<hr>
+<h2>7. Van gesprek naar model</h2>
+<p>Een fragment uit het gesprek met Meridiaan:</p>
+<blockquote>
+<p><em>“Een deelnemer werkt bij een werkgever. Nou ja, of hij heeft daar gewerkt — we houden ook de oude dienstverbanden bij, want die bepalen de opbouw. Sommige mensen werken bij twee werkgevers tegelijk, dat komt vooral in de zorg voor. Elk dienstverband heeft een deeltijdfactor en een salaris, maar dat salaris krijgen we niet altijd op tijd van de werkgever. Een deelnemer bouwt aanspraken op — ouderdom, partner, soms wezen. En we versturen elk jaar een overzicht, dat willen we ook kunnen terugvinden.”</em></p>
+</blockquote>
+<p>Werkwijze:</p>
+<ol>
+<li><strong>Onderstreep de zelfstandige naamwoorden</strong> → kandidaat-entiteiten: deelnemer, werkgever, dienstverband, deeltijdfactor, salaris, aanspraak, overzicht.</li>
+<li><strong>Onderstreep de werkwoorden</strong> → kandidaat-relaties: werkt bij, heeft gewerkt, bouwt op, versturen.</li>
+<li><strong>Schift.</strong> Deeltijdfactor en salaris zijn attributen van dienstverband, geen entiteiten — je hebt er niet meerdere van en je wilt er niets over vastleggen.</li>
+<li><strong>Let op de signaalwoorden.</strong> “Of hij heeft daar gewerkt” → historie. “Twee werkgevers tegelijk” → veel-op-veel. “Niet altijd op tijd” → het attribuut is optioneel.</li>
+</ol>
+<p>De opbrengst van dit fragment is niet het model maar de vragen die je nu kunt stellen:</p>
+<ul>
+<li>Wat is de peildatum waarop we “aantal deelnemers” tellen?</li>
+<li>Blijft iemand deelnemer na uitdiensttreding?</li>
+<li>Kan een aanspraak van meerdere dienstverbanden komen, of hoort hij bij de deelnemer als geheel?</li>
+</ul>
+<p>Die laatste vraag heeft in de casusdatabase een impliciet antwoord gekregen (aanspraak hangt aan deelnemer, niet aan dienstverband) zonder dat iemand hem heeft gesteld. Dat is precies het soort keuze dat je expliciet wilt maken.</p>
+<hr>
+<h2>8. Veel-op-veel: de koppeltabel</h2>
+<p>Een relationele database kan geen veel-op-veel-relatie rechtstreeks vastleggen. Je lost het op met een tussenliggende entiteit:</p>
+<pre><code>deelnemer  ||─────O&lt;  dienstverband  &gt;O─────||  werkgever
+</code></pre>
+<p>Lees: een deelnemer heeft nul of meer dienstverbanden; een dienstverband hoort bij precies één deelnemer en precies één werkgever.</p>
+<p><strong>De belangrijkste les over koppeltabellen:</strong> ze zijn zelden alleen een koppeling. Zodra je er attributen aan hangt — startdatum, einddatum, deeltijdfactor, salaris — is het een volwaardige entiteit met een eigen betekenis. “Dienstverband” is dan ook geen technische constructie maar een begrip dat de business herkent.</p>
+<p>Vuistregel: <strong>als je koppeltabel een naam heeft die de business gebruikt, is het een entiteit.</strong> Heet hij <code>deelnemer_werkgever</code>, dan heb je waarschijnlijk nog niet doorgevraagd.</p>
+<hr>
+<h2>9. Afhankelijke entiteiten</h2>
+<p>Sommige entiteiten kunnen niet bestaan zonder hun ouder. Een aanspraak zonder deelnemer is betekenisloos; een factuurregel zonder factuur ook.</p>
+<p>Dat heeft twee gevolgen:</p>
+<ol>
+<li>De foreign key is verplicht (<code>NOT NULL</code>).</li>
+<li><code>ON DELETE CASCADE</code> is hier verdedigbaar — dit is precies het geval uit deel 2 waar het kind zonder de ouder geen bestaansrecht heeft.</li>
+</ol>
+<p>Maar let op de nuance bij Meridiaan: een aanspraak is afhankelijk van een deelnemer, en tóch wil je <code>CASCADE</code> niet, omdat deelnemers helemaal niet verwijderd horen te worden (bewaarplicht). Het model zegt “afhankelijk”; het beleid zegt “niet verwijderen”. Beide zijn waar, en de tweede wint.</p>
+<hr>
+<h2>10. Functionele afhankelijkheid</h2>
+<p>Nu de theorie onder normalisatie. Het klinkt abstracter dan het is.</p>
+<blockquote>
+<p><strong>A → B</strong> (“A bepaalt B”) betekent: als je A kent, ligt B vast.</p>
+</blockquote>
+<p><code>deelnemer_id → geboortedatum</code>: ken je het id, dan ken je de geboortedatum. Andersom niet: één geboortedatum hoort bij veel deelnemers.</p>
+<p>Twee bijzondere vormen die je moet herkennen:</p>
+<p><strong>Partiële afhankelijkheid</strong> — een attribuut hangt af van een <em>deel</em> van een samengestelde sleutel. Bij een tabel met sleutel (werkgever_id, periode) is <code>werkgever_naam</code> afhankelijk van alleen <code>werkgever_id</code>. Dat is de schending die 2NF adresseert.</p>
+<p><strong>Transitieve afhankelijkheid</strong> — A → B en B → C, dus A → C via een omweg. <code>deelnemer_id → postcode → woonplaats</code>. Dat is de schending die 3NF adresseert.</p>
+<p>Normalisatie is niets anders dan: <strong>elk attribuut moet afhangen van de sleutel, de hele sleutel, en niets dan de sleutel.</strong></p>
+<p>Die formulering (van Kent, 1983) is het beste geheugensteuntje in het vak:</p>
+<ul>
+<li>“van de sleutel” → 1NF</li>
+<li>“de hele sleutel” → 2NF</li>
+<li>“niets dan de sleutel” → 3NF</li>
+</ul>
+<hr>
+<h2>11. Eerste normaalvorm</h2>
+<p><strong>1NF: elke cel bevat één waarde, en er zijn geen herhalende groepen.</strong></p>
+<p>Schending:</p>
+<table>
+<thead>
+<tr>
+<th>deelnemer_id</th>
+<th>naam</th>
+<th>telefoonnummers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1001</td>
+<td>De Wolff</td>
+<td>06-1234, 070-5678</td>
+</tr>
+</tbody>
+</table>
+<p>Twee waarden in één cel. Wat gaat er mis:</p>
+<ul>
+<li>zoeken op één nummer vereist tekstmanipulatie;</li>
+<li>er is geen manier om te zeggen “dit is het mobiele nummer”;</li>
+<li>een nummer toevoegen betekent een string bewerken in plaats van een rij invoegen;</li>
+<li>er is geen enkele bewaking op formaat of dubbelen.</li>
+</ul>
+<p>Ook een schending — de herhalende groep:</p>
+<table>
+<thead>
+<tr>
+<th>deelnemer_id</th>
+<th>telefoon_1</th>
+<th>telefoon_2</th>
+<th>telefoon_3</th>
+</tr>
+</thead>
+</table>
+<p>Dit voelt netter maar is het niet: je hebt een willekeurige bovengrens ingebouwd, kolommen die meestal leeg zijn, en query’s die alle drie de kolommen moeten doorzoeken.</p>
+<p>Oplossing: een aparte tabel <code>telefoonnummer</code> met een foreign key naar deelnemer en een <code>soort</code>-kolom.</p>
+<p><strong>En <code>jsonb</code> en arrays dan?</strong> PostgreSQL staat ze toe en schendt daarmee bewust 1NF. Dat is soms verdedigbaar: bij gegevens die je als geheel opslaat en ophaalt en waarop je niet hoeft te bewaken (een ruw bericht uit een koppelvlak, een logregel, een configuratieblok). Het is niet verdedigbaar voor gegevens waarop je moet filteren, aggregeren of integriteit bewaken. <strong>De vuistregel: <code>jsonb</code> voor wat je bewaart, kolommen voor wat je gebruikt.</strong></p>
+<hr>
+<h2>12. Tweede normaalvorm</h2>
+<p><strong>2NF: 1NF, én elk niet-sleutelattribuut hangt af van de héle primaire sleutel.</strong></p>
+<p>Alleen relevant bij een samengestelde sleutel. Schending:</p>
+<table>
+<thead>
+<tr>
+<th>werkgever_id</th>
+<th>periode</th>
+<th>werkgever_naam</th>
+<th>bedrag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>42</td>
+<td>2025-01</td>
+<td>Van Dijk Bouw</td>
+<td>12.400</td>
+</tr>
+<tr>
+<td>42</td>
+<td>2025-02</td>
+<td>Van Dijk Bouw</td>
+<td>12.400</td>
+</tr>
+<tr>
+<td>42</td>
+<td>2025-03</td>
+<td>Van Dijk Bouw B.V.</td>
+<td>13.100</td>
+</tr>
+</tbody>
+</table>
+<p>Sleutel is (werkgever_id, periode), maar <code>werkgever_naam</code> hangt alleen van <code>werkgever_id</code> af.</p>
+<p>Wat er misgaat — de drie klassieke anomalieën:</p>
+<ul>
+<li><strong>Wijzigingsanomalie.</strong> Een naamswijziging moet in alle 24 rijen. Rij 3 hierboven laat zien wat er gebeurt als dat half lukt.</li>
+<li><strong>Invoeganomalie.</strong> Een nieuwe werkgever zonder nota’s kun je niet vastleggen — er is geen periode.</li>
+<li><strong>Verwijderanomalie.</strong> Verwijder je de laatste nota, dan verdwijnt de naam van de werkgever uit het systeem.</li>
+</ul>
+<p>Oplossing: naam naar de werkgever-tabel.</p>
+<hr>
+<h2>13. Derde normaalvorm</h2>
+<p><strong>3NF: 2NF, én geen enkel niet-sleutelattribuut hangt af van een ander niet-sleutelattribuut.</strong></p>
+<p>Schending:</p>
+<table>
+<thead>
+<tr>
+<th>deelnemer_id</th>
+<th>naam</th>
+<th>postcode</th>
+<th>woonplaats</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1001</td>
+<td>De Wolff</td>
+<td>3511AB</td>
+<td>Utrecht</td>
+</tr>
+<tr>
+<td>1002</td>
+<td>Bousaid</td>
+<td>3511AB</td>
+<td>Utrect</td>
+</tr>
+</tbody>
+</table>
+<p><code>deelnemer_id → postcode → woonplaats</code>. De woonplaats hangt af van de postcode, niet van de deelnemer. Gevolg: dezelfde postcode kan bij twee verschillende woonplaatsen staan, en niets houdt dat tegen.</p>
+<p>Dit is precies het probleem uit deel 3, waar Den Haag in vijf schrijfwijzen voorkwam. De oorzaak zit niet in de invoer maar in het model.</p>
+<p>Oplossing: een aparte tabel met postcode → woonplaats, en in <code>deelnemer</code> alleen de postcode.</p>
+<p><strong>De nuance die je moet kennen:</strong> hier stopt de theorie en begint het oordeel. Een postcodetabel bijhouden betekent een externe bron beheren die periodiek wijzigt. Veel organisaties kiezen daarom voor een plaatsentabel (een gesloten lijst met een foreign key) zonder de volledige postcodelogica. Dat is niet zuiver 3NF maar wel een grote verbetering, en het is een verdedigbare afweging tussen zuiverheid en beheerlast.</p>
+<hr>
+<h2>14. BCNF en verder</h2>
+<p><strong>BCNF (Boyce-Codd)</strong> is een strengere 3NF: elke determinant moet een kandidaatsleutel zijn. Het verschil met 3NF treedt pas op bij meerdere overlappende kandidaatsleutels, en dat komt in administratieve modellen zelden voor.</p>
+<p><strong>4NF</strong> gaat over meerwaardige afhankelijkheden: twee onafhankelijke één-op-veel-relaties in één tabel proppen. Als je een deelnemer met zowel meerdere telefoonnummers als meerdere opleidingen in één tabel zet, krijg je het cartesisch product van beide. De oplossing is intuïtief (twee aparte tabellen) en de meeste modelleurs doen dat vanzelf goed.</p>
+<p><strong>5NF en 6NF</strong> bestaan en zijn in de praktijk zeldzaam.</p>
+<p><strong>Praktische boodschap:</strong> streef naar 3NF, ken BCNF als begrip, en wees je bewust dat de hogere normaalvormen bestaan zodat je ze herkent als je ze tegenkomt. Een model dat netjes in 3NF staat, heeft de anomalieën die er in de praktijk toe doen al uitgesloten.</p>
+<hr>
+<h2>15. Denormalisatie: wanneer bewust afwijken</h2>
+<p>Denormaliseren is het bewust toevoegen van redundantie voor prestaties of eenvoud. Dat mag — maar alleen als aan drie voorwaarden is voldaan:</p>
+<ol>
+<li><strong>Je hebt gemeten dat het genormaliseerde model niet voldoet.</strong> Niet vermoed. Gemeten (deel 8).</li>
+<li><strong>Je hebt vastgelegd hoe de redundantie synchroon blijft</strong> — een trigger, een geplande verversing, een materialized view.</li>
+<li><strong>Het staat in de documentatie</strong>, zodat de volgende ontwikkelaar niet denkt dat het een fout is.</li>
+</ol>
+<p>Legitieme gevallen bij Meridiaan:</p>
+<ul>
+<li>Een <code>aantal_deelnemers</code>-kolom op werkgever, ververst per nacht, omdat het portaal die telling honderden keren per minuut toont.</li>
+<li>Een historische kopie van het salaris in een aanspraakberekening — hier is het geen redundantie maar een <em>momentopname</em>: het salaris zoals het was op de berekeningsdatum. Dat is een ander soort gegeven dan het huidige salaris.</li>
+</ul>
+<p>Dat tweede geval is belangrijker dan het lijkt. Veel schijnbare denormalisatie is in werkelijkheid een historisch feit dat je bewust bevriest. Een factuurregel die het productbedrag herhaalt, is geen fout: de prijs van toen is een ander gegeven dan de prijs van nu.</p>
+<p><strong>De onlegitieme reden</strong>, die je in elk project tegenkomt: “joins zijn traag”. Op een goed geïndexeerd model van deze omvang zijn ze dat niet, en wie denormaliseert zonder te meten, ruilt een niet-bestaand prestatieprobleem in voor een gegarandeerd consistentieprobleem.</p>
+<hr>
+<h2>16. Historie: het probleem dat modellen breekt</h2>
+<p>Bij een pensioenuitvoerder is dit geen randgeval maar de kern van het vak.</p>
+<p>Drie soorten tijd:</p>
+<ul>
+<li><strong>Geldigheidstijd</strong> — vanaf wanneer geldt dit in de werkelijkheid? (Het adres geldt vanaf 1 maart.)</li>
+<li><strong>Registratietijd</strong> — vanaf wanneer weten wij dit? (Wij hoorden het op 12 april.)</li>
+<li><strong>Beslissingstijd</strong> — op basis van welke kennis is toen een besluit genomen?</li>
+</ul>
+<p>Een model dat alleen de huidige toestand vastlegt, kan de vraag “wat wisten wij op 1 januari” niet beantwoorden. Voor een pensioenuitvoerder is dat een aantoonbaarheidsprobleem richting toezichthouder, en bij een klacht een juridisch probleem.</p>
+<p>Patronen, oplopend in complexiteit:</p>
+<table>
+<thead>
+<tr>
+<th>Patroon</th>
+<th>Legt vast</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alleen huidige toestand</td>
+<td>Nu</td>
+<td>Geen historie</td>
+</tr>
+<tr>
+<td>Toestand + einddatum (“valid from/to”)</td>
+<td>Geldigheidstijd</td>
+<td>Elke query heeft een peildatum nodig</td>
+</tr>
+<tr>
+<td>Aparte historietabel</td>
+<td>Wat er was</td>
+<td>Twee plaatsen om te bevragen</td>
+</tr>
+<tr>
+<td>Bitemporeel (geldigheids- én registratietijd)</td>
+<td>Alles</td>
+<td>Query’s worden aanzienlijk complexer</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De les:</strong> kies dit bewust en per entiteit. Niet alles hoeft bitemporeel. Bij Meridiaan is het adres van een deelnemer waarschijnlijk toestand-met-geldigheidsperiode waard; het e-mailadres van een adviseur niet.</p>
+<p>En weet dat het achteraf toevoegen van historie aan een model dat er niet op gebouwd is, in de praktijk neerkomt op herbouwen. Dit is de belangrijkste vraag die je in de conceptuele fase moet stellen.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-5-3.png" alt="Dezelfde entiteit &quot;adres&quot; in vier historiepatronen, met de bijbehorende querycomplexiteit" loading="lazy"><figcaption>Figuur 5-3 — Dezelfde entiteit &quot;adres&quot; in vier historiepatronen, met de bijbehorende querycomplexiteit</figcaption></figure>
+<hr>
+<h2>17. Supertype en subtype</h2>
+<p>Soms lijken entiteiten op elkaar maar verschillen ze deels. Bij Meridiaan: aanspraken van soort ouderdom, partner, wezen en arbeidsongeschiktheid — gemeenschappelijke attributen, maar arbeidsongeschiktheid heeft er een paar extra.</p>
+<p>Drie implementatiekeuzes:</p>
+<table>
+<thead>
+<tr>
+<th>Aanpak</th>
+<th>Hoe</th>
+<th>Voordeel</th>
+<th>Nadeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eén tabel met typekolom</td>
+<td>Alles in <code>aanspraak</code>, kolom <code>soort</code></td>
+<td>Eenvoudig, één plek</td>
+<td>Kolommen die voor de meeste rijen leeg zijn</td>
+</tr>
+<tr>
+<td>Tabel per subtype</td>
+<td><code>ouderdomsaanspraak</code>, <code>partneraanspraak</code>…</td>
+<td>Strak, geen lege kolommen</td>
+<td>Query’s over alle soorten worden <code>UNION</code>s</td>
+</tr>
+<tr>
+<td>Supertype + subtypetabellen</td>
+<td><code>aanspraak</code> + specifieke tabellen met dezelfde sleutel</td>
+<td>Beste van beide</td>
+<td>Meer joins, meer complexiteit</td>
+</tr>
+</tbody>
+</table>
+<p>De casusdatabase koos de eerste. Dat is verdedigbaar zolang de verschillen klein blijven. Zodra één soort vijf eigen attributen krijgt, is het tijd om te herzien.</p>
+<hr>
+<h2>18. Het model van de casus, beoordeeld</h2>
+<p>Nu het studieobject. De casusdatabase bevat een aantal bewuste zwaktes, gemarkeerd met <code>[ONTWERPKEUZE]</code> in het DDL-script.</p>
+<h3>18.1 <code>woonplaats</code> als vrij tekstveld</h3>
+<p><strong>Schendt 3NF</strong> (in de volle vorm ook via postcode, die er niet eens is) en veroorzaakt de vijf schrijfwijzen van Den Haag uit deel 3.</p>
+<p>Verbetering: een <code>plaats</code>-tabel met een foreign key. Overweging: neem je ook postcode en gemeente op? Dat hangt af van of Meridiaan die gegevens elders nodig heeft en of iemand de bron wil bijhouden.</p>
+<h3>18.2 Geen adres, alleen woonplaats</h3>
+<p>De business stuurt jaarlijks een UPO per post. Zonder volledig adres kan dat niet, en er is geen historie — terwijl “naar welk adres hebben wij het UPO in 2023 gestuurd” een reële vraag is bij een klacht.</p>
+<p>Verbetering: een <code>adres</code>-entiteit met geldigheidsperiode (paragraaf 16).</p>
+<h3>18.3 Aanspraak hangt aan deelnemer, niet aan dienstverband</h3>
+<p>Impliciete keuze die nooit expliciet gemaakt is. Ze is verdedigbaar (aanspraken zijn van de persoon), maar ze maakt het onmogelijk te herleiden welk dienstverband tot welke opbouw leidde.</p>
+<p>Verbetering: afhankelijk van de eis. Als herleidbaarheid nodig is, hoort er een relatie naar dienstverband bij — of een aparte opbouw-entiteit tussen beide.</p>
+<h3>18.4 <code>soort</code> en <code>kanaal</code> als tekst met CHECK</h3>
+<p>De <code>CHECK</code>-constraint dwingt de waarden af, maar een nieuwe waarde toevoegen vereist een <code>ALTER TABLE</code> op een tabel die dan kort gelockt wordt.</p>
+<p>Verbetering: een referentietabel met een foreign key. Nieuwe waarde = één <code>INSERT</code>. Alternatief: een enum-type (deel 6), met eigen nadelen.</p>
+<h3>18.5 Geen historie op <code>jaarsalaris</code></h3>
+<p>Het salaris staat als één waarde in <code>dienstverband</code>. Een salarisverhoging overschrijft de vorige waarde, en daarmee de basis waarop eerdere aanspraken berekend zijn.</p>
+<p>Voor een pensioenuitvoerder is dit <strong>de ernstigste zwakte in het model.</strong></p>
+<p>Verbetering: een <code>salarisgegeven</code>-entiteit met een geldigheidsperiode per dienstverband.</p>
+<h3>18.6 Geen entiteit voor het UPO</h3>
+<p>Het gesprek in paragraaf 7 noemde het overzicht expliciet (“dat willen we ook kunnen terugvinden”). Het staat niet in het model.</p>
+<p>Verbetering: een <code>verzonden_overzicht</code>-entiteit met datum, deelnemer, en een verwijzing naar het bestand.</p>
+<p><strong>Dat laatste punt is de belangrijkste les van dit deel:</strong> de gemiste entiteit stond letterlijk in het gesprek. Modelleerfouten ontstaan zelden door verkeerd redeneren en meestal door niet doorvragen.</p>
+<hr>
+<h2>19. Veelgemaakte modelleerfouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Herkenning</th>
+<th>Gevolg</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Attribuut dat een entiteit had moeten zijn</td>
+<td>Vijf schrijfwijzen van dezelfde waarde</td>
+<td>Geen integriteit, geen uitbreidbaarheid</td>
+</tr>
+<tr>
+<td>Herhalende kolommen (<code>telefoon_1..3</code>)</td>
+<td>Genummerde kolomnamen</td>
+<td>Willekeurige grens, lege kolommen</td>
+</tr>
+<tr>
+<td>Betekenis in een sleutel</td>
+<td>“De eerste twee cijfers zijn de regio”</td>
+<td>Sleutel wijzigt als de betekenis wijzigt</td>
+</tr>
+<tr>
+<td>Eén tabel voor twee begrippen</td>
+<td>Veel kolommen die maar voor de helft van de rijen gelden</td>
+<td>Onhanteerbare <code>CHECK</code>-regels</td>
+</tr>
+<tr>
+<td>Historie vergeten</td>
+<td>“Kunnen we zien wat het vorig jaar was?” — nee</td>
+<td>Herbouw achteraf</td>
+</tr>
+<tr>
+<td>Statuskolom als NULL</td>
+<td><code>bedrag IS NULL</code> betekent “nog niet berekend”</td>
+<td>Elke query moet dat weten</td>
+</tr>
+<tr>
+<td>Te vroeg denormaliseren</td>
+<td>“Joins zijn traag” zonder meting</td>
+<td>Consistentieproblemen</td>
+</tr>
+<tr>
+<td>Koppeltabel zonder eigen naam</td>
+<td><code>deelnemer_werkgever</code></td>
+<td>Er is niet doorgevraagd</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>20. Kernbegrippen</h2>
+<p><strong>Conceptueel / logisch / fysiek model</strong> — de drie niveaus van betekenis naar implementatie.
+<strong>Cardinaliteit</strong> — hoeveel exemplaren aan elke kant van een relatie.
+<strong>Optionaliteit</strong> — of nul exemplaren toegestaan zijn.
+<strong>Koppeltabel</strong> — entiteit die een veel-op-veel-relatie oplost.
+<strong>Functionele afhankelijkheid</strong> — A → B: A bepaalt B.
+<strong>Partiële afhankelijkheid</strong> — afhankelijkheid van een deel van een samengestelde sleutel (2NF).
+<strong>Transitieve afhankelijkheid</strong> — A → B → C (3NF).
+<strong>Anomalie</strong> — invoeg-, wijzigings- of verwijderprobleem door redundantie.
+<strong>Denormalisatie</strong> — bewust toegevoegde redundantie, met beheersmaatregel.
+<strong>Geldigheidstijd / registratietijd</strong> — wanneer iets waar was versus wanneer wij het wisten.
+<strong>Supertype/subtype</strong> — gemeenschappelijke entiteit met gespecialiseerde varianten.</p>
+<hr>
+<h2>21. Verder lezen</h2>
+<ul>
+<li>C.J. Date, <em>Database Design and Relational Theory</em> — normalisatie tot op de bodem, streng maar helder.</li>
+<li>W. Kent, <em>A Simple Guide to Five Normal Forms in Relational Database Theory</em> (1983) — het artikel waar “de sleutel, de hele sleutel, en niets dan de sleutel” vandaan komt.</li>
+<li>Voor historie en tijd in modellen: het werk van Snodgrass over temporele databases; zwaar, maar er is geen lichter alternatief dat volledig is.</li>
+</ul>
+<hr>
+<p><em>Volgende deel: DDL, datatypen en constraints. Je bouwt het verbeterde model dat je vandaag hebt ontworpen — en je laat de database de regels afdwingen in plaats van ze in een handleiding te zetten.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">129 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-04-sql-verdieping-joins-subquery-s-en-cte-s/reader.html">&larr; Deel 4 — SQL verdieping: joins, subquery&#39;s en CTE&#39;s</a><a class="dbm-prevnext next" href="../deel-06-ddl-datatypen-en-constraints/reader.html">Deel 6 — DDL, datatypen en constraints &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

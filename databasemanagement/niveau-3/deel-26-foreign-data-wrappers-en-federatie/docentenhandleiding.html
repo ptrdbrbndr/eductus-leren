@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Foreign data wrappers en federatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 26 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 26: Foreign data wrappers en federatie</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Dit dagdeel sluit het gat dat in deel 23 expliciet openbleef: hoe bouwt de federatie een gezamenlijke rapportage over drie architecturaal gescheiden fondsen? Deel 24-25 (sharding) loste een ander probleem op; vandaag komt het derde gereedschap uit de “meerdere databases verbinden”-gereedschapskist: federatie via foreign data wrappers.</p>
+<p><strong>De centrale technische boodschap:</strong> pushdown werkt binnen één bron, niet ertussen. Een join tussen twee tabellen van dezelfde foreign server kan (deels) op de bron worden uitgevoerd; een join tussen twee verschillende bronnen kan dat nooit — dat is het federatieve equivalent van een cross-shard-join uit deel 24-25, en het verband moet expliciet worden gelegd.</p>
+<p><strong>De centrale architectuurboodschap:</strong> FDW, logische replicatie en Citus zijn drie verschillende antwoorden op “hoe verbind ik meerdere databases”, elk met een ander profiel (duplicatie, actualiteit, beheerlast). Geen enkele is universeel beter — de keuze hangt af van de behoefte, exact de discipline die door heel niveau 3 loopt.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> deel 23-25 afgerond.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li>Zorg voor minstens twee bereikbare databases (of duidelijk gescheiden schema’s als noodoplossing) vóór de sessie.</li>
+<li><strong>Draai opdracht 26.3 zelf vooraf</strong> en noteer de exacte <code>EXPLAIN</code>-uitvoer op jouw omgeving — de precieze <code>Remote SQL</code>-notatie kan tussen versies verschillen.</li>
+<li>Bereid een kort, visueel overzicht van paragraaf 11 (FDW/replicatie/Citus-vergelijking) voor als permanent zichtbaar referentiepunt.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Het gat dat deel 23 openliet (§2) + <strong>opdracht 26.1</strong></td>
+<td>Plenair + individueel</td>
+</tr>
+<tr>
+<td>0:15-0:20</td>
+<td>Wat een FDW is (§3)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:20-0:50</td>
+<td><strong>postgres_fdw opzetten (§4-5) + opdracht 26.2</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>0:50-1:05</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:05-1:45</td>
+<td><strong>Pushdown: wat wel/niet (§6-8) + opdracht 26.3</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>1:45-2:15</td>
+<td><strong>De federatieve rapportagelaag (§9-10) + opdracht 26.4</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>2:15-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:45</td>
+<td>FDW vs. replicatie vs. Citus (§11) + <strong>opdracht 26.6</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>2:45-3:00</td>
+<td>Rechten (§12) + <strong>opdracht 26.5</strong></td>
+<td>Presentatie + individueel</td>
+</tr>
+<tr>
+<td>3:00-3:15</td>
+<td>Schrijven via FDW (§13) + <strong>opdracht 26.7</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>3:15-4:00</td>
+<td><strong>Opdracht 26.8</strong> — het federatieontwerp</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> comprimeer opdracht 26.5 (rechten) tot een korte plenaire bespreking — het bouwt direct voort op deel 9/21 en vraagt geen nieuwe denkstap. Kort <strong>nooit</strong> opdracht 26.3 (pushdown) of 26.8 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Herhaal expliciet het gat uit deel 23, paragraaf 10. Laat opdracht 26.1b de zaal zelf laten herinneren welke twee eerdere technieken (replicatie, Citus) het probleem gedeeltelijk dekten en wat ze kostten — dat zet het nieuwe gereedschap van vandaag in de juiste context in plaats van het als geïsoleerd nieuw onderwerp te presenteren.</p>
+<h3>4.2 Opzetten (0:20)</h3>
+<p>Praktisch en stapsgewijs. Wijs bij elke stap (SERVER, USER MAPPING, IMPORT FOREIGN SCHEMA) op de parallel met eerdere rolgebonden en rechtengerichte discipline uit deel 9 en 21.</p>
+<h3>4.3 Pushdown: het kernmoment (1:05)</h3>
+<p><strong>Het belangrijkste blok van het dagdeel.</strong> Laat deelnemers bij opdracht 26.3 eerst voorspellen of een cross-bron-join wordt doorgeschoven, vóór ze het testen. De meeste zullen (net als bij de co-locatie-valkuil in deel 25) een te optimistische aanname maken.</p>
+<p>Trek de parallel met deel 25 hardop:</p>
+<blockquote>
+<p><em>“Dit is hetzelfde onderscheid als Task Count in Citus. Binnen één bron: goedkoop. Tussen bronnen: alles lokaal samenvoegen, met alle kosten van dien.”</em></p>
+</blockquote>
+<h3>4.4 De rapportagelaag (1:45)</h3>
+<p>Laat opdracht 26.4e (live versus materialized voor een druk bezocht ochtenddashboard) de zaal zelf laten beredeneren vanuit de kosten die ze net hebben gemeten, niet als abstracte regel.</p>
+<h3>4.5 Vergelijking en toepassing (2:30)</h3>
+<p>Behandel paragraaf 11 als kader, niet als eindantwoord — laat opdracht 26.6 de vier scenario’s elk een ander gereedschap laten uitlokken, zodat het kader wordt getoetst in plaats van een voorkeur bevestigd.</p>
+<h3>4.6 Schrijven via FDW (3:00)</h3>
+<p>Kort maar met nadruk: het risico van schrijven via een foreign table is hetzelfde probleem als cross-shard-transacties uit deel 24 — geen transactionele garantie over de grens heen. Laat deelnemers dat verband zelf leggen in opdracht 26.7b.</p>
+<h3>4.7 Opdracht 26.8 (3:15)</h3>
+<p>Stuur op:</p>
+<ul>
+<li><strong>Een bewust onderscheid live/materialized per behoefte.</strong></li>
+<li><strong>Concrete dataminimalisatie</strong>, niet alleen “we letten op privacy”.</li>
+<li><strong>Een scherp, niet-vaag onderscheid met logische replicatie.</strong></li>
+<li><strong>Een specifiek risico met een meetbare beheersmaatregel.</strong></li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Kan een foreign table geïndexeerd worden?”</strong>
+Niet lokaal in de zin van een eigen index — de index moet op de bron bestaan, en de bron gebruikt die index al bij het uitvoeren van de doorgeschoven <code>WHERE</code>-voorwaarde. Er is dus geen aparte indexeringsstap nodig op de foreign table zelf.</p>
+<p><strong>“Werkt FDW ook tussen verschillende PostgreSQL-versies?”</strong>
+Grotendeels wel, met het voorbehoud dat zeer nieuwe functionaliteit op de bron mogelijk niet volledig wordt benut als de wrapper-versie ouder is. Controleer de compatibiliteitsmatrix bij een productie-implementatie.</p>
+<p><strong>“Is een foreign table zichtbaar in pg_stat_user_tables?”</strong>
+Nee — die statistieken bestaan alleen voor lokale tabellen. De statistieken van de onderliggende, werkelijke tabel bestaan op de bron zelf, in zijn eigen <code>pg_stat_user_tables</code>.</p>
+<p><strong>“Kunnen we FDW gebruiken om data van Citus-workers rechtstreeks te bevragen?”</strong>
+Technisch mogelijk maar ongebruikelijk — Citus heeft zijn eigen, geoptimaliseerde coördinatielaag (deel 25) die vrijwel altijd de betere route is voor query’s binnen het gedistribueerde systeem zelf. FDW is voor federatie tussen zelfstandige systemen, niet voor interne Citus-communicatie.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voorspelt correct dat een cross-bron-join niet wordt doorgeschoven</td>
+<td>De kern van het dagdeel is begrepen</td>
+</tr>
+<tr>
+<td>Kiest bij 26.4e bewust voor materialized met een concrete reden</td>
+<td>Past de deel-8-discipline toe op een nieuwe context</td>
+</tr>
+<tr>
+<td>Legt bij 26.7b het verband met cross-shard-transacties (deel 24)</td>
+<td>Ziet niveau 3 als samenhangend geheel</td>
+</tr>
+<tr>
+<td>Kiest in 26.6 verschillende gereedschappen per scenario</td>
+<td>Begrijpt dat er geen universeel beste optie is</td>
+</tr>
+<tr>
+<td>Neemt aan dat elke join wordt doorgeschoven</td>
+<td>Terugbrengen naar <code>EXPLAIN</code>/<code>Remote SQL</code></td>
+</tr>
+<tr>
+<td>Stelt FDW voor als vervanging van Citus of andersom</td>
+<td>Verwart twee verschillende problemen; corrigeren</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 27</h2>
+<p>Brug: <em>“Vandaag hebben jullie geleerd hoe je gegevens uit meerdere, zelfstandige bronnen samenbrengt zonder ze te dupliceren. Dat sluit een drieluik af — multi-tenancy, sharding, federatie — dat allemaal ging over wáár gegevens staan. Volgende keer verandert de vraag fundamenteel: niet meer waar, maar wát je eigenlijk vastlegt. Tot nu toe heeft deze hele cursus, van deel 1 tot vandaag, één ding aangenomen zonder het ooit hardop te zeggen: dat een database de huidige stand van zaken bewaart, en de rest overschrijft. Volgende keer stellen we die aanname zelf ter discussie.”</em></p>
+<hr>
+<p><em>Einde docentenhandleiding deel 26.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">282 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-25-citus-in-de-praktijk/reader.html">&larr; Deel 25 — Citus in de praktijk</a><a class="dbm-prevnext next" href="../deel-27-event-sourcing-fundamenten/reader.html">Deel 27 — Event sourcing: fundamenten &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

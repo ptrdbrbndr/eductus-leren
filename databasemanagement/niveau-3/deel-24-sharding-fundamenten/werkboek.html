@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Sharding-fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 24 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 24 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 24: Sharding-fundamenten</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Dit deel is overwegend conceptueel — er is nog geen werkende multi-server-omgeving nodig (dat komt in deel 25 met Citus). Waar berekeningen of pseudoscript wordt gevraagd, volstaat papier of een tekstbestand.</p>
+<p>Tijdsindicatie: circa 125 minuten.</p>
+<hr>
+<h2>Opdracht 24.1 — Verticaal versus horizontaal (10 min, individueel)</h2>
+<p>a) Meridiaan alleen (niveau 2) had nooit sharding nodig. Waarom niet?
+b) Bereken ruw: als één server tot ongeveer 50 miljoen mutatierijen comfortabel aankan (met de technieken uit niveau 2), en de Pensioenfederatie groeit naar twintig fondsen met elk het volume van Meridiaan (2,4 miljoen mutaties), is er dan een probleem? Reken het uit.
+c) Bij welk aantal fondsen, bij dit groeitempo, zou verticaal schalen (een zwaardere server) waarschijnlijk niet meer volstaan?</p>
+<hr>
+<h2>Opdracht 24.2 — Een shardsleutel kiezen (20 min, drietallen)</h2>
+<p>Voor elk van deze kandidaat-shardsleutels: beoordeel cardinaliteit, verdeling, en aansluiting bij het toegangspatroon (gebruik de kennis van <code>pg_stat_statements</code> uit deel 13 als denkkader — welke query’s zouden dominant zijn).</p>
+<p>a) <code>fonds_id</code>
+b) <code>deelnemer_id</code>
+c) <code>werkgever_id</code>
+d) <code>aangemeld_op</code> (datum van een mutatie)
+e) Een samengestelde sleutel van <code>fonds_id</code> + <code>deelnemer_id</code></p>
+<p>f) Welke zou je aanraden, en welke twee zou je expliciet afraden? Onderbouw.</p>
+<hr>
+<h2>Opdracht 24.3 — Co-locatie ontwerpen (20 min, drietallen)</h2>
+<p>a) Teken (in tekst of schema) welke tabellen uit de Meridiaan-casus (<code>deelnemer</code>, <code>dienstverband</code>, <code>mutatie</code>, <code>aanspraak</code>, <code>werkgever</code>, <code>premienota</code>) je op <code>deelnemer_id</code> zou co-locaten.
+b) Welke van deze tabellen heeft geen directe <code>deelnemer_id</code>-kolom, en hoe zou je die toch co-locaten?
+c) Welke tabel(len) blijven inherent lastig te co-locaten met de rest, en waarom?
+d) Voor de tabel(len) uit c): referentietabel, aparte shardsleutel, of accepteren dat het cross-shard blijft? Beargumenteer je keuze.</p>
+<hr>
+<h2>Opdracht 24.4 — Cross-shard-transacties (15 min, drietallen)</h2>
+<p>a) Beschrijf een concreet scenario bij de Pensioenfederatie waarin een cross-shard-transactie zou kunnen voorkomen, gegeven de shardsleutel <code>deelnemer_id</code>.
+b) Is dat scenario met een goed ontwerp te vermijden (co-locatie), of is het inherent cross-shard? Beargumenteer.
+c) Als het inherent cross-shard blijkt: zou je 2PC of een saga-patroon adviseren? Onderbouw met de kosten uit paragraaf 7.
+d) Wat zou je NIET doen: het probleem negeren en hopen dat het zelden voorkomt. Waarom is dat gevaarlijker dan bij een probleem dat vaak voorkomt?</p>
+<hr>
+<h2>Opdracht 24.5 — Referentietabellen aanwijzen (10 min, individueel)</h2>
+<p>Beoordeel voor elk van deze tabellen of ze referentietabel-kandidaten zijn: <code>fonds</code>, <code>sector_code</code>, <code>mutatie</code>, <code>deelnemer</code>, <code>valuta_code</code>, <code>premienota</code>.</p>
+<hr>
+<h2>Opdracht 24.6 — Bereik versus hash (15 min, tweetallen)</h2>
+<p>a) Stel dat de Pensioenfederatie bereik-gebaseerde sharding had gekozen op <code>deelnemer_id</code>, met shards die elk een aaneengesloten blok ID’s krijgen. Wat gebeurt er met nieuwe deelnemers die zich aanmelden?
+b) Vergelijk dat met hash-gebaseerde sharding op dezelfde sleutel. Welke van de twee zou jij aanraden voor deze specifieke sleutel, en waarom?
+c) Bedenk een sleutel (niet noodzakelijk bij deze casus) waarbij bereik-gebaseerde sharding wél de voorkeur zou verdienen. Waarom daar wel?</p>
+<hr>
+<h2>Opdracht 24.7 — Rebalancing doordenken (15 min, drietallen)</h2>
+<p>a) De Pensioenfederatie voegt een vierde fonds toe en moet daarom een nieuwe shard toevoegen. Schets de drie fasen (expand-migrate-contract) voor deze rebalancing.
+b) Wat zou er kunnen misgaan als de verificatiestap wordt overgeslagen?
+c) Waarom is consistente hashing hier relevant, vergeleken met een simpele <code>hash(sleutel) mod aantal_shards</code>?</p>
+<hr>
+<h2>Opdracht 24.8 — Wel of niet shardenen (10 min, individueel)</h2>
+<p>Beoordeel voor elk scenario, met de toetsvraag uit paragraaf 13: shardenen, of eerst iets anders proberen?</p>
+<p>a) De Pensioenfederatie heeft nu drie fondsen en merkt geen capaciteitsproblemen.
+b) Een van de fondsen overweegt uit te breiden naar een buitenlandse markt met een geheel ander datamodel.
+c) Rapportagequery’s zijn traag, maar er zijn geen relevante indexen of materialized views geprobeerd.
+d) Er is een aangetoonde, gemeten grens bereikt: zelfs de zwaarste beschikbare server kan de gecombineerde schrijfbelasting niet meer bijbenen, ook na partitionering en indexoptimalisatie.</p>
+<hr>
+<h2>Opdracht 24.9 — Het sharding-principebesluit (20 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>principebesluit over sharding</strong> voor de Pensioenfederatie, maximaal anderhalve A4, gericht aan Femke.</p>
+<ol>
+<li><strong>Is sharding nu nodig?</strong> Met onderbouwing vanuit de huidige schaal (drie fondsen) versus toekomstige groei.</li>
+<li><strong>Als het ooit nodig wordt: welke shardsleutel</strong>, met de co-locatie-analyse uit opdracht 24.3.</li>
+<li><strong>Welke tabellen als referentietabel.</strong></li>
+<li><strong>Hoe cross-shard-transacties worden vermeden of, waar onvermijdelijk, afgehandeld.</strong></li>
+<li><strong>Het signaal dat zou aangeven dat het tijd is om daadwerkelijk te shardten</strong> (een concrete, meetbare drempel, geen vage aanname).</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is punt 1 een eerlijk “nog niet nodig” als de cijfers dat rechtvaardigen, in plaats van sharding voorstellen omdat het interessant is?</li>
+<li>Is de shardsleutel onderbouwd met een co-locatie-analyse, niet alleen een keuze zonder motivatie?</li>
+<li>Bevat punt 5 een concreet, meetbaar getal?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 24.1</h2>
+<p>a) Meridiaans volume (2,4 miljoen mutaties, enkele honderden GB aan totale data) past ruim binnen wat een goed geconfigureerde server (niveau 2, deel 11-16) aankan — verticaal schalen (of zelfs helemaal niet schalen) was voldoende.</p>
+<p>b) Twintig fondsen × 2,4 miljoen = 48 miljoen mutatierijen — net onder de aangenomen grens van 50 miljoen. <strong>Nog geen probleem</strong>, maar wel dicht bij de grens, en dat is vóór rekening te houden met de andere tabellen (<code>deelnemer</code>, <code>dienstverband</code>, etc.) die evenredig meegroeien.</p>
+<p>c) Bij een tempo van 2,4 miljoen per fonds zou rond de 20-21 fondsen de aangenomen grens overschreden worden — het exacte aantal hangt af van de werkelijke servercapaciteit en of niveau-2-technieken (partitionering, indexoptimalisatie) nog verdere hoofdruimte bieden. Dit is precies het soort berekening die een architect zou maken om te bepalen wanneer sharding relevant wordt, in plaats van een slag in de lucht.</p>
+<hr>
+<h2>Uitwerking 24.2</h2>
+<p>a) <strong><code>fonds_id</code>:</strong> lage cardinaliteit (3), zeer ongelijke verdeling (Baken versus de andere twee) — zwakke kandidaat.</p>
+<p>b) <strong><code>deelnemer_id</code>:</strong> hoge cardinaliteit, gelijkmatige verdeling (elke deelnemer is uniek), sluit aan bij het dominante toegangspatroon (bijna alle operationele query’s draaien om één deelnemer). Sterke kandidaat.</p>
+<p>c) <strong><code>werkgever_id</code>:</strong> middelmatige cardinaliteit (4.100 bij Meridiaan alleen), maar het toegangspatroon (rapportages per werkgever) is minder dominant dan deelnemer-gerichte query’s. Bruikbaar als secundaire overweging, niet de primaire sleutel.</p>
+<p>d) <strong><code>aangemeld_op</code>:</strong> goed voor partitionering (deel 16) binnen een shard, maar een slechte shardsleutel — een tijdgebaseerde sleutel concentreert nieuwe schrijfacties op de “nieuwste” shard bij bereik-gebaseerde verdeling (hotspot, paragraaf 11).</p>
+<p>e) <strong><code>fonds_id</code> + <code>deelnemer_id</code>:</strong> effectief gelijk aan <code>deelnemer_id</code> alleen voor verdelingsdoeleinden (aangezien elke deelnemer al bij precies één fonds hoort), met als voordeel dat <code>fonds_id</code> expliciet in de sleutel zit voor eventuele toekomstige fonds-specifieke queries.</p>
+<p>f) <strong>Aanraden: <code>deelnemer_id</code></strong> (eventueel met <code>fonds_id</code> erbij voor expliciete herkenbaarheid). <strong>Afraden: <code>fonds_id</code></strong> alleen (te grof, ongelijke verdeling) en <strong><code>aangemeld_op</code></strong> (hotspot-risico bij bereik-gebaseerde verdeling, en sluit niet aan bij het dominante toegangspatroon).</p>
+<hr>
+<h2>Uitwerking 24.3</h2>
+<p>a) Co-locaten op <code>deelnemer_id</code>: <code>deelnemer</code>, <code>dienstverband</code> (heeft <code>deelnemer_id</code>), <code>mutatie</code> (heeft <code>deelnemer_id</code>), <code>aanspraak</code> (heeft <code>deelnemer_id</code> via <code>dienstverband</code> of direct).</p>
+<p>b) <code>premienota</code> heeft geen directe <code>deelnemer_id</code> — die is gekoppeld aan <code>werkgever_id</code> en een periode. Om dit toch te co-locaten zou je een surrogaat kunnen gebruiken (bijvoorbeeld: shard op <code>werkgever_id</code> in plaats van <code>deelnemer_id</code> voor deze specifieke tabel — wat betekent dat <code>premienota</code> niet perfect co-located is met <code>deelnemer</code>-gerichte tabellen, een bewuste afweging).</p>
+<p>c) <strong><code>werkgever</code></strong> blijft lastig: een werkgever heeft dienstverbanden met deelnemers die (in theorie) over meerdere shards verspreid zouden kunnen zijn als de shardsleutel <code>deelnemer_id</code> is, terwijl werkgever-gerichte rapportages (aantal dienstverbanden per werkgever) dan cross-shard worden.</p>
+<p>d) Gegeven dat <code>werkgever</code> bij Meridiaan slechts 4.100 rijen telt (relatief klein, deel 16) is een <strong>referentietabel</strong> hier verdedigbaar: elke shard heeft een volledige kopie van <code>werkgever</code>, wat cross-shard-joins voor werkgeverdetails voorkomt. Werkgever-brede aggregaties (totalen per werkgever) blijven cross-shard, wat acceptabel is omdat dat soort rapportage toch al periodiek en niet realtime hoeft te zijn.</p>
+<hr>
+<h2>Uitwerking 24.4</h2>
+<p>a) Een fictieve toekomstige functie: waardeoverdracht tussen twee deelnemers bij verschillende, niet-gerelateerde dienstverbanden (bijvoorbeeld bij een fusie van twee werkgevers uit verschillende “delen” van de gehashte ruimte) — bedrag af bij deelnemer A, bij bij deelnemer B, waarbij A en B (door de hash) op verschillende shards staan.</p>
+<p>b) <strong>Grotendeels te vermijden</strong> als de meeste waardeoverdrachten binnen dezelfde shard blijven (wat met een goede hashverdeling bij toeval regelmatig gebeurt, maar niet gegarandeerd is) — maar <strong>niet volledig</strong>, want twee willekeurige deelnemers kunnen nu eenmaal op verschillende shards uitkomen. Dit is dus een inherent, zij het zeldzaam, cross-shard-scenario.</p>
+<p>c) Bij een <strong>zeldzaam maar kritiek</strong> scenario (financiële correctheid staat niet ter discussie) is <strong>2PC</strong> te verdedigen ondanks de tragere doorvoer — de frequentie is laag genoeg dat de prestatiekosten van 2PC niet zwaar wegen, en de correctheidseis is te streng voor een saga’s tijdelijke inconsistentie.</p>
+<p>d) Negeren en hopen dat het zelden voorkomt is gevaarlijker dan bij een veelvoorkomend probleem, omdat een zeldzaam probleem <strong>moeilijker te testen en te reproduceren</strong> is — het faalt onopgemerkt in productie, precies op het moment dat het optreedt, in plaats van vroeg in ontwikkeling aan het licht te komen. Dit is dezelfde les als “test je back-up” (deel 17) en “test je failover” (deel 19): onbeproefde paden falen wanneer je ze het minst kunt gebruiken.</p>
+<hr>
+<h2>Uitwerking 24.5</h2>
+<p><strong>Referentietabel-kandidaten:</strong> <code>fonds</code> (klein, zelden gewijzigd), <code>sector_code</code> (klein, zelden gewijzigd), <code>valuta_code</code> (klein, zelden gewijzigd).
+<strong>Geen referentietabel — shardten:</strong> <code>mutatie</code> (groot, groeit continu), <code>deelnemer</code> (groot, groeit), <code>premienota</code> (middelgroot, groeit).</p>
+<hr>
+<h2>Uitwerking 24.6</h2>
+<p>a) Nieuwe deelnemers krijgen (bij een oplopende <code>deelnemer_id</code>) allemaal de “hoogste” shard toegewezen — alle nieuwe schrijfacties concentreren zich op één server terwijl de andere shards relatief stil blijven. Een klassieke hotspot, vergelijkbaar met het tellerrij-probleem uit deel 15.</p>
+<p>b) <strong>Hash-gebaseerd</strong> is hier duidelijk te verkiezen: nieuwe deelnemers verdelen zich gelijkmatig over alle shards, ongeacht wanneer ze zich aanmelden.</p>
+<p>c) Een sleutel waarbij je vaak <strong>bereikquery’s</strong> uitvoert die binnen één shard willen blijven — bijvoorbeeld een sleutel gebaseerd op geografische regio, waar je vaak “alle deelnemers in regio X” wilt opvragen. Bereik-gebaseerde sharding houdt zulke queries lokaal aan één shard; hash-gebaseerd zou ze cross-shard maken.</p>
+<hr>
+<h2>Uitwerking 24.7</h2>
+<p>a) <strong>Expand:</strong> de nieuwe shard (server D) wordt opgezet, leeg, met de juiste structuur en referentietabellen. <strong>Migrate:</strong> een deel van de bestaande data (bepaald door de nieuwe hash-toewijzing bij consistente hashing — idealiter maar een fractie van het totaal) wordt gekopieerd naar shard D, met een mechanisme dat nieuwe schrijfacties niet mist (vergelijkbaar met logische replicatie, deel 18). <strong>Contract:</strong> na verificatie wordt het verkeer voor de verplaatste sleutelbereiken omgeleid naar shard D, en de verplaatste data op de oorspronkelijke shards opgeschoond.</p>
+<p>b) Zonder verificatie zou een fout in de verhuizing onopgemerkt kunnen blijven — rijen die tijdens de migratie zijn gewijzigd maar niet correct zijn meegenomen, kunnen op de oude shard verdwijnen zonder op de nieuwe te zijn aangekomen (dataverlies), of omgekeerd op beide shards blijven bestaan (dubbele data, inconsistentie).</p>
+<p>c) Bij een simpele <code>hash(sleutel) mod aantal_shards</code> verandert het toevoegen van één shard de uitkomst van de modulo-berekening voor <strong>vrijwel alle</strong> bestaande sleutels — een rebalancing zou dan bijna de hele dataset moeten verplaatsen. Consistente hashing zorgt dat alleen een klein, voorspelbaar deel van de data (ongeveer 1/n van het totaal bij het toevoegen van de n-de shard) daadwerkelijk hoeft te verhuizen.</p>
+<hr>
+<h2>Uitwerking 24.8</h2>
+<p>a) <strong>Niet shardenen.</strong> Geen aangetoond capaciteitsprobleem — sharding zou hier complexiteit toevoegen zonder gemeten noodzaak (paragraaf 13).</p>
+<p>b) <strong>Waarschijnlijk niet shardenen als primaire oplossing</strong> — een geheel ander datamodel voor een nieuwe markt is eerder een argument voor <strong>patroon 2 of 3 uit deel 23</strong> (een apart schema of database voor die nieuwe entiteit) dan voor sharding, die vooral bedoeld is om één samenhangend datamodel over servers te verdelen.</p>
+<p>c) <strong>Eerst iets anders proberen.</strong> Traagheid zonder dat indexen of materialized views (deel 8, 13, 14) zijn onderzocht, is een prestatieprobleem dat niveau-2-technieken waarschijnlijk al oplossen — sharding zou hier voorbarig zijn.</p>
+<p>d) <strong>Sharding overwegen.</strong> Dit is precies het scenario dat de toetsvraag uit paragraaf 13 beoogt: een aangetoonde, gemeten grens die verticaal schalen en niveau-2-technieken niet meer oplossen.</p>
+<hr>
+<h2>Uitwerking 24.9 — modelantwoord (verkort)</h2>
+<p><strong>Principebesluit sharding — Pensioenfederatie</strong></p>
+<p><strong>1. Is sharding nu nodig?</strong></p>
+<p><strong>Nee.</strong> Met drie fondsen en een gecombineerd volume ruim onder de geschatte capaciteitsgrens van een goed geconfigureerde server (opdracht 24.1), voegt sharding op dit moment complexiteit toe zonder gemeten noodzaak. Niveau-2-technieken (partitionering per fonds, deel 16; multi-tenant-scheiding, deel 23) volstaan voor de komende jaren bij het huidige groeitempo.</p>
+<p><strong>2. Voorgestelde shardsleutel, mocht het ooit nodig worden</strong></p>
+<p><code>deelnemer_id</code>, hash-gebaseerd. Co-locatie: <code>deelnemer</code>, <code>dienstverband</code>, <code>mutatie</code>, <code>aanspraak</code> allemaal op dezelfde sleutel. <code>premienota</code> is een aandachtspunt (gekoppeld aan <code>werkgever_id</code>, niet direct aan <code>deelnemer_id</code>) — voorgesteld wordt deze via <code>werkgever_id</code> te co-locaten met een aparte overweging voor werkgever-brede rapportages.</p>
+<p><strong>3. Referentietabellen</strong></p>
+<p><code>fonds</code>, sectorcodes, valutacodes — klein en zelden gewijzigd, op elke toekomstige shard te repliceren.</p>
+<p><strong>4. Cross-shard-transacties</strong></p>
+<p>Met een goed gekozen shardsleutel blijven de meeste operationele transacties (per deelnemer) binnen één shard. Voor het zeldzame scenario van een cross-shard-waardeoverdracht (opdracht 24.4): 2PC, gezien de lage frequentie en de hoge correctheidseis van financiële transacties.</p>
+<p><strong>5. Het signaal om daadwerkelijk te shardten</strong></p>
+<p>Een gemeten, aanhoudende situatie waarin: (a) de gecombineerde schrijfbelasting van alle fondsen de I/O-capaciteit van de zwaarst beschikbare server benadert (te meten via <code>pg_stat_bgwriter</code>, deel 20), <strong>en</strong> (b) partitionering en indexoptimalisatie (deel 14, 16) al zijn toegepast en onvoldoende verlichting geven. Dit wordt jaarlijks herbeoordeeld als onderdeel van de capaciteitsplanning, niet ad hoc.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Een eerlijk “nog niet nodig” in punt 1</strong>, onderbouwd met cijfers uit opdracht 24.1 — niet een voorstel om te shardten omdat het interessant is.</li>
+<li><strong>De co-locatie-analyse in punt 2</strong>, met een eerlijke erkenning van het lastige geval (<code>premienota</code>/<code>werkgever</code>).</li>
+<li><strong>Een concreet, meetbaar signaal in punt 5</strong> — “als het te traag wordt” is onvoldoende; er moet een aanwijsbare metriek en drempel staan.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 24.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">272 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-23-architectuur-voor-meerdere-fondsen/reader.html">&larr; Deel 23 — Architectuur voor meerdere fondsen</a><a class="dbm-prevnext next" href="../deel-25-citus-in-de-praktijk/reader.html">Deel 25 — Citus in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

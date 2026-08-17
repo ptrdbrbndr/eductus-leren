@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Citus in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 25 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 25 — Citus in de praktijk</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 3 van 8 (deel 25 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Wat Citus is en wat het niet is</li>
+<li>De architectuur: coördinator en workers</li>
+<li>Een cluster opzetten</li>
+<li>Distributed tables aanmaken</li>
+<li>Reference tables in de praktijk</li>
+<li>Co-locatie expliciet maken</li>
+<li>Query’s op een distributed table: wat blijft hetzelfde</li>
+<li>Query’s die de coördinator moet samenvoegen</li>
+<li>EXPLAIN op een distributed query</li>
+<li>Rebalancing met Citus</li>
+<li>Wat Citus niet automatisch oplost</li>
+<li>Citus en de niveau-2-technieken</li>
+<li>Migreren van een gepartitioneerde tabel naar Citus</li>
+<li>Wanneer Citus, wanneer niet</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de architectuur van een Citus-cluster (coördinator, workers) beschrijven;</li>
+<li>een distributed table en een reference table aanmaken en hun onderlinge samenhang uitleggen;</li>
+<li>co-locatie expliciet configureren met <code>colocate_with</code>;</li>
+<li>een <code>EXPLAIN</code>-plan op een distributed query lezen en onderscheid maken tussen lokale en cross-shard-uitvoering;</li>
+<li>rebalancing met Citus’ ingebouwde gereedschap uitvoeren en de risico’s herkennen die ondanks automatisering blijven bestaan;</li>
+<li>een bestaande, gepartitioneerde PostgreSQL-tabel migreren naar een Citus distributed table;</li>
+<li>beoordelen of Citus voor een gegeven situatie het juiste gereedschap is.</li>
+</ul>
+<hr>
+<h2>2. Wat Citus is en wat het niet is</h2>
+<p><strong>Citus is een PostgreSQL-extensie</strong> — geen apart databasesysteem, geen fork. Je installeert hem op een gewone PostgreSQL-installatie (dezelfde manier waarop je <code>pg_trgm</code> of <code>pgcrypto</code> installeerde in deel 14 en 21), en hij voegt sharding-functionaliteit toe aan wat verder gewoon PostgreSQL is.</p>
+<p><strong>Wat dat concreet betekent:</strong></p>
+<ul>
+<li>Alle SQL die je in niveau 1 en 2 leerde, blijft geldig.</li>
+<li>Alle systeemweergaven uit deel 20 blijven bestaan, met Citus-specifieke aanvullingen.</li>
+<li>Elke node in een Citus-cluster is een volwaardige PostgreSQL-server, met alles wat daarbij hoort: WAL, vacuum, indexen, replicatie (deel 18), zelfs Patroni voor HA per node (deel 19) indien gewenst.</li>
+</ul>
+<p><strong>Wat Citus toevoegt:</strong> een laag die weet hoe een logische tabel over meerdere fysieke servers wordt verdeeld, en die query’s herschrijft zodat ze — voor de gebruiker onzichtbaar — over de juiste shards worden uitgevoerd en de resultaten worden samengevoegd.</p>
+<p><strong>Dit deel implementeert letterlijk de concepten uit deel 24.</strong> Elke term uit dat deel (shardsleutel, co-locatie, referentietabel, rebalancing) krijgt hier een concrete <code>CREATE</code>-opdracht.</p>
+<hr>
+<h2>3. De architectuur: coördinator en workers</h2>
+<pre><code>                  ┌──────────────┐
+   Applicatie ──→ │ Coördinator  │
+                  │ (weet WAT    │
+                  │  waar staat) │
+                  └──────┬───────┘
+           ┌─────────────┼─────────────┐
+           ▼             ▼             ▼
+     ┌──────────┐  ┌──────────┐  ┌──────────┐
+     │ Worker 1 │  │ Worker 2 │  │ Worker 3 │
+     │ (shards) │  │ (shards) │  │ (shards) │
+     └──────────┘  └──────────┘  └──────────┘
+</code></pre>
+<p><strong>De coördinator</strong> is het aanspreekpunt voor de applicatie. Hij bevat geen shard-data zelf (in de gangbare opzet), maar wel de <strong>metadata</strong>: welke tabel is gesherd, op welke sleutel, en welke shard op welke worker staat. Elke query komt bij de coördinator binnen, die hem herschrijft naar een of meerdere queries op de betrokken workers en de resultaten samenvoegt.</p>
+<p><strong>De workers</strong> zijn gewone PostgreSQL-servers die de daadwerkelijke shards bevatten — elk een fysieke tabel die een deel van de logische, gesharde tabel vertegenwoordigt.</p>
+<p><strong>Belangrijke nuance: de coördinator kan een single point of failure zijn</strong> tenzij hij zelf ook met Patroni (deel 19) hoogbeschikbaar wordt gemaakt. Recente Citus-versies ondersteunen ook een opzet zonder aparte coördinator-node (elke node kan coördinator én worker zijn), maar het klassieke model met een aparte coördinator blijft het meest voorkomend en het duidelijkst om te leren.</p>
+<hr>
+<h2>4. Een cluster opzetten</h2>
+<p>Conceptueel, per node:</p>
+<pre><code class="language-sql">-- Op elke node (coördinator én workers)
+CREATE EXTENSION citus;
+</code></pre>
+<pre><code class="language-sql">-- Alleen op de coördinator: workers registreren
+SELECT citus_add_node('worker1-host', 5432);
+SELECT citus_add_node('worker2-host', 5432);
+SELECT citus_add_node('worker3-host', 5432);
+
+-- Controleren
+SELECT * FROM citus_get_active_worker_nodes();
+</code></pre>
+<p>Vanaf dit punt gedraagt de coördinator zich naar de applicatie toe als één gewone PostgreSQL-database — het enige verschil is dat sommige tabellen (die je hierna expliciet distribueert) hun data over de workers hebben verspreid.</p>
+<hr>
+<h2>5. Distributed tables aanmaken</h2>
+<pre><code class="language-sql">-- Eerst een gewone tabel, zoals altijd
+CREATE TABLE deelnemer (
+    deelnemer_id integer GENERATED ALWAYS AS IDENTITY,
+    fonds_id     integer NOT NULL,
+    achternaam   text NOT NULL,
+    bsn_hash     text NOT NULL,
+    PRIMARY KEY (deelnemer_id)
+);
+
+-- Dan: distribueren op de shardsleutel uit deel 24
+SELECT create_distributed_table('deelnemer', 'deelnemer_id');
+</code></pre>
+<p>Vanaf <code>create_distributed_table</code> bestaat <code>deelnemer</code> niet meer als één fysieke tabel — Citus heeft hem opgesplitst in een (standaard: 32) shards, verdeeld over de geregistreerde workers, met hash-gebaseerde verdeling op <code>deelnemer_id</code> (deel 24, paragraaf 11).</p>
+<pre><code class="language-sql">-- Zichtbaar maken hoe de verdeling eruitziet
+SELECT * FROM citus_shards WHERE table_name = 'deelnemer'::regclass;
+</code></pre>
+<p><strong>Het aantal shards</strong> (<code>citus.shard_count</code>, standaard 32) is vooraf in te stellen en bepaalt de fijnmazigheid van toekomstige rebalancing — meer shards dan workers is gebruikelijk, zodat een worker meerdere shards draagt en toekomstige rebalancing kleinere eenheden kan verplaatsen.</p>
+<hr>
+<h2>6. Reference tables in de praktijk</h2>
+<p>Het concept uit deel 24, paragraaf 9, wordt hier één functieaanroep:</p>
+<pre><code class="language-sql">CREATE TABLE fonds (
+    fonds_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    naam     text NOT NULL,
+    sector   text NOT NULL
+);
+
+SELECT create_reference_table('fonds');
+</code></pre>
+<p><strong>Wat er nu is:</strong> een volledige kopie van <code>fonds</code> op <strong>elke</strong> worker. Een join tegen <code>fonds</code> vanuit een gesharde tabel op elke worker blijft <strong>lokaal</strong> aan die worker — geen cross-shard-verkeer nodig, precies de belofte uit deel 24.</p>
+<pre><code class="language-sql">-- Deze join blijft lokaal aan elke worker, ongeacht welke shard van deelnemer wordt geraakt
+SELECT d.achternaam, f.naam
+FROM deelnemer d JOIN fonds f USING (fonds_id)
+WHERE d.deelnemer_id = 42;
+</code></pre>
+<p><strong>Wijzigingen op een reference table</strong> (een nieuw fonds toevoegen) worden door Citus automatisch naar elke worker gerepliceerd — de applicatiecode ziet één simpele <code>INSERT</code>, Citus regelt de vermenigvuldiging naar alle kopieën.</p>
+<hr>
+<h2>7. Co-locatie expliciet maken</h2>
+<p>Standaard krijgt elke distributed table zijn eigen, onafhankelijke sharding-schema. Voor co-locatie (deel 24, paragraaf 6) moet je expliciet aangeven dat twee tabellen dezelfde verdeling moeten delen:</p>
+<pre><code class="language-sql">CREATE TABLE dienstverband (
+    dienstverband_id bigint GENERATED ALWAYS AS IDENTITY,
+    deelnemer_id      integer NOT NULL,
+    werkgever_id      integer NOT NULL,
+    PRIMARY KEY (dienstverband_id, deelnemer_id)
+);
+
+SELECT create_distributed_table('dienstverband', 'deelnemer_id',
+    colocate_with =&gt; 'deelnemer');
+</code></pre>
+<p><strong>Wat <code>colocate_with</code> garandeert:</strong> rijen in <code>dienstverband</code> met dezelfde <code>deelnemer_id</code> als een rij in <code>deelnemer</code> belanden <strong>gegarandeerd op dezelfde worker</strong>. Een join tussen de twee op <code>deelnemer_id</code> is daardoor altijd lokaal, ongeacht welke specifieke deelnemer het betreft.</p>
+<pre><code class="language-sql">-- Lokaal aan één worker, dankzij colocate_with
+SELECT d.achternaam, dv.werkgever_id
+FROM deelnemer d JOIN dienstverband dv USING (deelnemer_id)
+WHERE d.deelnemer_id = 42;
+</code></pre>
+<p><strong>Controleren of twee tabellen co-located zijn:</strong></p>
+<pre><code class="language-sql">SELECT logicalrelid, colocationid FROM pg_dist_partition
+WHERE logicalrelid IN ('deelnemer'::regclass, 'dienstverband'::regclass);
+-- gelijke colocationid = co-located
+</code></pre>
+<p>Dit is de implementatie van de analyse die je in deel 24, opdracht 24.3, op papier deed — nu met een concrete parameter die het afdwingt.</p>
+<hr>
+<h2>8. Query’s op een distributed table: wat blijft hetzelfde</h2>
+<p><strong>Bijna alles.</strong> Dit is het punt dat Citus zo aantrekkelijk maakt ten opzichte van applicatieniveau-sharding: de applicatie schrijft gewone SQL, zonder te weten dat de data over meerdere servers verspreid is.</p>
+<pre><code class="language-sql">-- Ziet er precies zo uit als in niveau 1/2
+SELECT * FROM deelnemer WHERE deelnemer_id = 42;
+INSERT INTO mutatie (deelnemer_id, soort, ...) VALUES (42, 'adreswijziging', ...);
+UPDATE deelnemer SET achternaam = 'Jansen' WHERE deelnemer_id = 42;
+</code></pre>
+<p>Voor elk van deze query’s herkent Citus, op basis van de <code>WHERE</code>-voorwaarde op de shardsleutel, <strong>direct welke ene shard</strong> (en dus welke ene worker) de query moet raken. De coördinator stuurt de query door naar die ene worker en geeft het resultaat terug — vergelijkbaar met, maar over servergrenzen heen, partition pruning uit deel 16.</p>
+<p><strong>De voorwaarde:</strong> de shardsleutel moet in de <code>WHERE</code>-clausule staan, op dezelfde manier als een partitiesleutel moet voorkomen voor pruning (deel 16, paragraaf 8) — een functie om de shardsleutel, of het ontbreken van de voorwaarde, dwingt Citus om alle workers te bevragen.</p>
+<hr>
+<h2>9. Query’s die de coördinator moet samenvoegen</h2>
+<pre><code class="language-sql">-- Geen enkele voorwaarde op de shardsleutel: alle workers moeten mee
+SELECT count(*) FROM deelnemer WHERE fonds_id = 2;
+</code></pre>
+<p>Deze query kan niet naar één worker worden gestuurd — <code>fonds_id</code> is niet de shardsleutel (<code>deelnemer_id</code> is dat), dus Citus weet niet vooraf welke shard de relevante rijen bevat. De coördinator stuurt de query naar <strong>alle</strong> workers, elk telt zijn eigen deel, en de coördinator <strong>sommeert</strong> de deelresultaten.</p>
+<pre><code class="language-sql">-- Een aggregatie over de hele dataset: hetzelfde patroon, complexer samenvoegen
+SELECT soort, count(*) FROM mutatie GROUP BY soort;
+</code></pre>
+<p>Voor een <code>GROUP BY</code> stuurt Citus de aggregatie naar elke worker (die zijn eigen gedeeltelijke <code>GROUP BY soort, count(*)</code> uitvoert), en voegt de coördinator de deelresultaten samen tot het eindtotaal — een tweetraps-aggregatie die griffig is voor <code>count</code>/<code>sum</code>, en complexer (soms onmogelijk in één stap) voor bijvoorbeeld een exacte <code>median</code> of <code>count(DISTINCT ...)</code> over de hele dataset.</p>
+<p><strong>Dit is exact de “distributed query” uit deel 24, paragraaf 6, nu zichtbaar in de praktijk.</strong> Karins kwartaalrapportage, die nu over alle fondsen gaat in plaats van één, is precies dit soort query — werkend, maar duurder dan een lokale.</p>
+<hr>
+<h2>10. EXPLAIN op een distributed query</h2>
+<pre><code class="language-sql">EXPLAIN SELECT * FROM deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<pre><code>Custom Scan (Citus Adaptive)
+  Task Count: 1
+  Tasks Shown: All
+  -&gt;  Task
+        Node: host=worker2 port=5432
+        -&gt;  Index Scan using deelnemer_pkey on deelnemer_102008
+              Index Cond: (deelnemer_id = 42)
+</code></pre>
+<p><strong><code>Task Count: 1</code></strong> bevestigt wat paragraaf 8 beloofde: deze query raakt precies één shard, op precies één worker. Dit is het distributed-equivalent van “één partitie in het plan” uit deel 16.</p>
+<pre><code class="language-sql">EXPLAIN SELECT count(*) FROM deelnemer WHERE fonds_id = 2;
+</code></pre>
+<pre><code>Aggregate
+  -&gt;  Custom Scan (Citus Adaptive)
+        Task Count: 32
+        -&gt;  Task
+              Node: host=worker1 port=5432
+              -&gt;  Seq Scan on deelnemer_102001
+                    Filter: (fonds_id = 2)
+        (... 31 more tasks ...)
+</code></pre>
+<p><strong><code>Task Count: 32</code></strong> — alle shards moeten worden doorzocht, en de coördinator telt de resultaten bij elkaar op. Precies de “geen pruning”-situatie uit deel 16, nu met de aanvullende kostenpost van netwerkverkeer tussen coördinator en elke worker.</p>
+<p><strong>De discipline blijft dezelfde als in deel 8, 13, 16: controleer met <code>EXPLAIN</code> of je query het gunstige (<code>Task Count: 1</code>) of het dure (<code>Task Count: &lt;shard_count&gt;</code>) pad neemt, vóórdat je aanneemt dat een query snel is.</strong></p>
+<hr>
+<h2>11. Rebalancing met Citus</h2>
+<pre><code class="language-sql">-- Een nieuwe worker toevoegen
+SELECT citus_add_node('worker4-host', 5432);
+
+-- Shards herverdelen zodat de nieuwe worker ook data draagt
+SELECT rebalance_table_shards('deelnemer');
+</code></pre>
+<p><code>rebalance_table_shards</code> implementeert het expand-migrate-contract-patroon uit deel 24, paragraaf 10, grotendeels automatisch: shards worden gekopieerd naar de nieuwe worker, verkeer wordt omgeleid, en de oude locatie wordt opgeschoond — met minimale onderbreking van lopend verkeer.</p>
+<p><strong>Wat automatisering wél en niet wegneemt:</strong></p>
+<ul>
+<li><strong>Wel:</strong> het handmatige kopieerwerk, de coördinatie tussen expand/migrate/contract, en een groot deel van het risico op menselijke fouten tijdens de uitvoering.</li>
+<li><strong>Niet:</strong> de noodzaak om <strong>te verifiëren</strong> dat de rebalancing correct is afgerond (dezelfde discipline als deel 6, 16, 22 — automatisering vermindert het risico, het elimineert het niet). En niet de <strong>planning</strong>: wanneer je rebalancet (buiten de piek, deel 15’s lessen over timing), en of de resulterende verdeling daadwerkelijk gelijkmatiger is.</li>
+</ul>
+<pre><code class="language-sql">-- Verifiëren na afloop
+SELECT * FROM citus_shards WHERE table_name = 'deelnemer'::regclass;
+-- controleer de verdeling van shards over workers
+</code></pre>
+<hr>
+<h2>12. Wat Citus niet automatisch oplost</h2>
+<p><strong>Cross-shard-transacties (deel 24, paragraaf 7)</strong> vereisen nog steeds bewust ontwerp. Citus ondersteunt 2PC voor transacties die meerdere shards raken, maar de prestatiekosten en het ontwerpadvies (co-locatie eerst) blijven onveranderd geldig — Citus maakt 2PC mogelijk, niet gratis.</p>
+<p><strong>Globale uniciteit (deel 24, paragraaf 8)</strong> buiten de shardsleutel blijft een aandachtspunt: een <code>UNIQUE</code>-constraint op een kolom die niet de shardsleutel is (of er onderdeel van is), kan Citus niet over shards heen afdwingen — vergelijkbaar met de partitiesleutel-eis uit deel 16.</p>
+<p><strong>HA per node (deel 19)</strong> is niet automatisch — elke worker (en de coördinator) is een gewone PostgreSQL-server die zijn eigen replicatie- en failover-opzet nodig heeft als hoge beschikbaarheid gewenst is. Citus lost horizontale capaciteit op, niet beschikbaarheid; die twee zijn orthogonale eisen.</p>
+<p><strong>Back-up (deel 17)</strong> moet per node worden ingericht, en een consistente back-up van het <strong>hele cluster</strong> (coördinator plus alle workers, op hetzelfde moment) is complexer dan een back-up van één server — Citus biedt hier gereedschap voor coördinatie, maar het blijft een zorgvuldiger operatie dan in niveau 2.</p>
+<hr>
+<h2>13. Citus en de niveau-2-technieken</h2>
+<p><strong>Partitionering (deel 16) binnen een shard:</strong> een shard is een gewone PostgreSQL-tabel (fysiek); niets weerhoudt je ervan die zelf te partitioneren als hij groot genoeg wordt. Citus en partitionering zijn stapelbaar.</p>
+<p><strong>Indexen (deel 14):</strong> gewoon aan te maken op de gedistribueerde tabel; Citus zorgt dat de index op elke shard wordt aangemaakt — hetzelfde patroon als een index op een gepartitioneerde tabel in deel 16, nu over workers verspreid.</p>
+<pre><code class="language-sql">CREATE INDEX ON deelnemer (achternaam);
+-- wordt op elke shard van deelnemer aangemaakt, op elke worker
+</code></pre>
+<p><strong>Concurrency (deel 15):</strong> locking gedraagt zich normaal <strong>binnen</strong> een shard/worker; over workers heen bestaat geen gedeelde lockwachtrij — een lock op worker 1 heeft geen effect op worker 2. Dat is deels bevrijdend (minder kans op een lockwachtrij die het hele systeem raakt) en deels een nieuwe complexiteit (cross-shard-consistentie is niet met locks te garanderen, vandaar 2PC).</p>
+<p><strong>Monitoring (deel 20):</strong> <code>pg_stat_statements</code> en de andere weergaven bestaan <strong>per node</strong> — de coördinator heeft een eigen overzicht, elke worker zijn eigen. Citus voegt eigen weergaven toe (<code>citus_stat_statements</code>, <code>citus_shards</code>) die het geheel samenbrengen.</p>
+<hr>
+<h2>14. Migreren van een gepartitioneerde tabel naar Citus</h2>
+<p>De volledige toepassing van het architectuur-migratiepad uit deel 23 en het sharding-migratiepad uit deel 24, nu met Citus als concreet gereedschap.</p>
+<pre><code class="language-sql">-- Stap 1: Citus beschikbaar maken (expand, op infrastructuurniveau)
+CREATE EXTENSION citus;
+SELECT citus_add_node(...);
+
+-- Stap 2: de bestaande, gepartitioneerde mutatie-tabel (deel 16)
+-- kan niet direct gedistribueerd worden terwijl hij gepartitioneerd is
+-- op een andere sleutel dan de shardsleutel — hier moet een keuze:
+
+-- Optie A: de bestaande partitiesleutel (aangemeld_op) hergebruiken
+--          als shardsleutel is meestal ongewenst (deel 24: hotspot-risico)
+-- Optie B: een nieuwe tabel opzetten met de juiste shardsleutel
+--          (deelnemer_id) en migreren zoals in deel 22
+
+CREATE TABLE mutatie_nieuw (LIKE mutatie INCLUDING ALL);
+SELECT create_distributed_table('mutatie_nieuw', 'deelnemer_id',
+    colocate_with =&gt; 'deelnemer');
+
+-- Stap 3: data overzetten — logische replicatie (deel 18) of een
+-- backfill-patroon (deel 22, paragraaf 9), afhankelijk van de omvang
+
+-- Stap 4: omschakelmoment, verificatie, en pas dan de oude tabel opruimen
+</code></pre>
+<p><strong>De les die hier samenkomt:</strong> dit is geen nieuwe migratietechniek. Het is expand-contract (deel 22) plus de shardsleutel-analyse (deel 24) plus de Citus-syntax (vandaag) — drie eerder geleerde stukken kennis, samengevoegd tot één concrete operatie.</p>
+<hr>
+<h2>15. Wanneer Citus, wanneer niet</h2>
+<p>Dezelfde toetsvraag als deel 24, paragraaf 13, nu toegepast op de keuze van gereedschap.</p>
+<p><strong>Citus past goed bij:</strong> een datamodel dat natuurlijk co-located kan worden rond één dominante sleutel (zoals <code>deelnemer_id</code> bij de Pensioenfederatie), een aangetoonde capaciteitsgrens die verticaal schalen niet meer oplost, en een team dat de operationele last van meerdere PostgreSQL-nodes aankan (deel 17-20, vermenigvuldigd).</p>
+<p><strong>Citus past minder goed bij:</strong> een datamodel met veel sterk verweven relaties zonder een natuurlijke co-locatie-sleutel, een werklast die overwegend uit cross-shard-aggregaties bestaat (waar de winst van sharding grotendeels wordt opgegeten door coördinatiekosten), of een organisatie die nog niet buiten de mogelijkheden van verticaal schalen en niveau-2-technieken is gegroeid.</p>
+<p><strong>Voor de Pensioenfederatie, concreet vandaag:</strong> met drie fondsen en een volume ruim onder de aangenomen capaciteitsgrens (deel 24, opdracht 24.1) is Citus <strong>nu niet nodig</strong> — het architectuuradvies uit deel 23 (patroon 2, met patroon 3 voor Baken) volstaat. Wat vandaag is opgebouwd, is de kennis en de concrete implementatiekennis om <strong>wanneer</strong> het wel nodig wordt, niet vanaf nul te hoeven beginnen.</p>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Een tabel distribueren zonder eerst de shardsleutel-analyse van deel 24</td>
+<td>Slechte verdeling, veel cross-shard-verkeer</td>
+<td>Eerst de analyse, dan pas <code>create_distributed_table</code></td>
+</tr>
+<tr>
+<td><code>colocate_with</code> vergeten bij gerelateerde tabellen</td>
+<td>Onnodige cross-shard-joins</td>
+<td>Expliciet co-locaten waar het toegangspatroon dat vraagt</td>
+</tr>
+<tr>
+<td>Een kleine, zelden gewijzigde tabel toch distribueren</td>
+<td>Onnodige complexiteit voor iets dat een reference table had moeten zijn</td>
+<td><code>create_reference_table</code> voor kleine naslagtabellen</td>
+</tr>
+<tr>
+<td>Query’s schrijven zonder de shardsleutel in de WHERE-clausule, en verbaasd zijn over trage prestaties</td>
+<td>Elke query raakt alle shards (<code>Task Count: &lt;shard_count&gt;</code>)</td>
+<td><code>EXPLAIN</code> controleren, shardsleutel expliciet meegeven</td>
+</tr>
+<tr>
+<td>Rebalancing draaien zonder verificatie achteraf</td>
+<td>Onopgemerkte inconsistentie</td>
+<td>Dezelfde verificatiediscipline als elke migratie</td>
+</tr>
+<tr>
+<td>Citus invoeren zonder de HA- en back-upgevolgen per node te doordenken</td>
+<td>Complexiteit vermenigvuldigd met het aantal nodes, zonder dat back-up/HA is meegegroeid</td>
+<td>Elk niveau-2-onderwerp opnieuw doorlopen, nu per node</td>
+</tr>
+<tr>
+<td>Citus kiezen zonder aangetoonde capaciteitsnood</td>
+<td>Onnodige operationele last (deel 24, paragraaf 13, herhaald)</td>
+<td>Eerst verticaal schalen en niveau-2-technieken uitputten</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Kernbegrippen</h2>
+<p><strong>Coördinator</strong> — de Citus-node die metadata bewaart en query’s routeert.
+<strong>Worker</strong> — een Citus-node die daadwerkelijke shard-data bevat.
+<strong><code>create_distributed_table</code></strong> — de opdracht die een gewone tabel omzet naar een gesharde tabel.
+<strong><code>create_reference_table</code></strong> — de opdracht die een tabel op elke worker volledig repliceert.
+<strong><code>colocate_with</code></strong> — de parameter die co-locatie tussen tabellen afdwingt.
+<strong>Task Count</strong> — in een <code>EXPLAIN</code>-plan: het aantal shards dat een query moet raken.
+<strong><code>rebalance_table_shards</code></strong> — Citus’ geautomatiseerde rebalancing-gereedschap.
+<strong><code>citus_shards</code></strong> — systeemweergave die toont welke shard op welke worker staat.</p>
+<hr>
+<p><em>Volgende deel: [foreign data wrappers en federatie, of het volgende onderwerp in de reeks richting event sourcing] — vandaag heb je horizontale capaciteit gebouwd. Volgende keer breidt de architectuur zich in een andere richting uit.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">297 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-24-sharding-fundamenten/reader.html">&larr; Deel 24 — Sharding-fundamenten</a><a class="dbm-prevnext next" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">Deel 26 — Foreign data wrappers en federatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

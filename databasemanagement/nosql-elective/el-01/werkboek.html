@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Document en key-value in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; NoSQL-elective &rsaquo; Document en key-value in de praktijk &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>NoSQL-elective, deel 1 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Elective, niveau 2</strong>
+Opdrachten met uitwerkingen</p>
+<hr>
+<h2>Zo gebruik je dit werkboek</h2>
+<p>Maak eerst alle opdrachten zelf. De uitwerkingen staan na de scheidingslijn — kijk er niet in voordat je zelf een antwoord hebt geformuleerd, ook al vraagt een opdracht om een ontwerpkeuze in plaats van een enkel juist antwoord.</p>
+<hr>
+<h2>Opdracht EL1.1 — TTL-strategie kiezen</h2>
+<p>Het Meridiaan-portaal krijgt naast de sessiegegevens ook een “recent bekeken pensioenoverzichten”-lijstje per deelnemer, bedoeld om snel terug te kunnen naveren.</p>
+<p>a. Welke Redis-datastructuur past het beste bij deze lijst, en waarom?
+b. Stel een TTL voor en beargumenteer de duur.
+c. Hoort dit lijstje in dezelfde hash als de sessie uit paragraaf 4, of in een aparte sleutel? Beargumenteer.</p>
+<h2>Opdracht EL1.2 — Cache-invalidatie ontwerpen</h2>
+<p>Een deelnemer wijzigt zijn taalvoorkeur van “nl” naar “en” via het portaal. De wijziging wordt in PostgreSQL opgeslagen. De actieve sessie in Redis bevat nog <code>taal: &quot;nl&quot;</code>.</p>
+<p>a. Welke van de drie strategieën uit paragraaf 3 zou jij hier toepassen, en waarom?
+b. Beschrijf in twee zinnen wat er misgaat als je geen van de drie strategieën toepast.</p>
+<h2>Opdracht EL1.3 — Embedding versus referencing</h2>
+<p>Een klantcorrespondentie-document (paragraaf 6) krijgt een nieuw vereiste: elk bericht kan door meerdere medewerkers becommentarieerd worden, met naam, tijdstip en tekst per commentaar.</p>
+<p>a. Ontwerp het document met commentaren als embedded array. Schrijf het voorbeelddocument.
+b. Benoem één scenario waarin embedding hier tot een probleem leidt (denk aan een document dat te groot wordt, of aan onafhankelijk zoeken binnen commentaren).
+c. Zou je in dat scenario naar referencing overstappen? Beargumenteer.</p>
+<h2>Opdracht EL1.4 — De grondvraag toepassen (hoofdopdracht)</h2>
+<p>Meridiaan overweegt een derde toepassing: een “vergelijk mijn pensioensituatie met vergelijkbare deelnemers”-functie op het portaal, die per deelnemer een profiel van 40 kenmerken bijhoudt (leeftijd, dienstjaren, salarisschijf, regelingtype, etc.) en bij elke portaalbezoek de 20 dichtstbijzijnde profielen moet vinden.</p>
+<p>a. Is dit een geschikt scenario voor Redis, MongoDB, een van de twee uit deel 21 paragraaf 13 (Elasticsearch/wide-column/graaf), of voor een uitbreiding binnen PostgreSQL zelf? Beargumenteer met het toegangspatroon.
+b. Formuleer het concrete, meetbare knelpunt dat aanwezig zou moeten zijn vóór je deze keuze daadwerkelijk zou maken (in lijn met deel 21, paragraaf 12’s slotconclusie).
+c. Beoordelingspunten: (1) correcte identificatie van het toegangspatroon, (2) een concreet meetbaar knelpunt in plaats van een aanname, (3) expliciete afweging van de operationele meerkost.</p>
+<hr>
+<hr>
+<h2>Uitwerkingen</h2>
+<h3>EL1.1</h3>
+<p>a. Een <strong>sorted set</strong>, met de bekijktijd als score — dat geeft gratis sortering op recentheid zonder los sorteerwerk in de applicatie, en met <code>ZREVRANGE</code> haal je in één commando de N meest recente items op.
+b. Een dag tot een week is redelijk: langer dan een sessie (dit is geen sessiedata), maar niet permanent — “recent bekeken” verliest betekenis na een paar dagen. Beargumenteer op basis van hoe het portaal dit gebruikt, niet als vaste regel.
+c. Apart, niet in dezelfde hash: de sessie heeft een kortere levensduur (30 minuten inactiviteit) en een ander doel dan de bekijklijst. Ze in dezelfde sleutel stoppen zou de TTL van de een aan de ander koppelen zonder reden.</p>
+<h3>EL1.2</h3>
+<p>a. Strategie 2 (actief invalideren bij wijziging) is hier het meest praktisch: het taalvoorkeur-schrijfpad in de applicatie werkt zowel de PostgreSQL-rij als de Redis-sessie bij (of verwijdert het <code>taal</code>-veld uit de sessie zodat het bij de volgende lezing opnieuw wordt opgehaald). Strategie 1 (TTL alleen) zou betekenen dat de gebruiker tot dertig minuten in de verkeerde taal blijft zien — voor een taalvoorkeur draaglijk, maar niet voor iets als een geblokkeerd account.
+b. Zonder invalidatie blijft de sessie de oude taal tonen totdat de TTL verloopt of de gebruiker opnieuw inlogt — de gebruiker ziet zijn eigen wijziging niet direct terug, wat overkomt als een bug ook al is de onderliggende data correct.</p>
+<h3>EL1.3</h3>
+<p>a.</p>
+<pre><code class="language-json">{
+  &quot;_id&quot;: ObjectId(&quot;...&quot;),
+  &quot;deelnemer_id&quot;: 4821,
+  &quot;kanaal&quot;: &quot;email&quot;,
+  &quot;onderwerp&quot;: &quot;Vraag over indexatie 2026&quot;,
+  &quot;commentaren&quot;: [
+    { &quot;medewerker&quot;: &quot;J. Aris&quot;, &quot;tijdstip&quot;: ISODate(&quot;2026-08-14T10:00:00Z&quot;), &quot;tekst&quot;: &quot;Doorgezet naar backoffice&quot; },
+    { &quot;medewerker&quot;: &quot;P. Osei&quot;, &quot;tijdstip&quot;: ISODate(&quot;2026-08-14T11:30:00Z&quot;), &quot;tekst&quot;: &quot;Afgehandeld, antwoord verzonden&quot; }
+  ]
+}
+</code></pre>
+<p>b. Als het aantal commentaren onbegrensd kan groeien (bijvoorbeeld bij een langlopend dossier met tientallen updates), groeit het document mee en wordt elke lezing van het bericht — ook als je alleen de onderwerpregel nodig hebt — zwaarder dan nodig. MongoDB heeft bovendien een maximale documentgrootte (16 MB), theoretisch ver weg maar een signaal dat onbegrensde embedded arrays een designgeur zijn.
+c. Bij een klein, begrensd aantal commentaren (zoals hier, per bericht typisch een handvol) blijft embedding de praktische keuze — de leeswinst van “alles in één document” weegt op tegen het groeirisico. Bij een dossier dat structureel honderden updates kan krijgen, zou referencing (een aparte <code>commentaren</code>-collection met een <code>bericht_id</code>-verwijzing) beter passen, analoog aan hoe deel 5 een 1:N-relatie als aparte tabel modelleert zodra de “N”-kant onbegrensd is.</p>
+<h3>EL1.4</h3>
+<p>a. Dit toegangspatroon — “vind de N dichtstbijzijnde profielen in een multidimensionale ruimte van kenmerken” — is een <strong>similarity search / nearest-neighbor</strong>-vraag. Dat is geen van de vier scenario’s uit deel 21 paragraaf 13 in hun klassieke vorm (geen sub-milliseconde key-lookup, geen graafpad, geen vrije tekst, geen logging-schaal). Het dichtst in de buurt komt vectorzoeken — waarvoor PostgreSQL zelf een uitbreiding heeft (<code>pgvector</code>), wat het eerste te onderzoeken pad zou moeten zijn vóór een apart systeem, in lijn met deel 21’s grondhouding.
+b. Een concreet knelpunt zou zijn: bij een gemeten belasting van bijvoorbeeld duizenden gelijktijdige “vergelijk mij”-aanvragen presteert een <code>pgvector</code>-index (of een naïeve afstandquery) niet binnen de acceptabele responstijd, ook na indexering en query-optimalisatie (deel 13, deel 14). Zonder die meting is dit een aanname, geen knelpunt.
+c. Zelfbeoordeling aan de hand van de drie punten: heb je “similarity search” als het echte patroon benoemd (niet “gewoon NoSQL nodig”), heb je een meetbaar knelpunt geformuleerd in plaats van “het zou wel eens traag kunnen zijn”, en heb je de kosten van een derde systeem (naast PostgreSQL en de twee uit dit deel) benoemd als iets dat een concrete rechtvaardiging nodig heeft?</p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">14 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">241 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><span></span><a class="dbm-prevnext next" href="../el-02/reader.html">Wide-column en graaf in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

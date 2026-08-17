@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Security-verdieping en NoSQL in perspectief — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 21 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 21 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 21: Security-verdieping en NoSQL in perspectief</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE SCHEMA IF NOT EXISTS oefening21;
+</code></pre>
+<p>Tijdsindicatie: circa 125 minuten.</p>
+<hr>
+<h2>Opdracht 21.1 — Permissief versus restrictief (20 min, tweetallen)</h2>
+<p>a) Maak een tabel met testrijen en zet RLS aan.
+b) Maak twee permissieve policies: één die rijen toont waar <code>status = 'actief'</code>, één die rijen toont waar <code>regio = 'noord'</code>. Wat gebeurt er met een rij die <code>status = 'actief'</code> maar <code>regio = 'zuid'</code> heeft?
+c) Verklaar het resultaat uit b) met het OR-gedrag van permissieve policies.
+d) Maak een derde policy die restrictief is: alleen zichtbaar binnen kantooruren (simuleer dit met een simpele <code>true</code>/<code>false</code>-conditie die je kunt omzetten). Combineer met b). Verklaar het nieuwe resultaat.
+e) Herformuleer de opzet zodat het gedrag wordt: <strong>een rij moet aan status ÉN regio voldoen</strong>, in plaats van OF. Welke aanpassing was daarvoor nodig?</p>
+<hr>
+<h2>Opdracht 21.2 — RLS en prestaties (20 min, drietallen)</h2>
+<p>a) Maak een tabel met 200.000 rijen en een RLS-policy die filtert op een sessie-instelling.
+b) Meet een query met deze RLS aan, zonder ondersteunende index.
+c) Voeg de index toe en meet opnieuw.
+d) Maak een tweede versie van de policy die in plaats van de sessie-instelling een <code>STABLE</code>-functie aanroept die dezelfde waarde teruggeeft via een kleine lookup-tabel. Meet het verschil.
+e) Verklaar waarom het verschil bij 200.000 rijen zichtbaar wordt, terwijl het bij 100 rijen (zoals in deel 9) onopgemerkt zou blijven.</p>
+<hr>
+<h2>Opdracht 21.3 — pgcrypto in de praktijk (15 min, tweetallen)</h2>
+<p>a) Maak een tabel met een gewone tekstkolom en een versleutelde variant van dezelfde gegevens.
+b) Vergelijk <code>pg_column_size</code> van beide.
+c) Probeer de versleutelde kolom te doorzoeken met een gelijkheidsvergelijking op de versleutelde waarde zelf (niet ontsleuteld). Werkt dat zoals verwacht?
+d) Wat zou je moeten doen om toch doorzoekbaarheid te krijgen op een versleuteld veld (bijvoorbeeld op een deterministisch gehashte variant ernaast)? Wat lever je daarbij in aan bescherming?
+e) Waar in je eigen infrastructuur (of, als oefening, denkbeeldig bij Meridiaan) zou de encryptiesleutel moeten wonen, en waarom niet in de database zelf?</p>
+<hr>
+<h2>Opdracht 21.4 — SSL verplicht stellen (15 min, tweetallen)</h2>
+<p>a) Bekijk de huidige <code>pg_hba.conf</code> van je omgeving. Staat er <code>host</code> of <code>hostssl</code>?
+b) Als mogelijk: zet een regel om naar <code>hostssl</code> en probeer daarna een verbinding met <code>sslmode=disable</code>. Wat gebeurt er?
+c) Probeer een verbinding met <code>sslmode=verify-full</code> zonder het juiste rootcertificaat. Wat gebeurt er?
+d) Wat is het verschil tussen <code>sslmode=require</code> en <code>sslmode=verify-full</code> in termen van wat er precies wordt gecontroleerd?
+e) Voor welk deel van Meridiaans verkeer (portaal, rapportage, beheer) zou je op zijn minst <code>verify-full</code> willen afdwingen?</p>
+<hr>
+<h2>Opdracht 21.5 — Rolhiërarchie bouwen (20 min, drietallen)</h2>
+<p>a) Ontwerp groepsrollen voor minstens vier van de rollen die in eerdere delen zijn langsgekomen (portaal_app, rapportage, klantenservice, migratie, backup).
+b) Ken per groepsrol de minimale rechten toe die bij die taak horen.
+c) Maak een individuele rol aan en ken hem twee groepsrollen toe. Controleer met de overzichtsquery uit de reader of dat klopt.
+d) Zet <code>DEFAULT PRIVILEGES</code> zodat een nieuwe tabel in het schema automatisch leesrechten krijgt voor de juiste groepsrol.
+e) Maak een nieuwe tabel aan en controleer of de rechten inderdaad automatisch zijn toegepast.
+f) Wat is het risico als je <code>DEFAULT PRIVILEGES</code> te ruim instelt?</p>
+<hr>
+<h2>Opdracht 21.6 — De search_path-valkuil (15 min, tweetallen)</h2>
+<p>a) Maak een <code>SECURITY DEFINER</code>-functie zonder vaste <code>search_path</code> die een simpele tabel bevraagt met een niet-schema-gekwalificeerde naam.
+b) Maak in een ander schema een tabel met dezelfde naam maar andere inhoud.
+c) Verander (als test, in je eigen sessie) de <code>search_path</code> zodat het nieuwe schema eerst komt, en roep de functie aan. Welke tabel wordt geraadpleegd?
+d) Herstel de functie met een vaste <code>SET search_path</code> en herhaal c). Verandert het resultaat?
+e) Formuleer in twee zinnen waarom dit een beveiligingslek is en niet alleen een correctheidsbug.</p>
+<hr>
+<h2>Opdracht 21.7 — NoSQL-categorieën toepassen (15 min, drietallen)</h2>
+<p>Voor elk scenario: welke NoSQL-categorie (of: blijf bij PostgreSQL, en met welk onderdeel) past het beste, en waarom?</p>
+<p>a) Meridiaan wil sessietokens voor het portaal met een levensduur van twintig minuten en submilliseconde-opzoeking.
+b) Een toekomstig platform wil klantenservicemedewerkers laten zoeken door vrije tekst in duizenden ondersteuningsnotities, met facetten (per soort, per periode) en tolerantie voor typefouten.
+c) Een onderzoeksvraag: “welke werkgevers zijn via gedeelde bestuurders verbonden met elkaar, tot drie schakels diep.”
+d) Ruwe klikstroomgegevens van het portaal, honderden miljoenen events per maand, waarvan het merendeel nooit individueel wordt opgevraagd maar wel geaggregeerd geanalyseerd.
+e) De deelnemersregistratie zelf.</p>
+<hr>
+<h2>Opdracht 21.8 — Het beveiligingsadvies (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>beveiligingsadvies</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>RLS-ontwerp</strong> voor het werkgeverportaal (multi-tenant), met policies en de bijbehorende index.</li>
+<li><strong>Encryptiebeleid:</strong> welke kolommen (indien enige) kolomversleuteling verdienen, en welke niet — met reden.</li>
+<li><strong>Verbindingsbeleid:</strong> SSL-vereisten per type verkeer.</li>
+<li><strong>De rolhiërarchie</strong>, met minstens vijf groepsrollen en hun onderlinge relatie tot individuele rollen.</li>
+<li><strong>Eén concrete <code>SECURITY DEFINER</code>-functie</strong> uit een eerder deel van de cursus (zoek er zelf een op) en de correctie die nodig is volgens paragraaf 9.</li>
+<li><strong>Eén NoSQL-overweging</strong>: een scenario bij Meridiaan waar je een aparte datastore zou overwegen, met de afweging expliciet gemaakt.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is elke RLS-policy voorzien van de bijbehorende index?</li>
+<li>Is het encryptiebeleid selectief (niet “alles versleutelen”) met een expliciete reden per keuze?</li>
+<li>Is de gevonden <code>SECURITY DEFINER</code>-functie een echte uit eerdere delen, niet verzonnen?</li>
+<li>Is de NoSQL-overweging gebaseerd op een toegangspatroon, niet op voorkeur?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 21.1</h2>
+<p>b) De rij <strong>is zichtbaar</strong>, ook al voldoet hij maar aan één van de twee voorwaarden.</p>
+<p>c) Permissieve policies worden met <strong>OR</strong> gecombineerd: een rij is zichtbaar zodra minstens één toepasselijke policy hem toelaat. De twee voorwaarden werken dus niet als een gezamenlijke eis maar als twee alternatieve toegangswegen.</p>
+<p>d) Met een <code>AS RESTRICTIVE</code>-policy die buiten kantooruren <code>false</code> teruggeeft: de rij wordt <strong>onzichtbaar</strong> buiten kantooruren, ongeacht wat de permissieve policies zeggen — de restrictieve voorwaarde wordt met AND toegevoegd bovenop het resultaat van de permissieve OR.</p>
+<p>e) Om status ÉN regio als gezamenlijke eis te laten gelden (in plaats van OF), moet je ze <strong>in dezelfde policy</strong> samenvoegen met een expliciete AND in de <code>USING</code>-clausule, óf één van de twee als <code>AS RESTRICTIVE</code> maken. Twee losse permissieve policies zijn per definitie een OF-relatie.</p>
+<hr>
+<h2>Uitwerking 21.2</h2>
+<p>c) Met de ondersteunende index: aanzienlijke winst, vergelijkbaar met elke andere indexcasus in deze cursus (deel 8, 13, 14) — de RLS-voorwaarde is in essentie gewoon een extra <code>WHERE</code>-clausule voor de planner.</p>
+<p>d) De functie-variant is <strong>merkbaar trager</strong>, vooral naarmate het aantal rijen groeit — ook al geeft de functie uiteindelijk dezelfde waarde terug als de sessie-instelling. Zonder dat de planner de functie kan “wegoptimaliseren”, wordt hij effectief per rij (of in elk geval vaker dan nodig) geëvalueerd.</p>
+<p>e) Bij 100 rijen is de absolute tijd van een functie-aanroep-per-rij verwaarloosbaar — enkele microseconden maal honderd is niets. Bij 200.000 rijen vermenigvuldigt diezelfde kleine overhead zich tot een merkbaar verschil. Dit is dezelfde les als “meten op schaal, niet op een speelgoedvoorbeeld” die door de hele cursus terugkeert (bijvoorbeeld deel 12, kolomvolgorde).</p>
+<hr>
+<h2>Uitwerking 21.3</h2>
+<p>b) De versleutelde kolom is <strong>groter</strong> — de versleutelingsoverhead (metadata, initialisatievector) komt bovenop de oorspronkelijke gegevensomvang.</p>
+<p>c) <strong>Nee.</strong> Twee keer dezelfde brontekst versleuteld met <code>pgp_sym_encrypt</code> levert (door een ingebouwde willekeurige component) <strong>verschillende</strong> cijferteksten op, dus een gelijkheidsvergelijking op de versleutelde waarde zelf vindt niets, zelfs niet de eigen eerder opgeslagen waarde in een andere rij met dezelfde brontekst.</p>
+<p>d) Een aparte, deterministische hash (bijvoorbeeld met een sleutelgebonden HMAC) naast de versleutelde waarde, waarop je wél gelijkheid kunt zoeken. <strong>Wat je inlevert:</strong> die hash lekt of twee waarden gelijk zijn (een aanvaller kan patronen zien, zoals hoe vaak dezelfde waarde voorkomt), ook al kent hij de waarde zelf niet — een kleiner maar reëel lek ten opzichte van volledige, niet-doorzoekbare versleuteling.</p>
+<p>e) Modelantwoord: <em>“In een extern sleutelbeheersysteem (Vault of vergelijkbaar), nooit in de database zelf — anders heeft iedereen met leestoegang tot de database ook toegang tot de sleutel die de versleuteling zou moeten tegenhouden, en is de versleuteling zinledig tegen precies het risico (een gecompromitteerde databaserol) waar hij tegen zou moeten beschermen.”</em></p>
+<hr>
+<h2>Uitwerking 21.4</h2>
+<p>b) Met <code>sslmode=disable</code> wordt de verbinding <strong>geweigerd</strong> — <code>hostssl</code> staat geen onversleutelde verbindingen toe, in tegenstelling tot een gewone <code>host</code>-regel die beide zou toestaan.</p>
+<p>c) De verbinding wordt geweigerd met een foutmelding over een onbekende of niet-geverifieerde certificaatketen — <code>verify-full</code> controleert actief of het certificaat te vertrouwen is, in tegenstelling tot alleen “is er versleuteling”.</p>
+<p>d) <code>require</code> controleert alleen dat het verkeer versleuteld is, zonder te verifiëren wíé aan de andere kant zit — kwetsbaar voor een man-in-the-middle die zijn eigen (niet-geverifieerd) certificaat aanbiedt. <code>verify-full</code> controleert daarnaast dat het certificaat bij de verwachte hostnaam hoort.</p>
+<p>e) Modelantwoord: al het verkeer met persoonsgegevens — dus portaal, klantenservice en beheerverkeer zeker; voor rapportageverkeer geldt hetzelfde als de rapportagereplica ook persoonsgegevens bevat (wat in deel 18’s ontwerp bewust werd vermeden voor de logische-replicatie-variant, maar niet noodzakelijk voor de fysieke replica’s).</p>
+<hr>
+<h2>Uitwerking 21.5</h2>
+<p>b) Modelvoorbeeld:</p>
+<ul>
+<li><code>lezer_deelnemer</code>: <code>SELECT</code> op <code>deelnemer</code>, <code>dienstverband</code>, <code>aanspraak</code></li>
+<li><code>schrijver_mutatie</code>: <code>SELECT, INSERT, UPDATE</code> op <code>mutatie</code></li>
+<li><code>lezer_rapportage</code>: <code>SELECT</code> op alle tabellen, bedoeld voor de replica (deel 18)</li>
+<li><code>beheerder_migratie</code>: <code>ALL</code> op het schema, tijdelijk en gedocumenteerd gebruik</li>
+</ul>
+<p>c)</p>
+<pre><code class="language-sql">CREATE ROLE klantenservice LOGIN PASSWORD '...';
+GRANT lezer_deelnemer TO klantenservice;
+GRANT schrijver_mutatie TO klantenservice;
+
+SELECT r.rolname, g.rolname AS via_groep
+FROM pg_auth_members m
+JOIN pg_roles r ON r.oid = m.member
+JOIN pg_roles g ON g.oid = m.roleid
+WHERE r.rolname = 'klantenservice';
+</code></pre>
+<p>d)</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan_prod
+    GRANT SELECT ON TABLES TO lezer_deelnemer;
+</code></pre>
+<p>e) Een nieuwe tabel (aangemaakt ná deze instelling) toont automatisch <code>lezer_deelnemer</code> in zijn rechtenoverzicht (<code>\dp</code> in psql, of een query op <code>information_schema.table_privileges</code>), zonder dat iemand er expliciet een <code>GRANT</code> voor hoefde te typen.</p>
+<p>f) Als <code>DEFAULT PRIVILEGES</code> te ruim is (bijvoorbeeld leesrechten voor een brede groepsrol op <strong>elk</strong> nieuw schema in plaats van een specifiek schema), krijgt een toekomstige, mogelijk gevoelige tabel automatisch en onopgemerkt leesrechten voor een rol die daar nooit expliciet voor is goedgekeurd. Dit is het spiegelbeeld van het probleem dat de instelling probeert op te lossen: vergeten om rechten toe te kennen wordt vervangen door het risico van onbedoeld te veel rechten.</p>
+<hr>
+<h2>Uitwerking 21.6</h2>
+<p>c) Met de gemanipuleerde <code>search_path</code>: de functie raadpleegt de <strong>verkeerde</strong> tabel (die in het schema dat nu eerder in het pad staat), zonder dat de aanroeper dat had bedoeld of gemerkt — de functie draait immers met de rechten van de eigenaar, dus de aanroeper ziet mogelijk resultaten (of veroorzaakt effecten) op basis van een tabel die hij zelf heeft gepositioneerd.</p>
+<p>d) Met een vaste <code>SET search_path = meridiaan_prod, pg_catalog</code>: de functie raadpleegt <strong>altijd</strong> de bedoelde tabel in <code>meridiaan_prod</code>, ongeacht wat de aanroepende sessie als eigen <code>search_path</code> heeft ingesteld.</p>
+<p>e) Modelantwoord: <em>“Het is geen correctheidsbug maar een beveiligingslek, omdat een kwaadwillende aanroeper — met slechts het recht om de functie aan te roepen, niet de onderliggende tabel te lezen — actief kan sturen welk object de functie raadpleegt, en zo mogelijk resultaten kan zien of effecten kan veroorzaken waarvoor hij normaal geen rechten had.”</em></p>
+<hr>
+<h2>Uitwerking 21.7</h2>
+<p>a) <strong>Key-value (Redis).</strong> Extreem simpele opzoeking, korte levensduur, snelheid is de enige eis — het schoolvoorbeeld voor deze categorie.</p>
+<p>b) <strong>Zoek-georiënteerd (Elasticsearch), naast PostgreSQL als bron van waarheid.</strong> Facetten, tolerantie voor typefouten en schaal op vrije tekst gaan verder dan wat <code>pg_trgm</code> comfortabel biedt, al zou <code>pg_trgm</code>/<code>tsvector</code> (deel 14) bij een kleinere schaal een prima startpunt zijn.</p>
+<p>c) <strong>Graaf (Neo4j).</strong> Padvragen over meerdere schakels diep zijn met recursieve CTE’s (deel 4, 8) mogelijk maar worden bij grote, dichte netwerken al snel onhandelbaar in zowel schrijfstijl als prestatie.</p>
+<p>d) <strong>Wide-column, of eenvoudiger: PostgreSQL met partitionering (deel 16) als het volume dat toelaat.</strong> Bij “honderden miljoenen per maand” is de vervolgvraag of één goed gepartitioneerde PostgreSQL-installatie (eventueel met BRIN, deel 14) volstaat vóór je naar een aparte wide-column-oplossing grijpt — dat hangt af van het werkelijke schrijftempo en de gewenste retentie.</p>
+<p>e) <strong>PostgreSQL, relationeel, zonder twijfel.</strong> Sterke integriteitseisen, transactionele samenhang tussen tabellen, en complexe query’s met joins zijn precies waar het relationele model voor gemaakt is.</p>
+<hr>
+<h2>Uitwerking 21.8 — modelantwoord (verkort)</h2>
+<p><strong>Beveiligingsadvies Meridiaan</strong></p>
+<p><strong>1. RLS-ontwerp werkgeverportaal</strong></p>
+<pre><code class="language-sql">ALTER TABLE dienstverband ENABLE ROW LEVEL SECURITY;
+CREATE POLICY wg_eigen ON dienstverband FOR SELECT
+    USING (werkgever_id = current_setting('app.werkgever_id')::integer);
+CREATE INDEX ON dienstverband (werkgever_id);
+</code></pre>
+<p>Analoog voor <code>premienota</code>. Sessie-instelling in plaats van een lookup-functie, om de prestatieval uit paragraaf 4 te vermijden.</p>
+<p><strong>2. Encryptiebeleid</strong></p>
+<p>Kolomversleuteling <strong>alleen</strong> voor rekeningnummers (<code>pgcrypto</code>, sleutel in extern sleutelbeheer) — een klein aantal velden met een specifieke, hoge gevoeligheid. <strong>Niet</strong> voor BSN of adresgegevens: die zijn al beschermd door RLS, rolrechten en <code>pgaudit</code> (deel 20), en volledige versleuteling zou hun doorzoekbaarheid (nodig voor het portaal en de klantenservice) onnodig wegnemen.</p>
+<p><strong>3. Verbindingsbeleid</strong></p>
+<p><code>hostssl</code> verplicht voor alle verkeer met persoonsgegevens; <code>sslmode=verify-full</code> vanaf elke applicatieserver. Interne beheerverbindingen (migratie, back-up) minimaal <code>verify-ca</code>.</p>
+<p><strong>4. Rolhiërarchie</strong></p>
+<p>Vijf groepsrollen: <code>lezer_deelnemer</code>, <code>schrijver_mutatie</code>, <code>lezer_rapportage</code>, <code>beheerder_migratie</code>, <code>backup_operator</code> (dit laatste met alleen het <code>REPLICATION</code>-recht, deel 17). Individuele rollen (<code>portaal_app</code>, <code>klantenservice</code>, <code>rapportage_bi</code>) erven een combinatie hiervan. <code>DEFAULT PRIVILEGES</code> ingesteld voor <code>lezer_deelnemer</code> op het productieschema.</p>
+<p><strong>5. Een gevonden SECURITY DEFINER-functie</strong></p>
+<p><em>Voorbeeld:</em> een functie uit deel 9 die deelnemersgegevens voor de klantenservice ontsluit zonder brede tabelrechten. <strong>Correctie:</strong> controleer of <code>SET search_path</code> expliciet is gezet; zo niet, toevoegen als eerstvolgende wijziging vóór verdere uitrol.</p>
+<p><strong>6. Een NoSQL-overweging</strong></p>
+<p>De klantenservice heeft behoefte aan vrije-tekstzoeken door historische contactnotities. Voorstel: starten met <code>pg_trgm</code>/<code>tsvector</code> binnen PostgreSQL (deel 14); pas overstappen naar Elasticsearch als het notitievolume en de gewenste facetfunctionaliteit die aanpak aantoonbaar ontgroeien — een gemeten beslissing, geen vooraf genomen keuze.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Elke RLS-policy met een index.</strong> Groepen die dit vergeten, herhalen de valkuil uit paragraaf 4.</li>
+<li><strong>Selectief encryptiebeleid.</strong> “Alles versleutelen” toont dat de afweging uit paragraaf 5 niet is gemaakt.</li>
+<li><strong>Een echte functie uit eerdere delen</strong>, niet verzonnen — dit toetst of de groep de cursus als één doorlopend geheel heeft gevolgd.</li>
+<li><strong>De NoSQL-overweging op toegangspatroon gebaseerd</strong>, met een expliciete “wanneer stappen we over”-drempel in plaats van een vooraf ingenomen standpunt.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 21.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">314 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">&larr; Deel 20 — Monitoring, logging en pgaudit</a><a class="dbm-prevnext next" href="../deel-22-zero-downtime-migraties-en-capstone/reader.html">Deel 22 — Zero-downtime migraties en capstone &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

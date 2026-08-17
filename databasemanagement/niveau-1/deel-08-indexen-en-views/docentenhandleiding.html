@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Indexen en views — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 8 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 8: Indexen en views</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Deelnemers komen binnen met de aanname dat prestatieproblemen worden opgelost door indexen toe te voegen. Dat is soms waar en meestal niet, en het corrigeren van die aanname is het echte doel van vandaag.</p>
+<p>Drie dingen die moeten landen:</p>
+<ol>
+<li><strong><code>Seq Scan</code> is geen fout.</strong> Op een kleine tabel of een brede selectie is het de juiste keuze, en de planner heeft dat uitgerekend.</li>
+<li><strong>Meten in plaats van geloven.</strong> Elke prestatiebewering die niemand met <code>EXPLAIN ANALYZE</code> heeft gecontroleerd, is een gerucht — en dit vakgebied zit vol geruchten.</li>
+<li><strong>“Traag” is een diagnose, geen probleem.</strong> Opdracht 8.7 leert onderscheiden tussen vier oorzaken waarvan er maar één met een index wordt opgelost.</li>
+</ol>
+<p><strong>Waarschuwing over de casusomvang:</strong> met 8.000 deelnemers zijn veel query’s ook zónder index in milliseconden klaar. Dat is didactisch lastig én didactisch nuttig. Het werkboek maakt daarom eerst een tabel van bijna 300.000 rijen. Laat de zaal dat script draaien vóór opdracht 8.2; het kost een halve minuut.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 8; de meegenomen trage query uit deel 4.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Draai het <code>mutatie_groot</code>-script zelf vooraf</strong> en noteer je eigen meetwaarden. Die getallen gebruik je in de demonstraties, en ze verschillen per machine — je moet weten wat op jouw scherm te verwachten is.</li>
+<li>Zorg dat je psql-venster breed genoeg is om queryplannen leesbaar te tonen. Plannen die omklappen zijn onleesbaar; overweeg een kleiner lettertype of <code>\pset pager off</code>.</li>
+<li>Verzamel bij aanvang de meegenomen query’s uit deel 4. Eén echte query uit de zaal werkt beter als demonstratiemateriaal dan elk bedacht voorbeeld.</li>
+</ul>
+<p><strong>Zaalopstelling:</strong> iedereen achter een machine; tweetallen voor de meetopdrachten, drietallen voor 8.7 en 8.9.</p>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:10</td>
+<td>Terugblik; oogst de meegenomen query’s</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:10-0:25</td>
+<td>“Traag” ontleden (§2) + B-tree (§3)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:25-0:50</td>
+<td>EXPLAIN en EXPLAIN ANALYZE (§4-5) + <strong>opdracht 8.1</strong></td>
+<td>Demo + zelfstandig</td>
+</tr>
+<tr>
+<td>0:50-1:00</td>
+<td><code>mutatie_groot</code> aanmaken; scantypen (§6)</td>
+<td>Meetypen + presentatie</td>
+</tr>
+<tr>
+<td>1:00-1:25</td>
+<td><strong>Opdracht 8.2</strong> — sequentieel of index</td>
+<td>Tweetallen</td>
+</tr>
+<tr>
+<td>1:25-1:40</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:40-1:55</td>
+<td>Wanneer seq scan goed is (§7) + joinalgoritmen (§8)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>1:55-2:10</td>
+<td><strong>Opdracht 8.3</strong> — de klassieke fout</td>
+<td>Zelfstandig</td>
+</tr>
+<tr>
+<td>2:10-2:30</td>
+<td>Samengestelde indexen (§10) + <strong>opdracht 8.4</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:30-2:40</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:40-2:55</td>
+<td>Partiële en expressie-indexen (§11-13) + <strong>opdracht 8.5</strong></td>
+<td>Demo + zelfstandig</td>
+</tr>
+<tr>
+<td>2:55-3:10</td>
+<td>Wat een index kost (§15) + <strong>opdracht 8.6</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>3:10-3:25</td>
+<td><strong>Opdracht 8.7</strong> — diagnose</td>
+<td>Drietallen + plenair</td>
+</tr>
+<tr>
+<td>3:25-3:35</td>
+<td>Views en materialized views (§19-20)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>3:35-4:00</td>
+<td><strong>Opdracht 8.9</strong> — materialized view voor Karin</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 8.6 vervallen (of geef als huiswerk) en behandel de kosten plenair. Kort <strong>nooit</strong> paragraaf 7 (wanneer seq scan goed is) of opdracht 8.7 in — dat zijn de twee correcties waarvoor dit dagdeel bestaat.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Begin met de vijf betekenissen van “de database is traag” uit paragraaf 2. Vraag de zaal welke ze in hun eigen organisatie het vaakst horen — meestal de vage variant.</p>
+<p>Zet dan de vier oorzaken op het bord en laat ze de hele dag staan. Aan het eind, bij opdracht 8.7, komen ze terug.</p>
+<p>Oogst de meegenomen query’s uit deel 4. Kies er één die geschikt lijkt en bewaar hem voor het <code>EXPLAIN</code>-blok.</p>
+<h3>4.2 EXPLAIN (0:25)</h3>
+<p>Loop een plan <strong>regel voor regel</strong> langs op het grote scherm en benoem elk veld. Deelnemers die dit voor het eerst zien, raken overweldigd door de hoeveelheid getallen; de structuur (van binnen naar buiten, van onder naar boven) moet je expliciet tekenen.</p>
+<p>Twee dingen die je hier vestigt en de hele dag herhaalt:</p>
+<ul>
+<li><strong><code>Rows Removed by Filter</code></strong> is het duidelijkste signaal van een ontbrekende index. Wijs het aan.</li>
+<li><strong>Schatting versus werkelijkheid.</strong> Laat zien waar <code>rows=</code> en <code>actual rows=</code> staan en zeg dat een factor tien verschil betekent dat het plan verdacht is.</li>
+</ul>
+<p>De waarschuwing over <code>EXPLAIN ANALYZE</code> op een <code>UPDATE</code> moet je expliciet maken. Iemand in de zaal gaat dit anders een keer in productie doen.</p>
+<h3>4.3 Opdracht 8.2 (1:00)</h3>
+<p>Dit is het meetblok waar de kernles uit komt. Loop rond en let erop dat deelnemers <strong>beide</strong> metingen noteren — voor en na. Wie alleen de eindtoestand bekijkt, leert niets.</p>
+<p>Onderdeel c) (index op <code>kanaal</code>, 20% van de rijen) is het belangrijkste: de index wordt niet of nauwelijks gebruikt, en deelnemers vinden dat aanvankelijk teleurstellend. Grijp dat moment:</p>
+<blockquote>
+<p><em>“Jullie hebben net een index gemaakt die niet gebruikt wordt. Dat is geen mislukking — dat is de planner die uitrekent dat jullie index duurder is dan gewoon alles lezen. Wie kan uitleggen waarom?”</em></p>
+</blockquote>
+<p>Onderdeel e) (250 werkgevers) bevestigt het: op een kleine tabel is een index vrijwel altijd zinloos.</p>
+<h3>4.4 Wanneer seq scan goed is (1:40)</h3>
+<p>Dit is de correctie van het dagdeel en die verdient een eigen blok, ook al is de inhoud kort. Zeg het als regel:</p>
+<blockquote>
+<p><em>“Zie je een <code>Seq Scan</code> waar je een index verwachtte, dan is de vraag niet ‘hoe dwing ik een index af’ maar ‘waarom denkt de planner dat dit goedkoper is — en heeft hij gelijk?’ Meestal heeft hij gelijk.”</em></p>
+</blockquote>
+<p>Joinalgoritmen kort houden: benoemen, laten herkennen, niet uitdiepen. Het enige praktische punt is dat een <code>Nested Loop</code> met een hoge <code>loops</code> vaak de oorzaak van een traag plan is.</p>
+<h3>4.5 Opdracht 8.3 (1:55)</h3>
+<p>De functie-om-de-kolom-fout. Dit is de meest voorkomende praktijkfout uit dit deel en deelnemers herkennen hem in hun eigen code.</p>
+<p>Belangrijk bij de bespreking van e): <strong>herschrijven verslaat een expressie-index.</strong> Deelnemers zijn enthousiast over de expressie-index omdat hij nieuw is, en willen hem overal toepassen. Stuur daartegenin: de herschrijving is gratis, de index kost onderhoud.</p>
+<p>Verwijs terug naar de uitwerking van opdracht 3.3c, waar dit al terloops stond. Deelnemers vinden het bevredigend als een eerdere terzijde nu betekenis krijgt.</p>
+<h3>4.6 Samengestelde indexen (2:10)</h3>
+<p>De voorvoegselregel is examenstof en praktijkstof tegelijk. Teken de index als gesorteerde lijst op het bord en laat de zaal zien waarom zoeken op de tweede kolom niet werkt: de lijst is niet op die kolom gesorteerd.</p>
+<p>Onderdeel e) (gelijkheid vóór bereik) is subtiel maar waardevol. Groepen die het zelf vinden, verdienen een compliment.</p>
+<h3>4.7 Partiële indexen (2:40)</h3>
+<p>Verbind expliciet met deel 7: dit is de index die de <code>SKIP LOCKED</code>-verwerkingsquery snel maakt. Het argument in opdracht 8.5f — dat de index niet meegroeit met de historie omdat verwerkte rijen eruit verdwijnen — is het sterkste en wordt zelden zelf gevonden. Breng het in als niemand erop komt.</p>
+<h3>4.8 Opdracht 8.7 (3:10)</h3>
+<p>De belangrijkste opdracht van het dagdeel, en hij duurt maar een kwartier.</p>
+<p>Laat de drietallen kort werken en bespreek daarna plenair. De opbrengst zit in onderdeel d): <strong>alleen bij melding C helpt een nieuwe index.</strong> Bij A rekent de query niet maar wacht hij (deel 7), bij B ligt de index er waarschijnlijk al maar wordt hij niet gekozen.</p>
+<p>Zeg de conclusie hardop:</p>
+<blockquote>
+<p><em>“Mensen voegen indexen toe bij melding A — juist daar waar het het minst kan helpen. Vraag altijd eerst: wat precies is traag, en sinds wanneer?”</em></p>
+</blockquote>
+<p>Verwijs terug naar de vier oorzaken op het bord uit de opening.</p>
+<h3>4.9 Views en opdracht 8.9 (3:25)</h3>
+<p>Views kort: het punt is de definitieplek. Verbind met deel 1 — drie afdelingen, drie deelnemersaantallen. Een view legt vast wat “actieve deelnemer” betekent, op één plek en zichtbaar voor iedereen.</p>
+<p>Bij opdracht 8.9 stuur je op twee dingen:</p>
+<ul>
+<li><strong>Onderdeel c) levert nauwelijks verschil op</strong> op de casusomvang. Dat is de bedoeling. Groepen die dat opmerken en concluderen dat een materialized view hier (nog) niet nodig is, hebben de les van het dagdeel begrepen — beloon dat expliciet.</li>
+<li><strong>Onderdeel f) is de kern.</strong> Een materialized view die stilletjes stopt met verversen, ziet er precies hetzelfde uit als een actuele. Groepen die alleen de snelheidswinst beschrijven, moeten de vraag krijgen: <em>“hoe merkt Karin dat de cijfers van drie weken geleden zijn?”</em></li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Kan ik een index afdwingen, zoals een hint in Oracle?”</strong>
+Nee, PostgreSQL kent geen query-hints, en dat is een bewuste ontwerpkeuze: hints verouderen mee met de data en leveren op termijn slechtere plannen op. Wat je wel hebt zijn de <code>enable_*</code>-instellingen — maar die zijn diagnosemiddelen, geen productiegereedschap.</p>
+<p><strong>“Hoeveel indexen zijn te veel?”</strong>
+Geen getal, wel een toets: als het aantal indexen de schrijfsnelheid meetbaar hindert en er staan indexen met <code>idx_scan = 0</code> bij, is het te veel. Meet beide kanten (opdracht 8.6).</p>
+<p><strong>“Moet ik indexen periodiek opnieuw opbouwen?”</strong>
+Meestal niet. Indexen krijgen bloat (deel 7), maar autovacuum houdt dat doorgaans onder controle. Bij zeer schrijfintensieve tabellen kan <code>REINDEX CONCURRENTLY</code> zinvol zijn; dat hoort in niveau 2.</p>
+<p><strong>“Wat is een goede uitvoeringstijd?”</strong>
+Hangt af van wat de gebruiker doet. Voor een schermactie: onder 100 ms. Voor een rapport: seconden. Voor een nachtelijke batch: minuten. De bruikbare vraag is niet “is dit snel” maar “is dit snel genoeg voor wat het moet doen, en wordt het erger als de data groeit?”</p>
+<p><strong>“Waarom niet gewoon een index op elke kolom?”</strong>
+Opdracht 8.6 beantwoordt dat met een meting. Kort: elke schrijfbewerking moet elke index bijwerken, en de meeste van die indexen worden nooit gebruikt.</p>
+<p><strong>“Helpt een index bij een <code>LIKE '%zoekterm%'</code>?”</strong>
+Een B-tree niet — er is geen voorvoegsel om op te zoeken. Daarvoor bestaat een GIN-index met de <code>pg_trgm</code>-extensie, of volledige tekstzoekfunctionaliteit. Beide in niveau 2, deel 14.</p>
+<p><strong>“Wij hebben een rapportagedatabase naast productie. Verandert dat het antwoord?”</strong>
+Ja, aanzienlijk: op een leesreplica of rapportagekopie zijn de schrijfkosten van indexen veel minder relevant, dus je kunt daar ruimer indexeren. Dat is precies waarom die scheiding bestaat. Replicatie komt in niveau 2, deel 18.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vraagt bij een <code>Seq Scan</code> uit zichzelf naar de tabelgrootte</td>
+<td>De correctie is geland</td>
+</tr>
+<tr>
+<td>Noteert bij 8.2 beide metingen</td>
+<td>Werkt methodisch; goed teken</td>
+</tr>
+<tr>
+<td>Kiest bij 8.3 voor herschrijven boven een expressie-index</td>
+<td>Weegt kosten mee</td>
+</tr>
+<tr>
+<td>Concludeert bij 8.9c dat de materialized view hier niet nodig is</td>
+<td>Sterk; noteer voor de capstone</td>
+</tr>
+<tr>
+<td>Voegt bij melding A uit 8.7 een index toe</td>
+<td>Kernmisvatting; corrigeren</td>
+</tr>
+<tr>
+<td>Wil overal indexen “voor de zekerheid”</td>
+<td>Terugbrengen naar opdracht 8.6</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 9</h2>
+<p>Brug: <em>“Nog één probleem uit deel 1 staat open: de stagiair die toegang kreeg tot de werkgeversmap en daarbij ook de burgerservicenummers kon zien. Volgende keer sluiten we dat af — en dan is de lijst van zes compleet.”</em></p>
+<p>Geef mee: <em>bedenk voor de eigen organisatie wie er allemaal bij de database kan, en of dat klopt.</em> Dat is het startpunt van deel 9.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 8.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">432 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-07-transacties-acid-en-mvcc/reader.html">&larr; Deel 7 — Transacties, ACID en MVCC</a><a class="dbm-prevnext next" href="../deel-09-rollen-rechten-en-security/reader.html">Deel 9 — Rollen, rechten en security &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

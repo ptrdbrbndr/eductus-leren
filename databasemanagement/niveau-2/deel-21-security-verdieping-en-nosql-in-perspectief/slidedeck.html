@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Security-verdieping en NoSQL in perspectief — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 21 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 21 — Slidedeck</h1>
+<p><strong>Security-verdieping en NoSQL in perspectief</strong>
+Niveau 2, dagdeel 13 (deel 21 van 30) | 32 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Security-verdieping en NoSQL</h1>
+<h2>Niveau 2 — Deel 21</h2>
+<p><em>Voorlaatste dagdeel van dit niveau.</em></p>
+<hr>
+<h2>Slide 2 — Waar deel 9 ophield</h2>
+<p>Rollen, GRANT/REVOKE, een eerste RLS-regel.</p>
+<p>Sindsdien bijgekomen: partitionering, replicatie, pgaudit —
+allemaal dingen die rechten en beleid <strong>complexer</strong> maken.</p>
+<hr>
+<h2>Slide 3 — Twee policies</h2>
+<pre><code class="language-sql">CREATE POLICY p1 ON t FOR SELECT USING (status = 'actief');
+CREATE POLICY p2 ON t FOR SELECT USING (regio = 'noord');
+</code></pre>
+<p>Een rij: <code>status='actief'</code>, <code>regio='zuid'</code>.</p>
+<h1>Zichtbaar of niet?</h1>
+<p><strong>Notities:</strong> laat de zaal gokken.</p>
+<hr>
+<h2>Slide 4 — Zichtbaar.</h2>
+<h1>Permissieve policies worden</h1>
+<h1>met OR gecombineerd.</h1>
+<p>Niet: “moet aan beide voldoen.”
+Wél: “voldoet aan minstens één.”</p>
+<hr>
+<h2>Slide 5 — De harde grens</h2>
+<pre><code class="language-sql">CREATE POLICY kantooruren ON t
+    AS RESTRICTIVE
+    USING (extract(hour FROM now()) BETWEEN 8 AND 18);
+</code></pre>
+<p>Restrictief = <strong>AND</strong>, bovenop de permissieve OR.
+Kan alleen inperken, nooit verruimen.</p>
+<hr>
+<h2>Slide 6 — Opdracht 21.1</h2>
+<h1>Permissief versus restrictief</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 7 — RLS is geen gratis beveiliging</h2>
+<p>De policy-voorwaarde is een <strong>extra WHERE-clausule</strong>
+voor de planner. Zonder index: extra scan.</p>
+<pre><code class="language-sql">CREATE INDEX ON dienstverband (werkgever_id);
+</code></pre>
+<hr>
+<h2>Slide 8 — De valkuil</h2>
+<pre><code class="language-sql">-- traag: per rij een functie-aanroep
+USING (werkgever_id = huidige_werkgever())
+
+-- snel: directe sessie-instelling
+USING (werkgever_id = current_setting('app.werkgever_id')::int)
+</code></pre>
+<hr>
+<h2>Slide 9 — Waarom dit nu pas opvalt</h2>
+<p>In deel 9: 100 rijen. Onmerkbaar.</p>
+<h1>Vandaag: 200.000 rijen.</h1>
+<p>Dezelfde overhead, vermenigvuldigd — de schaal-les
+uit deel 12, opnieuw.</p>
+<hr>
+<h2>Slide 10 — Opdracht 21.2</h2>
+<h1>RLS en prestaties</h1>
+<p>Meet het verschil zelf, op 200.000 rijen.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 11 — Pauze</h2>
+<hr>
+<h2>Slide 12 — pgcrypto</h2>
+<pre><code class="language-sql">UPDATE deelnemer
+SET rekeningnummer_enc = pgp_sym_encrypt(rekeningnummer, 'sleutel');
+</code></pre>
+<h1>Probeer op de versleutelde waarde te zoeken.</h1>
+<p><strong>Notities:</strong> laat het mislukken vóór de uitleg.</p>
+<hr>
+<h2>Slide 13 — Waarom het mislukt</h2>
+<p>Elke versleuteling van dezelfde tekst levert een
+<strong>andere</strong> cijfertekst op.</p>
+<p>Versleuteld ≠ doorzoekbaar versleuteld.</p>
+<hr>
+<h2>Slide 14 — De sleutel</h2>
+<h1>Nooit in de query.</h1>
+<h1>Nooit in de applicatiecode.</h1>
+<h1>Nooit in de database zelf.</h1>
+<p>Extern sleutelbeheer — anders is de versleuteling
+zinledig tegen precies het risico waar hij tegen moet beschermen.</p>
+<hr>
+<h2>Slide 15 — Opdracht 21.3</h2>
+<h1>pgcrypto in de praktijk</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 16 — hostssl versus host</h2>
+<pre><code>hostssl  meridiaan  all  0.0.0.0/0  scram-sha-256
+</code></pre>
+<p><code>host</code> = SSL optioneel. <code>hostssl</code> = <strong>verplicht</strong>.</p>
+<p><code>sslmode=verify-full</code> — controleert ook of het
+certificaat bij de juiste server hoort.</p>
+<hr>
+<h2>Slide 17 — Onderweg vs. in rust</h2>
+<p><strong>Onderweg</strong> — beschermt tegen afluisteren
+<strong>In rust</strong> — beschermt tegen fysieke toegang</p>
+<h1>Geen van beide beschermt tegen</h1>
+<h1>een gecompromitteerde rol met</h1>
+<h1>geldige toegang.</h1>
+<hr>
+<h2>Slide 18 — Opdracht 21.4</h2>
+<h1>SSL verplicht stellen</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 19 — Rolhiërarchie</h2>
+<pre><code class="language-sql">CREATE ROLE lezer_deelnemer NOLOGIN;
+GRANT SELECT ON deelnemer TO lezer_deelnemer;
+
+CREATE ROLE klantenservice LOGIN PASSWORD '...';
+GRANT lezer_deelnemer TO klantenservice;
+</code></pre>
+<p>Eén recht wijzigen op de groep → werkt door naar iedereen.</p>
+<hr>
+<h2>Slide 20 — DEFAULT PRIVILEGES</h2>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan_prod
+    GRANT SELECT ON TABLES TO lezer_deelnemer;
+</code></pre>
+<p>Zonder dit: een <strong>nieuwe</strong> tabel heeft geen rechten —
+iemand moet er expliciet aan denken. Elke keer.</p>
+<hr>
+<h2>Slide 21 — Opdracht 21.5</h2>
+<h1>Rolhiërarchie bouwen</h1>
+<p>Zoek de rollen uit deel 9, 11, 15, 17 terug.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 22 — Pauze</h2>
+<hr>
+<h2>Slide 23 — SECURITY DEFINER, herzien</h2>
+<p>Draait met de rechten van de <strong>eigenaar</strong>.</p>
+<h1>Wat als de aanroeper zijn eigen</h1>
+<h1>search_path manipuleert?</h1>
+<hr>
+<h2>Slide 24 — De kaping</h2>
+<p>Functie zoekt een tabel zonder schema-naam.
+Aanroeper zet zijn eigen schema <strong>eerst</strong> in het pad.</p>
+<h1>De functie raadpleegt de verkeerde tabel —</h1>
+<h1>met de rechten van de eigenaar.</h1>
+<hr>
+<h2>Slide 25 — De regel, zonder uitzondering</h2>
+<pre><code class="language-sql">CREATE FUNCTION … SECURITY DEFINER
+    SET search_path = meridiaan_prod, pg_catalog
+    …
+</code></pre>
+<h1>Elke SECURITY DEFINER-functie.</h1>
+<h1>Geen uitzonderingen.</h1>
+<hr>
+<h2>Slide 26 — Opdracht 21.6</h2>
+<h1>De search_path-valkuil</h1>
+<p>Laat het zelf gebeuren, dan de correctie.</p>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 27 — Twintig dagdelen relationeel</h2>
+<h1>Waarom niet NoSQL?</h1>
+<p>Een eerlijk antwoord, geen ontwijking.</p>
+<hr>
+<h2>Slide 28 — De categorieën</h2>
+<table>
+<thead>
+<tr>
+<th>Categorie</th>
+<th>Sterk in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Document</td>
+<td>Flexibel schema</td>
+</tr>
+<tr>
+<td>Key-value</td>
+<td>Extreme snelheid, simpele opzoeking</td>
+</tr>
+<tr>
+<td>Wide-column</td>
+<td>Schrijfschaal</td>
+</tr>
+<tr>
+<td>Graaf</td>
+<td>Relatiepaden</td>
+</tr>
+<tr>
+<td>Zoek-georiënteerd</td>
+<td>Volledige tekst op schaal</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 29 — Jullie hebben dit al gebruikt</h2>
+<table>
+<thead>
+<tr>
+<th>Gezocht bij NoSQL</th>
+<th>Al gebruikt in deze cursus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flexibel opslaan</td>
+<td><code>jsonb</code> (deel 6, 14)</td>
+</tr>
+<tr>
+<td>Snel zoeken in documenten</td>
+<td>GIN (deel 14)</td>
+</tr>
+<tr>
+<td>Volledige tekst</td>
+<td><code>pg_trgm</code> (deel 14)</td>
+</tr>
+<tr>
+<td>Schrijfschaal</td>
+<td>Partitionering (deel 16)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notities:</strong> laat de zaal elke rij herkennen.</p>
+<hr>
+<h2>Slide 30 — De juiste vraag</h2>
+<p>Niet: <em>“SQL of NoSQL?”</em></p>
+<h1>Heeft dít stuk van het systeem een</h1>
+<h1>toegangspatroon dat een gespecialiseerde</h1>
+<h1>structuur vraagt — en weegt de winst op</h1>
+<h1>tegen een tweede systeem erbij?</h1>
+<hr>
+<h2>Slide 31 — Opdracht 21.7 &amp; 21.8</h2>
+<p><strong>21.7</strong> NoSQL-categorieën toepassen — vijf scenario’s — <em>15 min</em></p>
+<p><strong>21.8</strong> Het beveiligingsadvies — RLS met index · selectief
+encryptiebeleid · een échte SECURITY DEFINER-functie ·
+NoSQL op toegangspatroon</p>
+<p><em>40 min, drietallen</em></p>
+<hr>
+<h2>Slide 32 — Volgende keer</h2>
+<h1>Deel 22 — Zero-downtime migraties</h1>
+<h3><em>(laatste deel van niveau 2)</em></h3>
+<p>Hoe voer je een grote wijziging door op productie,
+zonder dat iemand het merkt?</p>
+<p>En: een terugblik op alle twaalf dagdelen van dit niveau.</p>
+<p><strong>Bewaar je beveiligingsadvies uit 21.8.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 21.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">314 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">&larr; Deel 20 — Monitoring, logging en pgaudit</a><a class="dbm-prevnext next" href="../deel-22-zero-downtime-migraties-en-capstone/reader.html">Deel 22 — Zero-downtime migraties en capstone &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

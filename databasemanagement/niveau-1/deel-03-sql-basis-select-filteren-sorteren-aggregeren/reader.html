@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — SQL basis: SELECT, filteren, sorteren, aggregeren — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 3 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 3 van 10
+Aansluiting: EDB PostgreSQL Associate — domein “SQL”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>psql: je werkomgeving</li>
+<li>De vorm van een SELECT</li>
+<li>Kolommen kiezen en berekenen</li>
+<li>Filteren met WHERE</li>
+<li>Filteren met NULL erbij</li>
+<li>Sorteren</li>
+<li>Beperken: LIMIT, OFFSET, FETCH</li>
+<li>DISTINCT</li>
+<li>Tekstfuncties</li>
+<li>Datum- en tijdfuncties</li>
+<li>CASE, COALESCE en NULLIF</li>
+<li>Typen en casting</li>
+<li>Aggregeren</li>
+<li>GROUP BY</li>
+<li>HAVING — en waarom het niet hetzelfde is als WHERE</li>
+<li>De volgorde waarin SQL werkelijk uitvoert</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>je weg vinden in psql en de belangrijkste meta-commando’s gebruiken;</li>
+<li>kolommen kiezen, hernoemen en berekenen;</li>
+<li>rijen filteren met samengestelde voorwaarden, inclusief correcte behandeling van NULL;</li>
+<li>resultaten sorteren en beperken, en uitleggen waarom <code>LIMIT</code> zonder <code>ORDER BY</code> onbetrouwbaar is;</li>
+<li>tekst- en datumfuncties toepassen op de casusgegevens;</li>
+<li><code>CASE</code>, <code>COALESCE</code> en <code>NULLIF</code> inzetten;</li>
+<li>aggregeren, groeperen en groepen filteren;</li>
+<li>de logische uitvoeringsvolgorde van een SELECT uitleggen en daarmee de meeste beginnersfouten zelf verklaren.</li>
+</ul>
+<hr>
+<h2>2. psql: je werkomgeving</h2>
+<p>psql is de opdrachtregelclient. Grafische clients zijn prettiger, maar psql is overal beschikbaar, ook op een server om drie uur 's nachts. Deze cursus gebruikt psql; wie liever DBeaver of pgAdmin gebruikt, mag dat, maar moet de meta-commando’s kennen.</p>
+<p>Verbinden:</p>
+<pre><code class="language-bash">psql -d meridiaan
+</code></pre>
+<p>Meta-commando’s beginnen met een backslash en zijn geen SQL:</p>
+<table>
+<thead>
+<tr>
+<th>Commando</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>\l</code></td>
+<td>Databases in dit cluster</td>
+</tr>
+<tr>
+<td><code>\dn</code></td>
+<td>Schema’s</td>
+</tr>
+<tr>
+<td><code>\dt</code></td>
+<td>Tabellen in het zoekpad</td>
+</tr>
+<tr>
+<td><code>\d deelnemer</code></td>
+<td>Structuur van een tabel: kolommen, typen, constraints, indexen</td>
+</tr>
+<tr>
+<td><code>\du</code></td>
+<td>Rollen</td>
+</tr>
+<tr>
+<td><code>\x</code></td>
+<td>Uitgebreide weergave aan/uit (onmisbaar bij brede tabellen)</td>
+</tr>
+<tr>
+<td><code>\timing</code></td>
+<td>Uitvoeringstijd tonen</td>
+</tr>
+<tr>
+<td><code>\e</code></td>
+<td>Query in een editor openen</td>
+</tr>
+<tr>
+<td><code>\i bestand.sql</code></td>
+<td>Script uitvoeren</td>
+</tr>
+<tr>
+<td><code>\?</code></td>
+<td>Alle meta-commando’s</td>
+</tr>
+<tr>
+<td><code>\q</code></td>
+<td>Afsluiten</td>
+</tr>
+</tbody>
+</table>
+<p>Het zoekpad instellen, zodat je niet elke tabel met <code>meridiaan.</code> hoeft voor te voegen:</p>
+<pre><code class="language-sql">SET search_path TO meridiaan, public;
+</code></pre>
+<p>Zet dit in <code>~/.psqlrc</code> als je het elke sessie wilt (zie Toolbijlage).</p>
+<p><strong>Eén gewoonte die je meteen moet aanleren:</strong> elke SQL-opdracht eindigt met een puntkomma. Vergeet je die, dan wacht psql zwijgend op meer invoer en denk je dat de database hangt. De prompt verandert dan van <code>meridiaan=#</code> in <code>meridiaan-#</code>.</p>
+<hr>
+<h2>3. De vorm van een SELECT</h2>
+<pre><code class="language-sql">SELECT   &lt;kolommen&gt;
+FROM     &lt;tabellen&gt;
+WHERE    &lt;rijfilter&gt;
+GROUP BY &lt;groepering&gt;
+HAVING   &lt;groepsfilter&gt;
+ORDER BY &lt;sortering&gt;
+LIMIT    &lt;aantal&gt;;
+</code></pre>
+<p>Deze volgorde is de <strong>schrijfvolgorde</strong>. De <strong>uitvoeringsvolgorde</strong> is een andere, en dat verschil verklaart bijna elke beginnersfout. Paragraaf 17 komt erop terug; lees die pas als je de rest hebt gehad.</p>
+<hr>
+<h2>4. Kolommen kiezen en berekenen</h2>
+<pre><code class="language-sql">SELECT achternaam, geboortedatum FROM deelnemer;
+</code></pre>
+<p><code>SELECT *</code> haalt alles op. Prima om te verkennen, maar <strong>niet in applicatiecode</strong>: als iemand later een kolom toevoegt, verandert je resultaat ongemerkt, en je haalt gegevens op die je niet gebruikt.</p>
+<p>Berekende kolommen en aliassen:</p>
+<pre><code class="language-sql">SELECT
+    achternaam,
+    jaarsalaris,
+    jaarsalaris / 12                       AS maandsalaris,
+    jaarsalaris * deeltijdfactor           AS salaris_naar_rato
+FROM dienstverband
+JOIN deelnemer USING (deelnemer_id);
+</code></pre>
+<p>Over aliassen: <code>AS</code> mag je weglaten, maar doe dat niet — <code>jaarsalaris maandsalaris</code> leest als een fout. Wil je hoofdletters of spaties in een alias, gebruik dan dubbele aanhalingstekens: <code>AS &quot;Salaris naar rato&quot;</code>.</p>
+<p><strong>Aanhalingstekens in PostgreSQL — leer dit nu goed:</strong></p>
+<ul>
+<li><code>'enkele'</code> = een tekstwaarde</li>
+<li><code>&quot;dubbele&quot;</code> = een identifier (kolom- of tabelnaam)</li>
+</ul>
+<p><code>SELECT &quot;Jansen&quot;</code> zoekt naar een <em>kolom</em> met die naam en levert een foutmelding. Dit is de meest voorkomende verwarring bij mensen die uit MySQL of Excel komen.</p>
+<p>PostgreSQL zet niet-aangehaalde namen om naar kleine letters. <code>SELECT Achternaam</code> werkt dus, maar een kolom die ooit is aangemaakt als <code>&quot;Achternaam&quot;</code> moet je voortaan altijd met dubbele aanhalingstekens benaderen. <strong>Advies: gebruik consequent kleine letters met liggende streepjes</strong> en je hebt hier nooit last van.</p>
+<p>Tekst samenvoegen met <code>||</code>:</p>
+<pre><code class="language-sql">SELECT voorletters || ' ' || coalesce(tussenvoegsel || ' ', '') || achternaam AS volledige_naam
+FROM deelnemer;
+</code></pre>
+<p>Let op de <code>coalesce</code>: zonder die functie wordt de hele uitdrukking NULL zodra <code>tussenvoegsel</code> NULL is. Concatenatie met NULL levert NULL. Dat is de eerste plek waar deel 2 zich terugbetaalt.</p>
+<hr>
+<h2>5. Filteren met WHERE</h2>
+<pre><code class="language-sql">SELECT achternaam, woonplaats
+FROM deelnemer
+WHERE land = 'NL'
+  AND geboortedatum &lt; DATE '1960-01-01';
+</code></pre>
+<p>Operatoren:</p>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>=</code> <code>&lt;&gt;</code> <code>&lt;</code> <code>&gt;</code> <code>&lt;=</code> <code>&gt;=</code></td>
+<td>Vergelijken (<code>!=</code> mag ook, maar <code>&lt;&gt;</code> is standaard)</td>
+</tr>
+<tr>
+<td><code>BETWEEN a AND b</code></td>
+<td>Inclusief beide grenzen</td>
+</tr>
+<tr>
+<td><code>IN (…)</code></td>
+<td>In een lijst</td>
+</tr>
+<tr>
+<td><code>LIKE</code> / <code>ILIKE</code></td>
+<td>Patroon; <code>ILIKE</code> is hoofdletterongevoelig</td>
+</tr>
+<tr>
+<td><code>IS NULL</code> / <code>IS NOT NULL</code></td>
+<td>Onbekend of niet</td>
+</tr>
+<tr>
+<td><code>AND</code> <code>OR</code> <code>NOT</code></td>
+<td>Combineren</td>
+</tr>
+</tbody>
+</table>
+<p><code>LIKE</code>-jokers: <code>%</code> is nul of meer tekens, <code>_</code> is precies één teken.</p>
+<pre><code class="language-sql">SELECT achternaam FROM deelnemer WHERE achternaam ILIKE 'van %';
+SELECT kvk_nummer FROM werkgever WHERE kvk_nummer LIKE '170000__';
+</code></pre>
+<p><strong><code>BETWEEN</code> en datums: let op.</strong> <code>BETWEEN DATE '2025-01-01' AND DATE '2025-12-31'</code> werkt goed voor een <code>date</code>-kolom, maar op een <code>timestamp</code>-kolom mis je alles ná middernacht op 31 december. Gebruik daar:</p>
+<pre><code class="language-sql">WHERE aangemeld_op &gt;= TIMESTAMP '2025-01-01'
+  AND aangemeld_op &lt;  TIMESTAMP '2026-01-01'
+</code></pre>
+<p>Dit patroon — ondergrens inclusief, bovengrens exclusief — is de veilige gewoonte voor alles wat tijd bevat.</p>
+<p><strong>Haakjes bij AND/OR.</strong> <code>AND</code> bindt sterker dan <code>OR</code>. Dit:</p>
+<pre><code class="language-sql">WHERE land = 'BE' OR land = 'DE' AND einddatum_deelname IS NULL
+</code></pre>
+<p>betekent <code>land = 'BE' OR (land = 'DE' AND einddatum_deelname IS NULL)</code>, wat vrijwel nooit de bedoeling is. Zet haakjes, ook als je zeker weet dat het klopt — de volgende lezer weet dat niet.</p>
+<hr>
+<h2>6. Filteren met NULL erbij</h2>
+<p>Deel 2 behandelde de theorie; hier de praktijk op de casus.</p>
+<pre><code class="language-sql">-- Werkt niet zoals verwacht: laat deelnemers zonder woonplaats weg
+SELECT count(*) FROM deelnemer WHERE woonplaats &lt;&gt; 'Utrecht';
+
+-- Wel correct
+SELECT count(*) FROM deelnemer WHERE woonplaats IS DISTINCT FROM 'Utrecht';
+</code></pre>
+<p>Bij Meridiaan heeft circa 3% van de deelnemers geen woonplaats. Op 8.000 rijen is dat 240 deelnemers die stilzwijgend uit een rapportage vallen. Niemand ziet dat, want er komt geen foutmelding — alleen een getal dat 240 te laag is.</p>
+<p>Actieve deelnemers vind je zo:</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer WHERE einddatum_deelname IS NULL;
+</code></pre>
+<p>Onverwerkte mutaties:</p>
+<pre><code class="language-sql">SELECT count(*) FROM mutatie WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>Merk op hoe NULL hier bewust betekenisdragend is gebruikt: “nog niet verwerkt”, “nog aangesloten”. Dat is verdedigbaar, maar het betekent dat elke query op die kolommen NULL expliciet moet adresseren.</p>
+<hr>
+<h2>7. Sorteren</h2>
+<pre><code class="language-sql">SELECT achternaam, geboortedatum
+FROM deelnemer
+ORDER BY geboortedatum DESC, achternaam ASC;
+</code></pre>
+<p><code>ASC</code> is de standaard. Je mag ook op positienummer sorteren (<code>ORDER BY 2</code>), maar doe dat niet in code die iemand later moet onderhouden.</p>
+<p><strong>NULL bij sorteren.</strong> In PostgreSQL komt NULL standaard als laatste bij <code>ASC</code> en als eerste bij <code>DESC</code>. Wil je dat anders:</p>
+<pre><code class="language-sql">ORDER BY einddatum_deelname DESC NULLS LAST;
+</code></pre>
+<p>Dit is een verschil met sommige andere DBMS’en en een klassieke examenvraag.</p>
+<p><strong>Sorteren van tekst hangt af van de collatie.</strong> Of <code>van der Berg</code> vóór <code>Van Dijk</code> komt, wordt bepaald door de collatie van de database. Wees hier alert op als sorteervolgorde bedrijfsmatig relevant is (bijvoorbeeld in een brievenrun). Details in niveau 2, deel 11.</p>
+<hr>
+<h2>8. Beperken: LIMIT, OFFSET, FETCH</h2>
+<pre><code class="language-sql">SELECT achternaam FROM deelnemer ORDER BY achternaam LIMIT 10;
+SELECT achternaam FROM deelnemer ORDER BY achternaam LIMIT 10 OFFSET 20;
+</code></pre>
+<p>De standaardvorm is <code>FETCH FIRST 10 ROWS ONLY</code>; PostgreSQL ondersteunt beide. <code>LIMIT</code> is gangbaarder.</p>
+<p><strong>Regel:</strong> <code>LIMIT</code> zonder <code>ORDER BY</code> levert <em>willekeurige</em> rijen. Het lijkt vaak stabiel, maar die stabiliteit is toeval — na een update, een vacuum of een gewijzigd queryplan krijg je andere rijen. Wie “de tien duurste” wil, moet zeggen waarop gesorteerd wordt.</p>
+<p><strong>Waarschuwing over <code>OFFSET</code>.</strong> Paginering met een grote offset is traag: de database moet alle overgeslagen rijen alsnog produceren. <code>OFFSET 100000</code> doet het werk van honderdduizend rijen om er tien te tonen. In niveau 2 leer je keyset-paginering als alternatief.</p>
+<hr>
+<h2>9. DISTINCT</h2>
+<pre><code class="language-sql">SELECT DISTINCT sector FROM werkgever ORDER BY sector;
+SELECT DISTINCT sector, plaats FROM werkgever;   -- unieke combinaties
+</code></pre>
+<p><code>DISTINCT</code> werkt over álle geselecteerde kolommen, niet over de eerste. Dat verrast mensen regelmatig.</p>
+<p>PostgreSQL kent daarnaast <code>DISTINCT ON</code>, een eigen uitbreiding die de eerste rij per groep teruggeeft:</p>
+<pre><code class="language-sql">SELECT DISTINCT ON (werkgever_id) werkgever_id, periode_jaar, periode_maand, bedrag
+FROM premienota
+ORDER BY werkgever_id, periode_jaar DESC, periode_maand DESC;
+</code></pre>
+<p>Dit geeft per werkgever de meest recente nota. Krachtig, maar niet-standaard: gebruik het bewust en documenteer het. In deel 4 zie je het alternatief met vensterfuncties.</p>
+<hr>
+<h2>10. Tekstfuncties</h2>
+<table>
+<thead>
+<tr>
+<th>Functie</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>length(t)</code></td>
+<td>Aantal tekens</td>
+</tr>
+<tr>
+<td><code>upper(t)</code> / <code>lower(t)</code></td>
+<td>Hoofd-/kleine letters</td>
+</tr>
+<tr>
+<td><code>initcap(t)</code></td>
+<td>Eerste letter per woord hoofdletter</td>
+</tr>
+<tr>
+<td><code>trim(t)</code> / <code>ltrim</code> / <code>rtrim</code></td>
+<td>Spaties weghalen</td>
+</tr>
+<tr>
+<td><code>substring(t FROM 1 FOR 3)</code></td>
+<td>Deel eruit</td>
+</tr>
+<tr>
+<td><code>position('a' IN t)</code></td>
+<td>Positie van een teken</td>
+</tr>
+<tr>
+<td><code>replace(t, 'a', 'b')</code></td>
+<td>Vervangen</td>
+</tr>
+<tr>
+<td><code>left(t, n)</code> / <code>right(t, n)</code></td>
+<td>Eerste/laatste n tekens</td>
+</tr>
+<tr>
+<td><code>split_part(t, '-', 2)</code></td>
+<td>Deel op scheidingsteken</td>
+</tr>
+<tr>
+<td><code>concat_ws(' ', a, b, c)</code></td>
+<td>Samenvoegen; <strong>negeert NULL</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>concat_ws</code> is de nette oplossing voor het naamprobleem uit paragraaf 4:</p>
+<pre><code class="language-sql">SELECT concat_ws(' ', voorletters, tussenvoegsel, achternaam) AS volledige_naam
+FROM deelnemer;
+</code></pre>
+<p>De rommelige woonplaatsen in de casus (<code>den haag</code>, <code>DEN HAAG</code>, <code> Den Haag</code>) normaliseer je zo:</p>
+<pre><code class="language-sql">SELECT initcap(trim(woonplaats)) AS woonplaats_net, count(*)
+FROM deelnemer
+GROUP BY 1
+ORDER BY 2 DESC;
+</code></pre>
+<p>Merk op dat dit het <em>symptoom</em> opruimt in een query. De echte oplossing is een domein — een aparte plaatsentabel met een foreign key. Dat is deel 5.</p>
+<hr>
+<h2>11. Datum- en tijdfuncties</h2>
+<pre><code class="language-sql">SELECT current_date, current_timestamp, now();
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Bewerking</th>
+<th>Voorbeeld</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Optellen</td>
+<td><code>geboortedatum + 30</code> (dagen)</td>
+</tr>
+<tr>
+<td>Interval</td>
+<td><code>now() - INTERVAL '3 months'</code></td>
+</tr>
+<tr>
+<td>Verschil in dagen</td>
+<td><code>einddatum - startdatum</code> (levert integer)</td>
+</tr>
+<tr>
+<td>Deel eruit</td>
+<td><code>extract(year FROM geboortedatum)</code></td>
+</tr>
+<tr>
+<td>Afronden op periode</td>
+<td><code>date_trunc('month', aangemeld_op)</code></td>
+</tr>
+<tr>
+<td>Leeftijd</td>
+<td><code>age(geboortedatum)</code> → interval</td>
+</tr>
+<tr>
+<td>Opbouwen</td>
+<td><code>make_date(2025, 12, 31)</code></td>
+</tr>
+<tr>
+<td>Opmaken</td>
+<td><code>to_char(aangemeld_op, 'YYYY-MM-DD HH24:MI')</code></td>
+</tr>
+</tbody>
+</table>
+<p>Leeftijd in hele jaren:</p>
+<pre><code class="language-sql">SELECT achternaam, extract(year FROM age(geboortedatum)) AS leeftijd
+FROM deelnemer;
+</code></pre>
+<p>Doorlooptijd van mutaties:</p>
+<pre><code class="language-sql">SELECT
+    date_trunc('month', aangemeld_op) AS maand,
+    count(*)                          AS aangemeld,
+    count(verwerkt_op)                AS verwerkt,
+    round(avg(extract(epoch FROM verwerkt_op - aangemeld_op) / 86400)::numeric, 1)
+        AS gem_doorlooptijd_dagen
+FROM mutatie
+GROUP BY 1
+ORDER BY 1;
+</code></pre>
+<p>Bestudeer deze query goed: <code>count(*)</code> telt alle mutaties, <code>count(verwerkt_op)</code> alleen de verwerkte, en het verschil is precies wat er nog openstaat. Dat is het <code>COUNT</code>-onderscheid uit deel 2, nu als bruikbaar stuurinformatie.</p>
+<p><strong><code>timestamp</code> versus <code>timestamptz</code>.</strong> <code>timestamptz</code> slaat een absoluut moment op en rekent om naar de tijdzone van de sessie; <code>timestamp</code> is een lokale wandkloktijd zonder context. <strong>Gebruik <code>timestamptz</code> tenzij je een heel goede reden hebt.</strong> In de casus is <code>aangemeld_op</code> daarom <code>timestamptz</code>. Zomertijd is de reden dat dit ertoe doet: op de nacht van de overgang bestaat een uur twee keer of helemaal niet.</p>
+<hr>
+<h2>12. CASE, COALESCE en NULLIF</h2>
+<p><code>CASE</code> is de if-then-else van SQL:</p>
+<pre><code class="language-sql">SELECT
+    achternaam,
+    CASE
+        WHEN einddatum_deelname IS NULL THEN 'actief'
+        WHEN einddatum_deelname &gt; current_date THEN 'eindigt binnenkort'
+        ELSE 'beëindigd'
+    END AS status
+FROM deelnemer;
+</code></pre>
+<p>Zonder <code>ELSE</code> levert een niet-passende rij NULL. Schrijf <code>ELSE</code> altijd expliciet, ook als je denkt dat alle gevallen gedekt zijn.</p>
+<p><code>COALESCE</code> geeft de eerste niet-NULL waarde:</p>
+<pre><code class="language-sql">SELECT coalesce(woonplaats, 'onbekend') AS woonplaats FROM deelnemer;
+SELECT coalesce(jaarsalaris, 0) AS salaris FROM dienstverband;
+</code></pre>
+<p>Wees hier voorzichtig. <code>coalesce(jaarsalaris, 0)</code> in een gemiddelde verandert de betekenis: ontbrekende salarissen tellen dan mee als nul en drukken het gemiddelde. “Onbekend” is niet “nul”. Dit is een van de vaakst gemaakte fouten in rapportages.</p>
+<p><code>NULLIF</code> doet het omgekeerde en is vooral nuttig tegen deling door nul:</p>
+<pre><code class="language-sql">SELECT bedrag / nullif(aantal_deelnemers, 0) FROM ...;
+</code></pre>
+<hr>
+<h2>13. Typen en casting</h2>
+<p>Casten kan op twee manieren:</p>
+<pre><code class="language-sql">SELECT '2025-01-01'::date;
+SELECT CAST('2025-01-01' AS date);
+</code></pre>
+<p>De eerste is PostgreSQL-eigen en overal in gebruik; de tweede is standaard-SQL.</p>
+<p><strong>De valkuil van integerdeling:</strong></p>
+<pre><code class="language-sql">SELECT 7 / 2;            -- 3
+SELECT 7.0 / 2;          -- 3.5
+SELECT 7::numeric / 2;   -- 3.5
+</code></pre>
+<p>Twee integers delen levert een integer. Dit veroorzaakt stille fouten in percentageberekeningen:</p>
+<pre><code class="language-sql">-- Fout: levert altijd 0
+SELECT count(*) FILTER (WHERE verwerkt_op IS NULL) / count(*) FROM mutatie;
+
+-- Goed
+SELECT round(100.0 * count(*) FILTER (WHERE verwerkt_op IS NULL) / count(*), 1)
+    AS percentage_open
+FROM mutatie;
+</code></pre>
+<p><strong>Gebruik <code>numeric</code> voor geld, nooit <code>float</code>.</strong> <code>numeric</code> rekent exact; <code>real</code> en <code>double precision</code> zijn binaire benaderingen waarin <code>0.1 + 0.2</code> niet precies <code>0.3</code> is. Voor een pensioenuitvoerder is dat geen academisch punt. In de casus zijn alle bedragen daarom <code>numeric</code>.</p>
+<hr>
+<h2>14. Aggregeren</h2>
+<table>
+<thead>
+<tr>
+<th>Functie</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>count(*)</code></td>
+<td>Aantal rijen</td>
+</tr>
+<tr>
+<td><code>count(kolom)</code></td>
+<td>Aantal niet-NULL waarden</td>
+</tr>
+<tr>
+<td><code>count(DISTINCT kolom)</code></td>
+<td>Aantal verschillende niet-NULL waarden</td>
+</tr>
+<tr>
+<td><code>sum</code> / <code>avg</code> / <code>min</code> / <code>max</code></td>
+<td>Spreekt voor zich; negeren NULL</td>
+</tr>
+<tr>
+<td><code>string_agg(t, ', ')</code></td>
+<td>Tekst samenvoegen over rijen</td>
+</tr>
+<tr>
+<td><code>array_agg(k)</code></td>
+<td>Waarden in een array</td>
+</tr>
+</tbody>
+</table>
+<p>Zonder <code>GROUP BY</code> levert een aggregatie één rij over de hele tabel:</p>
+<pre><code class="language-sql">SELECT count(*), min(geboortedatum), max(geboortedatum) FROM deelnemer;
+</code></pre>
+<h3>FILTER: aggregeren over een deelverzameling</h3>
+<p>Een PostgreSQL-mogelijkheid die je veel werk bespaart:</p>
+<pre><code class="language-sql">SELECT
+    count(*)                                          AS totaal,
+    count(*) FILTER (WHERE einddatum_deelname IS NULL) AS actief,
+    count(*) FILTER (WHERE bsn IS NULL)                AS zonder_bsn,
+    count(*) FILTER (WHERE land &lt;&gt; 'NL')               AS buitenland
+FROM deelnemer;
+</code></pre>
+<p>Vier getallen, één scan over de tabel. Het alternatief — vier losse query’s — is trager en levert bovendien gegevens die niet uit hetzelfde moment komen.</p>
+<hr>
+<h2>15. GROUP BY</h2>
+<pre><code class="language-sql">SELECT sector, count(*) AS aantal
+FROM werkgever
+GROUP BY sector
+ORDER BY aantal DESC;
+</code></pre>
+<p><strong>De regel die alles verklaart:</strong> elke kolom in de <code>SELECT</code>-lijst moet óf in <code>GROUP BY</code> staan, óf in een aggregatiefunctie zitten. Doe je dat niet, dan volgt:</p>
+<pre><code>ERROR: column &quot;w.naam&quot; must appear in the GROUP BY clause
+       or be used in an aggregate function
+</code></pre>
+<p>Dat is geen pesterij van PostgreSQL: als je per sector groepeert en er zitten dertig werkgevers in een sector, wélke naam moet er dan komen te staan? De vraag is onbeantwoordbaar, dus wordt hij geweigerd. (MySQL beantwoordde die vraag jarenlang wél, met een willekeurige waarde — bron van veel stille fouten.)</p>
+<p>Groeperen op meerdere kolommen:</p>
+<pre><code class="language-sql">SELECT sector, plaats, count(*)
+FROM werkgever
+GROUP BY sector, plaats
+ORDER BY sector, plaats;
+</code></pre>
+<p>Groeperen op een berekening — herhaal de uitdrukking of gebruik het positienummer:</p>
+<pre><code class="language-sql">SELECT date_trunc('month', aangemeld_op) AS maand, count(*)
+FROM mutatie
+GROUP BY 1
+ORDER BY 1;
+</code></pre>
+<p>Je mag hier niet de alias <code>maand</code> gebruiken in <code>GROUP BY</code>… behalve dat PostgreSQL dat wél toestaat, als uitbreiding op de standaard. Wees je bewust dat het niet draagbaar is.</p>
+<hr>
+<h2>16. HAVING — en waarom het niet hetzelfde is als WHERE</h2>
+<p><code>WHERE</code> filtert <strong>rijen, vóór het groeperen</strong>.
+<code>HAVING</code> filtert <strong>groepen, ná het groeperen</strong>.</p>
+<pre><code class="language-sql">SELECT w.sector, count(*) AS aantal_werkgevers
+FROM werkgever w
+WHERE w.opzegdatum IS NULL          -- rijen: alleen aangesloten werkgevers
+GROUP BY w.sector
+HAVING count(*) &gt;= 20               -- groepen: alleen sectoren met 20 of meer
+ORDER BY aantal_werkgevers DESC;
+</code></pre>
+<p>In <code>HAVING</code> mag je aggregaties gebruiken; in <code>WHERE</code> niet. Andersom geldt: alles wat je in <code>WHERE</code> kúnt filteren, moet je daar filteren — het scheelt werk, want er blijven minder rijen over om te groeperen.</p>
+<p>Een concreet voorbeeld uit de casus: werkgevers met meer dan drie onbetaalde nota’s.</p>
+<pre><code class="language-sql">SELECT werkgever_id, count(*) AS onbetaald
+FROM premienota
+WHERE betaaldatum IS NULL
+GROUP BY werkgever_id
+HAVING count(*) &gt; 3
+ORDER BY onbetaald DESC;
+</code></pre>
+<hr>
+<h2>17. De volgorde waarin SQL werkelijk uitvoert</h2>
+<p>Nu de kern van dit deel. De logische uitvoeringsvolgorde is:</p>
+<pre><code>1. FROM      (en JOIN)   → welke rijen zijn er
+2. WHERE                 → welke rijen blijven
+3. GROUP BY              → hoe worden ze gegroepeerd
+4. HAVING                → welke groepen blijven
+5. SELECT                → welke kolommen, aliassen ontstaan hier
+6. DISTINCT
+7. ORDER BY              → hier mogen aliassen wél
+8. LIMIT / OFFSET
+</code></pre>
+<figure class="dbm-figure"><img src="../../figuren/figuur-3-1.png" alt="Schrijfvolgorde naast uitvoeringsvolgorde, met pijlen die de verschillen aangeven" loading="lazy"><figcaption>Figuur 3-1 — Schrijfvolgorde naast uitvoeringsvolgorde, met pijlen die de verschillen aangeven</figcaption></figure>
+<p>Hieruit volgt direct:</p>
+<p><strong>Waarom je een alias niet in <code>WHERE</code> mag gebruiken.</strong> De alias ontstaat in stap 5; <code>WHERE</code> draait in stap 2 en kent hem nog niet.</p>
+<pre><code class="language-sql">-- Fout
+SELECT jaarsalaris / 12 AS maandsalaris FROM dienstverband WHERE maandsalaris &gt; 3000;
+-- Goed
+SELECT jaarsalaris / 12 AS maandsalaris FROM dienstverband WHERE jaarsalaris / 12 &gt; 3000;
+</code></pre>
+<p><strong>Waarom je een alias wél in <code>ORDER BY</code> mag gebruiken.</strong> Stap 7 komt na stap 5.</p>
+<p><strong>Waarom <code>WHERE</code> geen aggregaties toestaat.</strong> In stap 2 bestaan er nog geen groepen om over te aggregeren.</p>
+<p>Let op het woord <em>logische</em>. De planner mag intern een andere volgorde kiezen, zolang het resultaat gelijk blijft — precies het punt uit deel 2 over geslotenheid van relationele bewerkingen. Wat je hier leert is het model waarmee je over je query redeneert, niet het uitvoeringsplan.</p>
+<hr>
+<h2>18. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Oplossing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;&gt;</code> op een kolom met NULL</td>
+<td>Rijen vallen stil weg</td>
+<td><code>IS DISTINCT FROM</code></td>
+</tr>
+<tr>
+<td><code>count(kolom)</code> waar <code>count(*)</code> bedoeld is</td>
+<td>Te laag aantal</td>
+<td>Weet wat je telt</td>
+</tr>
+<tr>
+<td>Integerdeling in een percentage</td>
+<td>Altijd 0</td>
+<td>Vermenigvuldig met <code>100.0</code></td>
+</tr>
+<tr>
+<td><code>LIMIT</code> zonder <code>ORDER BY</code></td>
+<td>Willekeurige rijen</td>
+<td>Altijd sorteren</td>
+</tr>
+<tr>
+<td><code>coalesce(x, 0)</code> in een gemiddelde</td>
+<td>Vertekend gemiddelde</td>
+<td>Onbekend is niet nul</td>
+</tr>
+<tr>
+<td>Alias in <code>WHERE</code></td>
+<td>Foutmelding</td>
+<td>Uitdrukking herhalen</td>
+</tr>
+<tr>
+<td><code>AND</code>/<code>OR</code> zonder haakjes</td>
+<td>Verkeerd resultaat, geen foutmelding</td>
+<td>Altijd haakjes</td>
+</tr>
+<tr>
+<td><code>BETWEEN</code> op <code>timestamp</code></td>
+<td>Laatste dag mist deels</td>
+<td><code>&gt;=</code> en <code>&lt;</code></td>
+</tr>
+<tr>
+<td><code>float</code> voor geld</td>
+<td>Afrondingsverschillen</td>
+<td><code>numeric</code></td>
+</tr>
+<tr>
+<td><code>SELECT *</code> in applicatiecode</td>
+<td>Breekt bij schemawijziging</td>
+<td>Kolommen benoemen</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>19. Aansluiting op de certificering</h2>
+<p>SQL is een zwaar wegend domein in de Associate-certificering. Paraat moet zijn:</p>
+<ul>
+<li>de logische uitvoeringsvolgorde en de gevolgen daarvan;</li>
+<li>het verschil tussen <code>WHERE</code> en <code>HAVING</code>;</li>
+<li><code>count(*)</code> versus <code>count(kolom)</code> versus <code>count(DISTINCT kolom)</code>;</li>
+<li>NULL-gedrag bij vergelijken, aggregeren en sorteren (<code>NULLS FIRST</code>/<code>LAST</code>);</li>
+<li>de GROUP BY-regel;</li>
+<li>casting en het gedrag van integerdeling.</li>
+</ul>
+<p>Zoals altijd: raadpleeg de actuele EDB-examenblauwdruk; deze cursus is voorbereiding en geen vervanging van het officiële materiaal.</p>
+<hr>
+<h2>20. Kernbegrippen</h2>
+<p><strong>Alias</strong> — alternatieve naam voor kolom of tabel, ontstaat in de <code>SELECT</code>-fase.
+<strong>Predicaat</strong> — een voorwaarde die waar, onwaar of onbekend oplevert.
+<strong>Aggregatiefunctie</strong> — functie die veel rijen tot één waarde reduceert.
+<strong>FILTER</strong> — beperking van een aggregatie tot rijen die aan een voorwaarde voldoen.
+<strong>Logische uitvoeringsvolgorde</strong> — FROM → WHERE → GROUP BY → HAVING → SELECT → DISTINCT → ORDER BY → LIMIT.
+<strong>Collatie</strong> — de regels die de sorteervolgorde van tekst bepalen.
+<strong><code>timestamptz</code></strong> — tijdstip met tijdzonebesef; de standaardkeuze.</p>
+<hr>
+<p><em>Volgende deel: joins, subquery’s en CTE’s. Je gaat gegevens uit meerdere tabellen combineren — en je zult ontdekken dat de keuze tussen <code>INNER</code> en <code>LEFT</code> een inhoudelijke vraag is, geen technische.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">70 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">442 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-02-het-relationele-model-en-de-postgresql-architectuur/reader.html">&larr; Deel 2 — Het relationele model en de PostgreSQL-architectuur</a><a class="dbm-prevnext next" href="../deel-04-sql-verdieping-joins-subquery-s-en-cte-s/reader.html">Deel 4 — SQL verdieping: joins, subquery&#39;s en CTE&#39;s &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

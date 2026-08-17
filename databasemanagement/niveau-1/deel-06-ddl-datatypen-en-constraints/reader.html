@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — DDL, datatypen en constraints — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 6 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 6 — DDL, datatypen en constraints</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 6 van 10
+Aansluiting: EDB PostgreSQL Associate — domeinen “SQL” en “Database objects”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>DDL, DML, DCL, TCL</li>
+<li>CREATE TABLE</li>
+<li>Datatypen: numeriek</li>
+<li>Datatypen: tekst</li>
+<li>Datatypen: datum en tijd</li>
+<li>Datatypen: overige</li>
+<li>jsonb en arrays: wanneer wel</li>
+<li>Sleutelwaarden genereren</li>
+<li>Constraints: het contract met de werkelijkheid</li>
+<li>NOT NULL</li>
+<li>UNIQUE</li>
+<li>PRIMARY KEY</li>
+<li>FOREIGN KEY</li>
+<li>CHECK</li>
+<li>EXCLUDE: de constraint die je in deel 5 miste</li>
+<li>DEFAULT en gegenereerde kolommen</li>
+<li>DOMAIN en ENUM</li>
+<li>ALTER TABLE — en waarom het gevaarlijk is</li>
+<li>DROP, DELETE en TRUNCATE</li>
+<li>DDL is transactioneel</li>
+<li>Naamgevingsconventies</li>
+<li>Commentaar in de database</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>tabellen aanmaken met passende datatypen en een onderbouwde keuze per kolom;</li>
+<li>uitleggen waarom <code>numeric</code> voor geld en <code>text</code> voor tekst de standaardkeuzes zijn in PostgreSQL;</li>
+<li>alle constrainttypen toepassen, inclusief <code>EXCLUDE</code> voor overlappende perioden;</li>
+<li>identiteitskolommen aanmaken en het verschil met <code>serial</code> uitleggen;</li>
+<li><code>DEFAULT</code>, gegenereerde kolommen, domeinen en enums inzetten en hun nadelen benoemen;</li>
+<li>een bestaande tabel wijzigen en de risico’s van die wijziging in productie inschatten;</li>
+<li>het verschil tussen <code>DELETE</code>, <code>TRUNCATE</code> en <code>DROP</code> toepassen;</li>
+<li>gebruikmaken van het feit dat DDL in PostgreSQL transactioneel is;</li>
+<li>het model uit deel 5 omzetten in werkende DDL.</li>
+</ul>
+<p><strong>De kernboodschap van dit deel:</strong> elke regel die je niet in de database vastlegt, moet iemand anders onthouden. Constraints zijn geen luxe maar de plek waar het model uit deel 5 werkelijkheid wordt.</p>
+<hr>
+<h2>2. DDL, DML, DCL, TCL</h2>
+<p>SQL wordt traditioneel in vier groepen verdeeld:</p>
+<table>
+<thead>
+<tr>
+<th>Groep</th>
+<th>Wat</th>
+<th>Commando’s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>DDL</strong> — Data Definition</td>
+<td>Structuur</td>
+<td><code>CREATE</code>, <code>ALTER</code>, <code>DROP</code>, <code>TRUNCATE</code></td>
+</tr>
+<tr>
+<td><strong>DML</strong> — Data Manipulation</td>
+<td>Gegevens</td>
+<td><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>SELECT</code></td>
+</tr>
+<tr>
+<td><strong>DCL</strong> — Data Control</td>
+<td>Rechten</td>
+<td><code>GRANT</code>, <code>REVOKE</code> (deel 9)</td>
+</tr>
+<tr>
+<td><strong>TCL</strong> — Transaction Control</td>
+<td>Transacties</td>
+<td><code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> (deel 7)</td>
+</tr>
+</tbody>
+</table>
+<p>Dit deel gaat over DDL. Nuttig om te weten voor het examen en voor het gesprek met collega’s; de indeling zelf is verder van beperkt praktisch belang.</p>
+<hr>
+<h2>3. CREATE TABLE</h2>
+<pre><code class="language-sql">CREATE TABLE plaats (
+    plaats_id  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    naam       text NOT NULL,
+    provincie  text,
+    CONSTRAINT plaats_naam_uniek UNIQUE (naam)
+);
+</code></pre>
+<p>Constraints kun je <strong>op kolomniveau</strong> schrijven (achter de kolom) of <strong>op tabelniveau</strong> (als aparte regel). Functioneel gelijk, met één verschil: een constraint over meerdere kolommen kan alleen op tabelniveau.</p>
+<p><strong>Geef constraints altijd een naam.</strong> Zonder naam verzint PostgreSQL er een (<code>plaats_naam_key</code>), en die verschijnt in foutmeldingen die je gebruikers te zien krijgen. Een zelfgekozen naam is bovendien nodig om de constraint later gericht te kunnen verwijderen.</p>
+<p>Handige varianten:</p>
+<pre><code class="language-sql">CREATE TABLE IF NOT EXISTS …          -- geen fout als hij al bestaat
+CREATE TEMP TABLE …                   -- verdwijnt aan het eind van de sessie
+CREATE TABLE nieuw (LIKE bestaand INCLUDING ALL);   -- zelfde structuur
+CREATE TABLE kopie AS SELECT …;       -- structuur én gegevens, maar ZONDER constraints
+</code></pre>
+<p>Die laatste is een bekende valkuil: <code>CREATE TABLE AS SELECT</code> neemt geen sleutels, constraints of indexen over. Je krijgt een tabel die eruitziet als het origineel en niets bewaakt.</p>
+<hr>
+<h2>4. Datatypen: numeriek</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bereik / precisie</th>
+<th>Gebruik</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>smallint</code></td>
+<td>±32.767</td>
+<td>Kleine tellers, jaartallen</td>
+</tr>
+<tr>
+<td><code>integer</code></td>
+<td>±2,1 miljard</td>
+<td>De standaardkeuze voor gehele getallen</td>
+</tr>
+<tr>
+<td><code>bigint</code></td>
+<td>±9,2 triljoen</td>
+<td>Identiteitskolommen van grote tabellen</td>
+</tr>
+<tr>
+<td><code>numeric(p,s)</code></td>
+<td>Exact, willekeurige precisie</td>
+<td><strong>Geld, alles waar exactheid telt</strong></td>
+</tr>
+<tr>
+<td><code>real</code> / <code>double precision</code></td>
+<td>Binaire benadering</td>
+<td>Wetenschappelijke metingen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De regel die je nooit vergeet: geld is <code>numeric</code>.</strong> Uit deel 3:</p>
+<pre><code class="language-sql">SELECT 0.1::float + 0.2::float = 0.3::float;        -- false
+SELECT 0.1::numeric + 0.2::numeric = 0.3::numeric;  -- true
+</code></pre>
+<p>Bij een pensioenuitvoerder is een afrondingsverschil van een cent op honderdduizenden aanspraken geen academisch punt.</p>
+<p><code>numeric(10,2)</code> betekent: maximaal 10 cijfers in totaal, waarvan 2 achter de komma. Kies <code>p</code> ruim genoeg — het aanpassen van de precisie op een grote tabel is een operatie met downtime.</p>
+<p><strong>Over <code>integer</code> versus <code>bigint</code> voor sleutels:</strong> <code>integer</code> gaat tot 2,1 miljard. Dat lijkt genoeg tot je bedenkt dat een sequentie ook doorloopt bij mislukte transacties en verwijderde rijen. Voor tabellen die snel groeien (logregels, gebeurtenissen, mutaties) is <code>bigint</code> de veilige keuze; de extra vier bytes zijn zelden het probleem. Voor <code>werkgever</code> met 250 rijen is <code>integer</code> ruim voldoende.</p>
+<hr>
+<h2>5. Datatypen: tekst</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code></td>
+<td>Onbegrensde tekst</td>
+</tr>
+<tr>
+<td><code>varchar(n)</code></td>
+<td>Tekst met maximumlengte</td>
+</tr>
+<tr>
+<td><code>varchar</code></td>
+<td>Gelijk aan <code>text</code></td>
+</tr>
+<tr>
+<td><code>char(n)</code></td>
+<td>Vaste lengte, <strong>aangevuld met spaties</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>In PostgreSQL is <code>text</code> de standaardkeuze.</strong> Anders dan in sommige andere DBMS’en levert een lengtelimiet hier geen prestatiewinst op; alle drie de typen worden intern hetzelfde opgeslagen.</p>
+<p>Wanneer dan wél <code>varchar(n)</code>? Alleen als de lengte een <strong>echte bedrijfsregel</strong> is: een KvK-nummer is acht tekens, een ISO-landcode twee. Dan is de limiet documentatie én bewaking. Gebruik hem niet als vage schatting (“naam is vast niet langer dan 100”), want de eerste keer dat iemand een langere naam heeft, krijg je een productiefout op een regel die niemand ooit heeft bedacht.</p>
+<p><strong><code>char(n)</code> moet je vermijden.</strong> De opvulling met spaties leidt tot verrassingen bij vergelijken en samenvoegen. In de casusdatabase is <code>bsn char(9)</code> gebruikt — verdedigbaar omdat een BSN altijd negen cijfers heeft, maar <code>text</code> met een <code>CHECK</code> op het formaat was beter geweest, omdat dat óók afdwingt dat het cijfers zijn.</p>
+<hr>
+<h2>6. Datatypen: datum en tijd</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Legt vast</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>date</code></td>
+<td>Kalenderdatum</td>
+</tr>
+<tr>
+<td><code>time</code></td>
+<td>Tijd zonder datum (zelden nuttig)</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>Datum en tijd <strong>zonder</strong> tijdzone</td>
+</tr>
+<tr>
+<td><code>timestamptz</code></td>
+<td>Datum en tijd <strong>met</strong> tijdzonebesef</td>
+</tr>
+<tr>
+<td><code>interval</code></td>
+<td>Tijdsduur</td>
+</tr>
+<tr>
+<td><code>daterange</code>, <code>tstzrange</code></td>
+<td>Een periode als één waarde</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gebruik <code>timestamptz</code>, niet <code>timestamp</code>.</strong> <code>timestamptz</code> slaat een absoluut moment op en toont het in de tijdzone van de sessie. <code>timestamp</code> is een wandkloktijd zonder context: op de nacht van de zomertijdovergang is <code>2026-10-25 02:30</code> in Nederland dubbelzinnig, en de database kan je niet helpen.</p>
+<p>De <strong>rangetypen</strong> verdienen aandacht, want ze lossen het historieprobleem uit deel 5 elegant op:</p>
+<pre><code class="language-sql">SELECT daterange(DATE '2024-01-01', DATE '2024-07-01', '[)') @&gt; DATE '2024-03-15';
+-- true
+</code></pre>
+<p>De notatie <code>'[)'</code> betekent: ondergrens inclusief, bovengrens exclusief — hetzelfde veilige patroon als bij datumfilters in deel 3. Een <code>daterange</code> maakt “geldig van/tot” één waarde in plaats van twee kolommen, en maakt de exclusion constraint uit paragraaf 16 mogelijk.</p>
+<hr>
+<h2>7. Datatypen: overige</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Gebruik</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>boolean</code></td>
+<td><code>true</code> / <code>false</code> / NULL</td>
+</tr>
+<tr>
+<td><code>uuid</code></td>
+<td>Universeel unieke identificatie</td>
+</tr>
+<tr>
+<td><code>bytea</code></td>
+<td>Binaire gegevens</td>
+</tr>
+<tr>
+<td><code>inet</code>, <code>cidr</code>, <code>macaddr</code></td>
+<td>Netwerkadressen</td>
+</tr>
+<tr>
+<td><code>jsonb</code></td>
+<td>Geïndexeerd, doorzoekbaar JSON</td>
+</tr>
+<tr>
+<td><code>array</code></td>
+<td>Meerdere waarden van hetzelfde type</td>
+</tr>
+<tr>
+<td><code>enum</code></td>
+<td>Vaste lijst van waarden</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Over <code>boolean</code> en NULL:</strong> een <code>boolean</code>-kolom die NULL mag zijn, heeft drie toestanden. Bedoel je dat? Meestal niet — dan hoort er <code>NOT NULL DEFAULT false</code> bij. Bedoel je het wel (“we weten nog niet of deze deelnemer akkoord is”), leg het dan vast in de kolomnaam of het commentaar.</p>
+<p><strong>Over <code>uuid</code> als sleutel:</strong> aantrekkelijk bij gedistribueerde systemen, omdat elke bron zelf sleutels kan maken zonder centrale coördinatie. Nadelen: 16 bytes in plaats van 4 of 8, willekeurige volgorde (slechter voor indexlokaliteit), en onleesbaar in foutmeldingen en gesprekken. Voor Meridiaan is een identiteitskolom de betere keuze; in niveau 3 komt de gedistribueerde situatie terug waar dat kantelt.</p>
+<hr>
+<h2>8. jsonb en arrays: wanneer wel</h2>
+<p>Uit deel 5: <strong><code>jsonb</code> voor wat je bewaart, kolommen voor wat je gebruikt.</strong></p>
+<p>Legitiem gebruik bij Meridiaan:</p>
+<ul>
+<li>het <strong>ruwe bericht</strong> dat via een koppelvlak binnenkwam, bewaard voor onderzoek en aantoonbaarheid;</li>
+<li>een <strong>configuratieblok</strong> dat als geheel wordt gelezen en geschreven;</li>
+<li><strong>schemaloze uitbreidingen</strong> die per soort verschillen en waarop je niet bewaakt.</li>
+</ul>
+<p>Niet-legitiem: het adres in <code>jsonb</code> zetten “omdat het flexibeler is”. Op een adres wil je filteren, bewaken en historie voeren — dat zijn precies de dingen die <code>jsonb</code> je niet geeft.</p>
+<pre><code class="language-sql">CREATE TABLE koppelvlakbericht (
+    bericht_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ontvangen_op timestamptz NOT NULL DEFAULT now(),
+    bron        text NOT NULL,
+    inhoud      jsonb NOT NULL
+);
+
+SELECT inhoud -&gt;&gt; 'bsn' FROM koppelvlakbericht;      -- als tekst
+SELECT inhoud -&gt; 'adres' -&gt;&gt; 'plaats' FROM koppelvlakbericht;
+</code></pre>
+<p><strong>Arrays</strong> zijn een schending van 1NF en meestal een teken dat je een tabel mist. Uitzondering: een korte, vaste lijst waar je nooit los op filtert of naar verwijst — bijvoorbeeld een reeks tags. Zodra je een array wilt joinen, had het een tabel moeten zijn.</p>
+<hr>
+<h2>9. Sleutelwaarden genereren</h2>
+<pre><code class="language-sql">-- Aanbevolen (standaard-SQL, sinds PostgreSQL 10)
+deelnemer_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+
+-- Ouder, PostgreSQL-eigen
+deelnemer_id serial PRIMARY KEY
+</code></pre>
+<p>Beide gebruiken onderliggend een sequentie. Verschillen:</p>
+<ul>
+<li><code>GENERATED ALWAYS</code> <strong>verbiedt</strong> dat je zelf een waarde meegeeft (tenzij je <code>OVERRIDING SYSTEM VALUE</code> schrijft). Dat voorkomt de klassieke fout waarbij iemand handmatig een id invoegt en de sequentie daarna botsingen geeft.</li>
+<li><code>GENERATED BY DEFAULT</code> staat een eigen waarde wél toe — nuttig bij het migreren van bestaande gegevens.</li>
+<li><code>serial</code> is geen echt type maar een afkorting; het gedraagt zich als <code>GENERATED BY DEFAULT</code> en de sequentie is losser gekoppeld aan de kolom.</li>
+</ul>
+<p><strong>Advies:</strong> gebruik <code>GENERATED ALWAYS AS IDENTITY</code> voor nieuwe tabellen. Kom je <code>serial</code> tegen, dan hoef je het niet te vervangen, maar weet dat het legacy is.</p>
+<p><strong>Sequenties zijn niet gatenloos.</strong> Een teruggedraaide transactie geeft de gebruikte waarde niet terug. Wie een gatenloze nummering nodig heeft — factuurnummers bij de Belastingdienst, bijvoorbeeld — moet dat anders oplossen, met alle gevolgen voor gelijktijdigheid. Verwacht deze vraag van de business en beloof niets voordat je de gevolgen hebt uitgelegd.</p>
+<hr>
+<h2>10. Constraints: het contract met de werkelijkheid</h2>
+<p>Nu de kern van dit deel.</p>
+<p>Een constraint is een regel die de database zelf afdwingt. Het alternatief is de regel in applicatiecode zetten — en dat gaat mis, om drie redenen:</p>
+<ol>
+<li><strong>Er is bijna nooit één applicatie.</strong> Er is de applicatie, plus een importscript, plus een correctie die iemand met psql uitvoert, plus straks een tweede systeem.</li>
+<li><strong>Applicatiecode wordt vervangen; gegevens blijven.</strong> De database van Meridiaan gaat twintig jaar mee; de applicatie erboven waarschijnlijk vijf.</li>
+<li><strong>De database bewaakt bij gelijktijdigheid.</strong> Applicatiecode die “eerst kijken of het bestaat, dan invoegen” doet, faalt onder gelijktijdige belasting. Een <code>UNIQUE</code>-constraint niet.</li>
+</ol>
+<blockquote>
+<p><strong>Vuistregel: elke regel die je niet in de database vastlegt, moet iemand anders onthouden.</strong></p>
+</blockquote>
+<p>Dat betekent niet dat álles een constraint moet zijn. Regels die vaak wijzigen, die van externe gegevens afhangen of die per situatie verschillen, horen in de applicatie of in een referentietabel. Maar de standaardhouding is: leg het vast, tenzij.</p>
+<hr>
+<h2>11. NOT NULL</h2>
+<pre><code class="language-sql">achternaam text NOT NULL
+</code></pre>
+<p>De eenvoudigste en meest verwaarloosde constraint. Uit deel 5: de optionaliteit die je in het model tekende, wordt hier <code>NOT NULL</code> of niet.</p>
+<p><strong>Wees streng.</strong> Een kolom die nullable is zonder reden, dwingt elke query die hem gebruikt om NULL te behandelen (deel 3), en elke ontwikkelaar om zich af te vragen wat NULL hier betekent. Kun je niet uitleggen wat NULL in deze kolom betekent, dan hoort er <code>NOT NULL</code>.</p>
+<hr>
+<h2>12. UNIQUE</h2>
+<pre><code class="language-sql">kvk_nummer text NOT NULL UNIQUE
+CONSTRAINT premienota_uniek_per_periode UNIQUE (werkgever_id, periode_jaar, periode_maand)
+</code></pre>
+<p>PostgreSQL maakt automatisch een index aan om een <code>UNIQUE</code>-constraint af te dwingen. Dat is een gratis bijeffect dat je in deel 8 leert waarderen.</p>
+<p><strong>Twee dingen om te weten:</strong></p>
+<ol>
+<li><strong><code>UNIQUE</code> staat meerdere NULL’s toe</strong> (deel 2). Twee rijen met NULL in dezelfde unieke kolom zijn toegestaan, want ze zijn niet aantoonbaar gelijk. In de casus is dat precies wat we willen bij <code>bsn</code>.</li>
+<li><strong>Gedeeltelijke uniciteit</strong> vereist een unieke index in plaats van een constraint:</li>
+</ol>
+<pre><code class="language-sql">CREATE UNIQUE INDEX deelnemer_actief_bsn_uniek
+    ON deelnemer (bsn) WHERE einddatum_deelname IS NULL;
+</code></pre>
+<p>Hiermee zeg je: onder actieve deelnemers is het BSN uniek, maar historische rijen mogen het herhalen. Dat soort regel is met een gewone constraint niet uit te drukken.</p>
+<hr>
+<h2>13. PRIMARY KEY</h2>
+<pre><code class="language-sql">deelnemer_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+</code></pre>
+<p>Een primaire sleutel is <code>UNIQUE</code> plus <code>NOT NULL</code>, en er is er maximaal één per tabel. Dat is de entiteitsintegriteitsregel uit deel 2, hier geïmplementeerd.</p>
+<p>Uit deel 2, als cursusregel: <strong>surrogaatsleutel als primaire sleutel, natuurlijke sleutel als <code>UNIQUE</code>.</strong> In de casus is dat <code>deelnemer_id</code> als sleutel en <code>bsn UNIQUE</code>.</p>
+<p><strong>Elke tabel hoort een primaire sleutel te hebben.</strong> PostgreSQL staat een tabel zonder toe, maar dan kun je een individuele rij niet aanspreken — geen gerichte <code>UPDATE</code>, geen verwijzing, en logische replicatie (niveau 2) werkt niet. De enige verdedigbare uitzondering is een pure logtabel waarvan de rijen nooit individueel worden benaderd, en zelfs daar is een identiteitskolom goedkoop.</p>
+<hr>
+<h2>14. FOREIGN KEY</h2>
+<pre><code class="language-sql">CONSTRAINT dienstverband_deelnemer_fk
+    FOREIGN KEY (deelnemer_id) REFERENCES deelnemer (deelnemer_id)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+</code></pre>
+<p>De referentiële integriteit uit deel 2. Het gedrag bij verwijderen is daar behandeld; hier de praktische aanvullingen.</p>
+<p><strong><code>ON UPDATE CASCADE</code></strong> is bij surrogaatsleutels zelden nodig — die wijzigen immers nooit. Bij natuurlijke sleutels is het onmisbaar, wat op zichzelf een extra argument voor surrogaten is.</p>
+<p><strong>PostgreSQL maakt géén index aan op de foreign key-kolom.</strong> Dit is een van de bekendste valkuilen. De sleutel zelf (aan de ouderkant) is geïndexeerd; de verwijzende kolom niet. Gevolgen: joins zijn traag, en — belangrijker — elke <code>DELETE</code> op de oudertabel moet de hele kindtabel scannen om te controleren of er nog verwijzingen zijn.</p>
+<p>In het casusscript staan die indexen daarom expliciet:</p>
+<pre><code class="language-sql">CREATE INDEX dienstverband_deelnemer_idx ON dienstverband (deelnemer_id);
+</code></pre>
+<p><strong>Uitgestelde constraints.</strong> Soms moet je tijdelijk een inconsistente toestand toestaan binnen een transactie (bijvoorbeeld bij circulaire verwijzingen):</p>
+<pre><code class="language-sql">CONSTRAINT … FOREIGN KEY … DEFERRABLE INITIALLY DEFERRED
+</code></pre>
+<p>De controle vindt dan pas bij <code>COMMIT</code> plaats. Gebruik dit spaarzaam en bewust.</p>
+<hr>
+<h2>15. CHECK</h2>
+<pre><code class="language-sql">CONSTRAINT deelnemer_deelname_logisch
+    CHECK (einddatum_deelname IS NULL OR einddatum_deelname &gt;= startdatum_deelname)
+
+CONSTRAINT dienstverband_deeltijdfactor_bereik
+    CHECK (deeltijdfactor &gt; 0 AND deeltijdfactor &lt;= 1)
+
+CONSTRAINT aanspraak_soort_toegestaan
+    CHECK (soort IN ('ouderdom','partner','wezen','arbeidsongeschiktheid'))
+</code></pre>
+<p>De domeinintegriteit uit deel 2. Drie aandachtspunten:</p>
+<p><strong>1. NULL en <code>CHECK</code>.</strong> Een <code>CHECK</code> die <code>unknown</code> oplevert, wordt <strong>toegestaan</strong>. <code>CHECK (bedrag &gt; 0)</code> laat een NULL-bedrag dus door. Wil je dat niet, voeg dan <code>NOT NULL</code> toe — de <code>CHECK</code> doet dat niet voor je.</p>
+<p><strong>2. Een <code>CHECK</code> mag alleen naar de eigen rij kijken.</strong> Geen subquery’s, geen verwijzingen naar andere tabellen. Wie “het bedrag moet lager zijn dan het jaartotaal van deze werkgever” wil afdwingen, heeft een trigger nodig (niveau 2) of moet het in de applicatie doen.</p>
+<p><strong>3. Een lijst toegestane waarden in een <code>CHECK</code> is een ontwerpkeuze met kosten.</strong> Een nieuwe waarde toevoegen vereist <code>ALTER TABLE</code>, en dat lockt de tabel (paragraaf 19). Voor een stabiele lijst (de vier aanspraaksoorten) prima; voor een lijst die groeit is een referentietabel met een foreign key beter. Dit is precies zwakte 18.4 uit deel 5.</p>
+<hr>
+<h2>16. EXCLUDE: de constraint die je in deel 5 miste</h2>
+<p>In opdracht 5.6c wilde je voorkomen dat twee adresperioden van dezelfde deelnemer elkaar overlappen. Met <code>UNIQUE</code> lukt dat niet: de perioden zijn niet gelijk, ze overlappen alleen.</p>
+<p>PostgreSQL heeft daar de <strong>exclusion constraint</strong> voor:</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+CREATE TABLE adres (
+    adres_id     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    deelnemer_id integer NOT NULL REFERENCES deelnemer,
+    straat       text NOT NULL,
+    huisnummer   text NOT NULL,
+    postcode     text NOT NULL,
+    plaats_id    integer NOT NULL REFERENCES plaats,
+    geldigheid   daterange NOT NULL,
+    CONSTRAINT adres_geen_overlap
+        EXCLUDE USING gist (deelnemer_id WITH =, geldigheid WITH &amp;&amp;)
+);
+</code></pre>
+<p>Lees de constraint als: <em>er mogen geen twee rijen bestaan waarvoor <code>deelnemer_id</code> gelijk is (<code>=</code>) én de geldigheidsperioden overlappen (<code>&amp;&amp;</code>)</em>.</p>
+<p>De extensie <code>btree_gist</code> is nodig omdat je een gewoon type (<code>integer</code>) combineert met een rangetype in dezelfde index.</p>
+<p>Waarom dit ertoe doet: zonder deze constraint moet de applicatie overlap bewaken, en dat faalt zodra twee mutaties gelijktijdig binnenkomen — precies het gelijktijdigheidsargument uit paragraaf 10. Met de constraint is het onmogelijk, ongeacht wie het probeert.</p>
+<p>Dit is een van de dingen die PostgreSQL kan en de meeste andere DBMS’en niet. Het is het waard om te kennen.</p>
+<hr>
+<h2>17. DEFAULT en gegenereerde kolommen</h2>
+<pre><code class="language-sql">aangemaakt_op timestamptz NOT NULL DEFAULT now(),
+land          text        NOT NULL DEFAULT 'NL',
+actief        boolean     NOT NULL DEFAULT true
+</code></pre>
+<p>Een <code>DEFAULT</code> geldt alleen als de kolom bij <code>INSERT</code> niet wordt genoemd. Geef je expliciet NULL mee, dan krijg je NULL (of een foutmelding bij <code>NOT NULL</code>) — niet de standaardwaarde.</p>
+<p><strong>Gegenereerde kolommen</strong> worden door de database zelf berekend en bijgehouden:</p>
+<pre><code class="language-sql">volledige_naam text GENERATED ALWAYS AS (
+    concat_ws(' ', voorletters, tussenvoegsel, achternaam)
+) STORED
+</code></pre>
+<p>Dit is de veilige vorm van de “denormalisatie” uit opdracht 5.5d: de waarde staat opgeslagen, maar niemand kan hem inconsistent maken, want alleen de database schrijft hem. De uitdrukking moet wel <em>immutable</em> zijn — je kunt er geen <code>now()</code> of een subquery in gebruiken.</p>
+<hr>
+<h2>18. DOMAIN en ENUM</h2>
+<p>Een <strong>domein</strong> is een hergebruikbaar type met constraints — precies het begrip “domein” uit deel 2, nu als taalconstructie:</p>
+<pre><code class="language-sql">CREATE DOMAIN bsn AS text
+    CHECK (VALUE ~ '^[0-9]{9}$');
+
+CREATE DOMAIN positief_bedrag AS numeric(12,2)
+    CHECK (VALUE &gt;= 0);
+
+CREATE TABLE deelnemer (
+    …
+    bsn bsn UNIQUE,
+    …
+);
+</code></pre>
+<p>Voordeel: de regel staat op één plek en geldt overal waar het domein gebruikt wordt. Nadeel: het wijzigen van een domein dat in veel tabellen wordt gebruikt, raakt al die tabellen tegelijk.</p>
+<p>Een <strong>enum</strong> is een type met een vaste waardenlijst:</p>
+<pre><code class="language-sql">CREATE TYPE aanspraaksoort AS ENUM ('ouderdom','partner','wezen','arbeidsongeschiktheid');
+</code></pre>
+<p>Aantrekkelijk, maar met echte nadelen: een waarde toevoegen kan (<code>ALTER TYPE … ADD VALUE</code>), een waarde verwijderen of hernoemen praktisch niet, en de sorteervolgorde is de definitievolgorde — wat verrast.</p>
+<p><strong>Advies voor deze cursus:</strong> voor een korte, stabiele lijst is een <code>CHECK</code> het eenvoudigst. Voor een lijst die groeit of waar je extra gegevens bij wilt (een omschrijving, een volgorde, een einddatum) is een <strong>referentietabel met een foreign key</strong> de beste keuze. Enums zijn zelden de moeite waard.</p>
+<hr>
+<h2>19. ALTER TABLE — en waarom het gevaarlijk is</h2>
+<pre><code class="language-sql">ALTER TABLE deelnemer ADD COLUMN e_mailadres text;
+ALTER TABLE deelnemer ALTER COLUMN woonplaats DROP NOT NULL;
+ALTER TABLE deelnemer ADD CONSTRAINT deelnemer_land_geldig CHECK (land ~ '^[A-Z]{2}$');
+ALTER TABLE deelnemer RENAME COLUMN woonplaats TO plaatsnaam;
+ALTER TABLE deelnemer DROP COLUMN plaatsnaam;
+</code></pre>
+<p>Op een lege ontwikkelmachine is dit onschuldig. Op een productietabel met miljoenen rijen niet, en dit is de belangrijkste waarschuwing van dit deel.</p>
+<p><strong>Elke <code>ALTER TABLE</code> neemt een lock.</strong> Hoe zwaar, verschilt sterk:</p>
+<table>
+<thead>
+<tr>
+<th>Bewerking</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kolom toevoegen zonder default</td>
+<td>Vrijwel gratis (alleen metadata)</td>
+</tr>
+<tr>
+<td>Kolom toevoegen met een constante default</td>
+<td>Vrijwel gratis in moderne versies</td>
+</tr>
+<tr>
+<td>Kolom toevoegen met een volatiele default</td>
+<td>Herschrijft de hele tabel</td>
+</tr>
+<tr>
+<td>Type wijzigen</td>
+<td>Herschrijft de hele tabel</td>
+</tr>
+<tr>
+<td><code>NOT NULL</code> toevoegen</td>
+<td>Scant de hele tabel</td>
+</tr>
+<tr>
+<td><code>CHECK</code> toevoegen</td>
+<td>Scant de hele tabel</td>
+</tr>
+<tr>
+<td>Kolom verwijderen</td>
+<td>Vrijwel gratis (ruimte komt later vrij)</td>
+</tr>
+</tbody>
+</table>
+<p>Een tabelherschrijving houdt gedurende de hele operatie een exclusieve lock vast: <strong>alle</strong> lezers en schrijvers wachten. Op een tabel van tien miljoen rijen kan dat minuten duren, en in die minuten staat de applicatie stil.</p>
+<p>Het patroon om dat te vermijden — een constraint eerst <code>NOT VALID</code> toevoegen en daarna in een tweede stap valideren — hoort bij zero-downtime migraties en komt in niveau 2 (deel 22) en niveau 3 (deel 27) uitgebreid aan bod. Onthoud voor nu vooral: <strong>test elke <code>ALTER TABLE</code> op een kopie met productievolume voordat je hem uitvoert</strong>, en kijk hoe lang hij duurt.</p>
+<hr>
+<h2>20. DROP, DELETE en TRUNCATE</h2>
+<table>
+<thead>
+<tr>
+<th>Commando</th>
+<th>Doet</th>
+<th>Terugdraaibaar in transactie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DELETE FROM t WHERE …</code></td>
+<td>Verwijdert rijen, rij voor rij</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><code>TRUNCATE t</code></td>
+<td>Leegt de tabel in één keer</td>
+<td>Ja (in PostgreSQL)</td>
+</tr>
+<tr>
+<td><code>DROP TABLE t</code></td>
+<td>Verwijdert de tabel zelf</td>
+<td>Ja (in PostgreSQL)</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>TRUNCATE</code> is veel sneller dan <code>DELETE</code></strong> omdat het geen rijen individueel verwerkt en geen dode rijversies achterlaat (MVCC, deel 2). Maar: het neemt een exclusieve lock, het activeert geen row-triggers, en het respecteert foreign keys alleen met <code>CASCADE</code> — wat betekent dat <code>TRUNCATE … CASCADE</code> ook de verwijzende tabellen leegt. Dat laatste is een van de effectiefste manieren om per ongeluk een database te wissen.</p>
+<p><strong><code>DROP TABLE … CASCADE</code></strong> verwijdert ook alle objecten die ervan afhangen: views, foreign keys, en meer. Gebruik het nooit in productie zonder eerst zonder <code>CASCADE</code> te proberen — de foutmelding vertelt je precies wat er afhangt, en dat is informatie die je wilt zien vóórdat je het weggooit.</p>
+<hr>
+<h2>21. DDL is transactioneel</h2>
+<p>Dit is een van de sterkste eigenschappen van PostgreSQL en het is een van de weinige plekken waar het duidelijk beter is dan de concurrentie.</p>
+<pre><code class="language-sql">BEGIN;
+
+CREATE TABLE plaats (…);
+INSERT INTO plaats (naam) SELECT DISTINCT initcap(trim(woonplaats)) FROM deelnemer WHERE woonplaats IS NOT NULL;
+ALTER TABLE deelnemer ADD COLUMN plaats_id integer REFERENCES plaats;
+UPDATE deelnemer SET plaats_id = p.plaats_id FROM plaats p WHERE p.naam = initcap(trim(deelnemer.woonplaats));
+ALTER TABLE deelnemer DROP COLUMN woonplaats;
+
+-- Controleren voordat je vastlegt:
+SELECT count(*) FROM deelnemer WHERE plaats_id IS NULL AND woonplaats IS NOT NULL;
+
+COMMIT;   -- of ROLLBACK als het niet klopt
+</code></pre>
+<p>In Oracle en MySQL wordt een DDL-opdracht automatisch vastgelegd; een half mislukte migratie laat je daar achter met een tabel die half is omgebouwd. In PostgreSQL draai je de hele migratie terug met één <code>ROLLBACK</code>.</p>
+<p><strong>Maak hier gebruik van.</strong> Zet elke migratie tussen <code>BEGIN</code> en <code>COMMIT</code>, voer controlequery’s uit vóór de <code>COMMIT</code>, en draai terug als er iets niet klopt. Dit is de belangrijkste praktische gewoonte uit dit deel.</p>
+<p>(Uitzonderingen bestaan: <code>CREATE INDEX CONCURRENTLY</code> en <code>VACUUM</code> kunnen niet in een transactie. Die kom je in niveau 2 tegen.)</p>
+<hr>
+<h2>22. Naamgevingsconventies</h2>
+<p>Er is geen officiële standaard. Er is wel een verkeerde keuze: geen conventie hebben.</p>
+<p>De conventie die deze cursus aanhoudt:</p>
+<ul>
+<li><strong>Kleine letters met liggende streepjes</strong>: <code>deelnemer_id</code>, <code>geldig_van</code>. Zo ontloop je het probleem met dubbele aanhalingstekens uit deel 3.</li>
+<li><strong>Tabelnamen enkelvoud</strong>: <code>deelnemer</code>, niet <code>deelnemers</code>. Een rij is één deelnemer. (Hierover bestaat oprechte onenigheid in het vak; kies één kant en wees consequent.)</li>
+<li><strong>Sleutelkolom</strong> <code>&lt;entiteit&gt;_id</code>.</li>
+<li><strong>Foreign key</strong> heet net als de kolom waarnaar hij verwijst.</li>
+<li><strong>Constraints</strong>: <code>&lt;tabel&gt;_&lt;kolom&gt;_&lt;soort&gt;</code>, bijvoorbeeld <code>deelnemer_bsn_uniek</code>, <code>dienstverband_deelnemer_fk</code>.</li>
+<li><strong>Geen afkortingen</strong> die niet in de organisatie gangbaar zijn. <code>dv_dt_st</code> bespaart tekens en kost begrip.</li>
+<li><strong>Geen gereserveerde woorden</strong> als naam: <code>user</code>, <code>order</code>, <code>group</code>, <code>table</code>. Ze werken alleen met dubbele aanhalingstekens en zijn daarna een blijvende ergernis.</li>
+</ul>
+<hr>
+<h2>23. Commentaar in de database</h2>
+<pre><code class="language-sql">COMMENT ON TABLE deelnemer IS
+    'Personen met pensioenaanspraken bij Meridiaan, inclusief slapers en gepensioneerden.';
+COMMENT ON COLUMN deelnemer.einddatum_deelname IS
+    'NULL betekent: deelname loopt nog. Zie beleidsregel PB-2024-03.';
+</code></pre>
+<p>Commentaar staat in de catalogus (deel 2) en is zichtbaar met <code>\d+</code> in psql. Het reist mee met de database, ook als het projectdocument verdwijnt — en dat is precies wat er over twintig jaar gebeurd zal zijn.</p>
+<p><strong>Documenteer vooral de niet-vanzelfsprekende dingen:</strong> wat NULL betekent in een kolom, waarom een denormalisatie er staat, welke bedrijfsregel achter een <code>CHECK</code> zit. De kolomnaam <code>achternaam</code> heeft geen toelichting nodig.</p>
+<hr>
+<h2>24. Aansluiting op de certificering</h2>
+<p>Voor de Associate-certificering paraat:</p>
+<ul>
+<li>de datatypen en hun toepassingsgebied, met nadruk op <code>numeric</code> versus <code>float</code> en <code>text</code> versus <code>varchar</code>;</li>
+<li>alle constrainttypen en hun gedrag bij NULL;</li>
+<li><code>GENERATED AS IDENTITY</code> versus <code>serial</code>;</li>
+<li>het gedrag van <code>DELETE</code>, <code>TRUNCATE</code> en <code>DROP</code>, inclusief <code>CASCADE</code>;</li>
+<li>dat DDL in PostgreSQL transactioneel is;</li>
+<li>dat een foreign key geen index aanmaakt op de verwijzende kolom.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>25. Kernbegrippen</h2>
+<p><strong>DDL</strong> — de commando’s die structuur definiëren.
+<strong>Constraint</strong> — regel die de database zelf afdwingt.
+<strong>Identiteitskolom</strong> — automatisch gegenereerde sleutelwaarde.
+<strong>Exclusion constraint</strong> — verbiedt combinaties van rijen, bijvoorbeeld overlappende perioden.
+<strong>Gegenereerde kolom</strong> — kolom die de database zelf berekent en bijhoudt.
+<strong>Domein</strong> — hergebruikbaar type met constraints.
+<strong>Rangetype</strong> — een periode of bereik als één waarde.
+<strong>Tabelherschrijving</strong> — <code>ALTER TABLE</code>-bewerking die de hele tabel opnieuw schrijft, met exclusieve lock.
+<strong>Transactionele DDL</strong> — structuurwijzigingen die terugdraaibaar zijn.</p>
+<hr>
+<p><em>Volgende deel: transacties, ACID en MVCC. Je hebt nu een database die regels afdwingt. Volgende keer kijken we wat er gebeurt als twee mensen tegelijk iets willen wijzigen — het probleem uit deel 1 dat we nog niet hebben opgelost.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">27 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-05-datamodellering-en-normalisatie/reader.html">&larr; Deel 5 — Datamodellering en normalisatie</a><a class="dbm-prevnext next" href="../deel-07-transacties-acid-en-mvcc/reader.html">Deel 7 — Transacties, ACID en MVCC &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

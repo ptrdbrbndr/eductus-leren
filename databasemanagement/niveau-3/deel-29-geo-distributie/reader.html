@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Geo-distributie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 29 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 29 — Geo-distributie</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 7 van 8 (deel 29 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Terug naar waar, op een nieuwe schaal</li>
+<li>Waarom één regio ooit niet meer volstaat</li>
+<li>Latency: de fysica die je niet kunt wegconfigureren</li>
+<li>Dataresidentie: waarom “gewoon een replica in een andere regio” niet altijd mag</li>
+<li>Drie geo-topologieën</li>
+<li>Topologie 1: primary in één regio, replica’s elders (read-heavy)</li>
+<li>Topologie 2: actief-passief tussen regio’s</li>
+<li>Topologie 3: actief-actief tussen regio’s</li>
+<li>Wat actief-actief werkelijk kost: conflictresolutie</li>
+<li>Geo-partitionering: data bij de bron houden</li>
+<li>AVG en geo-distributie: het snijvlak</li>
+<li>Geo-distributie en de rest van niveau 3</li>
+<li>Wanneer geo-distributie wél, wanneer niet</li>
+<li>Een geo-advies voor de Pensioenfederatie</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>uitleggen wanneer één regio niet meer volstaat, los van pure capaciteit;</li>
+<li>het effect van latency op cross-regio-communicatie kwantificeren en de gevolgen voor ontwerp benoemen;</li>
+<li>dataresidentie-eisen plaatsen naast de AVG en de gevolgen daarvan voor architectuurkeuzes beschrijven;</li>
+<li>drie geo-topologieën (read-replica’s, actief-passief, actief-actief) tegen elkaar afwegen;</li>
+<li>de kosten van conflictresolutie bij actief-actief-opzetten benoemen;</li>
+<li>geo-partitionering toepassen als alternatief voor volledige replicatie tussen regio’s;</li>
+<li>beoordelen of geo-distributie voor een gegeven situatie nodig is.</li>
+</ul>
+<hr>
+<h2>2. Terug naar waar, op een nieuwe schaal</h2>
+<p>Niveau 3 begon met een vraag over waar gegevens staan (deel 23: tussen fondsen), verlegde die naar horizontale capaciteit (deel 24-25: tussen shards) en naar federatie (deel 26: tussen zelfstandige databases). Deel 27-28 verlegde de aandacht naar wát je vastlegt.</p>
+<p><strong>Dit deel keert terug naar waar — maar op een schaal die niveau 2’s hoge beschikbaarheid (deel 19) nooit behandelde: meerdere geografische regio’s, mogelijk over landsgrenzen heen.</strong> Patroni en synchrone replicatie (deel 19) losten uitval van één machine of datacenter op; dit deel gaat over een fundamenteel andere vraag: wat als de hele regio, of het hele land, niet meer het juiste antwoord is voor waar je data moet staan?</p>
+<hr>
+<h2>3. Waarom één regio ooit niet meer volstaat</h2>
+<p>Drie, principieel verschillende redenen, die niet met elkaar verward mogen worden:</p>
+<p><strong>Beschikbaarheid.</strong> Eén regio, hoe goed intern ook opgezet met Patroni en synchrone replicatie (deel 19), blijft kwetsbaar voor een regio-brede storing (een geografisch wijdverbreide stroomstoring, een grote netwerkuitval). Voor sommige organisaties is dat risico onaanvaardbaar.</p>
+<p><strong>Latency voor gebruikers.</strong> Een gebruiker in een andere regio dan de database ervaart onvermijdelijk extra vertraging (paragraaf 4) — voor sommige toepassingen acceptabel, voor andere niet.</p>
+<p><strong>Dataresidentie.</strong> Wettelijke of contractuele eisen dat bepaalde gegevens binnen specifieke landsgrenzen moeten blijven (paragraaf 5) — een heel andere motivatie dan de eerste twee, die vaak <strong>tegen</strong> replicatie naar andere regio’s pleit in plaats van ervoor.</p>
+<p><strong>Voor de Pensioenfederatie, op dit moment:</strong> geen van de drie is acuut. Nederlandse pensioenfondsen, Nederlandse deelnemers, geen internationale uitbreiding gepland. Dit deel is daarom, meer dan enig ander deel in niveau 3, een <strong>vooruitblik</strong> — kennis voor een scenario dat zich nog niet heeft voorgedaan, maar wel kan voordoen als de federatie ooit internationaal uitbreidt of als de continuïteitseisen verscherpen.</p>
+<hr>
+<h2>4. Latency: de fysica die je niet kunt wegconfigureren</h2>
+<p>Elke eerdere schaaltechniek in deze cursus (indexen, partitionering, sharding, zelfs Citus) loste een probleem op binnen infrastructuur die, ruwweg, op vergelijkbare afstand van elkaar stond — dezelfde datacenter-regio, met verbindingen van enkele milliseconden.</p>
+<p><strong>Tussen geografische regio’s is dat anders.</strong> Het slechtste geval: licht (en dus ook een elektrisch signaal) heeft een fysieke ondergrens nodig om van de ene naar de andere kant van de wereld te reizen. Een verbinding tussen Europa en Azië kost realistisch 100-150 milliseconden retourtijd, ongeacht hoe goed de infrastructuur is geoptimaliseerd — dit is geen configuratieprobleem zoals <code>work_mem</code> (deel 11) dat kan zijn, het is een fysieke grens.</p>
+<p><strong>Wat dit betekent voor synchrone replicatie (deel 18):</strong> een synchrone <code>COMMIT</code> die moet wachten tot een replica in een andere regio heeft bevestigd, kost per definitie die retourtijd erbij, bovenop de gewone verwerkingstijd. Voor Meridiaans huidige gebruik (schrijfacties enkele keren per seconde) zou dat een merkbare, maar misschien acceptabele vertraging zijn; voor een systeem met veel schrijfverkeer wordt dit al snel een knelpunt.</p>
+<p><strong>De vuistregel: hoe verder de regio’s uit elkaar liggen, hoe minder aantrekkelijk synchrone replicatie tussen hen wordt.</strong> Binnen Europa (enkele tientallen milliseconden) is synchrone cross-regio-replicatie voor sommige toepassingen nog haalbaar; tussen continenten wordt asynchrone replicatie (met het geaccepteerde risico op dataverlies bij een failover, deel 18) vaak de enige praktische keuze.</p>
+<hr>
+<h2>5. Dataresidentie: waarom “gewoon een replica in een andere regio” niet altijd mag</h2>
+<p>Uit deel 9 en 21: persoonsgegevens vallen onder de AVG. Een minder besproken aspect tot nu toe: <strong>waar</strong> die gegevens fysiek mogen staan.</p>
+<p><strong>De kern:</strong> de AVG staat gegevensoverdracht buiten de EU alleen toe onder specifieke voorwaarden (een adequaatheidsbesluit, passende waarborgen, of een uitzondering) — een replica van Meridiaans deelnemersgegevens op een server buiten de EU is niet zomaar toegestaan, ook al zou dat technisch en zelfs voor latency-redenen aantrekkelijk kunnen zijn.</p>
+<p><strong>Wat dit betekent voor geo-distributie-ontwerp:</strong> de keuze van regio’s is niet alleen een technische of prestatie-afweging (paragraaf 4) maar ook een <strong>juridische</strong> — en die twee kunnen tegenstrijdig zijn. Een regio die technisch de laagste latency zou geven, kan om dataresidentie-redenen simpelweg uitgesloten zijn.</p>
+<p><strong>Voor sectorspecifieke gevoelige gegevens (zoals pensioengegevens) gelden vaak nog strengere eisen</strong> dan de AVG in algemene zin — sommige sectoren of toezichthouders vereisen expliciet dat gegevens binnen een specifiek land blijven, los van wat de AVG als zodanig toestaat. Dit is een vraag die altijd met de eigen juridische en compliance-functie (Sanne, en bij een grensoverschrijdend vraagstuk mogelijk ook externe expertise) moet worden afgestemd — deze cursus geeft het technische kader, niet het laatste juridische woord.</p>
+<hr>
+<h2>6. Drie geo-topologieën</h2>
+<p>Net als bij multi-tenancy (deel 23) zijn er geen “de” oplossing, maar een spectrum van patronen met een oplopende complexiteit en een oplopende garantie.</p>
+<table>
+<thead>
+<tr>
+<th>Topologie</th>
+<th>Schrijven</th>
+<th>Latency voor verre gebruikers</th>
+<th>Complexiteit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Read-replica’s elders</strong></td>
+<td>Eén regio</td>
+<td>Laag voor lezen, hoog voor schrijven</td>
+<td>Laag (uitbreiding van deel 18)</td>
+</tr>
+<tr>
+<td><strong>Actief-passief</strong></td>
+<td>Eén regio actief tegelijk</td>
+<td>Hoog totdat een failover gebeurt</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td><strong>Actief-actief</strong></td>
+<td>Meerdere regio’s tegelijk</td>
+<td>Laag, overal</td>
+<td>Hoog (conflictresolutie)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Topologie 1: primary in één regio, replica’s elders (read-heavy)</h2>
+<p>De eenvoudigste uitbreiding van wat je al kende: de primary blijft in één regio (bijvoorbeeld Nederland, om dataresidentie triviaal te houden), met asynchrone replica’s (deel 18) in andere regio’s specifiek voor <strong>lezen</strong>.</p>
+<pre><code>Primary (Nederland, schrijven + lezen)
+    │ asynchrone replicatie
+    ▼
+Replica (andere EU-regio, alleen lezen)
+</code></pre>
+<p><strong>Voordelen:</strong> relatief eenvoudig (het is in essentie deel 18’s replicatiepatroon, nu over een grotere afstand), lage latency voor lezende gebruikers in de andere regio, schrijfverkeer blijft eenvoudig (één plek, geen conflictresolutie nodig).</p>
+<p><strong>Nadelen:</strong> schrijfverkeer vanuit de verre regio moet nog steeds naar de primary reizen — als schrijvers zich ook in de verre regio bevinden, ervaren zij nog steeds de volledige cross-regio-latency. En bij uitval van de primary-regio is een failover naar de replica-regio nodig (net als in deel 19, maar dan over een grotere afstand, met een groter risico op dataverlies bij asynchrone replicatie).</p>
+<p><strong>Voor de Pensioenfederatie:</strong> als er ooit een grensoverschrijdende rapportagebehoefte zou ontstaan (bijvoorbeeld een internationale toezichthouder die snel toegang wil), zou dit patroon een lichte, verdedigbare eerste stap zijn.</p>
+<hr>
+<h2>8. Topologie 2: actief-passief tussen regio’s</h2>
+<p>Eén regio is op elk moment “actief” (ontvangt alle schrijfverkeer), de andere staat volledig klaar om over te nemen bij een regio-brede storing — een uitbreiding van Patroni’s failover-principe (deel 19) naar regio-niveau in plaats van machine-niveau.</p>
+<p><strong>Het verschil met topologie 1:</strong> hier is de bedoeling expliciet <strong>continuïteit bij een regio-brede ramp</strong>, niet primair latency-verbetering voor lezers. De passieve regio doet doorgaans geen actief leesverkeer (of slechts beperkt), in tegenstelling tot topologie 1’s replica’s die juist wél actief leesverkeer verwerken.</p>
+<p><strong>De RTO/RPO-discipline uit deel 17 keert hier terug, nu op regio-schaal:</strong> hoeveel dataverlies is acceptabel bij een regio-failover (RPO, bepaald door de replicatievertraging over de afstand heen), en hoe snel moet de omschakeling voltooid zijn (RTO, gecompliceerder dan bij Patroni’s automatische failover binnen één datacenter — een cross-regio-failover wordt vaak bewust <strong>niet</strong> volledig geautomatiseerd, om te voorkomen dat een tijdelijke netwerkstoring tussen regio’s een onnodige, verstorende failover triggert).</p>
+<hr>
+<h2>9. Topologie 3: actief-actief tussen regio’s</h2>
+<p>Elke regio accepteert <strong>zowel lezen als schrijven</strong>, met voortdurende synchronisatie tussen de regio’s.</p>
+<pre><code>Regio A (schrijven + lezen)  ⇄  Regio B (schrijven + lezen)
+</code></pre>
+<p><strong>De belofte:</strong> lage latency voor zowel lezen als schrijven, in elke regio, zonder een enkel regionaal knelpunt.</p>
+<p><strong>De prijs, direct en zwaar:</strong> als dezelfde rij in twee regio’s tegelijk gewijzigd kan worden, wat gebeurt er als beide wijzigingen elkaar kruisen vóór ze elkaar hebben ingehaald? Dit heet een <strong>schrijfconflict</strong>, en het is het onderwerp van paragraaf 10.</p>
+<hr>
+<h2>10. Wat actief-actief werkelijk kost: conflictresolutie</h2>
+<p>Bij een enkele PostgreSQL-primary (alles tot nu toe in deze cursus) is er precies één plek waar een schrijfconflict wordt opgelost: de lockwachtrij (deel 15) binnen die ene server, met ACID-garanties (deel 7) die het resultaat eenduidig maken.</p>
+<p><strong>Bij actief-actief tussen twee regio’s bestaat die ene, gezaghebbende plek niet meer.</strong> Twee gebruikers, in twee regio’s, wijzigen dezelfde rij binnen de tijd die de netwerkvertraging tussen de regio’s kost (paragraaf 4) — en beide wijzigingen worden lokaal geaccepteerd vóór ze van elkaar weten.</p>
+<p><strong>Oplossingen, elk met hun eigen compromis:</strong></p>
+<ul>
+<li><strong>Last-write-wins</strong>, gebaseerd op een tijdstempel — simpel, maar een van de twee wijzigingen gaat stilzwijgend verloren, met het risico dat klokken tussen regio’s niet perfect gesynchroniseerd zijn (een probleem dat in gedistribueerde systemen serieus genomen moet worden).</li>
+<li><strong>Applicatie-specifieke merge-logica</strong> — bijvoorbeeld: als twee regio’s onafhankelijk een teller verhogen, tel de verhogingen bij elkaar op in plaats van de ene waarde te laten winnen. Correcter, maar vereist per situatie een doordachte, domeinspecifieke regel.</li>
+<li><strong>Conflictvrije datastructuren (CRDT’s)</strong> — datastructuren die wiskundig gegarandeerd op een consistente manier samenvoegen, ongeacht de volgorde waarin wijzigingen aankomen. Krachtig, maar niet elk datamodel laat zich natuurlijk in zo’n structuur gieten.</li>
+<li><strong>Voorkomen in plaats van oplossen: shardgewijs partitioneren van schrijfrechten per regio</strong> — bijvoorbeeld: Nederlandse deelnemers worden altijd in de Nederlandse regio geschreven, nooit in een andere regio, ook al staat de data overal leesbaar. Dit maakt conflicten voor die specifieke rijen onmogelijk, ten koste van cross-regio-flexibiliteit.</li>
+</ul>
+<p><strong>De volgorde van voorkeur, net als bij cross-shard-transacties (deel 24, paragraaf 7): eerst proberen het conflict te voorkomen door ontwerp (de laatste optie), pas als dat niet lukt een resolutiestrategie kiezen — met het volle besef van de complexiteit en het risico op stilzwijgend gegevensverlies die daarbij komt.</strong></p>
+<hr>
+<h2>11. Geo-partitionering: data bij de bron houden</h2>
+<p>Een ontwerp dat actief-actief-conflicten grotendeels vermijdt en tegelijk dataresidentie-eisen (paragraaf 5) natuurlijk oplost: <strong>partitioneer data naar de regio waar hij hoort, in plaats van hem overal te repliceren.</strong></p>
+<pre><code class="language-sql">-- Vergelijkbaar met range-partitionering (deel 16), nu op regio in plaats van tijd
+CREATE TABLE deelnemer (
+    deelnemer_id integer,
+    regio        text NOT NULL,
+    ...
+) PARTITION BY LIST (regio);
+
+CREATE TABLE deelnemer_nl PARTITION OF deelnemer FOR VALUES IN ('NL');
+CREATE TABLE deelnemer_be PARTITION OF deelnemer FOR VALUES IN ('BE');
+</code></pre>
+<p><strong>Elke partitie leeft fysiek in de bijbehorende regio</strong> (of wordt daar met Citus, deel 24-25, expliciet naartoe gestuurd als shard). Een Nederlandse deelnemer wordt altijd in Nederland geschreven en gelezen, nooit elders — geen cross-regio-latency voor het gangbare geval, geen actief-actief-conflict mogelijk (er is maar één regio die ooit voor die specifieke rij schrijft), en dataresidentie is bij ontwerp gegarandeerd in plaats van achteraf gecontroleerd.</p>
+<p><strong>Wat dit niet oplost:</strong> een gebruiker die reist en tijdelijk vanuit een andere regio toegang zoekt tot zijn eigen, in Nederland gepartitioneerde gegevens, ervaart nog steeds cross-regio-latency voor die ene sessie — een acceptabele prijs voor een zeldzaam geval, in ruil voor eenvoud in het gangbare geval.</p>
+<p><strong>Dit is de sterkste aanbeveling van dit deel voor een organisatie als de Pensioenfederatie, mocht internationale uitbreiding ooit acuut worden:</strong> geo-partitionering naar het land van de deelnemer, in plaats van actief-actief-replicatie met de bijbehorende conflictresolutiecomplexiteit.</p>
+<hr>
+<h2>12. AVG en geo-distributie: het snijvlak</h2>
+<p>Twee AVG-thema’s die deze cursus al behandelde (deel 9, 21, 28), komen hier concreet samen met geografie:</p>
+<p><strong>Dataminimalisatie over regio’s heen</strong> — een replica in een andere regio (topologie 1) hoeft niet noodzakelijk alle kolommen te bevatten; als het doel puur leesprestatie voor een specifiek, beperkt gebruiksdoel is, kan een gefilterde replica (met logische replicatie, deel 18, die selectief kolommen of rijen kan repliceren) het aantal plekken waar volledige persoonsgegevens staan, beperken.</p>
+<p><strong>Het recht op vergetelheid over regio’s heen</strong> — bij crypto-shredding (deel 28) moet de sleutelvernietiging <strong>in elke regio</strong> waar een kopie van de versleutelde gegevens staat, consistent zijn doorgevoerd. Een verwijderingsverzoek dat alleen in de primary-regio is verwerkt, terwijl een read-replica in een andere regio de oude, nog-versleutelbare data behoudt (totdat de sleutelverwijdering ook daar doorkomt), is een tijdelijk inconsistente — maar uiteindelijk, na replicatie van de sleutelverwijdering zelf, correcte — situatie. Dit vraagt expliciete aandacht bij het ontwerp: de sleuteltabel zelf moet mee-repliceren zoals elke andere tabel.</p>
+<hr>
+<h2>13. Geo-distributie en de rest van niveau 3</h2>
+<p><strong>Multi-tenancy (deel 23):</strong> een fonds dat internationaal actief wordt, zou zijn eigen patroon-3-database (eigen server) natuurlijk kunnen combineren met geo-partitionering — de tenant-scheiding en de regio-scheiding zijn orthogonale beslissingen die elkaar niet in de weg zitten.</p>
+<p><strong>Sharding (deel 24-25):</strong> Citus ondersteunt in gevorderde opzetten shard-plaatsing die rekening houdt met regio — in essentie geo-partitionering (paragraaf 11) geïmplementeerd met Citus’ gereedschap in plaats van handmatige partitionering.</p>
+<p><strong>Federatie (deel 26):</strong> een federatieve rapportagelaag die gegevens uit meerdere regio’s samenbrengt, moet zelf ook een bewuste keuze maken over waar hij staat en welke dataresidentie-eisen daarop van toepassing zijn.</p>
+<p><strong>Event sourcing (deel 27-28):</strong> een event store die geo-gepartitioneerd is (events van Nederlandse deelnemers in Nederland, Belgische in België) is een natuurlijke combinatie — de aggregaat-identiteit (deel 27, paragraaf 6) sluit al aan bij “één deelnemer, één regio”.</p>
+<hr>
+<h2>14. Wanneer geo-distributie wél, wanneer niet</h2>
+<p>Dezelfde discipline als elk krachtig patroon in deze cursus, hier misschien wel het scherpst — dit is het duurste en complexste patroon van heel niveau 3.</p>
+<p><strong>Geo-distributie past goed bij:</strong> aantoonbare internationale uitbreiding met gebruikers in meerdere regio’s die merkbaar last hebben van latency; wettelijke of contractuele continuïteitseisen die een regio-brede ramp expliciet moeten kunnen overleven; dataresidentie-eisen die sowieso al vereisen dat gegevens per land gescheiden worden.</p>
+<p><strong>Geo-distributie past niet bij:</strong> een organisatie die, zoals de Pensioenfederatie vandaag, uitsluitend in één land actief is met gebruikers die geen merkbare latency ervaren. Actief-actief-topologieën specifiek passen niet bij domeinen waar conflictresolutie geen natuurlijke, domeinspecifieke oplossing heeft (financiële transacties, bijvoorbeeld, waar “laatste schrijver wint” onaanvaardbaar is).</p>
+<blockquote>
+<p><strong>De vraag die je stelt vóór je geo-distributie overweegt: heb ik gebruikers of wettelijke eisen in meerdere regio’s, vandaag of aantoonbaar op korte termijn? Zo niet, is dit een oplossing voor een probleem dat nog niet bestaat — precies zoals sharding (deel 24) en patroon 3 (deel 23) dat konden zijn zonder gemeten noodzaak.</strong></p>
+</blockquote>
+<hr>
+<h2>15. Een geo-advies voor de Pensioenfederatie</h2>
+<p>Toegepast op de huidige, Nederlandse situatie:</p>
+<p><strong>Vandaag: geen geo-distributie nodig.</strong> Alle drie de fondsen, alle deelnemers, alle infrastructuur binnen Nederland (of in elk geval binnen de EU met dataresidentie-garanties) — geen van de drie triggers uit paragraaf 3 is aanwezig.</p>
+<p><strong>Als de federatie ooit internationaal zou uitbreiden</strong> (bijvoorbeeld een fonds met deelnemers die naar het buitenland verhuizen, of een fusie met een buitenlands fonds): begin met <strong>topologie 1</strong> (read-replica’s) voor rapportagebehoeften, overweeg <strong>geo-partitionering</strong> (paragraaf 11) als schrijfverkeer vanuit een andere regio structureel wordt, en vermijd <strong>actief-actief</strong> tenzij een concrete, domeinspecifieke conflictresolutiestrategie is uitgewerkt en getest.</p>
+<p><strong>Wat vandaag al waardevol is, ongeacht toekomstige geo-plannen:</strong> de discipline om dataresidentie als expliciete architectuurvraag te behandelen (paragraaf 5, 12) in plaats van als achteraf-compliance-check.</p>
+<hr>
+<h2>16. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Latency behandelen als een configuratieprobleem</td>
+<td>Onrealistische verwachtingen over cross-regio-prestaties</td>
+<td>Latency als fysieke grens accepteren, ontwerp eromheen</td>
+</tr>
+<tr>
+<td>Een replica in een andere regio zetten zonder dataresidentie te checken</td>
+<td>Mogelijke AVG-schending</td>
+<td>Juridische afstemming vóór de technische keuze</td>
+</tr>
+<tr>
+<td>Direct voor actief-actief kiezen “voor de beste prestaties overal”</td>
+<td>Onderschatte conflictresolutiecomplexiteit</td>
+<td>Beginnen bij read-replica’s of geo-partitionering</td>
+</tr>
+<tr>
+<td>Last-write-wins toepassen op financieel-kritieke gegevens</td>
+<td>Stilzwijgend verlies van een geldige wijziging</td>
+<td>Domeinspecifieke merge-logica, of conflicten voorkomen via geo-partitionering</td>
+</tr>
+<tr>
+<td>Sleutelverwijdering (crypto-shredding) niet consistent over regio’s laten repliceren</td>
+<td>Een read-replica in een andere regio “vergeet” het verwijderingsverzoek niet mee</td>
+<td>De sleuteltabel behandelen als elke andere te repliceren tabel</td>
+</tr>
+<tr>
+<td>Geo-distributie invoeren zonder aangetoonde internationale behoefte</td>
+<td>Het duurste patroon van niveau 3, zonder noodzaak</td>
+<td>Eerst de triggers uit paragraaf 3 aantonen</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Kernbegrippen</h2>
+<p><strong>Geo-distributie</strong> — een database-architectuur die gegevens of verkeer over meerdere geografische regio’s verdeelt.
+<strong>Dataresidentie</strong> — de wettelijke of contractuele eis dat bepaalde gegevens binnen specifieke landsgrenzen blijven.
+<strong>Read-replica-topologie</strong> — één schrijfregio, meerdere leesregio’s.
+<strong>Actief-passief</strong> — één actieve regio, een klaarstaande regio voor rampenherstel.
+<strong>Actief-actief</strong> — meerdere regio’s die gelijktijdig lezen én schrijven.
+<strong>Schrijfconflict</strong> — twee gelijktijdige, onafhankelijke wijzigingen aan dezelfde rij in verschillende regio’s.
+<strong>Last-write-wins</strong> — een eenvoudige, verlieslatende conflictresolutiestrategie op basis van tijdstempel.
+<strong>CRDT (conflictvrije datastructuur)</strong> — een datastructuur die wiskundig gegarandeerd consistent samenvoegt.
+<strong>Geo-partitionering</strong> — data naar de regio partitioneren waar hij hoort, in plaats van hem overal te repliceren.</p>
+<hr>
+<p><em>Volgende deel: de niveau-3-capstone. Acht delen, van multi-tenancy tot geo-distributie — volgende keer komt alles samen in een afsluitende architectuuropdracht voor de Pensioenfederatie, en een terugblik op het hele niveau.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">273 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-28-event-sourcing-in-de-praktijk/reader.html">&larr; Deel 28 — Event sourcing in de praktijk</a><a class="dbm-prevnext next" href="../deel-30-niveau-3-capstone-en-afsluiting/reader.html">Deel 30 — Niveau-3-capstone en afsluiting &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

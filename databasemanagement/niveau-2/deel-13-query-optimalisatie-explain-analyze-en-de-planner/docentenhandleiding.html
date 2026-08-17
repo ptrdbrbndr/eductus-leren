@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Query-optimalisatie: EXPLAIN ANALYZE en de planner — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 13 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 13 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 13: Query-optimalisatie</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Het inhoudelijk zwaarste dagdeel van niveau 2, en het meest direct toepasbare.</p>
+<p><strong>Het inzicht dat het geheel draagt:</strong></p>
+<blockquote>
+<p>De query waarover geklaagd wordt, is zelden de query die ertoe doet.</p>
+</blockquote>
+<p>Deelnemers komen binnen met de gewoonte om te optimaliseren wat mensen melden. Opdracht 13.2 breekt die gewoonte met een meting: de query die het traagst <em>voelt</em> staat onderaan de lijst van wat de server werkelijk kost.</p>
+<p><strong>De vaardigheid die ze meenemen:</strong> in een plan de plek vinden waar de rijschatting voor het eerst uit de bocht vliegt. Niet de duurste knoop — de eerste foute schatting. Dat onderscheid is het verschil tussen symptomen bestrijden en een oorzaak vinden.</p>
+<p><strong>En de discipline:</strong> één ding tegelijk veranderen, meten voor en na, en stoppen bij “snel genoeg” in plaats van “zo snel mogelijk”.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 13; <code>pg_stat_statements</code> in <code>shared_preload_libraries</code>.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li>⚠ <strong>Controleer een week vooraf wie <code>pg_stat_statements</code> heeft.</strong> Wie het in deel 11 vergat, moet herstarten — en dat is een leermoment, geen ramp, maar niet tijdens dit dagdeel. Stuur een bericht met <code>SHOW shared_preload_libraries;</code> en vraag om de uitkomst.</li>
+<li><strong>Draai opdracht 13.1 en 13.2 zelf</strong> en noteer je eigen top vijf. Die lijst gebruik je in de plenaire bespreking.</li>
+<li>Zorg dat <code>VACUUM ANALYZE</code> op <code>meridiaan_prod</code> is gedraaid. Verouderde statistieken maken de opdrachten onvoorspelbaar.</li>
+<li>Maak <code>CREATE SCHEMA oefening13;</code> onderdeel van de startinstructie.</li>
+<li>Overweeg een planvisualisatie te projecteren (<code>EXPLAIN (FORMAT JSON)</code> in een online hulpmiddel). Nuttig voor de uitleg, maar laat deelnemers zelf tekst lezen — dat is wat ze op een server hebben.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:10</td>
+<td>De twee telefoontjes: Ruud en Karin</td>
+<td>Plenair</td>
+</tr>
+<tr>
+<td>0:10-0:25</td>
+<td><code>pg_stat_statements</code> (§3) + <strong>opdracht 13.1</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>0:25-0:50</td>
+<td><strong>Opdracht 13.2</strong> — wat doet er werkelijk toe</td>
+<td>Tweetallen + plenaire bespreking</td>
+</tr>
+<tr>
+<td>0:50-1:15</td>
+<td>De planner (§4) en de vier vragen (§6) + <strong>opdracht 13.3</strong></td>
+<td>Demo + zelfstandig</td>
+</tr>
+<tr>
+<td>1:15-1:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:30-2:05</td>
+<td><strong>De rij-estimatiefout (§7) + opdracht 13.4</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>2:05-2:25</td>
+<td>Statistieken (§8-9) + <strong>opdracht 13.5</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>2:25-2:35</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:35-2:55</td>
+<td><strong>Opdracht 13.6</strong> — de ontbrekende indexen</td>
+<td>Drietallen</td>
+</tr>
+<tr>
+<td>2:55-3:15</td>
+<td>Herschrijven (§13) + <strong>opdracht 13.7</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>3:15-3:25</td>
+<td>Prepared statements (§14) + <code>auto_explain</code> (§15)</td>
+<td>Demo</td>
+</tr>
+<tr>
+<td>3:25-4:00</td>
+<td><strong>Opdracht 13.9</strong> — het optimalisatierapport</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 13.8 (prepared statements) vervallen als praktijkopdracht en doe hem als demonstratie van vijf minuten — het effect is met één <code>EXPLAIN EXECUTE</code> te tonen. Kort <strong>nooit</strong> opdracht 13.2, 13.4 of 13.9 in.</p>
+<p>Dit dagdeel loopt makkelijk uit. Bewaak de tijd hard bij opdracht 13.6 en 13.7; die zijn leuk en kunnen eindeloos doorgaan.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 De twee telefoontjes (0:00)</h3>
+<p>Open met de twee klachten uit de reader en stel de vraag:</p>
+<blockquote>
+<p><em>“Ruud zegt dat het portaal traag is op dinsdagavond. Karin zegt dat haar maandrapport vier minuten duurt. Wie heeft het dringendste probleem?”</em></p>
+</blockquote>
+<p>Laat de zaal kiezen. Vrijwel iedereen kiest Karin — vier minuten is veel. Reken dan hardop voor: vier minuten per maand tegenover bijna drie uur per maand aan portaalquery’s van 5 ms.</p>
+<p>Zet de formule op het bord en laat hem staan:</p>
+<blockquote>
+<p><strong>totale belasting = aantal aanroepen × gemiddelde tijd</strong></p>
+</blockquote>
+<p>Dit is het frame waar de hele dag aan hangt.</p>
+<h3>4.2 Opdracht 13.1 en 13.2 (0:10)</h3>
+<p>Het belastingscript is bewust zo gemaakt dat het gevoel en de meting uit elkaar lopen. Deelnemers <strong>voelen</strong> de scan-query van twee seconden; de meting toont dat de portaalquery’s samen veel meer kosten.</p>
+<p><strong>Bespreek 13.2 plenair en neem er tijd voor.</strong> Vraag na onderdeel d) expliciet:</p>
+<blockquote>
+<p><em>“Welke query zou je aanpakken als je alleen naar Ruud had geluisterd?”</em></p>
+</blockquote>
+<p>Onderdeel f) (<code>stddev_exec_time</code>) wordt zelden zelf begrepen. Leg uit dat een hoge standaardafwijking betekent dat dezelfde query soms snel en soms traag is, en beloof dat opdracht 13.8 laat zien waar dat vandaan komt. Die belofte betaal je later op de dag in.</p>
+<h3>4.3 De vier vragen (0:50)</h3>
+<p>Presenteer ze als een <strong>checklist in vaste volgorde</strong>, niet als een verzameling tips. Deelnemers die een plan van dertig regels zien, hebben houvast nodig.</p>
+<p>Loop opdracht 13.3 plenair door op het grote scherm voordat ze zelf beginnen, of direct erna. Twee dingen die je expliciet moet maken:</p>
+<ul>
+<li><strong>De tijd van een knoop is inclusief zijn kinderen.</strong> Deelnemers wijzen de bovenste knoop aan omdat die het hoogste getal heeft. Reken één keer voor: 4.800 min 4.700 is 100.</li>
+<li><strong><code>loops</code> vermenigvuldigt.</strong> Laat een plan zien met <code>loops=8000</code> en vraag wat de werkelijke tijd is.</li>
+</ul>
+<p>Onderdeel f) (<code>SETTINGS</code>) is een klein maar nuttig punt: het beantwoordt “waarom is het plan op acceptatie anders” in één regel. Verbind terug met opdracht 11.9.</p>
+<h3>4.4 De rij-estimatiefout (1:30)</h3>
+<p><strong>Het inhoudelijke hart van het dagdeel.</strong> Neem er de volle 35 minuten voor.</p>
+<p>Opdracht 13.4 heeft een bewuste opbouw: in <code>meridiaan_prod</code> zijn <code>kanaal</code> en <code>soort</code> onafhankelijk gegenereerd, dus daar klopt de aanname van de planner en is er niets aan de hand. Pas in de zelfgemaakte tabel met afhankelijke kolommen zie je het probleem.</p>
+<p><strong>Laat die volgorde intact.</strong> Deelnemers moeten eerst vaststellen dat er níéts mis is voordat ze zien hoe het misgaat — anders leren ze dat “de planner er altijd naast zit”, en dat is onjuist.</p>
+<p>Bij onderdeel b): laat ze de schatting <strong>zelf narekenen</strong> uit <code>pg_stats</code>. Dat de uitkomst overeenkomt met wat de planner deed, maakt het mechanisme concreet in plaats van magisch.</p>
+<p>Bij onderdeel h): de vraag naar echte kandidaten in het model is waardevoller dan het antwoord. Laat de zaal voorstellen doen en toets ze met de vraag: <em>“kun je meten of ze afhankelijk zijn?”</em></p>
+<h3>4.5 Statistieken (2:05)</h3>
+<p>Houd dit blok compact; de reader dekt het. Twee punten om te demonstreren:</p>
+<p><strong>Negatieve <code>n_distinct</code>.</strong> Iedereen ziet <code>-1</code> en denkt aan een fout. Eén zin uitleg volstaat.</p>
+<p><strong><code>SET (n_distinct = 5)</code> is krachtig en gevaarlijk.</strong> Vraag bij onderdeel f) door: <em>“wanneer wordt deze bewering onwaar, en wie merkt dat dan?”</em> Het antwoord — bij een nieuw kanaal, en niemand merkt het — is het punt.</p>
+<h3>4.6 De ontbrekende indexen (2:35)</h3>
+<p>Opdracht 13.6 heeft een verrassing in onderdeel c: de index op <code>dienstverband (werkgever_id)</code> levert voor een aggregatie over alle werkgevers <strong>weinig op</strong>. Dat is met opzet, en het is dezelfde les als in deel 8: een index is geen automatische verbetering.</p>
+<p><strong>Onderdeel d is waar het effect wél groot is:</strong> de <code>DELETE</code> op de oudertabel. Doe dit plenair als de zaal het niet zelf vindt. Het is het argument uit deel 6 dat deelnemers pas geloven als ze het meten — een foreign key zonder index maakt vooral verwijderingen traag, niet joins.</p>
+<p>Onderdeel e) (de partiële index voor de verwerkingsquery) is de grootste winst van de opdracht. Laat iemand het getal hardop noemen.</p>
+<h3>4.7 Herschrijven (2:55)</h3>
+<p>Keyset-paginering (a-c) is de duidelijkste demonstratie: <code>OFFSET 2000000</code> tegenover een <code>WHERE</code> op de sleutel. Laat beide meten.</p>
+<p>Het punt in onderdeel c dat blijft hangen:</p>
+<blockquote>
+<p><em>“Met OFFSET wacht de gebruiker die het diepst zoekt het langst. Dat is precies de gebruiker die het meest gemotiveerd is.”</em></p>
+</blockquote>
+<p>Bij onderdeel g): verwacht dat de gecorreleerde subquery <strong>minder slecht</strong> presteert dan deelnemers denken, omdat PostgreSQL hem soms zelf herschrijft. Grijp dat aan: ook “gecorreleerde subquery’s zijn traag” is prestatiefolklore (deel 8). Meten, niet aannemen.</p>
+<h3>4.8 Prepared statements (3:15)</h3>
+<p>Demonstratie van vijf minuten met de scheve tabel. Het effect is zichtbaar in twee <code>EXPLAIN</code>-uitvoeren: indexscan voor de zeldzame waarde, sequentiële scan voor de veelvoorkomende.</p>
+<p>Betaal hier de belofte uit 13.2f in: <strong>dit is waar een hoge <code>stddev_exec_time</code> vandaan komt.</strong> Deelnemers die dat verband leggen, hebben een diagnose in handen die ze niet in een boek vinden.</p>
+<p>Noem ook het praktische scenario: snel in <code>psql</code>, traag in de applicatie. Veel ORM’s gebruiken prepared statements zonder dat de ontwikkelaar het weet.</p>
+<h3>4.9 Opdracht 13.9 (3:25)</h3>
+<p>Stuur op vier dingen:</p>
+<ul>
+<li><strong>Gemeten winst, geen bewering.</strong> Vraag bij elke maatregel: <em>“wat was het vóór, en wat is het nu?”</em></li>
+<li><strong>Eén ding per query.</strong> Groepen die tegelijk een index toevoegen én <code>work_mem</code> verhogen, moet je vragen welke van de twee het deed.</li>
+<li><strong>De niet-geoptimaliseerde query.</strong> Dit is de belangrijkste alinea. Het toont dat de groep het verschil kent tussen “kan sneller” en “is de moeite waard”.</li>
+<li><strong>Het antwoord aan Karin.</strong> Groepen schrijven vaak óf “dat kan niet sneller” óf een belofte. Het goede antwoord geeft gemeten winst en legt de vervolgkeuze — actueel versus vooraf berekend — bij haar, want dat is een bedrijfsvraag.</li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Kan ik <code>pg_stat_statements</code> op productie aanzetten? Kost dat niet veel?”</strong>
+De overhead is klein — enkele procenten in het slechtste geval, doorgaans minder. Vrijwel elke serieuze PostgreSQL-omgeving draait het permanent. Wat wél aandacht vraagt is <code>pg_stat_statements.max</code>: bij zeer veel verschillende query’s loopt de lijst over en verlies je juist de zeldzame trage exemplaren.</p>
+<p><strong>“Waarom herschrijft de planner mijn query niet gewoon goed?”</strong>
+Dat doet hij vaak wel — views worden ingevouwen, subquery’s worden joins, CTE’s worden samengevoegd (sinds versie 12). Waar hij niet bij kan: verbanden tussen tabellen die niet in de statistieken staan, en semantische kennis die alleen jij hebt.</p>
+<p><strong>“Is het erg dat mijn schatting een factor twee mist?”</strong>
+Nee. Een factor twee tot drie is normaal en heeft zelden invloed op de plankeuze. Zorgelijk wordt het bij een factor tien of meer, en vooral als de fout zich naar boven voortplant.</p>
+<p><strong>“Moet ik <code>enable_seqscan = off</code> in de applicatie zetten als het helpt?”</strong>
+Nee — het is een diagnosemiddel (deel 8). Als het uitzetten helpt, weet je dat de planner een verkeerde keuze maakte; de vervolgvraag is waarom. Het antwoord is bijna altijd de rijschatting, en dát repareer je.</p>
+<p><strong>“Hoe weet ik wanneer ik moet stoppen met optimaliseren?”</strong>
+Als de query snel genoeg is voor wat hij moet doen. Dat is een bedrijfsvraag, geen technische: een portaalquery moet onder 100 ms, een nachtelijke batch mag minuten duren. Zonder doel is optimaliseren oneindig werk — en dan optimaliseer je op een gegeven moment iets dat niemand merkt.</p>
+<p><strong>“Wij gebruiken een ORM en zien de query’s niet.”</strong>
+<code>pg_stat_statements</code> toont ze wél — dat is een van de sterkste argumenten voor de extensie. Je ziet precies wat je ORM werkelijk stuurt, inclusief het N+1-probleem dat je in de kolom <code>calls</code> terugvindt.</p>
+<p><strong>“Wat is een goede <code>work_mem</code> voor rapportage?”</strong>
+Geen vast getal. Verhoog tot <code>Batches: 1</code> en geen <code>external merge Disk</code> meer in het plan, en niet verder. Rolgebonden, zoals in deel 11.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kiest bij 13.2d de portaalquery en kan uitleggen waarom</td>
+<td>Het frame is geland</td>
+</tr>
+<tr>
+<td>Zoekt in een plan de eerste foute schatting, niet de duurste knoop</td>
+<td>De kernvaardigheid</td>
+</tr>
+<tr>
+<td>Rekent bij 13.4b de schatting zelf na</td>
+<td>Begrijpt het mechanisme</td>
+</tr>
+<tr>
+<td>Concludeert bij 13.6c dat de index weinig oplevert</td>
+<td>Meet in plaats van aan te nemen</td>
+</tr>
+<tr>
+<td>Legt het verband tussen 13.8 en <code>stddev_exec_time</code></td>
+<td>Sterk; noteer voor de capstone</td>
+</tr>
+<tr>
+<td>Optimaliseert de query waarover geklaagd wordt</td>
+<td>Terugbrengen naar de formule</td>
+</tr>
+<tr>
+<td>Verandert meerdere dingen tegelijk</td>
+<td>Actief corrigeren; dit is de meest hardnekkige gewoonte</td>
+</tr>
+<tr>
+<td>Blijft optimaliseren zonder doel</td>
+<td>Vraag: snel genoeg waarvoor?</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 14</h2>
+<p>Brug: <em>“Jullie weten nu welke query’s ertoe doen en waarom hun plannen zijn zoals ze zijn. Bij bijna elke maatregel van vandaag was het antwoord een index — en steeds een B-tree. Volgende keer bouwen we de indexen die geen B-tree zijn, en dan blijkt dat correlatie uit deel 12 opeens een index van een paar kilobyte mogelijk maakt op een tabel van 600 megabyte.”</em></p>
+<p>Geef mee: <strong>bewaar je top vijf uit <code>pg_stat_statements</code>.</strong> Die lijst is het uitgangspunt van deel 14, en aan het eind van dat dagdeel kijk je of de rangorde is veranderd.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 13.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">73 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">466 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">&larr; Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat</a><a class="dbm-prevnext next" href="../deel-14-geavanceerde-indexering/reader.html">Deel 14 — Geavanceerde indexering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Transacties, ACID en MVCC — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 7 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 7 — Transacties, ACID en MVCC</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 7 van 10
+Aansluiting: EDB PostgreSQL Associate — domeinen “Architecture” en “Concurrency”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Het probleem dat nog openstaat</li>
+<li>Wat een transactie is</li>
+<li>BEGIN, COMMIT, ROLLBACK</li>
+<li>Savepoints</li>
+<li>ACID, nu concreet</li>
+<li>De vier anomalieën</li>
+<li>Isolatieniveaus</li>
+<li>MVCC: hoe PostgreSQL het oplost</li>
+<li>Transactie-ID’s en zichtbaarheid</li>
+<li>Locks</li>
+<li>Rijlocks bij UPDATE</li>
+<li>SELECT … FOR UPDATE</li>
+<li>Deadlocks</li>
+<li>De lost update in de praktijk</li>
+<li>Optimistisch versus pessimistisch vergrendelen</li>
+<li>VACUUM en het prijskaartje van MVCC</li>
+<li>Transactiegrenzen in applicaties</li>
+<li>Foutafhandeling</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>uitleggen wat een transactie is en waar de grenzen ervan horen te liggen;</li>
+<li>transacties beheren met <code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> en savepoints;</li>
+<li>de vier ACID-eigenschappen koppelen aan het mechanisme dat ze in PostgreSQL waarmaakt;</li>
+<li>de vier anomalieën herkennen en zeggen welk isolatieniveau ze uitsluit;</li>
+<li>het isolatieniveau kiezen dat bij een bedrijfsproces past en die keuze motiveren;</li>
+<li>uitleggen hoe MVCC gelijktijdigheid regelt en welke prijs daarvoor betaald wordt;</li>
+<li>een lost update reproduceren en op twee manieren voorkomen;</li>
+<li>een deadlock herkennen, verklaren en voorkomen;</li>
+<li>de rol van <code>VACUUM</code> uitleggen en de gevolgen van het uitzetten van autovacuum benoemen.</li>
+</ul>
+<hr>
+<h2>2. Het probleem dat nog openstaat</h2>
+<p>Uit deel 1, de zes problemen van de schil bij Meridiaan:</p>
+<blockquote>
+<p><em>“Twee collega’s werken 's middags in hetzelfde Excel-bestand met premiemutaties. Om 17:10 blijkt het werk van de een verdwenen.”</em></p>
+</blockquote>
+<p>Vijf van de zes problemen hebben we inmiddels opgelost: redundantie en inconsistentie met normalisatie (deel 5), integriteitsbewaking met constraints (deel 6), toegangsbeheer volgt in deel 9. Dit is het probleem dat overblijft, en het is het lastigste van de zes — omdat het pas optreedt als er meerdere mensen tegelijk werken, en dus zelden op een testomgeving.</p>
+<p>De naam ervan is <strong>lost update</strong>. In paragraaf 15 reproduceren we hem in twee psql-vensters, en daarna lossen we hem op.</p>
+<hr>
+<h2>3. Wat een transactie is</h2>
+<p>Een <strong>transactie</strong> is een groep bewerkingen die als één ondeelbaar geheel wordt uitgevoerd: alles slaagt, of niets slaagt.</p>
+<p>Het schoolvoorbeeld bij Meridiaan is de waardeoverdracht uit deel 1: bedrag af bij fonds A, bedrag bij bij fonds B. Als de tweede stap mislukt, mag de eerste niet blijven staan.</p>
+<p>Maar transacties zijn niet alleen voor geld. Elke bewerking die meerdere rijen of tabellen raakt en waarbij een tussentoestand ongeldig is, hoort in een transactie:</p>
+<ul>
+<li>een deelnemer aanmaken met zijn eerste dienstverband;</li>
+<li>een adres beëindigen en het nieuwe adres openen (deel 6: die twee handelingen samen mogen nooit een gat of overlap opleveren);</li>
+<li>een premienota vaststellen en de bijbehorende journaalpost wegschrijven.</li>
+</ul>
+<p><strong>In PostgreSQL is elke opdracht al een transactie.</strong> Type je een losse <code>UPDATE</code>, dan draait die impliciet tussen een <code>BEGIN</code> en een <code>COMMIT</code>. Dat heet autocommit. Zodra je meerdere opdrachten wilt samenvoegen, maak je de transactie expliciet.</p>
+<hr>
+<h2>4. BEGIN, COMMIT, ROLLBACK</h2>
+<pre><code class="language-sql">BEGIN;
+
+UPDATE rekening SET saldo = saldo - 1000 WHERE fonds = 'A';
+UPDATE rekening SET saldo = saldo + 1000 WHERE fonds = 'B';
+
+COMMIT;
+</code></pre>
+<p>Gaat er iets mis, dan:</p>
+<pre><code class="language-sql">ROLLBACK;
+</code></pre>
+<p>Alles sinds <code>BEGIN</code> wordt teruggedraaid alsof het nooit is gebeurd.</p>
+<p><strong>De aborted-toestand.</strong> Treedt er binnen een transactie een fout op, dan gaat PostgreSQL in een bijzondere toestand:</p>
+<pre><code>ERROR:  current transaction is aborted, commands ignored until end of transaction block
+</code></pre>
+<p>Alle volgende opdrachten worden geweigerd tot je <code>ROLLBACK</code> (of <code>COMMIT</code>, die dan als rollback werkt) uitvoert. Dat voelt streng maar is precies goed: het voorkomt dat je verder werkt op een toestand die je niet kent. Deelnemers die dit voor het eerst tegenkomen, denken vaak dat hun sessie kapot is. Dat is hij niet — hij beschermt je.</p>
+<p>Nuttige commando’s:</p>
+<table>
+<thead>
+<tr>
+<th>Commando</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BEGIN;</code></td>
+<td>Start een transactie</td>
+</tr>
+<tr>
+<td><code>COMMIT;</code></td>
+<td>Legt vast</td>
+</tr>
+<tr>
+<td><code>ROLLBACK;</code></td>
+<td>Draait terug</td>
+</tr>
+<tr>
+<td><code>SELECT txid_current();</code></td>
+<td>Toont het transactie-ID</td>
+</tr>
+<tr>
+<td><code>\set AUTOCOMMIT off</code></td>
+<td>psql-instelling: alles expliciet</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>5. Savepoints</h2>
+<p>Een savepoint is een terugvalpunt binnen een transactie:</p>
+<pre><code class="language-sql">BEGIN;
+INSERT INTO plaats (naam) VALUES ('Utrecht');
+
+SAVEPOINT voor_import;
+INSERT INTO plaats (naam) VALUES ('Utrecht');   -- fout: al aanwezig
+
+ROLLBACK TO SAVEPOINT voor_import;              -- alleen dit stukje terug
+
+INSERT INTO plaats (naam) VALUES ('Amersfoort');
+COMMIT;   -- Utrecht en Amersfoort zijn opgeslagen
+</code></pre>
+<p>Nuttig bij importscripts waarin één mislukte rij niet de hele partij mag laten sneuvelen. Wees er wel spaarzaam mee: elk savepoint kost geheugen en administratie, en duizenden savepoints in één transactie zijn een bekende oorzaak van prestatieproblemen.</p>
+<hr>
+<h2>6. ACID, nu concreet</h2>
+<p>Deel 1 introduceerde ACID als belofte. Nu het mechanisme erachter.</p>
+<table>
+<thead>
+<tr>
+<th>Eigenschap</th>
+<th>Betekent</th>
+<th>Waargemaakt door</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Atomicity</strong></td>
+<td>Alles of niets</td>
+<td>Transactiebeheer + WAL (deel 2)</td>
+</tr>
+<tr>
+<td><strong>Consistency</strong></td>
+<td>Geldige toestand in, geldige toestand uit</td>
+<td>Constraints (deel 6)</td>
+</tr>
+<tr>
+<td><strong>Isolation</strong></td>
+<td>Gelijktijdige transacties storen elkaar niet</td>
+<td>MVCC + locks (dit deel)</td>
+</tr>
+<tr>
+<td><strong>Durability</strong></td>
+<td>Bevestigd is bevestigd</td>
+<td>WAL met <code>fsync</code> (deel 2)</td>
+</tr>
+</tbody>
+</table>
+<p>Merk op dat de <strong>C</strong> de enige is die jij invult. Atomiciteit, isolatie en duurzaamheid regelt de database; consistentie is de verzameling regels die jij in deel 6 hebt vastgelegd. Een database zonder constraints is nog steeds ACID — hij bewaakt dan alleen niets.</p>
+<p>Dat is een nuttige zin voor een gesprek met een leverancier die zegt dat zijn systeem “volledig ACID” is.</p>
+<hr>
+<h2>7. De vier anomalieën</h2>
+<p>Zonder isolatie kunnen vier soorten problemen optreden. Je moet ze kunnen benoemen én herkennen.</p>
+<p><strong>Dirty read.</strong> Transactie A leest een wijziging van B die nog niet is vastgelegd — en B draait daarna terug. A heeft gerekend met gegevens die nooit hebben bestaan.</p>
+<p><strong>Non-repeatable read.</strong> A leest een rij, B wijzigt en commit die rij, A leest hem opnieuw en krijgt een andere waarde. Binnen één transactie is dezelfde vraag twee keer anders beantwoord.</p>
+<p><strong>Phantom read.</strong> A telt de rijen die aan een voorwaarde voldoen, B voegt een rij toe die er ook aan voldoet en commit, A telt opnieuw en krijgt een ander aantal. Niet een gewijzigde rij, maar een nieuwe.</p>
+<p><strong>Serialization anomaly.</strong> Subtieler: elke transactie is op zichzelf correct, maar het resultaat komt niet overeen met welke volgorde van uitvoeren dan ook. Twee transacties die elk controleren “is er nog minstens één beschikbaar” en beide besluiten er een te nemen — met als uitkomst nul beschikbaar, wat geen enkele seriële volgorde had opgeleverd.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-7-1.png" alt="Tijdlijn van twee transacties per anomalie, met het moment waarop het misgaat" loading="lazy"><figcaption>Figuur 7-1 — Tijdlijn van twee transacties per anomalie, met het moment waarop het misgaat</figcaption></figure>
+<hr>
+<h2>8. Isolatieniveaus</h2>
+<p>De SQL-standaard kent vier niveaus, gedefinieerd naar welke anomalieën ze toestaan.</p>
+<table>
+<thead>
+<tr>
+<th>Niveau</th>
+<th>Dirty read</th>
+<th>Non-repeatable</th>
+<th>Phantom</th>
+<th>Serialization anomaly</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read uncommitted</td>
+<td>Toegestaan</td>
+<td>Toegestaan</td>
+<td>Toegestaan</td>
+<td>Toegestaan</td>
+</tr>
+<tr>
+<td><strong>Read committed</strong></td>
+<td>Nee</td>
+<td>Toegestaan</td>
+<td>Toegestaan</td>
+<td>Toegestaan</td>
+</tr>
+<tr>
+<td><strong>Repeatable read</strong></td>
+<td>Nee</td>
+<td>Nee</td>
+<td>Nee*</td>
+<td>Toegestaan</td>
+</tr>
+<tr>
+<td><strong>Serializable</strong></td>
+<td>Nee</td>
+<td>Nee</td>
+<td>Nee</td>
+<td>Nee</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Drie dingen die specifiek voor PostgreSQL gelden:</strong></p>
+<ol>
+<li><strong>Read uncommitted bestaat niet.</strong> Vraag je erom, dan krijg je read committed. Dirty reads zijn in PostgreSQL onmogelijk — een gevolg van MVCC.</li>
+<li><strong>De standaard is read committed.</strong> Elke opdracht ziet een momentopname van het moment waarop díé opdracht begon, niet van het begin van de transactie.</li>
+<li><strong>Repeatable read voorkomt in PostgreSQL óók phantom reads</strong> (vandaar het sterretje), strenger dan de standaard eist. Dat komt eveneens door MVCC: de hele transactie werkt op één momentopname.</li>
+</ol>
+<p>Instellen:</p>
+<pre><code class="language-sql">BEGIN ISOLATION LEVEL REPEATABLE READ;
+-- of
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+</code></pre>
+<p><strong>Welk niveau kies je?</strong></p>
+<ul>
+<li><strong>Read committed</strong> voor vrijwel al het gewone werk. Snel, weinig conflicten.</li>
+<li><strong>Repeatable read</strong> als een transactie meerdere keren leest en een consistent beeld nodig heeft — een rapportage die over meerdere tabellen optelt, bijvoorbeeld. Zonder dit niveau kunnen de deeltotalen uit verschillende momenten komen en niet optellen tot het geheel.</li>
+<li><strong>Serializable</strong> als correctheid boven doorvoer gaat en de logica te subtiel is om met locks te bewaken.</li>
+</ul>
+<p><strong>De prijs van de strengere niveaus:</strong> transacties kunnen worden afgebroken met een serialisatiefout:</p>
+<pre><code>ERROR: could not serialize access due to concurrent update
+</code></pre>
+<p>Dat is geen bug maar het ontwerp. <strong>Je applicatie moet die fout opvangen en de transactie opnieuw proberen.</strong> Wie <code>serializable</code> inschakelt zonder retry-logica te bouwen, ruilt een zeldzame stille fout in voor een frequente luidruchtige. Dat is meestal een verbetering, maar alleen als iemand de foutmelding afhandelt.</p>
+<hr>
+<h2>9. MVCC: hoe PostgreSQL het oplost</h2>
+<p>Deel 2 gaf de samenvatting; hier de werking.</p>
+<p><strong>Het kernidee:</strong> een <code>UPDATE</code> wijzigt de bestaande rij niet. PostgreSQL schrijft een <em>nieuwe versie</em> van de rij en markeert de oude als geldig tot een bepaald transactiemoment. Een <code>DELETE</code> markeert de rij alleen als verwijderd; hij blijft fysiek staan.</p>
+<p>Elke rijversie draagt twee verborgen kolommen:</p>
+<ul>
+<li><strong><code>xmin</code></strong> — het transactie-ID dat deze versie heeft gemaakt;</li>
+<li><strong><code>xmax</code></strong> — het transactie-ID dat deze versie heeft beëindigd (0 als hij nog geldig is).</li>
+</ul>
+<p>Je kunt ze gewoon opvragen:</p>
+<pre><code class="language-sql">SELECT xmin, xmax, * FROM plaats;
+</code></pre>
+<p>Een transactie ziet een rijversie als: <code>xmin</code> is vastgelegd en zichtbaar voor mij, en <code>xmax</code> is dat niet. Dat is de hele zichtbaarheidsregel, en daaruit volgt:</p>
+<blockquote>
+<p><strong>Lezers blokkeren geen schrijvers, en schrijvers blokkeren geen lezers.</strong></p>
+</blockquote>
+<p>Een lezer heeft de oude versie nog beschikbaar terwijl een schrijver de nieuwe maakt. Niemand hoeft te wachten.</p>
+<p><strong>Het praktische gevolg dat je moet kennen:</strong> een lang lopende rapportagequery legt in PostgreSQL de administratie niet stil. In systemen met vergrendelend lezen doet hij dat wel. Dit is een van de belangrijkste redenen dat PostgreSQL goed presteert onder gemengde belasting — en het is een argument dat je in het gesprek uit deel 1 kunt gebruiken.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-7-2.png" alt="Twee rijversies met xmin/xmax, en twee transacties die elk een andere versie zien" loading="lazy"><figcaption>Figuur 7-2 — Twee rijversies met xmin/xmax, en twee transacties die elk een andere versie zien</figcaption></figure>
+<hr>
+<h2>10. Transactie-ID’s en zichtbaarheid</h2>
+<p>Elke transactie die iets wijzigt, krijgt een oplopend transactie-ID (XID). Een momentopname (<em>snapshot</em>) bestaat uit: welke XID’s waren al vastgelegd toen ik begon, en welke waren nog bezig.</p>
+<p>Onder <strong>read committed</strong> neemt elke opdracht een nieuwe momentopname. Vandaar dat je binnen één transactie twee keer een ander antwoord kunt krijgen — de non-repeatable read.</p>
+<p>Onder <strong>repeatable read</strong> en <strong>serializable</strong> neemt de hele transactie één momentopname bij de eerste opdracht. Alles wat je daarna leest, komt uit datzelfde bevroren beeld.</p>
+<p><strong>Waarom lange transacties schadelijk zijn.</strong> Zolang een transactie loopt, moeten alle rijversies die zij mogelijk nog nodig heeft, bewaard blijven. Een transactie die uren openstaat — vaak een applicatie die een <code>BEGIN</code> deed en toen op gebruikersinvoer wachtte — verhindert het opruimen van dode rijversies in de héle database. De tabellen groeien, de query’s worden trager, en de oorzaak zit in een sessie die niets doet.</p>
+<p><code>pg_stat_activity</code> (deel 2) toont dit:</p>
+<pre><code class="language-sql">SELECT pid, state, now() - xact_start AS duur, query
+FROM pg_stat_activity
+WHERE state &lt;&gt; 'idle'
+ORDER BY xact_start;
+</code></pre>
+<p>De toestand <code>idle in transaction</code> met een lange duur is het signaal. Onthoud die term; in niveau 2 is het een van de eerste dingen die je bij een prestatieprobleem opzoekt.</p>
+<hr>
+<h2>11. Locks</h2>
+<p>MVCC lost het lezen op. Voor schrijven zijn locks nodig: twee transacties mogen niet tegelijk dezelfde rij wijzigen.</p>
+<p>PostgreSQL kent locks op verschillende niveaus. De belangrijkste tabellocks:</p>
+<table>
+<thead>
+<tr>
+<th>Lock</th>
+<th>Genomen door</th>
+<th>Conflicteert met</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ACCESS SHARE</code></td>
+<td><code>SELECT</code></td>
+<td>Alleen <code>ACCESS EXCLUSIVE</code></td>
+</tr>
+<tr>
+<td><code>ROW SHARE</code></td>
+<td><code>SELECT … FOR UPDATE</code></td>
+<td><code>EXCLUSIVE</code>, <code>ACCESS EXCLUSIVE</code></td>
+</tr>
+<tr>
+<td><code>ROW EXCLUSIVE</code></td>
+<td><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code></td>
+<td><code>SHARE</code> en zwaarder</td>
+</tr>
+<tr>
+<td><code>SHARE</code></td>
+<td><code>CREATE INDEX</code></td>
+<td>Schrijvers</td>
+</tr>
+<tr>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><code>ALTER TABLE</code>, <code>DROP</code>, <code>TRUNCATE</code>, <code>VACUUM FULL</code></td>
+<td><strong>Alles</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Dat laatste verklaart de waarschuwing uit deel 6: een <code>ALTER TABLE</code> die de tabel herschrijft, houdt een <code>ACCESS EXCLUSIVE</code>-lock vast en laat álles wachten — ook gewone <code>SELECT</code>s.</p>
+<p>Wie op een lock wacht, zie je hier:</p>
+<pre><code class="language-sql">SELECT pid, wait_event_type, wait_event, query
+FROM pg_stat_activity
+WHERE wait_event_type = 'Lock';
+</code></pre>
+<p><strong>Een belangrijk detail over <code>ALTER TABLE</code>:</strong> de opdracht wacht zélf ook op de lock. Staat er één lang lopende <code>SELECT</code> op de tabel, dan wacht je <code>ALTER TABLE</code> daarop — en alle nieuwe query’s gaan intussen achter de <code>ALTER TABLE</code> in de rij staan. Eén trage query kan zo de hele tabel blokkeren. Dit is de belangrijkste reden om migraties met <code>lock_timeout</code> uit te voeren; niveau 2 werkt dat uit.</p>
+<hr>
+<h2>12. Rijlocks bij UPDATE</h2>
+<p>Een <code>UPDATE</code> neemt een lock op de gewijzigde rijen tot het eind van de transactie.</p>
+<pre><code>Sessie 1                          Sessie 2
+BEGIN;
+UPDATE plaats SET naam='X'
+  WHERE plaats_id=1;
+                                  BEGIN;
+                                  UPDATE plaats SET naam='Y'
+                                    WHERE plaats_id=1;
+                                  -- wacht...
+COMMIT;
+                                  -- gaat nu door
+</code></pre>
+<p>Sessie 2 wacht tot sessie 1 klaar is. Onder <strong>read committed</strong> leest sessie 2 daarna de nieuwe waarde en past zijn wijziging daarop toe. Onder <strong>repeatable read</strong> krijgt sessie 2 een serialisatiefout, omdat de rij is veranderd sinds haar momentopname.</p>
+<p>Dat verschil is belangrijk en komt terug in paragraaf 15.</p>
+<hr>
+<h2>13. SELECT … FOR UPDATE</h2>
+<p>Soms wil je een rij vergrendelen op het moment dat je hem leest, omdat je van plan bent hem te wijzigen:</p>
+<pre><code class="language-sql">BEGIN;
+SELECT saldo FROM rekening WHERE fonds = 'A' FOR UPDATE;
+-- niemand anders kan deze rij nu wijzigen
+UPDATE rekening SET saldo = saldo - 1000 WHERE fonds = 'A';
+COMMIT;
+</code></pre>
+<p>Varianten:</p>
+<table>
+<thead>
+<tr>
+<th>Vorm</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FOR UPDATE</code></td>
+<td>Volledige rijlock</td>
+</tr>
+<tr>
+<td><code>FOR NO KEY UPDATE</code></td>
+<td>Lichter; staat verwijzingen toe</td>
+</tr>
+<tr>
+<td><code>FOR SHARE</code></td>
+<td>Anderen mogen lezen, niet wijzigen</td>
+</tr>
+<tr>
+<td><code>FOR UPDATE NOWAIT</code></td>
+<td>Foutmelding in plaats van wachten</td>
+</tr>
+<tr>
+<td><code>FOR UPDATE SKIP LOCKED</code></td>
+<td>Slaat vergrendelde rijen over</td>
+</tr>
+</tbody>
+</table>
+<p><code>SKIP LOCKED</code> is het gereedschap voor werkverdeling: meerdere verwerkers halen elk een andere onverwerkte mutatie op zonder elkaar te blokkeren.</p>
+<pre><code class="language-sql">SELECT * FROM mutatie
+WHERE verwerkt_op IS NULL
+ORDER BY aangemeld_op
+LIMIT 10
+FOR UPDATE SKIP LOCKED;
+</code></pre>
+<p>Dat patroon is precies wat Meridiaan nodig heeft om de mutatieverwerking over meerdere processen te verdelen. Zonder <code>SKIP LOCKED</code> staan die processen op elkaar te wachten of pakken ze dezelfde mutaties.</p>
+<hr>
+<h2>14. Deadlocks</h2>
+<p>Twee transacties wachten op elkaar:</p>
+<pre><code>Sessie 1                          Sessie 2
+UPDATE rij A                      UPDATE rij B
+UPDATE rij B  ← wacht op 2        UPDATE rij A  ← wacht op 1
+</code></pre>
+<p>Geen van beide kan door. PostgreSQL detecteert dit automatisch (standaard na een seconde), kiest een slachtoffer en breekt die transactie af:</p>
+<pre><code>ERROR: deadlock detected
+DETAIL: Process 1234 waits for ShareLock on transaction 5678...
+</code></pre>
+<p><strong>Voorkomen:</strong></p>
+<ol>
+<li><strong>Benader rijen altijd in dezelfde volgorde.</strong> Als beide sessies eerst A en dan B doen, kan er geen cyclus ontstaan. Dit is verreweg de belangrijkste maatregel, en hij hoort in de afspraken van je ontwikkelteam.</li>
+<li><strong>Houd transacties kort.</strong> Hoe korter de lock, hoe kleiner het venster.</li>
+<li><strong>Vergrendel niet meer dan nodig.</strong></li>
+<li><strong>Vang de fout op en probeer opnieuw.</strong> Een deadlock is bij gelijktijdige belasting nooit volledig uit te sluiten.</li>
+</ol>
+<p>Een deadlock is geen ramp — de database lost hem zelf op. Maar frequente deadlocks wijzen op een ontwerpprobleem, meestal op punt 1.</p>
+<hr>
+<h2>15. De lost update in de praktijk</h2>
+<p>Nu het probleem uit deel 1. Reproduceer het zelf in twee psql-vensters.</p>
+<p><strong>De situatie:</strong> twee medewerkers passen het jaarsalaris van hetzelfde dienstverband aan. De een verhoogt met 2.000, de ander met 1.000.</p>
+<pre><code>Sessie 1                                Sessie 2
+BEGIN;
+SELECT jaarsalaris FROM dienstverband
+  WHERE dienstverband_id = 1;   -- 50.000
+                                        BEGIN;
+                                        SELECT jaarsalaris FROM dienstverband
+                                          WHERE dienstverband_id = 1;   -- 50.000
+UPDATE dienstverband
+  SET jaarsalaris = 52000
+  WHERE dienstverband_id = 1;
+COMMIT;
+                                        UPDATE dienstverband
+                                          SET jaarsalaris = 51000
+                                          WHERE dienstverband_id = 1;
+                                        COMMIT;
+</code></pre>
+<p>Eindresultaat: <strong>51.000.</strong> De verhoging van sessie 1 is verdwenen zonder enige foutmelding. Precies het Excel-probleem uit deel 1, nu in een echte database — want een database beschermt hier niet vanzelf tegen.</p>
+<p><strong>Drie oplossingen:</strong></p>
+<p><strong>1. Reken in de database, niet in de applicatie.</strong></p>
+<pre><code class="language-sql">UPDATE dienstverband SET jaarsalaris = jaarsalaris + 2000 WHERE dienstverband_id = 1;
+</code></pre>
+<p>De tweede sessie wacht op de rijlock, leest daarna de nieuwe waarde en telt daar bij op. Resultaat: 53.000, wat beide bedoelden. Dit is de eenvoudigste oplossing en werkt wanneer de bewerking als optelling uit te drukken is.</p>
+<p><strong>2. Vergrendel bij het lezen.</strong></p>
+<pre><code class="language-sql">BEGIN;
+SELECT jaarsalaris FROM dienstverband WHERE dienstverband_id = 1 FOR UPDATE;
+-- de ander wacht nu al hier
+UPDATE dienstverband SET jaarsalaris = 52000 WHERE dienstverband_id = 1;
+COMMIT;
+</code></pre>
+<p>Pessimistisch: je claimt de rij voordat je gaat rekenen.</p>
+<p><strong>3. Optimistisch vergrendelen met een versiekolom.</strong></p>
+<pre><code class="language-sql">UPDATE dienstverband
+   SET jaarsalaris = 52000, versie = versie + 1
+ WHERE dienstverband_id = 1 AND versie = 7;
+</code></pre>
+<p>Levert dit nul gewijzigde rijen op, dan heeft iemand anders de rij intussen aangepast en moet je opnieuw beginnen — meestal met een melding aan de gebruiker: <em>“dit record is gewijzigd door een ander, ververs en probeer opnieuw.”</em></p>
+<p><strong>Of gebruik <code>repeatable read</code>.</strong> Onder dat isolatieniveau krijgt sessie 2 een serialisatiefout in plaats van stil te overschrijven. Dat lost het probleem ook op, mits de applicatie de fout opvangt.</p>
+<hr>
+<h2>16. Optimistisch versus pessimistisch vergrendelen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Pessimistisch (<code>FOR UPDATE</code>)</th>
+<th>Optimistisch (versiekolom)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Aanpak</td>
+<td>Claim de rij vooraf</td>
+<td>Controleer bij het schrijven</td>
+</tr>
+<tr>
+<td>Goed bij</td>
+<td>Veel conflicten, korte bewerkingen</td>
+<td>Weinig conflicten, lange bedenktijd</td>
+</tr>
+<tr>
+<td>Kosten</td>
+<td>Anderen wachten</td>
+<td>Werk opnieuw doen bij conflict</td>
+</tr>
+<tr>
+<td>Gebruikerservaring</td>
+<td>“Even wachten”</td>
+<td>“Iemand was je voor”</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De doorslaggevende overweging bij webtoepassingen:</strong> je kunt een databaselock niet vasthouden terwijl een gebruiker een formulier invult. Die transactie zou minuten openstaan — met alle gevolgen uit paragraaf 10. Voor het deelnemersportaal van Meridiaan is optimistisch vergrendelen daarom de enige werkbare keuze; voor een kortlopende batchverwerking is <code>FOR UPDATE</code> prima.</p>
+<hr>
+<h2>17. VACUUM en het prijskaartje van MVCC</h2>
+<p>Elke <code>UPDATE</code> en <code>DELETE</code> laat een dode rijversie achter. Zonder opruiming groeit de tabel onbeperkt — <strong>table bloat</strong>.</p>
+<p><code>VACUUM</code> doet drie dingen:</p>
+<ol>
+<li>Ruimt dode rijversies op en geeft de ruimte vrij voor hergebruik <em>binnen de tabel</em>.</li>
+<li>Werkt de statistieken bij die de planner gebruikt (deel 2, deel 8).</li>
+<li>Voorkomt het aflopen van de transactie-ID-teller.</li>
+</ol>
+<p>Dat derde punt verdient uitleg. De XID-teller is eindig. Elke rijversie bewaart de XID die hem maakte; zonder opruiming zou de teller na verloop van tijd omlopen en zouden oude rijen “in de toekomst” lijken te liggen — en daarmee onzichtbaar worden. <code>VACUUM</code> bevriest oude rijen om dat te voorkomen. Gebeurt dat te lang niet, dan <strong>stopt PostgreSQL met schrijven</strong> om gegevensverlies te voorkomen.</p>
+<p>Dat is geen theoretisch scenario. Het is de bekendste manier om een PostgreSQL-productieomgeving stil te leggen, en het begint altijd hetzelfde: iemand zet autovacuum uit omdat het I/O kost.</p>
+<table>
+<thead>
+<tr>
+<th>Variant</th>
+<th>Doet</th>
+<th>Lock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>VACUUM</code></td>
+<td>Ruimt op, ruimte blijft in de tabel</td>
+<td>Licht; tabel blijft bruikbaar</td>
+</tr>
+<tr>
+<td><code>VACUUM ANALYZE</code></td>
+<td>Idem + statistieken</td>
+<td>Licht</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code></td>
+<td>Herschrijft de tabel, geeft ruimte terug aan het OS</td>
+<td><strong><code>ACCESS EXCLUSIVE</code> — alles wacht</strong></td>
+</tr>
+<tr>
+<td><code>ANALYZE</code></td>
+<td>Alleen statistieken</td>
+<td>Licht</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>VACUUM FULL</code> is geen routineonderhoud.</strong> Het herschrijft de tabel volledig, heeft tijdelijk twee keer de ruimte nodig en blokkeert alles. Gebruik het alleen na een eenmalige grote opruiming, in een onderhoudsvenster.</p>
+<p><strong>Autovacuum</strong> draait permanent op de achtergrond en doet dit werk vanzelf. De afstelling ervan hoort in niveau 2. De enige boodschap voor nu: laat het aan staan.</p>
+<hr>
+<h2>18. Transactiegrenzen in applicaties</h2>
+<p>Waar begint en eindigt een transactie? Dit is een ontwerpvraag, geen technische.</p>
+<p><strong>Vuistregels:</strong></p>
+<ul>
+<li><strong>Eén transactie per bedrijfshandeling.</strong> Een deelnemer aanmaken met zijn dienstverband is één handeling, dus één transactie.</li>
+<li><strong>Geen gebruikersinteractie binnen een transactie.</strong> Nooit <code>BEGIN</code> doen, een formulier tonen en op de gebruiker wachten.</li>
+<li><strong>Geen externe aanroepen binnen een transactie</strong> als het te vermijden is. Een webservice die traag reageert, houdt je transactie open en daarmee locks vast.</li>
+<li><strong>Zo kort mogelijk, maar niet korter.</strong> Een transactie opsplitsen “voor de prestaties” verbreekt de atomiciteit die je juist wilde.</li>
+</ul>
+<p>Een klassieke fout bij Meridiaan zou zijn: de mutatieverwerking opent een transactie, roept de basisregistratie aan voor een adrescontrole, en wacht. Bij een trage externe dienst staan er dan tientallen transacties open, groeit de bloat en loopt de verwerking vast. De oplossing is de externe aanroep buiten de transactie te doen en het resultaat daarna in een korte transactie te verwerken.</p>
+<hr>
+<h2>19. Foutafhandeling</h2>
+<p>Een transactie kan om drie redenen mislukken:</p>
+<ol>
+<li><strong>Constraintschending</strong> (deel 6) — voorspelbaar, hoort in de applicatielogica.</li>
+<li><strong>Serialisatiefout</strong> — hoort opgevangen en opnieuw geprobeerd te worden.</li>
+<li><strong>Deadlock</strong> — idem.</li>
+</ol>
+<p>Voor 2 en 3 geldt hetzelfde patroon: vang de fout, wacht kort (met een oplopende wachttijd bij herhaling), probeer opnieuw, en geef na een paar pogingen op met een begrijpelijke melding.</p>
+<p><strong>Wat je niet doet:</strong> de foutmelding onderdrukken en doorgaan. Een genegeerde serialisatiefout betekent dat een bedrijfshandeling niet is uitgevoerd terwijl de gebruiker denkt van wel.</p>
+<hr>
+<h2>20. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Oplossing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lezen, rekenen in de applicatie, terugschrijven</td>
+<td>Lost update</td>
+<td>Rekenen in de <code>UPDATE</code>, of vergrendelen</td>
+</tr>
+<tr>
+<td><code>BEGIN</code> en dan op de gebruiker wachten</td>
+<td><code>idle in transaction</code>, bloat, locks</td>
+<td>Transactiegrens verleggen</td>
+</tr>
+<tr>
+<td>Autovacuum uitzetten</td>
+<td>Bloat, uiteindelijk schrijfblokkade</td>
+<td>Aan laten</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code> als routine</td>
+<td>Downtime</td>
+<td>Alleen na eenmalige opruiming</td>
+</tr>
+<tr>
+<td>Rijen in wisselende volgorde benaderen</td>
+<td>Deadlocks</td>
+<td>Vaste volgorde afspreken</td>
+</tr>
+<tr>
+<td><code>serializable</code> zonder retry-logica</td>
+<td>Frequente zichtbare fouten</td>
+<td>Retry inbouwen</td>
+</tr>
+<tr>
+<td>Externe aanroep binnen een transactie</td>
+<td>Lange locks</td>
+<td>Buiten de transactie</td>
+</tr>
+<tr>
+<td>Duizenden savepoints in één transactie</td>
+<td>Prestatieverlies</td>
+<td>Partij opdelen</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>21. Aansluiting op de certificering</h2>
+<p>Voor de Associate-certificering paraat:</p>
+<ul>
+<li>de vier ACID-eigenschappen en het mechanisme per eigenschap;</li>
+<li>de vier anomalieën en welk isolatieniveau ze uitsluit;</li>
+<li>dat PostgreSQL geen read uncommitted kent en dat repeatable read hier ook phantoms uitsluit;</li>
+<li>de werking van MVCC met <code>xmin</code>/<code>xmax</code>;</li>
+<li>de belangrijkste locktypen en welke opdrachten ze nemen;</li>
+<li>het doel van <code>VACUUM</code>, inclusief XID-wraparound;</li>
+<li>het verschil tussen <code>VACUUM</code> en <code>VACUUM FULL</code>.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>22. Kernbegrippen</h2>
+<p><strong>Transactie</strong> — groep bewerkingen die geheel of niet wordt uitgevoerd.
+<strong>Savepoint</strong> — terugvalpunt binnen een transactie.
+<strong>Isolatieniveau</strong> — mate waarin gelijktijdige transacties elkaar kunnen beïnvloeden.
+<strong>Dirty read / non-repeatable read / phantom read / serialization anomaly</strong> — de vier anomalieën.
+<strong>MVCC</strong> — meerdere rijversies naast elkaar voor gelijktijdigheid zonder blokkeren.
+<strong><code>xmin</code> / <code>xmax</code></strong> — verborgen kolommen die de zichtbaarheid van een rijversie bepalen.
+<strong>Snapshot</strong> — momentopname van welke transacties zichtbaar zijn.
+<strong>Lost update</strong> — een wijziging die stil wordt overschreven door een andere sessie.
+<strong>Optimistisch vergrendelen</strong> — conflict pas bij het schrijven detecteren, met een versiekolom.
+<strong>Pessimistisch vergrendelen</strong> — de rij claimen bij het lezen, met <code>FOR UPDATE</code>.
+<strong>Deadlock</strong> — twee transacties die op elkaar wachten.
+<strong>Bloat</strong> — ruimte ingenomen door niet-opgeruimde dode rijversies.
+<strong>XID-wraparound</strong> — het aflopen van de transactie-ID-teller; voorkomen door vacuum.
+<strong><code>idle in transaction</code></strong> — sessie met een openstaande transactie die niets doet.</p>
+<hr>
+<p><em>Volgende deel: indexen en views. Je hebt nu een database die correct is onder gelijktijdige belasting. Volgende keer maken we hem snel — en leer je waarom “traag” bijna nooit betekent wat mensen denken.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">511 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-06-ddl-datatypen-en-constraints/reader.html">&larr; Deel 6 — DDL, datatypen en constraints</a><a class="dbm-prevnext next" href="../deel-08-indexen-en-views/reader.html">Deel 8 — Indexen en views &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

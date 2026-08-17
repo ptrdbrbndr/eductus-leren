@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Monitoring, logging en pgaudit — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 20 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 20 — Slidedeck</h1>
+<p><strong>Monitoring, logging en pgaudit</strong>
+Niveau 2, dagdeel 12 (deel 20 van 30) | 34 slides — zelfstandig leesbaar</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Monitoring, logging en pgaudit</h1>
+<h2>Niveau 2 — Deel 20</h2>
+<p><em>Zelfstandig leesbaar — een goed instapmoment.</em></p>
+<hr>
+<h2>Slide 2 — Negen dagdelen, negen signalen</h2>
+<table>
+<thead>
+<tr>
+<th>Deel</th>
+<th>Signaal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td>Cachetrefkans, verbindingsdruk</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Bloat, <code>age(relfrozenxid)</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>pg_stat_statements</code>-rangorde</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Ongebruikte indexen</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Lockwachtrijen, deadlocks</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Default-partitie-omvang</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Archiveringsfouten</td>
+</tr>
+<tr>
+<td>18</td>
+<td>Replicatievertraging</td>
+</tr>
+<tr>
+<td>19</td>
+<td>Clusterstatus</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notities:</strong> laat de zaal elke rij herkennen.</p>
+<hr>
+<h2>Slide 3 — De eerlijke vraag</h2>
+<h1>Hoeveel van deze negen heb je</h1>
+<h1>sindsdien nog eens bekeken —</h1>
+<h1>buiten die ene opdracht?</h1>
+<p>Kennis die niet geoperationaliseerd wordt, vervaagt.</p>
+<hr>
+<h2>Slide 4 — Drie lagen</h2>
+<p><strong>1. Ad-hoc</strong> — een query, getypt op het moment
+<strong>2. Historisch</strong> — vastgelegd, passief
+<strong>3. Continu + alarmering</strong> — automatisch, vóórdat iemand het meldt</p>
+<p>Vandaag bouw je alle drie, in die volgorde.</p>
+<hr>
+<h2>Slide 5 — Opdracht 20.1</h2>
+<h1>De lijst samenbrengen</h1>
+<p><em>15 min, individueel</em></p>
+<hr>
+<h2>Slide 6 — Laag 1: pg_stat_activity</h2>
+<pre><code class="language-sql">SELECT pid, state, wait_event_type,
+       now()-xact_start AS transactieduur, query
+FROM pg_stat_activity WHERE backend_type='client backend';
+</code></pre>
+<p>Het eerste dat je opent bij elke melding.</p>
+<hr>
+<h2>Slide 7 — pg_stat_statements als monitoringbron</h2>
+<p>Niet: één keer een probleem vinden (deel 13).</p>
+<h1>Nu: de <strong>trend</strong>.</h1>
+<p>Is de rangorde deze week anders dan vorige week?</p>
+<hr>
+<h2>Slide 8 — pg_stat_bgwriter</h2>
+<pre><code class="language-sql">SELECT checkpoints_timed, checkpoints_req,
+       buffers_backend FROM pg_stat_bgwriter;
+</code></pre>
+<p><code>checkpoints_req</code> hoog → schrijfbelasting haalt
+de cyclus in → <code>max_wal_size</code> verhogen (deel 11).</p>
+<hr>
+<h2>Slide 9 — Opdracht 20.2</h2>
+<h1>pg_stat_bgwriter interpreteren</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 10 — Vergeten weergaven</h2>
+<p><code>pg_stat_database.temp_bytes</code> — sorteringen naar schijf
+<code>pg_stat_progress_vacuum</code> — voortgang, geen giswerk meer
+<code>pg_replication_slots</code> — inactief + groeiend = alarm</p>
+<hr>
+<h2>Slide 11 — Pauze</h2>
+<hr>
+<h2>Slide 12 — Wat staat er in je log?</h2>
+<pre><code class="language-sql">SELECT * FROM deelnemer WHERE bsn = '123456789';
+</code></pre>
+<p><code>log_min_duration_statement = 1000</code> →</p>
+<h1>Het BSN staat letterlijk in het logbestand.</h1>
+<p><strong>Notities:</strong> laat het zien, niet alleen vertellen.</p>
+<hr>
+<h2>Slide 13 — Het antwoord</h2>
+<h1>Niet: log minder.</h1>
+<h1>Behandel de log als wat hij is —</h1>
+<h1>een bestand met persoonsgegevens,</h1>
+<h1>met dezelfde toegang als de database zelf.</h1>
+<hr>
+<h2>Slide 14 — Gestructureerd loggen</h2>
+<pre><code>log_destination = 'csvlog'
+</code></pre>
+<p>Direct met <code>COPY</code> in te lezen als tabel.
+Geen tekstverwerking meer nodig bij een incident-reconstructie.</p>
+<hr>
+<h2>Slide 15 — Opdracht 20.3</h2>
+<h1>Logging en de privacyafweging</h1>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 16 — auto_explain, herzien</h2>
+<pre><code>auto_explain.log_min_duration = 3000
+auto_explain.sample_rate = 0.1
+</code></pre>
+<p><code>pg_stat_statements</code> → <strong>welke</strong> query ertoe doet
+<code>auto_explain</code> → <strong>waarom</strong> één uitvoering traag was</p>
+<p><strong>Nu: permanent, niet eenmalig.</strong></p>
+<hr>
+<h2>Slide 17 — Opdracht 20.4</h2>
+<h1>auto_explain als permanente voorziening</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 18 — Terug naar deel 9</h2>
+<p>Sanne vroeg:</p>
+<h1>*&quot;Kunnen jullie aantonen wie</h1>
+<h1>het BSN heeft ingezien?&quot;*</h1>
+<p>Het eerlijke antwoord toen: <strong>nee, niet betrouwbaar.</strong></p>
+<hr>
+<h2>Slide 19 — pgaudit</h2>
+<pre><code>pgaudit.log = 'read, write, role'
+pgaudit.log_relation = on
+</code></pre>
+<p>Categorieën van handelingen. Eén regel per geraakt object.
+<strong>Ongeacht snelheid.</strong></p>
+<hr>
+<h2>Slide 20 — Rolgebonden, niet cluster-breed</h2>
+<pre><code class="language-sql">ALTER ROLE klantenservice SET pgaudit.log = 'read, write';
+</code></pre>
+<p>Cluster-breed = enorme logvolumes zonder gerichte waarde.</p>
+<p><strong>Gericht op wie bij gevoelige data kan komen.</strong></p>
+<hr>
+<h2>Slide 21 — Opdracht 20.5</h2>
+<h1>pgaudit voor Sanne</h1>
+<p>Zie de logregel verschijnen. Herformuleer het antwoord.</p>
+<p><em>25-30 min, drietallen</em></p>
+<hr>
+<h2>Slide 22 — De belofte ingelost</h2>
+<h1>Wie. Wanneer. Welke tabel.</h1>
+<p>Precies wat er in deel 9 ontbrak.</p>
+<hr>
+<h2>Slide 23 — Pauze</h2>
+<hr>
+<h2>Slide 24 — Laag 3: extern</h2>
+<pre><code>postgres_exporter → Prometheus → Grafana
+   (leest views)    (opslag +      (dashboard)
+                     alarmering)
+</code></pre>
+<p>Van “we hebben ooit gezien” naar
+<strong>“we zien precies wanneer het begon.”</strong></p>
+<hr>
+<h2>Slide 25 — Alarmdrempels: de samenvatting</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Drempel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>age(relfrozenxid)</code></td>
+<td>&gt;50%</td>
+</tr>
+<tr>
+<td>Replicatievertraging</td>
+<td>&gt;2 min</td>
+</tr>
+<tr>
+<td>Wachtend op lock</td>
+<td>&gt;5 of &gt;30s</td>
+</tr>
+<tr>
+<td>Archiveringsfout</td>
+<td>elke fout</td>
+</tr>
+<tr>
+<td>Patroni: geen leider</td>
+<td>direct</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Elke rij: een les uit dit niveau, teruggebracht tot één getal.</strong></p>
+<hr>
+<h2>Slide 26 — Niet alles alarmeren</h2>
+<h1>Te veel alarmen →</h1>
+<h1>alle alarmen genegeerd.</h1>
+<p>Kies bewust wat níét alarmeert.</p>
+<hr>
+<h2>Slide 27 — Opdracht 20.6</h2>
+<h1>Van signaal naar drempel</h1>
+<p>Kies je top vijf. En: wat alarmeer je bewust NIET?</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 28 — Drie niveaus van een dashboard</h2>
+<p><strong>1.</strong> Is alles in orde? <em>(groen/oranje/rood)</em>
+<strong>2.</strong> Waar zit het probleem? <em>(per categorie, over tijd)</em>
+<strong>3.</strong> Wat is de oorzaak? <em>(terug naar laag 1)</em></p>
+<p>Een dashboard vervangt niveau 3 niet — het wijst ernaar.</p>
+<hr>
+<h2>Slide 29 — Opdracht 20.7</h2>
+<h1>Het eerste-vijf-minuten-protocol</h1>
+<p>Drie meldingen. Welke stap eerst, en waarom?</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 30 — Dit protocol is niets nieuws</h2>
+<h1>Het is deel 7, 8, 12, 13, 15, 18 en 19 —</h1>
+<h1>samengevat als checklist.</h1>
+<p>Je had de kennis al. Dit maakt hem toegankelijk
+vóór en tijdens het moment dat je hem nodig hebt.</p>
+<hr>
+<h2>Slide 31 — Opdracht 20.8</h2>
+<h1>Een dashboardvoorstel</h1>
+<p>Vier categorieën. Wat moet Ruud in 2 minuten zien?</p>
+<p><em>10 min, tweetallen</em></p>
+<hr>
+<h2>Slide 32 — Wat monitoring niet oplost</h2>
+<ul>
+<li>Lost geen enkel onderliggend probleem op</li>
+<li>Vervangt geen back-up, replicatie, HA</li>
+<li>Ongebruikt = <strong>vals vertrouwen</strong></li>
+<li>Bewijst niet dat herstel/failover werkt — alleen dat er nu geen bekend probleem is</li>
+</ul>
+<hr>
+<h2>Slide 33 — Opdracht 20.9</h2>
+<h1>Het monitoringplan</h1>
+<p>Drie lagen ingevuld · logbeleid · pgaudit rolgebonden ·
+top 10 drempels geprioriteerd · <strong>wat dit niet oplost</strong></p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 34 — Volgende keer</h2>
+<h1>Deel 21 — Security-verdieping</h1>
+<p>Jullie zien nu wat er gebeurt, en kunnen aantonen
+wie er bij gevoelige gegevens is geweest.</p>
+<p>Volgende keer: verder dan deel 9 — row level security-patronen,
+encryptie in de praktijk, en examenvoorbereiding.</p>
+<p><strong>Bewaar je monitoringplan uit 20.9.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 20.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">339 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-19-hoge-beschikbaarheid/reader.html">&larr; Deel 19 — Hoge beschikbaarheid</a><a class="dbm-prevnext next" href="../deel-21-security-verdieping-en-nosql-in-perspectief/reader.html">Deel 21 — Security-verdieping en NoSQL in perspectief &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

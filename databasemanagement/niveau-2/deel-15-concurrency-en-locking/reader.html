@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Concurrency en locking — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 15 — Concurrency en locking</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdelen 5 en 6 van 12 (deel 15 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Concurrency &amp; locking”</p>
+<blockquote>
+<p><strong>Dit deel beslaat twee dagdelen.</strong>
+<strong>Dagdeel A</strong> (paragraaf 1-12) gaat over locks: wie wacht op wie, en waarom.
+<strong>Dagdeel B</strong> (paragraaf 13-22) gaat over isolatie en gelijktijdige werklast: correct blijven onder druk.</p>
+</blockquote>
+<hr>
+<h2>Inhoud</h2>
+<p><strong>Dagdeel A — Locks</strong></p>
+<ol>
+<li>Leerdoelen</li>
+<li>Snelheid is niet het probleem</li>
+<li>Het lockmodel</li>
+<li>De lockwachtrij</li>
+<li>Rijlocks</li>
+<li>Diagnose: wie blokkeert wie</li>
+<li>lock_timeout en de andere timeouts</li>
+<li>Deadlocks op schaal</li>
+<li>Advisory locks</li>
+<li>DDL en locks</li>
+<li>Het veilige migratiepatroon</li>
+<li>Samenvatting dagdeel A</li>
+</ol>
+<p><strong>Dagdeel B — Isolatie en gelijktijdige werklast</strong>
+13. Leerdoelen dagdeel B
+14. Isolatieniveaus, herzien
+15. Serializable Snapshot Isolation
+16. Retry-logica
+17. Wachtrijpatronen op schaal
+18. Hotspots: als iedereen dezelfde rij wil
+19. Verbindingen en transactiegedrag
+20. Monitoring van gelijktijdigheid
+21. Veelgemaakte fouten
+22. Aansluiting op de certificering en kernbegrippen</p>
+<hr>
+<hr>
+<h1>DAGDEEL A — Locks</h1>
+<h2>1. Leerdoelen</h2>
+<p>Na dagdeel A kun je:</p>
+<ul>
+<li>de belangrijkste locktypen benoemen en zeggen welke opdracht welke lock neemt;</li>
+<li>uitleggen hoe de lockwachtrij werkt en waarom één wachtende opdracht alles erachter blokkeert;</li>
+<li>vaststellen wie wie blokkeert met <code>pg_locks</code> en <code>pg_blocking_pids</code>;</li>
+<li><code>lock_timeout</code>, <code>statement_timeout</code> en <code>idle_in_transaction_session_timeout</code> gericht inzetten;</li>
+<li>deadlocks diagnosticeren en voorkomen met een vaste benaderingsvolgorde;</li>
+<li>advisory locks toepassen voor coördinatie buiten de gegevens om;</li>
+<li>per DDL-opdracht zeggen welke lock hij neemt en hoe lang die duurt;</li>
+<li>een migratie zo uitvoeren dat hij productie niet plat legt.</li>
+</ul>
+<hr>
+<h2>2. Snelheid is niet het probleem</h2>
+<p>Vier dagdelen lang heb je query’s sneller gemaakt. Dinsdagavond gaat het portaal alsnog onderuit.</p>
+<p>De query’s zijn niet trager geworden. Ze wachten.</p>
+<p>Dat is een ander soort probleem, en het is diagnostisch lastiger, omdat alle gebruikelijke signalen normaal blijven: de CPU staat laag, de schijf is rustig, <code>pg_stat_statements</code> toont geen uitschieters. En toch reageert niets.</p>
+<p><strong>Het onderscheid dat je moet kunnen maken:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Verschijnsel</th>
+<th>CPU</th>
+<th>I/O</th>
+<th><code>pg_stat_activity</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trage query</td>
+<td>Hoog</td>
+<td>Hoog</td>
+<td><code>state = active</code></td>
+</tr>
+<tr>
+<td>Vergrendeling</td>
+<td><strong>Laag</strong></td>
+<td><strong>Laag</strong></td>
+<td><code>wait_event_type = 'Lock'</code></td>
+</tr>
+</tbody>
+</table>
+<p>Uit deel 13, opdracht 8.7 melding A: <em>“alles is traag, ook inloggen”</em>. Dat is vrijwel nooit een index. Dat is dit.</p>
+<hr>
+<h2>3. Het lockmodel</h2>
+<p>PostgreSQL kent locks op verschillende niveaus. De acht tabellocks, van licht naar zwaar:</p>
+<table>
+<thead>
+<tr>
+<th>Lock</th>
+<th>Genomen door</th>
+<th>Conflicteert met</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ACCESS SHARE</code></td>
+<td><code>SELECT</code></td>
+<td>Alleen <code>ACCESS EXCLUSIVE</code></td>
+</tr>
+<tr>
+<td><code>ROW SHARE</code></td>
+<td><code>SELECT … FOR UPDATE/SHARE</code></td>
+<td><code>EXCLUSIVE</code>, <code>ACCESS EXCLUSIVE</code></td>
+</tr>
+<tr>
+<td><code>ROW EXCLUSIVE</code></td>
+<td><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code></td>
+<td><code>SHARE</code> en zwaarder</td>
+</tr>
+<tr>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td><code>VACUUM</code>, <code>ANALYZE</code>, <code>CREATE INDEX CONCURRENTLY</code>, veel <code>ALTER TABLE</code>-varianten</td>
+<td>Zichzelf en zwaarder</td>
+</tr>
+<tr>
+<td><code>SHARE</code></td>
+<td><code>CREATE INDEX</code> (zonder CONCURRENTLY)</td>
+<td>Schrijvers</td>
+</tr>
+<tr>
+<td><code>SHARE ROW EXCLUSIVE</code></td>
+<td><code>CREATE TRIGGER</code>, sommige <code>ALTER TABLE</code></td>
+<td>Bijna alles</td>
+</tr>
+<tr>
+<td><code>EXCLUSIVE</code></td>
+<td><code>REFRESH MATERIALIZED VIEW CONCURRENTLY</code></td>
+<td>Alles behalve <code>ACCESS SHARE</code></td>
+</tr>
+<tr>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><code>ALTER TABLE</code>, <code>DROP</code>, <code>TRUNCATE</code>, <code>VACUUM FULL</code>, <code>REINDEX</code>, <code>CLUSTER</code></td>
+<td><strong>Alles</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Twee regels die je uit je hoofd moet kennen:</p>
+<p><strong><code>ACCESS SHARE</code> en <code>ACCESS EXCLUSIVE</code> zijn elkaars tegenpolen.</strong> Een gewone <code>SELECT</code> conflicteert met precies één ding: een <code>ALTER TABLE</code> of <code>DROP</code>. Alle andere combinaties met een <code>SELECT</code> gaan gewoon door.</p>
+<p><strong><code>SHARE UPDATE EXCLUSIVE</code> conflicteert met zichzelf.</strong> Twee <code>VACUUM</code>-runs op dezelfde tabel wachten op elkaar, en een <code>CREATE INDEX CONCURRENTLY</code> wacht op een lopende <code>VACUUM</code>. Dat verklaart waarom een indexbouw soms lang niets lijkt te doen.</p>
+<p><strong>Locks worden altijd vastgehouden tot het eind van de transactie.</strong> Er is geen manier om een lock tussentijds vrij te geven. Dat is de reden dat transactieduur en vergrendeling hetzelfde onderwerp zijn.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-15-1.png" alt="Conflictmatrix van de acht locktypen" loading="lazy"><figcaption>Figuur 15-1 — Conflictmatrix van de acht locktypen</figcaption></figure>
+<hr>
+<h2>4. De lockwachtrij</h2>
+<p>Dit is het belangrijkste onderwerp van dagdeel A, en het is de oorzaak van de meeste productie-incidenten met PostgreSQL.</p>
+<p><strong>Wachtende locks vormen een rij, en die rij is ordelijk.</strong> Wie op een lock wacht, laat niemand voorbij die een conflicterende lock nodig heeft — ook niet als die persoon zelf niet met de blokkerende sessie in conflict zou zijn.</p>
+<p>Het scenario dat je moet kennen:</p>
+<pre><code>09:00:00  Sessie A: SELECT ... FROM deelnemer;        (rapportage, duurt 20 minuten)
+                    → ACCESS SHARE, blijft vasthouden
+
+09:00:05  Sessie B: ALTER TABLE deelnemer ADD COLUMN ...;
+                    → wil ACCESS EXCLUSIVE
+                    → conflicteert met A → gaat in de wachtrij
+
+09:00:06  Sessie C: SELECT * FROM deelnemer WHERE deelnemer_id = 42;
+                    → wil ACCESS SHARE
+                    → conflicteert NIET met A
+                    → maar staat achter B in de rij → WACHT
+</code></pre>
+<p>Sessie C is een portaalquery van 0,3 milliseconden. Hij wacht twintig minuten.</p>
+<p>En elke volgende query op <code>deelnemer</code> doet hetzelfde. Binnen een minuut staan er honderden sessies te wachten, loopt de verbindingspool vol, en is het portaal onbereikbaar.</p>
+<p><strong>De ALTER TABLE zelf heeft nog geen enkele rij aangeraakt.</strong> Hij wacht ook. Maar zijn plek in de rij legt de hele tabel stil.</p>
+<p>Dit is het incident dat vrijwel elke organisatie één keer meemaakt. De diagnose is achteraf verwarrend: de <code>ALTER TABLE</code> was “maar een kolom toevoegen” en duurde volgens de log twee milliseconden. Wat er niet in de log staat, is dat hij twintig minuten in de wachtrij stond en ondertussen alles ophield.</p>
+<blockquote>
+<p><strong>De les: niet de duur van de opdracht bepaalt de schade, maar de duur van het wachten.</strong></p>
+</blockquote>
+<p>Paragraaf 7 en 11 gaan over hoe je dit voorkomt.</p>
+<hr>
+<h2>5. Rijlocks</h2>
+<p>Naast tabellocks bestaan er locks op rijniveau. Uit deel 7, nu met de varianten erbij.</p>
+<table>
+<thead>
+<tr>
+<th>Vorm</th>
+<th>Genomen door</th>
+<th>Blokkeert</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FOR UPDATE</code></td>
+<td>Expliciet, of een <code>UPDATE</code>/<code>DELETE</code></td>
+<td>Andere <code>FOR UPDATE</code>, <code>FOR SHARE</code>, <code>UPDATE</code>, <code>DELETE</code></td>
+</tr>
+<tr>
+<td><code>FOR NO KEY UPDATE</code></td>
+<td><code>UPDATE</code> die geen sleutelkolom wijzigt</td>
+<td>Iets lichter</td>
+</tr>
+<tr>
+<td><code>FOR SHARE</code></td>
+<td>Expliciet</td>
+<td>Schrijvers, niet elkaar</td>
+</tr>
+<tr>
+<td><code>FOR KEY SHARE</code></td>
+<td>Foreign key-controle</td>
+<td>Alleen sleutelwijzigingen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Waarom <code>FOR KEY SHARE</code> bestaat:</strong> wanneer je een rij invoegt in <code>dienstverband</code>, controleert PostgreSQL of de bijbehorende <code>deelnemer</code> bestaat. Daarvoor neemt hij een lichte lock op die deelnemersrij. Zonder <code>FOR KEY SHARE</code> zou elke invoeging in een kindtabel de ouderrij blokkeren voor updates — en dat zou op een tabel als <code>deelnemer</code> onwerkbaar zijn.</p>
+<p><strong>Rijlocks staan niet in <code>pg_locks</code> zolang er geen conflict is.</strong> Ze worden opgeslagen in de rij zelf (het <code>xmax</code>-veld uit deel 12). Pas als een tweede sessie erop wacht, verschijnt er een wachtrecord. Dat maakt de diagnose lastiger: je kunt niet zomaar opvragen welke rijen vergrendeld zijn.</p>
+<hr>
+<h2>6. Diagnose: wie blokkeert wie</h2>
+<p>De query die je bij een incident als eerste draait:</p>
+<pre><code class="language-sql">SELECT
+    a.pid,
+    a.usename,
+    a.state,
+    now() - a.xact_start        AS transactieduur,
+    now() - a.state_change      AS in_deze_toestand,
+    a.wait_event_type,
+    a.wait_event,
+    pg_blocking_pids(a.pid)     AS wordt_geblokkeerd_door,
+    left(a.query, 100)          AS query
+FROM pg_stat_activity a
+WHERE a.backend_type = 'client backend'
+  AND (a.state &lt;&gt; 'idle' OR a.xact_start IS NOT NULL)
+ORDER BY a.xact_start;
+</code></pre>
+<p><code>pg_blocking_pids()</code> is het gereedschap dat je zoekt: het geeft de proces-id’s terug die deze sessie tegenhouden.</p>
+<p><strong>De hoofdschuldige vinden:</strong> zoek de sessie waarvoor <code>pg_blocking_pids()</code> <strong>leeg</strong> is en die zelf anderen blokkeert. Dat is de wortel van de boom.</p>
+<pre><code class="language-sql">SELECT pid, state, now() - xact_start AS duur, left(query, 80)
+FROM pg_stat_activity
+WHERE pid IN (
+    SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity
+)
+AND cardinality(pg_blocking_pids(pid)) = 0;
+</code></pre>
+<p><strong>Ingrijpen:</strong></p>
+<pre><code class="language-sql">SELECT pg_cancel_backend(12345);      -- annuleert de query, transactie blijft
+SELECT pg_terminate_backend(12345);   -- beëindigt de sessie
+</code></pre>
+<p>Probeer altijd eerst <code>pg_cancel_backend</code>. Bij een sessie in <code>idle in transaction</code> helpt dat niet — er draait geen query om te annuleren — en dan is <code>pg_terminate_backend</code> de enige optie.</p>
+<p><strong>Wat je in de log wilt hebben</strong> (deel 11):</p>
+<pre><code>log_lock_waits = on
+deadlock_timeout = 1s
+</code></pre>
+<p><code>log_lock_waits</code> logt elke sessie die langer dan <code>deadlock_timeout</code> op een lock wacht, mét de blokkerende query. Zonder deze instelling is een vergrendelingsincident achteraf vrijwel niet te reconstrueren — en achteraf is precies wanneer je het onderzoekt.</p>
+<hr>
+<h2>7. lock_timeout en de andere timeouts</h2>
+<p>Vier timeouts, met elk een ander doel. Ze verwarren is een veelgemaakte fout.</p>
+<table>
+<thead>
+<tr>
+<th>Instelling</th>
+<th>Beëindigt</th>
+<th>Gebruik voor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>statement_timeout</code></td>
+<td>Een query die te lang <strong>draait</strong></td>
+<td>Bescherming tegen ontspoorde query’s</td>
+</tr>
+<tr>
+<td><code>lock_timeout</code></td>
+<td>Een query die te lang <strong>wacht op een lock</strong></td>
+<td><strong>Migraties</strong></td>
+</tr>
+<tr>
+<td><code>idle_in_transaction_session_timeout</code></td>
+<td>Een sessie met een openstaande transactie die niets doet</td>
+<td>Bloat en locks (deel 7, 12)</td>
+</tr>
+<tr>
+<td><code>transaction_timeout</code></td>
+<td>Een transactie die in totaal te lang duurt</td>
+<td>Harde bovengrens</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>lock_timeout</code> is de belangrijkste van dit dagdeel.</strong> Hij lost het scenario uit paragraaf 4 op:</p>
+<pre><code class="language-sql">SET lock_timeout = '3s';
+ALTER TABLE deelnemer ADD COLUMN e_mailadres text;
+</code></pre>
+<p>Krijgt de <code>ALTER TABLE</code> de lock niet binnen drie seconden, dan faalt hij met een foutmelding — en gaat hij níét in de wachtrij staan waar hij alles achter zich ophoudt. Je probeert het gewoon opnieuw.</p>
+<blockquote>
+<p><strong>Vuistregel: elke DDL op productie draait met <code>lock_timeout</code>. Zonder uitzondering.</strong></p>
+</blockquote>
+<p>Drie seconden is een gangbare waarde: lang genoeg om de lock te krijgen als de tabel rustig is, kort genoeg om geen schade aan te richten als dat niet zo is.</p>
+<p>Per rol instellen (deel 11):</p>
+<pre><code class="language-sql">ALTER ROLE portaal_app SET statement_timeout = '10s';
+ALTER ROLE rapportage  SET statement_timeout = '15min';
+ALTER ROLE migratie    SET lock_timeout = '3s';
+</code></pre>
+<hr>
+<h2>8. Deadlocks op schaal</h2>
+<p>Uit deel 7: twee transacties die op elkaar wachten. PostgreSQL detecteert dit na <code>deadlock_timeout</code> (standaard 1 seconde) en breekt er één af.</p>
+<p>Op productieschaal komen er drie dingen bij.</p>
+<p><strong>Deadlocks tussen meer dan twee sessies.</strong> De detectie werkt ook bij een cyclus van vier of vijf, en die zijn moeilijker te doorgronden. De log toont de hele cyclus — lees hem helemaal.</p>
+<p><strong>Deadlocks via foreign keys.</strong> Twee sessies die verschillende kindrijen invoegen die naar dezelfde ouderrijen verwijzen, kunnen elkaar via de <code>FOR KEY SHARE</code>-locks blokkeren. Dat is contra-intuïtief omdat geen van beide de ouderrij wijzigt.</p>
+<p><strong>Deadlocks via indexen bij <code>INSERT</code>.</strong> Twee gelijktijdige invoegingen met dezelfde unieke sleutel blokkeren elkaar tot de eerste commit of terugdraait.</p>
+<p><strong>De maatregelen, in volgorde van effectiviteit:</strong></p>
+<ol>
+<li><strong>Vaste benaderingsvolgorde.</strong> Binnen een transactie rijen altijd in oplopende volgorde van hun primaire sleutel benaderen. Dit is verreweg de belangrijkste, en het is een teamafspraak, geen instelling.</li>
+<li><strong>Korte transacties.</strong> Hoe korter de lock, hoe kleiner het venster.</li>
+<li><strong>Batchbewerkingen sorteren.</strong> Een <code>UPDATE … WHERE id IN (…)</code> kan rijen in willekeurige volgorde raken; sorteer de lijst.</li>
+<li><strong>Retry-logica.</strong> Bij gelijktijdige belasting nooit volledig uit te sluiten. Zie dagdeel B, paragraaf 16.</li>
+</ol>
+<p>Meten hoe vaak het gebeurt:</p>
+<pre><code class="language-sql">SELECT datname, deadlocks FROM pg_stat_database WHERE datname = current_database();
+</code></pre>
+<p>Een enkele deadlock per week is normaal. Tientallen per dag wijzen op een ontwerpprobleem — vrijwel altijd punt 1.</p>
+<hr>
+<h2>9. Advisory locks</h2>
+<p>Soms wil je coördineren over iets dat geen rij is: <em>“slechts één proces mag de nachtelijke batch draaien”</em>.</p>
+<pre><code class="language-sql">-- Sessieniveau: blijft tot je hem vrijgeeft of de sessie sluit
+SELECT pg_advisory_lock(12345);
+SELECT pg_advisory_unlock(12345);
+
+-- Niet wachten, alleen proberen
+SELECT pg_try_advisory_lock(12345);   -- true of false
+
+-- Transactieniveau: valt vanzelf vrij bij commit of rollback
+SELECT pg_advisory_xact_lock(12345);
+</code></pre>
+<p>De sleutel is een getal dat jij kiest; PostgreSQL kent er geen betekenis aan toe. Spreek de nummering af en leg hem vast, anders botsen twee toepassingen op hetzelfde getal.</p>
+<p><strong>Waar je ze bij Meridiaan voor gebruikt:</strong></p>
+<ul>
+<li>Zorgen dat de maandelijkse premienotarun maar één keer tegelijk draait, ook als iemand hem per ongeluk twee keer start.</li>
+<li>Een migratiescript dat niet gelijktijdig mag draaien op meerdere applicatieservers.</li>
+</ul>
+<p><strong>Waarschuwing:</strong> <code>pg_advisory_lock</code> op sessieniveau valt <strong>niet</strong> vanzelf vrij bij een <code>ROLLBACK</code>. In combinatie met connection pooling (deel 19) is dat gevaarlijk: de verbinding gaat terug naar de pool met de lock er nog op. <strong>Gebruik in gepoolde omgevingen de <code>_xact_</code>-variant</strong>, die bij het eind van de transactie vanzelf vrijvalt.</p>
+<hr>
+<h2>10. DDL en locks</h2>
+<p>Hier betaalt het indexplan uit deel 14 zich uit — of niet.</p>
+<table>
+<thead>
+<tr>
+<th>Opdracht</th>
+<th>Lock</th>
+<th>Duur van de lock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CREATE INDEX</code></td>
+<td><code>SHARE</code></td>
+<td>De hele bouwtijd; schrijvers wachten</td>
+</tr>
+<tr>
+<td><code>CREATE INDEX CONCURRENTLY</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Lang, maar schrijvers gaan door</td>
+</tr>
+<tr>
+<td><code>DROP INDEX</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>Kort</td>
+</tr>
+<tr>
+<td><code>DROP INDEX CONCURRENTLY</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Kort</td>
+</tr>
+<tr>
+<td><code>REINDEX</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>De hele bouwtijd</td>
+</tr>
+<tr>
+<td><code>REINDEX CONCURRENTLY</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Lang, niet blokkerend</td>
+</tr>
+<tr>
+<td><code>ALTER TABLE ADD COLUMN</code> (zonder volatile default)</td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>Zeer kort</td>
+</tr>
+<tr>
+<td><code>ALTER TABLE ALTER TYPE</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><strong>De hele herschrijving</strong></td>
+</tr>
+<tr>
+<td><code>ALTER TABLE ADD CONSTRAINT … NOT VALID</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>Zeer kort</td>
+</tr>
+<tr>
+<td><code>VALIDATE CONSTRAINT</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>De hele scan, niet blokkerend</td>
+</tr>
+<tr>
+<td><code>VACUUM</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Lang, niet blokkerend</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>De hele herschrijving</td>
+</tr>
+<tr>
+<td><code>TRUNCATE</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>Kort</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Het patroon dat hieruit volgt:</strong> een korte <code>ACCESS EXCLUSIVE</code>-lock is meestal acceptabel — als je hem krijgt. Een lange <code>ACCESS EXCLUSIVE</code>-lock is dat nooit.</p>
+<p>En uit paragraaf 4: <strong>ook een korte lock is gevaarlijk als je erop moet wachten.</strong> Dat is waarom <code>ADD COLUMN</code>, dat zelf twee milliseconden kost, alsnog een productie-incident kan veroorzaken.</p>
+<p><strong>Wat <code>CREATE INDEX CONCURRENTLY</code> bijzonder maakt:</strong> hij moet wachten tot alle transacties die vóór hem begonnen zijn, klaar zijn — twee keer, want hij doorloopt de tabel twee keer. Eén sessie in <code>idle in transaction</code> kan een indexbouw daardoor uren ophouden zonder dat hij iets blokkeert. Dat is het probleem uit deel 12 in een nieuwe gedaante.</p>
+<hr>
+<h2>11. Het veilige migratiepatroon</h2>
+<p>Alles uit dagdeel A samengebracht. Dit is het patroon dat je meeneemt naar je eigen werk.</p>
+<p><strong>Vooraf:</strong></p>
+<ol>
+<li>Controleer of er lange transacties lopen:</li>
+</ol>
+<pre><code class="language-sql">SELECT pid, state, now() - xact_start AS duur, left(query,80)
+FROM pg_stat_activity
+WHERE xact_start &lt; now() - INTERVAL '1 minute'
+ORDER BY xact_start;
+</code></pre>
+<ol start="2">
+<li>Kies een moment buiten de piek.</li>
+<li>Weet welke lock je opdracht neemt en hoe lang.</li>
+</ol>
+<p><strong>Tijdens:</strong></p>
+<pre><code class="language-sql">SET lock_timeout = '3s';
+SET statement_timeout = '0';        -- de opdracht zelf mag lang duren
+
+BEGIN;
+ALTER TABLE deelnemer ADD COLUMN e_mailadres text;
+COMMIT;
+</code></pre>
+<p>Faalt hij op de lock, dan is er niets gebeurd. Wacht een minuut en probeer opnieuw. <strong>Een migratie die vijf keer moet worden geprobeerd, is een geslaagde migratie</strong> — beter dan één poging die het portaal twintig minuten plat legt.</p>
+<p><strong>Voor een lange bewerking: opsplitsen.</strong></p>
+<p>In plaats van één <code>ALTER TABLE ADD CONSTRAINT</code> die de hele tabel scant onder <code>ACCESS EXCLUSIVE</code>:</p>
+<pre><code class="language-sql">-- Stap 1: kort ACCESS EXCLUSIVE, geen scan
+ALTER TABLE dienstverband
+    ADD CONSTRAINT dv_salaris_positief CHECK (jaarsalaris &gt;= 0) NOT VALID;
+
+-- Stap 2: volledige scan, maar SHARE UPDATE EXCLUSIVE — schrijvers gaan door
+ALTER TABLE dienstverband VALIDATE CONSTRAINT dv_salaris_positief;
+</code></pre>
+<p>Tussen stap 1 en 2 geldt de constraint al voor <strong>nieuwe</strong> rijen; stap 2 controleert de bestaande. Dit is het belangrijkste zero-downtime-patroon, en het volledige repertoire komt in deel 22.</p>
+<p><strong>Achteraf:</strong></p>
+<ul>
+<li>Controleer <code>indisvalid</code> bij een indexbouw (deel 14).</li>
+<li>Kijk in de log naar <code>log_lock_waits</code>-regels: heeft iemand gewacht, en hoe lang?</li>
+</ul>
+<hr>
+<h2>12. Samenvatting dagdeel A</h2>
+<p>De vijf dingen die blijven hangen:</p>
+<ol>
+<li><strong>Vergrendeling ziet er niet uit als traagheid.</strong> Lage CPU, lage I/O, en toch reageert niets.</li>
+<li><strong>De wachtrij is het echte gevaar.</strong> Eén wachtende <code>ALTER TABLE</code> blokkeert alles erachter, ook query’s die niet met de oorspronkelijke sessie in conflict zijn.</li>
+<li><strong><code>pg_blocking_pids()</code> wijst de schuldige aan.</strong> Zoek de sessie die niemand blokkeert en zelf blokkeert.</li>
+<li><strong><code>lock_timeout</code> bij elke DDL.</strong> Zonder uitzondering.</li>
+<li><strong>Deadlocks voorkom je met een vaste benaderingsvolgorde</strong>, niet met een instelling.</li>
+</ol>
+<hr>
+<hr>
+<h1>DAGDEEL B — Isolatie en gelijktijdige werklast</h1>
+<h2>13. Leerdoelen dagdeel B</h2>
+<p>Na dagdeel B kun je:</p>
+<ul>
+<li>de isolatieniveaus toepassen op een productiewerklast en de keuze motiveren;</li>
+<li>uitleggen hoe Serializable Snapshot Isolation werkt en wat het kost;</li>
+<li>retry-logica ontwerpen die serialisatiefouten en deadlocks correct afhandelt;</li>
+<li>een wachtrijpatroon bouwen dat over meerdere verwerkers schaalt;</li>
+<li>hotspots herkennen waar veel sessies dezelfde rij willen, en drie oplossingen afwegen;</li>
+<li>de gevolgen van connection pooling voor transactiegedrag benoemen;</li>
+<li>gelijktijdigheid monitoren en vaststellen of hij een probleem wordt.</li>
+</ul>
+<hr>
+<h2>14. Isolatieniveaus, herzien</h2>
+<p>Uit deel 7: read committed (standaard), repeatable read, serializable. Nu de vraag welk niveau waar hoort in een productiewerklast.</p>
+<table>
+<thead>
+<tr>
+<th>Werklast bij Meridiaan</th>
+<th>Niveau</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Portaal: gegevens tonen</td>
+<td>Read committed</td>
+<td>Geen herhaald lezen; snelheid telt</td>
+</tr>
+<tr>
+<td>Portaal: adreswijziging</td>
+<td>Read committed + versiekolom</td>
+<td>Optimistisch vergrendelen (deel 7)</td>
+</tr>
+<tr>
+<td>Mutatieverwerking</td>
+<td>Read committed + <code>SKIP LOCKED</code></td>
+<td>Elke rij hoort bij één verwerker</td>
+</tr>
+<tr>
+<td>Kwartaalrapportage</td>
+<td><strong>Repeatable read</strong></td>
+<td>Deeltotalen moeten optellen</td>
+</tr>
+<tr>
+<td>Premienotarun</td>
+<td>Read committed per partij</td>
+<td>Atomair per werkgever, niet over het geheel</td>
+</tr>
+<tr>
+<td>Waardeoverdracht</td>
+<td><strong>Serializable</strong></td>
+<td>Correctheid boven doorvoer</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De vraag die de keuze bepaalt</strong> is niet “hoe belangrijk is dit” maar:</p>
+<blockquote>
+<p><em>Leest deze transactie iets waarop hij vervolgens een besluit baseert dat door een gelijktijdige transactie ongeldig kan worden gemaakt?</em></p>
+</blockquote>
+<p>Bij het tonen van gegevens: nee. Bij het rapporteren van optellende deeltotalen: ja, en dan is repeatable read genoeg. Bij <em>“controleer of het saldo toereikend is en boek dan af”</em>: ja, en dan is een momentopname niet genoeg — twee transacties kunnen elk vaststellen dat het saldo toereikend is.</p>
+<p>Dat laatste is het geval waarvoor serializable bestaat.</p>
+<hr>
+<h2>15. Serializable Snapshot Isolation</h2>
+<p>PostgreSQL implementeert <code>SERIALIZABLE</code> met <strong>SSI</strong>. In tegenstelling tot veel andere systemen doet het dat <strong>zonder extra locks</strong>: er wordt niets geblokkeerd. In plaats daarvan houdt PostgreSQL bij welke afhankelijkheden er tussen transacties ontstaan, en breekt hij een transactie af zodra het patroon niet meer overeenkomt met enige seriële volgorde.</p>
+<pre><code class="language-sql">BEGIN ISOLATION LEVEL SERIALIZABLE;
+SELECT sum(bedrag) FROM aanspraak WHERE deelnemer_id = 42;
+-- op basis daarvan:
+INSERT INTO aanspraak (deelnemer_id, ...) VALUES (42, ...);
+COMMIT;   -- kan hier falen
+</code></pre>
+<p>De foutmelding:</p>
+<pre><code>ERROR: could not serialize access due to read/write dependencies among transactions
+HINT: The transaction might succeed if retried.
+</code></pre>
+<p><strong>Wat SSI je geeft:</strong> de garantie dat het eindresultaat overeenkomt met een of andere volgorde waarin de transacties na elkaar waren uitgevoerd. Je hoeft geen locks te bedenken en geen benaderingsvolgorde af te spreken; je schrijft de logica alsof je alleen bent.</p>
+<p><strong>Wat het kost:</strong></p>
+<ol>
+<li><strong>Retry-logica is verplicht.</strong> Zonder afhandeling van de serialisatiefout krijgt de gebruiker een technische foutmelding en is de handeling niet uitgevoerd.</li>
+<li><strong>Overhead.</strong> PostgreSQL houdt per transactie de gelezen rijen bij (predicate locks). Bij grote leesbewerkingen kan dat geheugen kosten, en bij overloop schakelt hij over op grovere granulariteit — wat leidt tot méér valse afbrekingen.</li>
+<li><strong>Valse afbrekingen.</strong> SSI is conservatief: hij breekt soms transacties af die in werkelijkheid geen conflict hadden.</li>
+</ol>
+<p><strong>Praktische aanbevelingen:</strong></p>
+<ul>
+<li>Gebruik serializable voor de handelingen die het nodig hebben, niet voor alles.</li>
+<li>Houd serializable-transacties <strong>kort en smal</strong>: hoe minder ze lezen, hoe minder predicate locks en hoe minder valse afbrekingen.</li>
+<li>Zet <code>default_transaction_isolation</code> niet globaal op serializable tenzij elke applicatie retry-logica heeft.</li>
+<li>Markeer transacties die alleen lezen als <code>READ ONLY</code> — dan kan PostgreSQL ze goedkoper afhandelen:</li>
+</ul>
+<pre><code class="language-sql">BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE;
+</code></pre>
+<p><code>DEFERRABLE</code> laat de transactie wachten tot hij gegarandeerd niet meer kan falen. Voor een lange rapportage die correct moet zijn maar niet haast heeft, is dat een elegante oplossing: hij wordt nooit afgebroken en blokkeert niemand.</p>
+<hr>
+<h2>16. Retry-logica</h2>
+<p>Zonder retry is serializable onbruikbaar en zijn deadlocks een storing. Met retry zijn beide routine.</p>
+<p><strong>Welke fouten je opvangt:</strong></p>
+<table>
+<thead>
+<tr>
+<th>SQLSTATE</th>
+<th>Betekent</th>
+<th>Opnieuw proberen?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>40001</code></td>
+<td>Serialisatiefout</td>
+<td><strong>Ja</strong></td>
+</tr>
+<tr>
+<td><code>40P01</code></td>
+<td>Deadlock</td>
+<td><strong>Ja</strong></td>
+</tr>
+<tr>
+<td><code>55P03</code></td>
+<td>Lock niet beschikbaar (<code>NOWAIT</code>)</td>
+<td>Ja, met pauze</td>
+</tr>
+<tr>
+<td><code>23505</code></td>
+<td>Unieke sleutel geschonden</td>
+<td>Nee — dit is een bedrijfsregel</td>
+</tr>
+<tr>
+<td><code>23503</code></td>
+<td>Foreign key geschonden</td>
+<td>Nee</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Het patroon:</strong></p>
+<pre><code>poging = 0
+zolang poging &lt; 5:
+    start transactie
+    probeer:
+        voer de hele bedrijfshandeling uit
+        commit
+        klaar
+    bij fout 40001 of 40P01:
+        rollback
+        wacht (50 ms × 2^poging, plus een willekeurige spreiding)
+        poging = poging + 1
+    bij andere fout:
+        rollback
+        geef door aan de aanroeper
+geef op met een begrijpelijke melding
+</code></pre>
+<p>Drie details die ertoe doen:</p>
+<p><strong>De hele transactie opnieuw</strong>, niet alleen de mislukte opdracht. De gegevens waarop je besluit hebt gebaseerd, zijn veranderd — dat is juist de reden dat je bent afgebroken.</p>
+<p><strong>Exponentieel oplopende wachttijd met spreiding.</strong> Zonder spreiding proberen alle afgebroken transacties het op hetzelfde moment opnieuw en botsen ze weer.</p>
+<p><strong>Een bovengrens.</strong> Oneindig opnieuw proberen verplaatst een fout naar een oneindige lus. Na vijf pogingen geef je op met een melding die de gebruiker begrijpt: <em>“het lukte niet om je wijziging door te voeren, probeer het opnieuw”</em>.</p>
+<p><strong>Wat je nooit doet:</strong> de fout onderdrukken en doorgaan. Een genegeerde serialisatiefout betekent dat een bedrijfshandeling niet is uitgevoerd terwijl de gebruiker denkt van wel.</p>
+<hr>
+<h2>17. Wachtrijpatronen op schaal</h2>
+<p>Uit deel 7: <code>SKIP LOCKED</code> voor de mutatieverwerking. Op productieschaal met vier verwerkers en 287.000 openstaande mutaties komen er details bij.</p>
+<pre><code class="language-sql">BEGIN;
+
+WITH pakket AS (
+    SELECT mutatie_id FROM mutatie
+    WHERE verwerkt_op IS NULL
+    ORDER BY aangemeld_op
+    LIMIT 50
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE mutatie m
+   SET verwerkt_op = now()
+  FROM pakket p
+ WHERE m.mutatie_id = p.mutatie_id
+RETURNING m.*;
+
+COMMIT;
+</code></pre>
+<p>Waarom deze vorm:</p>
+<p><strong><code>LIMIT 50</code> in plaats van 1.</strong> Per pakket één transactie in plaats van vijftig. Minder overhead, minder commits. Maar niet te groot: hoe langer de transactie, hoe langer de locks.</p>
+<p><strong>De partiële index uit deel 14</strong> maakt dit werkbaar. Zonder die index scant elke verwerker de hele tabel om vijftig rijen te vinden.</p>
+<p><strong><code>RETURNING</code></strong> levert de verwerkte rijen meteen terug, zodat de applicatie ze kan afhandelen zonder een tweede query.</p>
+<p><strong>Vier valkuilen die je op schaal tegenkomt:</strong></p>
+<ol>
+<li><strong>Te grote pakketten.</strong> Bij <code>LIMIT 1000</code> houdt elke verwerker duizend rijen vergrendeld gedurende de hele verwerking. Bij een fout gaat het hele pakket terug.</li>
+<li><strong>Verwerking binnen de transactie.</strong> Als het afhandelen van een mutatie een externe aanroep vereist, hoort die <strong>buiten</strong> de transactie (deel 7, paragraaf 18). Anders houd je locks vast terwijl je op een webservice wacht.</li>
+<li><strong>Geen voortgang bij een gifpakket.</strong> Een mutatie die altijd faalt, wordt eindeloos opnieuw opgepakt. Voeg een pogingenteller toe en zet hem na drie mislukkingen apart.</li>
+<li><strong><code>ORDER BY</code> garandeert geen verwerkvolgorde.</strong> Verwerker 2 kan een jongere mutatie afronden vóór verwerker 1 klaar is met een oudere. Is strikte volgorde een eis, dan is dit patroon ongeschikt.</li>
+</ol>
+<hr>
+<h2>18. Hotspots: als iedereen dezelfde rij wil</h2>
+<p>Het probleem dat pas op schaal ontstaat.</p>
+<p>Stel dat Meridiaan een teller bijhoudt: <em>aantal verwerkte mutaties vandaag</em>, in één rij.</p>
+<pre><code class="language-sql">UPDATE teller SET aantal = aantal + 1 WHERE naam = 'mutaties_vandaag';
+</code></pre>
+<p>Met vier verwerkers gaat dat goed. Met honderdvijftig gelijktijdige sessies staat iedereen in de rij voor dezelfde rij, en de doorvoer wordt bepaald door hoe snel die ene rij kan worden bijgewerkt — ongeacht hoeveel cores je hebt.</p>
+<p>Dit heet <strong>lock contention op een hotspot</strong>, en het is niet op te lossen met een index, meer geheugen of snellere schijven.</p>
+<p><strong>Drie oplossingen, met hun afruil:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Aanpak</th>
+<th>Hoe</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Opdelen</strong></td>
+<td>Honderd tellerrijen; elke sessie werkt er willekeurig één bij; optellen bij het lezen</td>
+<td>Lezen wordt duurder</td>
+</tr>
+<tr>
+<td><strong>Invoegen in plaats van bijwerken</strong></td>
+<td>Elke gebeurtenis is een rij; periodiek samenvatten</td>
+<td>Meer opslag, opruimen nodig</td>
+</tr>
+<tr>
+<td><strong>Buiten de database</strong></td>
+<td>Teller in een cache, periodiek wegschrijven</td>
+<td>Verlies bij een crash</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De tweede is meestal de beste.</strong> Invoegingen concurreren niet met elkaar — elke rij gaat naar een eigen plek. Een periodieke samenvatting (een materialized view, deel 8) levert het getal op. Dat is bovendien het patroon dat je in deel 16 tegenkomt bij partitionering en in niveau 3 bij event sourcing.</p>
+<p><strong>Herkennen van een hotspot:</strong> in <code>pg_stat_activity</code> staan veel sessies met <code>wait_event_type = 'Lock'</code> en <code>wait_event = 'transactionid'</code>, allemaal wachtend op dezelfde tabel. In <code>pg_stat_user_tables</code> heeft die tabel een extreem hoge <code>n_tup_upd</code> in verhouding tot zijn omvang.</p>
+<hr>
+<h2>19. Verbindingen en transactiegedrag</h2>
+<p>Een vooruitwijzing naar deel 19, met wat je nu al moet weten.</p>
+<p><strong>Connection pooling verandert de aannames over sessies.</strong> In een gepoolde omgeving is “jouw” verbinding niet van jou: hij komt uit een pool en gaat terug.</p>
+<p>Wat daardoor niet meer werkt zoals verwacht:</p>
+<table>
+<thead>
+<tr>
+<th>Constructie</th>
+<th>Probleem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SET</code> op sessieniveau</td>
+<td>Blijft hangen voor de volgende gebruiker van die verbinding</td>
+</tr>
+<tr>
+<td><code>pg_advisory_lock</code> (sessieniveau)</td>
+<td>Valt niet vrij bij rollback; gaat mee terug in de pool</td>
+</tr>
+<tr>
+<td>Tijdelijke tabellen</td>
+<td>Blijven bestaan; de volgende sessie ziet ze</td>
+</tr>
+<tr>
+<td>Prepared statements</td>
+<td>Werken niet in transaction-pooling modus</td>
+</tr>
+<tr>
+<td><code>LISTEN</code> / <code>NOTIFY</code></td>
+<td>Idem</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De regel:</strong> in een gepoolde omgeving gebruik je <code>SET LOCAL</code> in plaats van <code>SET</code>, en <code>pg_advisory_xact_lock</code> in plaats van <code>pg_advisory_lock</code>. Beide vallen vanzelf vrij bij het eind van de transactie.</p>
+<p>Dit is een van de meest voorkomende oorzaken van fouten die “willekeurig” lijken: een instelling die van een vorige gebruiker is blijven staan.</p>
+<hr>
+<h2>20. Monitoring van gelijktijdigheid</h2>
+<p>Wat je in de gaten houdt om te weten of gelijktijdigheid een probleem wordt:</p>
+<pre><code class="language-sql">-- Sessies per toestand
+SELECT state, wait_event_type, count(*)
+FROM pg_stat_activity WHERE backend_type = 'client backend'
+GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- Langste transactie
+SELECT max(now() - xact_start) FROM pg_stat_activity WHERE xact_start IS NOT NULL;
+
+-- Deadlocks sinds de laatste reset
+SELECT datname, deadlocks, conflicts FROM pg_stat_database
+WHERE datname = current_database();
+
+-- Wachtende sessies met hun blokkeerder
+SELECT pid, pg_blocking_pids(pid), left(query, 60)
+FROM pg_stat_activity WHERE cardinality(pg_blocking_pids(pid)) &gt; 0;
+</code></pre>
+<p><strong>De drempels die je instelt:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Waarschuwing bij</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sessies met <code>wait_event_type = 'Lock'</code></td>
+<td>Meer dan 5, of langer dan 30 seconden</td>
+</tr>
+<tr>
+<td>Langste transactieduur</td>
+<td>Boven 5 minuten</td>
+</tr>
+<tr>
+<td>Sessies in <code>idle in transaction</code></td>
+<td>Meer dan 2, of langer dan 1 minuut</td>
+</tr>
+<tr>
+<td>Deadlocks per dag</td>
+<td>Meer dan 5</td>
+</tr>
+<tr>
+<td>Verhouding actief / totaal verbonden</td>
+<td>Boven 50% actief</td>
+</tr>
+</tbody>
+</table>
+<p>Dat laatste is een vroeg signaal: als een groot deel van de verbindingen tegelijk actief is, nadert de server de grens waarboven de doorvoer daalt (deel 11).</p>
+<hr>
+<h2>21. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DDL zonder <code>lock_timeout</code></td>
+<td>Eén opdracht legt de hele tabel stil</td>
+<td>Altijd <code>lock_timeout</code></td>
+</tr>
+<tr>
+<td><code>statement_timeout</code> gebruiken waar <code>lock_timeout</code> hoort</td>
+<td>De opdracht wordt afgebroken terwijl hij nuttig werk deed</td>
+<td>Ken het verschil</td>
+</tr>
+<tr>
+<td>Vergrendeling diagnosticeren als traagheid</td>
+<td>Verkeerde maatregel (index)</td>
+<td><code>wait_event_type</code> controleren</td>
+</tr>
+<tr>
+<td>Alleen naar de wachtende sessie kijken</td>
+<td>Symptoom in plaats van oorzaak</td>
+<td><code>pg_blocking_pids()</code>, zoek de wortel</td>
+</tr>
+<tr>
+<td><code>serializable</code> zonder retry-logica</td>
+<td>Zichtbare fouten voor gebruikers</td>
+<td>Retry met spreiding en bovengrens</td>
+</tr>
+<tr>
+<td>Retry zonder spreiding</td>
+<td>Alle transacties botsen opnieuw</td>
+<td>Exponentieel plus willekeurig</td>
+</tr>
+<tr>
+<td>Alleen de mislukte opdracht opnieuw</td>
+<td>Besluit op verouderde gegevens</td>
+<td>Hele transactie opnieuw</td>
+</tr>
+<tr>
+<td><code>pg_advisory_lock</code> in een gepoolde omgeving</td>
+<td>Lock blijft hangen in de pool</td>
+<td><code>pg_advisory_xact_lock</code></td>
+</tr>
+<tr>
+<td><code>SET</code> in plaats van <code>SET LOCAL</code> bij pooling</td>
+<td>Instelling lekt naar de volgende gebruiker</td>
+<td><code>SET LOCAL</code></td>
+</tr>
+<tr>
+<td>Teller in één rij bij hoge gelijktijdigheid</td>
+<td>Doorvoer bepaald door één rij</td>
+<td>Invoegen en samenvatten</td>
+</tr>
+<tr>
+<td>Externe aanroep binnen een transactie</td>
+<td>Locks vastgehouden tijdens het wachten</td>
+<td>Buiten de transactie</td>
+</tr>
+<tr>
+<td><code>pg_terminate_backend</code> als eerste middel</td>
+<td>Sessie verliest werk onnodig</td>
+<td>Eerst <code>pg_cancel_backend</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>22. Aansluiting op de certificering en kernbegrippen</h2>
+<p><strong>Voor de EDB PostgreSQL Professional-certificering paraat:</strong></p>
+<ul>
+<li>de acht tabellocktypen en de conflictmatrix;</li>
+<li>de werking van de lockwachtrij;</li>
+<li><code>pg_locks</code>, <code>pg_blocking_pids()</code>, <code>pg_cancel_backend</code>, <code>pg_terminate_backend</code>;</li>
+<li>de vier timeouts en hun verschillende doelen;</li>
+<li>deadlockdetectie en preventie;</li>
+<li>advisory locks, sessie- tegenover transactieniveau;</li>
+<li>welke lock elke DDL-opdracht neemt;</li>
+<li>het <code>NOT VALID</code> / <code>VALIDATE</code>-patroon;</li>
+<li>de drie isolatieniveaus en SSI;</li>
+<li><code>SKIP LOCKED</code> en <code>RETURNING</code> in wachtrijpatronen.</li>
+</ul>
+<p><strong>Kernbegrippen</strong></p>
+<p><strong>Lockwachtrij</strong> — geordende rij van wachtende locks; blokkeert ook niet-conflicterende opdrachten erachter.
+<strong><code>pg_blocking_pids()</code></strong> — geeft de processen die een sessie tegenhouden.
+<strong><code>lock_timeout</code></strong> — maximale wachttijd op een lock; onmisbaar bij DDL.
+<strong><code>FOR KEY SHARE</code></strong> — lichte rijlock bij foreign key-controles.
+<strong>SSI</strong> — Serializable Snapshot Isolation; serialiseerbaarheid zonder locks.
+<strong>Predicate lock</strong> — administratie van wat een serializable transactie heeft gelezen.
+<strong>Valse afbreking</strong> — serialisatiefout bij transacties die in werkelijkheid niet conflicteerden.
+<strong>Retry-logica</strong> — opnieuw uitvoeren van een afgebroken transactie, met oplopende en gespreide wachttijd.
+<strong>Hotspot</strong> — rij waarop veel sessies tegelijk wachten.
+<strong><code>SET LOCAL</code></strong> — instelling die aan het eind van de transactie vervalt; vereist bij pooling.
+<strong>Advisory lock</strong> — lock op een zelfgekozen getal, buiten de gegevens om.</p>
+<hr>
+<p><em>Volgende deel: partitionering. Je weet nu wat er gebeurt als honderdvijftig sessies tegelijk werken. Volgende keer maken we de grootste tabel hanteerbaar — en dan blijkt dat het weggooien van oude gegevens ineens gratis wordt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">69 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">32 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">540 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-14-geavanceerde-indexering/reader.html">&larr; Deel 14 — Geavanceerde indexering</a><a class="dbm-prevnext next" href="../deel-16-partitionering/reader.html">Deel 16 — Partitionering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

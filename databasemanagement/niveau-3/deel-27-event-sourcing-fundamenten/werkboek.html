@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Event sourcing: fundamenten — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 27 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 27 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 27: Event sourcing — fundamenten</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">CREATE SCHEMA IF NOT EXISTS oefening27;
+SET search_path TO oefening27, public;
+</code></pre>
+<p>Tijdsindicatie: circa 120 minuten. Dit deel is overwegend conceptueel/ontwerpgericht; opdrachten met SQL bouwen een eenvoudige event store, geen volledig productiesysteem (dat is deel 28).</p>
+<hr>
+<h2>Opdracht 27.1 — De aanname zelf ervaren (10 min, individueel)</h2>
+<p>a) Voer een <code>UPDATE</code> uit op een testtabel en probeer daarna de oude waarde terug te vinden via een gewone <code>SELECT</code>. Lukt dat?
+b) Wat zou je vooraf hebben moeten doen om de oude waarde toch terug te kunnen vinden?
+c) Noem twee eerdere delen uit de cursus waarin een vergelijkbare vraag (“wat was de waarde vroeger”) al aan bod kwam, en welk antwoord daar werd gegeven.</p>
+<hr>
+<h2>Opdracht 27.2 — Events versus commando’s (15 min, tweetallen)</h2>
+<p>Herschrijf elk van deze “commando’s” naar een correct geformuleerd event (voltooid feit, verleden tijd):</p>
+<p>a) “Wijzig salaris naar 45000”
+b) “Beëindig dienstverband”
+c) “Corrigeer BSN”
+d) “Verwerk premiebetaling van 500 euro”
+e) Bedenk zelf een vijfde, uit de Meridiaan-casus.</p>
+<hr>
+<h2>Opdracht 27.3 — Een event store bouwen (20 min, drietallen)</h2>
+<p>a) Maak de <code>events</code>-tabel naar het patroon uit paragraaf 5 van de reader.
+b) Voeg voor één fictief dienstverband (een zelfgekozen <code>aggregate_id</code>) een reeks van vier events toe: gestart, salariswijziging, deeltijdwijziging, beëindigd — met oplopende <code>volgnummer</code>.
+c) Probeer een vijfde event toe te voegen met een <code>volgnummer</code> dat al bestaat voor datzelfde aggregaat. Wat gebeurt er?
+d) Verklaar met paragraaf 5 waarom dat gedrag gewenst is.
+e) Probeer een bestaand event te <code>UPDATE</code>n. Zou je dat in een echte event store willen toestaan? Waarom (niet)?</p>
+<hr>
+<h2>Opdracht 27.4 — Een stream bevragen (15 min, tweetallen)</h2>
+<p>a) Haal de volledige stream van je dienstverband op, op volgorde.
+b) Bereken “met de hand” (in een query) wat het huidige salaris zou moeten zijn, gebaseerd op de laatste <code>SalarisGewijzigd</code>-gebeurtenis.
+c) Bereken wat het salaris was <strong>vóór</strong> de deeltijdwijziging (tijdreizen, met een datumgrens).
+d) Wat zou er gebeuren met je berekening in b) als er per ongeluk twee <code>SalarisGewijzigd</code>-events met hetzelfde <code>volgnummer</code> hadden bestaan? Verwijs naar de constraint uit opdracht 27.3.</p>
+<hr>
+<h2>Opdracht 27.5 — Een projectie bouwen (20 min, drietallen)</h2>
+<p>a) Bouw een materialized view die voor elk aggregaat in je <code>events</code>-tabel de “huidige stand” toont (laatste bekende salaris, laatste bekend deeltijdpercentage, of beëindigd).
+b) Voeg een nieuw event toe aan de stream. Is de materialized view meteen bijgewerkt?
+c) Ververs de materialized view. Klopt de stand nu?
+d) Wat zegt dit verschil (b versus c) over eventual consistency?
+e) Verwijder (uitsluitend voor deze oefening) de materialized view volledig en bouw hem opnieuw op vanaf de ruwe events. Werkt dat zonder gegevensverlies? Waarom is dat bij een traditionele, state-based tabel niet mogelijk als je de tabel zou verwijderen?</p>
+<hr>
+<h2>Opdracht 27.6 — CQRS herkennen (10 min, individueel)</h2>
+<p>a) Wijs in je eigen opzet uit opdracht 27.3-27.5 aan wat het “commando”-pad is en wat het “query”-pad is.
+b) Wat zou er veranderen als je besluit dat de leeskant (de projectie) op een aparte, read-only replica moet draaien (verwijs naar deel 18)?</p>
+<hr>
+<h2>Opdracht 27.7 — De terugblik toepassen (15 min, drietallen)</h2>
+<p>Voor elk van de volgende eerdere-deel-concepten: leg in eigen woorden uit hoe het concept vandaag terugkomt in event sourcing.</p>
+<p>a) Optimistisch vergrendelen (deel 7)
+b) Insert-only tabellen en bloat (deel 12)
+c) Het tellerrij-hotspot-probleem (deel 15)
+d) Partitioneren en <code>DROP TABLE</code> (deel 16)
+e) Materialized views (deel 8)</p>
+<hr>
+<h2>Opdracht 27.8 — Wel of niet event sourcing (15 min, drietallen)</h2>
+<p>Voor elk domein bij de Pensioenfederatie: zou je event sourcing aanraden? Waarom (niet)?</p>
+<p>a) De sectorcodetabel (referentiedata, deel 24).
+b) De aanspraakopbouw van een deelnemer.
+c) Het huidige e-mailadres van een deelnemer, gebruikt om notificaties te sturen.
+d) Het volledige verloop van een dienstverband, inclusief alle salariswijzigingen.
+e) Een tijdelijke sessietoken-tabel voor het portaal.</p>
+<hr>
+<h2>Opdracht 27.9 — Het architectuuradvies (20 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>advies over de toepassing van event sourcing</strong> bij Meridiaan, maximaal anderhalve A4, gericht aan Tarik.</p>
+<ol>
+<li><strong>Welk deel van het systeem</strong> je zou voorstellen event-sourced te maken, met onderbouwing vanuit de toetsvraag in paragraaf 13.</li>
+<li><strong>Wat dit oplevert</strong> dat de huidige, state-based aanpak niet biedt — concreet voor dat deel van het systeem.</li>
+<li><strong>Wat het kost</strong> — expliciet, niet weggemoffeld.</li>
+<li><strong>Eén concreet risico rond eventual consistency</strong> voor dit specifieke deel, met hoe je dat zou communiceren naar gebruikers.</li>
+<li><strong>Wat je NIET event-sourced zou maken</strong>, met reden.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is de keuze in punt 1 specifiek (welke tabellen/domeinen), niet “de hele database”?</li>
+<li>Wordt punt 3 (de kosten) net zo serieus behandeld als punt 2 (de baten)?</li>
+<li>Is punt 4 concreet voor het gekozen domein, geen abstracte definitie van eventual consistency?</li>
+<li>Bevat punt 5 een expliciete, beargumenteerde uitsluiting?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 27.1</h2>
+<p>a) <strong>Nee</strong> — de oude waarde is via een gewone <code>SELECT</code> niet meer te achterhalen.</p>
+<p>b) Een aparte historietabel bijhouden (bijvoorbeeld met een trigger die elke wijziging logt), of een periodieke back-up (deel 17) van precies dat moment.</p>
+<p>c) <strong>Deel 7</strong> (MVCC bewaart de oude rijversie kort, tot vacuum) en <strong>deel 17</strong> (point-in-time recovery kan een oude stand terughalen, maar alleen tot op een specifiek hersteld moment, niet doorlopend bevraagbaar). Beide bieden een gedeeltelijk antwoord, geen structurele, doorlopende geschiedenis zoals event sourcing dat biedt.</p>
+<hr>
+<h2>Uitwerking 27.2</h2>
+<p>a) <code>SalarisGewijzigd</code> (met de nieuwe waarde in de payload).
+b) <code>DienstverbandBeëindigd</code>.
+c) <code>BsnGecorrigeerd</code> (niet: het oorspronkelijke BSN-event wijzigen).
+d) <code>PremieOntvangen</code>.
+e) Bijvoorbeeld <code>AdresGewijzigd</code>, <code>MutatieIngediend</code>, <code>AanspraakToegekend</code>.</p>
+<hr>
+<h2>Uitwerking 27.3</h2>
+<p>c) De <code>INSERT</code> <strong>faalt</strong> met een schending van de <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint.</p>
+<p>d) Dit voorkomt dat twee gelijktijdige schrijvers onbewust hetzelfde volgnummer claimen — een vorm van optimistische concurrency control (deel 7): de tweede schrijver moet het conflict opmerken en met een vernieuwd volgnummer opnieuw proberen, in plaats van dat een van beide events stilzwijgend verloren gaat of de volgorde onduidelijk wordt.</p>
+<p>e) In een echte event store zou je dit <strong>nooit</strong> toestaan — technisch is een <code>UPDATE</code> op de tabel mogelijk (er is geen ingebouwde PostgreSQL-functionaliteit die dit blokkeert), maar het ondermijnt het hele principe van onveranderlijkheid. In de praktijk wordt dit afgedwongen met rechten (een rol die alleen <code>INSERT</code> mag, geen <code>UPDATE</code>/<code>DELETE</code> op de event store) of met een trigger die elke wijzigingspoging weigert.</p>
+<hr>
+<h2>Uitwerking 27.4</h2>
+<p>b)</p>
+<pre><code class="language-sql">SELECT payload-&gt;&gt;'nieuw_salaris' FROM oefening27.events
+WHERE aggregate_id = '...' AND event_type = 'SalarisGewijzigd'
+ORDER BY volgnummer DESC LIMIT 1;
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT payload-&gt;&gt;'nieuw_salaris' FROM oefening27.events
+WHERE aggregate_id = '...' AND event_type = 'SalarisGewijzigd'
+  AND occurred_at &lt; (SELECT occurred_at FROM oefening27.events
+                      WHERE aggregate_id = '...' AND event_type = 'DeeltijdPercentageGewijzigd')
+ORDER BY volgnummer DESC LIMIT 1;
+</code></pre>
+<p>d) De berekening zou <strong>onbepaald</strong> worden — welke van de twee “laatste” events zou moeten gelden? Dit is precies waarom de <code>UNIQUE</code>-constraint zulke dubbele volgnummers in de eerste plaats voorkomt: zonder die garantie is de vraag “wat is de huidige stand” niet meer eenduidig te beantwoorden.</p>
+<hr>
+<h2>Uitwerking 27.5</h2>
+<p>b) <strong>Nee</strong>, niet automatisch — een materialized view wordt pas bijgewerkt bij een expliciete <code>REFRESH</code> (deel 8). Dit is het eventual-consistency-venster uit paragraaf 9 in de praktijk.</p>
+<p>c) Na <code>REFRESH MATERIALIZED VIEW ...</code> klopt de stand weer met de laatste events.</p>
+<p>d) Het verschil toont letterlijk wat eventual consistency betekent: er is een periode waarin de projectie <strong>nog niet</strong> de laatste waarheid weerspiegelt, ook al is die waarheid (in de events) al vastgelegd.</p>
+<p>e) <strong>Ja, zonder gegevensverlies</strong> — de materialized view is volledig afgeleid van de events; opnieuw opbouwen (<code>CREATE MATERIALIZED VIEW ... AS SELECT ...</code> opnieuw uitvoeren) reproduceert exact dezelfde inhoud, mits de events zelf onaangetast zijn. Bij een traditionele, state-based tabel zou het verwijderen van de tabel <strong>onherroepelijk gegevensverlies</strong> betekenen, tenzij er een aparte back-up (deel 17) bestaat — de projectie heeft dat vangnet niet nodig, want de bron van waarheid (events) bestaat onafhankelijk van de projectie.</p>
+<hr>
+<h2>Uitwerking 27.6</h2>
+<p>a) <strong>Commando-pad:</strong> het toevoegen van events aan de <code>events</code>-tabel (opdracht 27.3). <strong>Query-pad:</strong> het raadplegen van de materialized view (opdracht 27.5).</p>
+<p>b) De leeskant zou dan resources en beschikbaarheid onafhankelijk van de schrijfkant kunnen krijgen — vergelijkbaar met hoe Karins rapportagewerklast in deel 18 naar een leesreplica werd verplaatst, zodat zware leesquery’s het schrijfverkeer (het toevoegen van nieuwe events) niet raken.</p>
+<hr>
+<h2>Uitwerking 27.7</h2>
+<p>a) De <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint in de event store werkt volgens hetzelfde principe als een versiekolom: een schrijver moet bewijzen dat hij vanaf de laatst bekende stand werkt, anders wordt de schrijfactie geweigerd in plaats van stilzwijgend een conflict te overschrijven.</p>
+<p>b) De event store is per ontwerp insert-only — precies de eigenschap die in deel 12 werd geprezen omdat zo’n tabel structureel minder bloat opbouwt dan een tabel met veel <code>UPDATE</code>s.</p>
+<p>c) Het tellerrij-probleem werd opgelost door gebeurtenissen in te voegen in plaats van een gedeelde rij bij te werken — dat ís letterlijk hoe een event store werkt: elke gebeurtenis is een eigen, nieuwe rij, geen gedeelde teller die door velen tegelijk wordt bijgewerkt.</p>
+<p>d) Oude event-partities (bijvoorbeeld events ouder dan de wettelijke bewaartermijn, indien van toepassing) kunnen net als <code>mutatie</code> in deel 16 gepartitioneerd worden op tijd, en verouderde partities kunnen met <code>DROP TABLE</code> verdwijnen in plaats van een dure <code>DELETE</code>.</p>
+<p>e) Projecties zíjn materialized views, nu specifiek gevoed door events in plaats van door andere brontabellen — hetzelfde mechanisme (<code>CREATE MATERIALIZED VIEW</code>, <code>REFRESH</code>), toegepast op een nieuw soort bron.</p>
+<hr>
+<h2>Uitwerking 27.8</h2>
+<p>a) <strong>Nee</strong> — kleine, zelden gewijzigde referentiedata heeft geen audit- of tijdreisbehoefte die de complexiteit rechtvaardigt.</p>
+<p>b) <strong>Ja, sterke kandidaat</strong> — precies het soort domein met een wettelijke verantwoordingsplicht over lange termijn, waar “wat was de opbouw op moment X” een legitieme vraag is.</p>
+<p>c) <strong>Nee</strong> — een e-mailadres voor notificaties heeft geen behoefte aan historische traceerbaarheid; de huidige waarde is alles wat telt, en state-based volstaat.</p>
+<p>d) <strong>Ja</strong> — een dienstverband met salariswijzigingen doorloopt precies het soort gebeurtenis-georiënteerde levenscyclus waarvoor event sourcing is bedoeld, en het sluit aan bij bestaande audit-eisen rond arbeidsvoorwaarden.</p>
+<p>e) <strong>Nee</strong> — een tijdelijke, kortlevende sessietabel heeft het tegenovergestelde profiel van wat event sourcing rechtvaardigt: geen behoefte aan geschiedenis, juist behoefte aan snel opruimen (vergelijkbaar met de conclusie in deel 21 over encryptie: niet overal toepassen waar het kan, alleen waar het moet).</p>
+<hr>
+<h2>Uitwerking 27.9 — modelantwoord (verkort)</h2>
+<p><strong>Advies: event sourcing bij Meridiaan</strong></p>
+<p><strong>1. Welk deel</strong></p>
+<p>De <strong>aanspraakopbouw en het dienstverbandverloop</strong> (salariswijzigingen, deeltijdwijzigingen, start/einde) — niet de deelnemersregistratie als geheel. Onderbouwing: dit is precies het domein met een wettelijke verantwoordingsplicht en een legitieme, terugkerende “wat was de stand toen”-vraag (paragraaf 13).</p>
+<p><strong>2. Wat het oplevert</strong></p>
+<p>Voor een toezichthouderaudit of een deelnemersvraag over de opbouw van jaren geleden: een exacte, herleidbare reconstructie in plaats van een afhankelijkheid van back-ups (deel 17) die mogelijk niet precies het gevraagde moment dekken. Elke correctie in het verleden blijft zichtbaar naast de fout die hij herstelde, wat de huidige aanpak (overschrijven) niet biedt.</p>
+<p><strong>3. Wat het kost</strong></p>
+<p>Een tweede laag complexiteit bovenop de bestaande, goed werkende state-based tabellen: projectieontwerp en -onderhoud, eventual consistency in het portaal (een net ingevoerde salariswijziging is mogelijk niet <strong>onmiddellijk</strong> zichtbaar in elk overzicht), en een team dat dit patroon moet leren beheersen naast de al aanwezige PostgreSQL-vaardigheden.</p>
+<p><strong>4. Een concreet risico</strong></p>
+<p>Een deelnemer die net een adreswijziging heeft doorgevoerd en direct daarna het portaal ververst, zou (bij een asynchroon bijgewerkte projectie) de oude gegevens nog kunnen zien. <strong>Communicatie:</strong> een korte, expliciete bevestiging (“uw wijziging is ontvangen en wordt verwerkt”) in plaats van te doen alsof de wijziging al overal direct zichtbaar is — dezelfde eerlijke communicatie-discipline als bij elke asynchrone verwerking in deze cursus (deel 7, de mutatieverwerking).</p>
+<p><strong>5. Wat niet event-sourced</strong></p>
+<p>Contactgegevens (e-mailadres, telefoonnummer), sectorcodes, en andere referentie- of contactdata: geen audit- of tijdreisbehoefte, de huidige, state-based aanpak blijft hier eenvoudiger en volstaat.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Specifieke keuze in punt 1</strong>, geen “overweeg het voor het hele systeem”.</li>
+<li><strong>De kosten net zo serieus als de baten</strong> — een advies dat alleen voordelen noemt, is geen advies maar een verkooppraatje.</li>
+<li><strong>Een concreet, herkenbaar risico in punt 4</strong>, niet de definitie van eventual consistency herhalen.</li>
+<li><strong>Een echte uitsluiting in punt 5.</strong></li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 27.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">301 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">&larr; Deel 26 — Foreign data wrappers en federatie</a><a class="dbm-prevnext next" href="../deel-28-event-sourcing-in-de-praktijk/reader.html">Deel 28 — Event sourcing in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

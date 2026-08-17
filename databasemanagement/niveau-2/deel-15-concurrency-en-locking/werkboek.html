@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Concurrency en locking — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 15 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 15: Concurrency en locking</strong>
+Werkboek met opdrachten en volledige uitwerkingen — twee dagdelen</p>
+<hr>
+<h2>Vooraf</h2>
+<p><strong>Dit deel werk je met drie psql-sessies naast elkaar.</strong> Open ze nu en label ze S1, S2 en S3. Zet in alle drie:</p>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\set PROMPT1 'S1 %/%R%# '
+</code></pre>
+<p>(Pas het cijfer aan per venster. Het teken vóór de <code>#</code> toont of je in een transactie zit — zie Toolbijlage A, paragraaf 7.)</p>
+<p>Zet in de configuratie aan, als dat nog niet is gebeurd:</p>
+<pre><code class="language-sql">ALTER SYSTEM SET log_lock_waits = on;
+SELECT pg_reload_conf();
+</code></pre>
+<p>Tijdsindicatie: <strong>dagdeel A circa 130 minuten, dagdeel B circa 130 minuten.</strong></p>
+<hr>
+<hr>
+<h1>DAGDEEL A — Locks</h1>
+<h2>Opdracht 15.1 — De conflictmatrix ervaren (20 min, drietallen)</h2>
+<p>Test per combinatie of de tweede opdracht wacht. Gebruik <code>mutatie</code> en houd de eerste transactie open.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>S1 doet (transactie open)</th>
+<th>S2 doet</th>
+<th>Wacht S2?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a</td>
+<td><code>SELECT count(*) FROM mutatie;</code></td>
+<td><code>SELECT ...</code></td>
+<td></td>
+</tr>
+<tr>
+<td>b</td>
+<td><code>SELECT count(*) FROM mutatie;</code></td>
+<td><code>UPDATE mutatie SET soort=soort WHERE mutatie_id=1;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>c</td>
+<td><code>SELECT count(*) FROM mutatie;</code></td>
+<td><code>ALTER TABLE mutatie ADD COLUMN t1 text;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>d</td>
+<td><code>UPDATE mutatie SET soort=soort WHERE mutatie_id=1;</code></td>
+<td><code>SELECT * FROM mutatie WHERE mutatie_id=1;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>e</td>
+<td><code>UPDATE mutatie SET soort=soort WHERE mutatie_id=1;</code></td>
+<td><code>UPDATE ... WHERE mutatie_id=2;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>f</td>
+<td><code>UPDATE mutatie SET soort=soort WHERE mutatie_id=1;</code></td>
+<td><code>UPDATE ... WHERE mutatie_id=1;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>g</td>
+<td><code>VACUUM mutatie;</code> (in S1, geen transactie)</td>
+<td><code>VACUUM mutatie;</code> in S2</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>h) Welke twee locktypen conflicteren met bijna niets, en welke met bijna alles?
+i) Vergelijk je bevindingen met de tabel in paragraaf 3 van de reader.</p>
+<p><em>Vergeet niet de kolommen <code>t1</code> op te ruimen na afloop.</em></p>
+<hr>
+<h2>Opdracht 15.2 — De lockwachtrij (25 min, drietallen)</h2>
+<p><strong>Dit is de kernopdracht van dagdeel A.</strong> Voer hem exact in deze volgorde uit.</p>
+<pre><code>S1:  BEGIN;
+     SELECT count(*) FROM deelnemer;
+     -- laat openstaan, doe verder niets
+
+S2:  ALTER TABLE deelnemer ADD COLUMN t2 text;
+     -- wat gebeurt er?
+
+S3:  SELECT achternaam FROM deelnemer WHERE deelnemer_id = 42;
+     -- wat gebeurt er?
+</code></pre>
+<p>a) Wacht S2? Waarom?
+b) Wacht S3? Conflicteert S3 met S1?
+c) Hoe lang zou S3 normaal duren? Hoe lang duurt hij nu?
+d) Draai in een vierde sessie de diagnosequery uit paragraaf 6. Teken de wachtketen.
+e) Welke sessie is de wortel van het probleem?
+f) Los het op met de minst ingrijpende maatregel.
+g) Herhaal het experiment, maar zet in S2 eerst <code>SET lock_timeout = '3s';</code>. Wat gebeurt er nu met S3?
+h) Formuleer in twee zinnen aan Ruud waarom een <code>ALTER TABLE</code> die volgens de log 2 milliseconden duurde, het portaal twintig minuten plat kan leggen.</p>
+<hr>
+<h2>Opdracht 15.3 — Diagnose (15 min, tweetallen)</h2>
+<p>a) Bouw een blokkade na (S1 houdt een rij vast, S2 wil hem).
+b) Draai de diagnosequery en noteer <code>wait_event_type</code> en <code>wait_event</code> van S2.
+c) Gebruik <code>pg_blocking_pids()</code> om de blokkeerder te vinden.
+d) Schrijf een query die alleen de <strong>wortel</strong> teruggeeft: sessies die anderen blokkeren maar zelf niet geblokkeerd worden.
+e) Annuleer de blokkerende query met <code>pg_cancel_backend</code>. Wat gebeurt er met S1’s transactie?
+f) Bouw de blokkade opnieuw, maar laat S1 nu in <code>idle in transaction</code> staan. Werkt <code>pg_cancel_backend</code> nu? Verklaar.
+g) Kijk in de serverlog. Wat heeft <code>log_lock_waits</code> vastgelegd?</p>
+<hr>
+<h2>Opdracht 15.4 — De vier timeouts (15 min, individueel)</h2>
+<p>Bepaal per situatie welke timeout je instelt en op welke waarde.</p>
+<p>a) Een rapportagequery die soms ontspoort en een half uur draait.
+b) Een <code>ALTER TABLE</code> op productie tijdens kantooruren.
+c) Een applicatie die soms een transactie opent en vergeet te sluiten.
+d) Een portaalquery die nooit langer dan een seconde mag duren.</p>
+<p>e) Test b): open een lange transactie in S1, zet <code>lock_timeout</code> in S2, en probeer een <code>ALTER TABLE</code>. Noteer de foutmelding.
+f) Wat gebeurt er als je in plaats daarvan <code>statement_timeout</code> zou zetten? Test het en verklaar het verschil.
+g) Stel de timeouts per rol in voor <code>portaal_app</code>, <code>rapportage</code> en een nieuwe rol <code>migratie</code>.</p>
+<hr>
+<h2>Opdracht 15.5 — Deadlocks op schaal (20 min, drietallen)</h2>
+<p>a) Veroorzaak een klassieke deadlock tussen twee sessies (deel 7).
+b) Veroorzaak nu een deadlock tussen <strong>drie</strong> sessies: S1 wacht op S2, S2 op S3, S3 op S1. Lukt dat?
+c) Lees de foutmelding in de log helemaal. Welke sessie werd afgebroken, en toont de melding de hele cyclus?
+d) Veroorzaak een deadlock via foreign keys: twee sessies die kindrijen invoegen die naar dezelfde ouderrijen verwijzen, in tegengestelde volgorde.
+e) Waarom is d) contra-intuïtief?
+f) Herhaal a) met een vaste benaderingsvolgorde. Treedt de deadlock nog op?
+g) Bekijk het aantal deadlocks sinds de laatste reset in <code>pg_stat_database</code>.
+h) Formuleer de teamafspraak die je hierover zou maken, in één zin.</p>
+<hr>
+<h2>Opdracht 15.6 — Advisory locks (15 min, tweetallen)</h2>
+<p>a) Gebruik <code>pg_try_advisory_lock</code> in S1 en S2 met hetzelfde getal. Wat krijgt S2 terug?
+b) Geef de lock vrij in S1 en probeer het opnieuw in S2.
+c) Neem in S1 een <code>pg_advisory_lock</code> binnen een transactie en doe <code>ROLLBACK</code>. Is de lock vrij?
+d) Herhaal c) met <code>pg_advisory_xact_lock</code>. Verschil?
+e) Waarom is c) gevaarlijk in een omgeving met connection pooling?
+f) Schrijf een constructie die garandeert dat de premienotarun maar één keer tegelijk draait, ook als iemand hem twee keer start.
+g) Welke variant gebruik je daarvoor, en waarom?</p>
+<hr>
+<h2>Opdracht 15.7 — DDL en locks (20 min, drietallen)</h2>
+<p>Meet voor elk van deze opdrachten welke lock hij neemt, met een tweede sessie die probeert te lezen en te schrijven.</p>
+<p>a) <code>CREATE INDEX</code> op <code>premienota (bedrag)</code>
+b) <code>CREATE INDEX CONCURRENTLY</code> op dezelfde kolom
+c) <code>ALTER TABLE mutatie ADD COLUMN t3 text;</code>
+d) <code>ALTER TABLE mutatie ALTER COLUMN soort TYPE varchar(50);</code>
+e) <code>VACUUM mutatie;</code>
+f) <code>TRUNCATE</code> op een kopietabel</p>
+<p>g) Welke van deze zes zou je nooit op productie draaien tijdens kantooruren zonder voorbereiding?
+h) Start een <code>CREATE INDEX CONCURRENTLY</code> op <code>mutatie</code> terwijl er in een andere sessie een openstaande transactie is. Wat gebeurt er? Verklaar.</p>
+<hr>
+<h2>Opdracht 15.8 — Het veilige migratiepatroon (25 min, drietallen)</h2>
+<p>Hoofdopdracht dagdeel A. Voer deze migratie uit alsof het productie is: <strong><code>jaarsalaris</code> in <code>dienstverband</code> moet een <code>CHECK</code>-constraint krijgen dat hij niet negatief is.</strong></p>
+<p>Randvoorwaarden:</p>
+<ul>
+<li>Het portaal draait door; er mag geen wachtrij ontstaan.</li>
+<li>Er staan 466.000 rijen in de tabel.</li>
+<li>Er is een sessie die af en toe een lange query doet (bootst dat na in S3).</li>
+</ul>
+<p>Lever:</p>
+<ol>
+<li><strong>De controles vooraf</strong>, met de query’s.</li>
+<li><strong>Het migratiescript</strong>, met de timeouts en de gekozen aanpak.</li>
+<li><strong>Een meting</strong> van hoe lang elke stap duurde en welke lock hij nam.</li>
+<li><strong>Het bewijs</strong> dat het portaal ondertussen doorliep — een query in S2 die de hele tijd bleef werken.</li>
+<li><strong>Wat je doet als de migratie faalt op de lock.</strong></li>
+<li><strong>De naschouw:</strong> wat staat er in de log?</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is de constraint in twee stappen toegevoegd (<code>NOT VALID</code> + <code>VALIDATE</code>)?</li>
+<li>Staat er <code>lock_timeout</code> op de eerste stap?</li>
+<li>Is aangetoond — niet beweerd — dat er geen wachtrij ontstond?</li>
+<li>Is er een plan voor het geval de lock niet beschikbaar is?</li>
+</ul>
+<hr>
+<hr>
+<h1>DAGDEEL B — Isolatie en gelijktijdige werklast</h1>
+<h2>Opdracht 15.9 — Isolatieniveau kiezen (15 min, drietallen)</h2>
+<p>Bepaal per handeling het isolatieniveau en de vergrendelstrategie. Motiveer met de vraag uit paragraaf 14 van de reader.</p>
+<p>a) Het portaal toont de aanspraken van de ingelogde deelnemer.
+b) De klantenservice wijzigt een adres.
+c) De kwartaalrapportage telt deelnemers, sommeert aanspraken en berekent premietotalen.
+d) Een waardeoverdracht: bedrag af bij Meridiaan, bedrag bij bij een ander fonds.
+e) De premienotarun over 4.100 werkgevers, duurt twintig minuten.
+f) Een nieuwe eis: <em>“controleer of een deelnemer minder dan drie lopende dienstverbanden heeft en voeg er dan één toe.”</em></p>
+<p>g) Welke van deze zes vraagt om <code>SERIALIZABLE</code>, en waarom precies die?</p>
+<hr>
+<h2>Opdracht 15.10 — Serializable in de praktijk (25 min, drietallen)</h2>
+<p>Bouw de situatie uit 15.9f na.</p>
+<pre><code class="language-sql">CREATE TABLE oefening15.dv_test AS
+SELECT deelnemer_id, dienstverband_id FROM dienstverband LIMIT 1000;
+</code></pre>
+<p>a) Schrijf in S1 en S2 dezelfde transactie: tel de dienstverbanden van deelnemer X, en voeg er één toe als het er minder dan drie zijn.
+b) Voer beide uit onder <code>READ COMMITTED</code>, met de tellingen vóór beide invoegingen. Wat is het resultaat?
+c) Klopt dat resultaat met de bedrijfsregel?
+d) Herhaal onder <code>SERIALIZABLE</code>. Wat gebeurt er bij de tweede <code>COMMIT</code>?
+e) Noteer de foutmelding en de SQLSTATE.
+f) Herhaal onder <code>REPEATABLE READ</code>. Wordt het probleem daar ook opgevangen? Verklaar.
+g) Meet het verschil in doorvoer: draai honderd korte transacties onder beide niveaus en vergelijk.
+h) Wat kost <code>SERIALIZABLE</code> hier, en wat levert het op?</p>
+<hr>
+<h2>Opdracht 15.11 — Retry-logica (20 min, drietallen)</h2>
+<p>a) Schrijf in pseudocode of in een taal naar keuze de retry-lus uit paragraaf 16.
+b) Welke SQLSTATE-codes vang je op, en welke uitdrukkelijk niet?
+c) Waarom moet de <strong>hele</strong> transactie opnieuw en niet alleen de mislukte opdracht?
+d) Waarom is een willekeurige spreiding in de wachttijd nodig? Wat gebeurt er zonder?
+e) Test je logica: laat twee sessies elkaar herhaaldelijk afbreken en kijk of ze uiteindelijk allebei slagen.
+f) Wat doe je na de vijfde mislukte poging, en wat zie de gebruiker?
+g) Een collega stelt voor de fout te loggen en door te gaan. Reageer in maximaal 60 woorden.</p>
+<hr>
+<h2>Opdracht 15.12 — Wachtrij op schaal (25 min, drietallen)</h2>
+<p>a) Meet hoeveel onverwerkte mutaties er zijn.
+b) Draai de verwerkingsquery uit paragraaf 17 in S1, S2 en S3 tegelijk, elk in een lus van tien pakketten. Meet de totale doorvoer.
+c) Haal <code>SKIP LOCKED</code> weg en herhaal. Wat is het verschil?
+d) Verhoog <code>LIMIT</code> van 50 naar 1000 en herhaal. Wordt het sneller? Wat gebeurt er met de lockduur?
+e) Simuleer een gifpakket: zorg dat één mutatie altijd faalt. Wat gebeurt er met de verwerking?
+f) Bouw een pogingenteller in en zet mislukte mutaties na drie pogingen apart.
+g) Voeg een externe aanroep na (bijvoorbeeld <code>pg_sleep(2)</code>) <strong>binnen</strong> de transactie. Meet de doorvoer opnieuw en verklaar.
+h) Verplaats de aanroep naar buiten de transactie. Wat verandert er?</p>
+<hr>
+<h2>Opdracht 15.13 — De hotspot (20 min, drietallen)</h2>
+<p>a) Maak een tellertabel met één rij en werk hem bij vanuit één sessie in een lus van 1.000 keer. Meet de tijd.
+b) Doe hetzelfde vanuit drie sessies tegelijk. Is het drie keer zo snel? Verklaar.
+c) Kijk tijdens b) in <code>pg_stat_activity</code> naar <code>wait_event_type</code> en <code>wait_event</code>.
+d) Implementeer de oplossing “opdelen”: honderd tellerrijen, willekeurig kiezen, optellen bij het lezen. Meet opnieuw.
+e) Implementeer de oplossing “invoegen in plaats van bijwerken”. Meet opnieuw.
+f) Vergelijk alle drie op doorvoer, leescomplexiteit en opslag.
+g) Welke zou je bij Meridiaan kiezen, en waarom?
+h) Hoe herken je een hotspot in de monitoring, zonder te weten dat hij bestaat?</p>
+<hr>
+<h2>Opdracht 15.14 — Het gelijktijdigheidsplan (25 min, drietallen)</h2>
+<p>Hoofdopdracht dagdeel B. Lever een <strong>gelijktijdigheidsplan</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>Per bedrijfshandeling</strong> uit opdracht 15.9: transactiegrens, isolatieniveau, vergrendelstrategie, en of retry nodig is.</li>
+<li><strong>Het migratieprotocol:</strong> de vaste stappen die elke DDL op productie volgt, inclusief timeouts.</li>
+<li><strong>De teamafspraken</strong> over benaderingsvolgorde en transactieduur.</li>
+<li><strong>Eén ontwerpwijziging</strong> die je voorstelt om gelijktijdigheidsdruk te verminderen — met de meting die hem onderbouwt.</li>
+<li><strong>De monitoring:</strong> welke signalen, welke drempels, en wat je doet bij overschrijding.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Staat er bij elk isolatieniveau een reden die verwijst naar de vraag uit paragraaf 14?</li>
+<li>Bevat het migratieprotocol <code>lock_timeout</code> en het <code>NOT VALID</code>/<code>VALIDATE</code>-patroon?</li>
+<li>Is de ontwerpwijziging onderbouwd met een cijfer?</li>
+<li>Zijn de drempels concreet genoeg om er een alarm op te zetten?</li>
+</ul>
+<hr>
+<hr>
+<h1>UITWERKINGEN — DAGDEEL A</h1>
+<h2>Uitwerking 15.1</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Wacht S2?</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a</td>
+<td>Nee</td>
+<td>Twee <code>ACCESS SHARE</code>-locks conflicteren niet</td>
+</tr>
+<tr>
+<td>b</td>
+<td>Nee</td>
+<td><code>ACCESS SHARE</code> en <code>ROW EXCLUSIVE</code> conflicteren niet</td>
+</tr>
+<tr>
+<td>c</td>
+<td><strong>Ja</strong></td>
+<td><code>ACCESS EXCLUSIVE</code> conflicteert met alles</td>
+</tr>
+<tr>
+<td>d</td>
+<td>Nee</td>
+<td>Lezen wordt niet geblokkeerd door schrijven (MVCC, deel 7)</td>
+</tr>
+<tr>
+<td>e</td>
+<td>Nee</td>
+<td>Verschillende rijen, dus geen rijlockconflict</td>
+</tr>
+<tr>
+<td>f</td>
+<td><strong>Ja</strong></td>
+<td>Zelfde rij; S2 wacht op de rijlock van S1</td>
+</tr>
+<tr>
+<td>g</td>
+<td><strong>Ja</strong></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code> conflicteert met zichzelf</td>
+</tr>
+</tbody>
+</table>
+<p>h) <strong><code>ACCESS SHARE</code> conflicteert met bijna niets</strong> — alleen met <code>ACCESS EXCLUSIVE</code>. <strong><code>ACCESS EXCLUSIVE</code> conflicteert met alles.</strong> Die twee zijn elkaars tegenpolen, en samen verklaren ze het merendeel van wat je in de praktijk tegenkomt.</p>
+<p>i) De belangrijkste bevestiging: <strong>lezen blokkeert schrijven niet en andersom</strong> (d en b). Dat is MVCC. De uitzondering is <code>ACCESS EXCLUSIVE</code>, en die neem je alleen bij DDL.</p>
+<hr>
+<h2>Uitwerking 15.2</h2>
+<p>a) <strong>Ja.</strong> <code>ALTER TABLE</code> wil <code>ACCESS EXCLUSIVE</code>, en S1 houdt <code>ACCESS SHARE</code> vast tot het eind van zijn transactie.</p>
+<p>b) <strong>Ja, S3 wacht ook</strong> — en dat is het verrassende. S3 wil <code>ACCESS SHARE</code>, wat <strong>niet</strong> conflicteert met de <code>ACCESS SHARE</code> van S1. Maar S3 staat achter S2 in de wachtrij, en de wachtrij is ordelijk: niemand gaat voorbij een wachtende conflicterende lock.</p>
+<p>c) Normaal 0,2 tot 0,5 ms. Nu: <strong>zolang S1 zijn transactie openhoudt.</strong></p>
+<p>d) De keten: S3 → S2 → S1. <code>pg_blocking_pids(S3)</code> geeft het pid van S2; <code>pg_blocking_pids(S2)</code> geeft dat van S1; <code>pg_blocking_pids(S1)</code> is leeg.</p>
+<p>e) <strong>S1</strong> is de wortel. Niet S2, ook al is dat de opdracht die “iets doet”.</p>
+<p>f) De minst ingrijpende maatregel: <strong>S1 laten committen of terugdraaien</strong>. Kan dat niet (de gebruiker is weg, het is een vergeten sessie), dan <code>pg_cancel_backend(S1)</code>. <code>pg_terminate_backend</code> alleen als S1 in <code>idle in transaction</code> staat.</p>
+<p>Merk op: S2 annuleren lost het ook op — dan kan S3 door. Maar dan is je migratie niet uitgevoerd, en het onderliggende probleem (S1) blijft.</p>
+<p>g) Met <code>lock_timeout = '3s'</code> faalt S2 na drie seconden met:</p>
+<pre><code>ERROR: canceling statement due to lock timeout
+</code></pre>
+<p><strong>S3 wacht niet.</strong> Er is nooit een wachtrij ontstaan. Dat is precies het doel.</p>
+<p>h) Modelantwoord: <em>“De opdracht zelf duurde inderdaad twee milliseconden — maar hij stond er twintig minuten vóór in de wachtrij, omdat een rapportagequery de tabel nog vasthield. En zolang hij daar stond, kwam geen enkele andere query op die tabel er nog langs, ook niet de query’s die niets met die rapportage te maken hadden. Niet de duur van de opdracht bepaalt de schade, maar de duur van het wachten.”</em></p>
+<hr>
+<h2>Uitwerking 15.3</h2>
+<p>b) <code>wait_event_type = 'Lock'</code>, <code>wait_event = 'transactionid'</code> (bij een rijlock) of <code>'relation'</code> (bij een tabellock).</p>
+<p>c) <code>SELECT pg_blocking_pids(&lt;pid van S2&gt;);</code></p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT pid, usename, state, now() - xact_start AS duur, left(query, 80) AS query
+FROM pg_stat_activity
+WHERE cardinality(pg_blocking_pids(pid)) = 0
+  AND pid IN (SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity);
+</code></pre>
+<p>Dit geeft de wortels: sessies die anderen blokkeren en zelf niet geblokkeerd worden.</p>
+<p>e) <code>pg_cancel_backend</code> annuleert de <strong>lopende query</strong>. De transactie blijft open en de locks blijven vastgehouden — S1 staat nu in <code>idle in transaction</code> en blokkeert nog steeds.</p>
+<p><strong>Dat is een belangrijk detail:</strong> annuleren is niet altijd genoeg.</p>
+<p>f) Bij een sessie in <code>idle in transaction</code> doet <code>pg_cancel_backend</code> <strong>niets</strong> — er is geen query om te annuleren. Alleen <code>pg_terminate_backend</code> werkt, en die beëindigt de hele sessie inclusief de transactie.</p>
+<p>g) De log toont regels als:</p>
+<pre><code>LOG: process 12345 still waiting for AccessExclusiveLock on relation ... after 1000.123 ms
+DETAIL: Process holding the lock: 12340. Wait queue: 12345, 12350.
+</code></pre>
+<p>De regel <code>Wait queue</code> toont de hele rij — dat is de informatie die je achteraf nodig hebt en die je zonder <code>log_lock_waits</code> niet hebt.</p>
+<hr>
+<h2>Uitwerking 15.4</h2>
+<p>a) <strong><code>statement_timeout</code></strong>, bijvoorbeeld 15 minuten, per rol op <code>rapportage</code>.
+b) <strong><code>lock_timeout</code></strong>, 3 seconden. <code>statement_timeout</code> uitdrukkelijk op 0 zetten voor de migratiesessie, zodat een lange maar nuttige bewerking niet halverwege wordt afgebroken.
+c) <strong><code>idle_in_transaction_session_timeout</code></strong>, bijvoorbeeld 10 minuten.
+d) <strong><code>statement_timeout</code></strong>, 1 tot 10 seconden, per rol op <code>portaal_app</code>.</p>
+<p>e)</p>
+<pre><code class="language-sql">-- S2
+SET lock_timeout = '3s';
+ALTER TABLE deelnemer ADD COLUMN t4 text;
+-- ERROR: canceling statement due to lock timeout
+</code></pre>
+<p>f) Met <code>statement_timeout</code> in plaats van <code>lock_timeout</code> gebeurt hetzelfde — de opdracht wordt na de ingestelde tijd afgebroken. <strong>Het verschil komt aan het licht bij een opdracht die de lock wél krijgt en daarna lang werk doet</strong>, zoals een <code>ALTER TABLE ALTER TYPE</code> op miljoenen rijen: <code>statement_timeout</code> breekt die halverwege af, <code>lock_timeout</code> niet.</p>
+<p><strong>De regel:</strong> <code>lock_timeout</code> begrenst het wachten, <code>statement_timeout</code> het werken. Bij een migratie wil je het eerste kort en het tweede ruim of uit.</p>
+<p>g)</p>
+<pre><code class="language-sql">ALTER ROLE portaal_app SET statement_timeout = '10s';
+ALTER ROLE rapportage  SET statement_timeout = '15min';
+CREATE ROLE migratie LOGIN PASSWORD '…';
+ALTER ROLE migratie SET lock_timeout = '3s';
+ALTER ROLE migratie SET statement_timeout = 0;
+ALTER ROLE migratie SET idle_in_transaction_session_timeout = '1min';
+</code></pre>
+<hr>
+<h2>Uitwerking 15.5</h2>
+<p>b) <strong>Ja, dat lukt.</strong> PostgreSQL detecteert cycli van willekeurige lengte. De detectie duurt iets langer omdat de grafiek groter is.</p>
+<p>c) De foutmelding toont de blokkerende processen en de gevraagde locks. De afgebroken sessie is meestal degene die de cyclus sluit, maar dat is geen garantie — PostgreSQL kiest.</p>
+<p>d)</p>
+<pre><code>S1: BEGIN; INSERT INTO dienstverband (deelnemer_id, werkgever_id, …) VALUES (100, …);
+    -- neemt FOR KEY SHARE op deelnemer 100
+S2: BEGIN; INSERT INTO dienstverband (deelnemer_id, …) VALUES (200, …);
+S1: INSERT ... VALUES (200, …);   -- wil KEY SHARE op 200
+S2: INSERT ... VALUES (100, …);   -- wil KEY SHARE op 100 → deadlock
+</code></pre>
+<p>In de praktijk is dit lastiger te reproduceren omdat <code>FOR KEY SHARE</code>-locks elkaar niet blokkeren; combineer het met een <code>UPDATE</code> op de deelnemersrij om het effect te zien.</p>
+<p>e) Omdat <strong>geen van beide sessies de ouderrij wijzigt.</strong> Ze voegen alleen kindrijen in. De lock ontstaat door de referentiële-integriteitscontrole, die de deelnemer moet vasthouden zodat hij niet tussentijds verdwijnt. Ontwikkelaars zoeken de oorzaak in de kindtabel en vinden hem niet.</p>
+<p>f) <strong>Nee.</strong> Benaderen beide sessies de rijen in oplopende volgorde van hun sleutel, dan kan er geen cyclus ontstaan — hoogstens wachttijd.</p>
+<p>g) <code>SELECT deadlocks FROM pg_stat_database WHERE datname = current_database();</code></p>
+<p>h) Modelantwoord: <em>“Binnen één transactie benaderen we rijen altijd in oplopende volgorde van hun primaire sleutel, en bij batchbewerkingen sorteren we de lijst vooraf — tenzij er een gedocumenteerde reden is om daarvan af te wijken.”</em></p>
+<hr>
+<h2>Uitwerking 15.6</h2>
+<p>a) S2 krijgt <strong><code>false</code></strong> terug. <code>pg_try_advisory_lock</code> wacht niet.</p>
+<p>b) Na <code>pg_advisory_unlock(12345)</code> in S1 krijgt S2 <code>true</code>.</p>
+<p>c) <strong>De lock is nog steeds bezet.</strong> <code>pg_advisory_lock</code> op sessieniveau overleeft een <code>ROLLBACK</code> — hij hangt aan de sessie, niet aan de transactie.</p>
+<p>d) <code>pg_advisory_xact_lock</code> valt <strong>wel</strong> vrij bij <code>ROLLBACK</code> (en bij <code>COMMIT</code>).</p>
+<p>e) Omdat de verbinding terugkeert naar de pool <strong>met de lock er nog op</strong>. De volgende gebruiker van die verbinding heeft een lock die hij niet heeft genomen en niet kent, en niemand geeft hem ooit vrij. Het gevolg is een lock die pas verdwijnt als de verbinding wordt vernieuwd — en dat kan uren duren.</p>
+<p>f)</p>
+<pre><code class="language-sql">BEGIN;
+SELECT pg_try_advisory_xact_lock(90210) AS gekregen;
+-- als false: netjes stoppen, er draait al een run
+-- als true: de premienotarun uitvoeren
+COMMIT;
+</code></pre>
+<p>g) De <strong><code>_xact_</code>-variant met <code>try_</code></strong>: transactiegebonden zodat hij altijd vrijvalt, en <code>try</code> zodat een tweede start meteen netjes afhaakt in plaats van te wachten.</p>
+<hr>
+<h2>Uitwerking 15.7</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Lock</th>
+<th>Blokkeert lezen?</th>
+<th>Blokkeert schrijven?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a <code>CREATE INDEX</code></td>
+<td><code>SHARE</code></td>
+<td>Nee</td>
+<td><strong>Ja</strong></td>
+</tr>
+<tr>
+<td>b <code>CREATE INDEX CONCURRENTLY</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Nee</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>c <code>ADD COLUMN</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><strong>Ja</strong> (kort)</td>
+<td><strong>Ja</strong> (kort)</td>
+</tr>
+<tr>
+<td>d <code>ALTER COLUMN TYPE</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><strong>Ja</strong> (lang)</td>
+<td><strong>Ja</strong> (lang)</td>
+</tr>
+<tr>
+<td>e <code>VACUUM</code></td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>Nee</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>f <code>TRUNCATE</code></td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td><strong>Ja</strong> (kort)</td>
+<td><strong>Ja</strong> (kort)</td>
+</tr>
+</tbody>
+</table>
+<p>g) <strong>d</strong> is de gevaarlijkste: <code>ACCESS EXCLUSIVE</code> gedurende de volledige herschrijving van 2,4 miljoen rijen. <strong>a</strong> is ook een probleem: schrijvers wachten de hele bouwtijd.</p>
+<p><strong>c en f zijn kort</strong>, maar uit opdracht 15.2 weet je dat een korte lock alsnog een wachtrij oplevert als je erop moet wachten. Dus: ook die met <code>lock_timeout</code>.</p>
+<p>h) <code>CREATE INDEX CONCURRENTLY</code> <strong>wacht</strong> tot alle transacties die vóór hem begonnen zijn, klaar zijn — en dat twee keer, want hij doorloopt de tabel twee keer. Eén openstaande transactie kan hem uren ophouden.</p>
+<p>Het bijzondere: hij blokkeert ondertussen <strong>niets</strong>. De tabel is gewoon in gebruik. Alleen de indexbouw schiet niet op, en dat is van buitenaf niet zichtbaar tenzij je ernaar kijkt.</p>
+<p>Dit is het probleem uit deel 12 (<code>idle in transaction</code> blokkeert vacuum) in een nieuwe gedaante.</p>
+<hr>
+<h2>Uitwerking 15.8 — modelantwoord</h2>
+<p><strong>1. Controles vooraf</strong></p>
+<pre><code class="language-sql">-- Lopen er lange transacties?
+SELECT pid, state, now() - xact_start AS duur, left(query,80)
+FROM pg_stat_activity
+WHERE xact_start &lt; now() - INTERVAL '1 minute' ORDER BY xact_start;
+
+-- Zijn er al wachtende sessies?
+SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock';
+
+-- Hoeveel rijen, en zijn er overtreders?
+SELECT count(*) AS totaal,
+       count(*) FILTER (WHERE jaarsalaris &lt; 0) AS overtreders
+FROM dienstverband;
+</code></pre>
+<p>Die laatste is essentieel: als er overtreders zijn, faalt <code>VALIDATE</code> en heb je een niet-gevalideerde constraint. Ruim ze eerst op of pas de regel aan.</p>
+<p><strong>2. Het migratiescript</strong></p>
+<pre><code class="language-sql">-- Stap 1: constraint toevoegen zonder scan.
+-- Korte ACCESS EXCLUSIVE, maar wél lock_timeout.
+SET lock_timeout = '3s';
+SET statement_timeout = 0;
+
+ALTER TABLE dienstverband
+    ADD CONSTRAINT dv_salaris_niet_negatief
+    CHECK (jaarsalaris &gt;= 0) NOT VALID;
+
+-- Stap 2: valideren. Volledige scan, maar SHARE UPDATE EXCLUSIVE.
+-- Schrijvers gaan door; lock_timeout mag hier ruimer.
+SET lock_timeout = '10s';
+ALTER TABLE dienstverband VALIDATE CONSTRAINT dv_salaris_niet_negatief;
+</code></pre>
+<p><strong>3. Meting</strong></p>
+<table>
+<thead>
+<tr>
+<th>Stap</th>
+<th>Lock</th>
+<th>Duur</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>ACCESS EXCLUSIVE</code></td>
+<td>&lt; 10 ms</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td>~2 s op 466.000 rijen</td>
+</tr>
+</tbody>
+</table>
+<p>Zonder de tweestapsaanpak zou stap 1 en 2 samen ongeveer 2 seconden <code>ACCESS EXCLUSIVE</code> zijn geweest — en gedurende die twee seconden staat alles op <code>dienstverband</code> stil, plus alles wat daarachter in de rij komt.</p>
+<p><strong>4. Bewijs dat het portaal doorliep</strong></p>
+<p>In S2 gedurende de hele migratie:</p>
+<pre><code class="language-sql">\watch 0.2
+SELECT count(*) FROM dienstverband WHERE deelnemer_id = 42;
+</code></pre>
+<p>Geen enkele uitvoering mag langer duren dan normaal. <strong>Dit is bewijs, geen bewering</strong> — het beoordelingspunt.</p>
+<p><strong>5. Als de migratie faalt op de lock</strong></p>
+<pre><code>ERROR: canceling statement due to lock timeout
+</code></pre>
+<p>Er is niets gebeurd. Zoek uit wie de lock vasthield:</p>
+<pre><code class="language-sql">SELECT pid, state, now() - xact_start, left(query,80) FROM pg_stat_activity
+WHERE xact_start &lt; now() - INTERVAL '10 seconds' ORDER BY xact_start;
+</code></pre>
+<p>Wacht een minuut, probeer opnieuw. <strong>Vijf pogingen die falen zijn beter dan één die het portaal plat legt.</strong></p>
+<p><strong>6. Naschouw</strong></p>
+<pre><code class="language-sql">-- Is de constraint geldig?
+SELECT conname, convalidated FROM pg_constraint
+WHERE conrelid = 'dienstverband'::regclass AND conname LIKE 'dv_salaris%';
+</code></pre>
+<p>En in de serverlog: staan er <code>still waiting for</code> regels van <code>log_lock_waits</code>? Zo ja, hoe lang heeft wie gewacht?</p>
+<p><strong>Beoordelingspunten:</strong></p>
+<ul>
+<li>De tweestapsaanpak is het kernpunt. Groepen die één <code>ADD CONSTRAINT</code> doen, hebben een <code>ACCESS EXCLUSIVE</code> van seconden genomen.</li>
+<li><code>lock_timeout</code> op stap 1, en <code>statement_timeout = 0</code> zodat stap 2 niet halverwege sneuvelt.</li>
+<li>Het bewijs in punt 4 moet een <strong>meting</strong> zijn.</li>
+<li>De controle op overtreders vooraf wordt vaak vergeten en is de reden dat <code>VALIDATE</code> faalt.</li>
+</ul>
+<hr>
+<hr>
+<h1>UITWERKINGEN — DAGDEEL B</h1>
+<h2>Uitwerking 15.9</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Niveau</th>
+<th>Vergrendeling</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a</td>
+<td>Read committed</td>
+<td>Geen</td>
+<td>Alleen tonen; geen besluit op basis van wat gelezen is</td>
+</tr>
+<tr>
+<td>b</td>
+<td>Read committed</td>
+<td><strong>Versiekolom</strong></td>
+<td>Tussen openen en versturen kan een ander wijzigen (deel 7)</td>
+</tr>
+<tr>
+<td>c</td>
+<td><strong>Repeatable read</strong></td>
+<td>Geen</td>
+<td>Deeltotalen moeten optellen; één momentopname</td>
+</tr>
+<tr>
+<td>d</td>
+<td><strong>Serializable</strong></td>
+<td>—</td>
+<td>Correctheid boven doorvoer; externe tegenpartij</td>
+</tr>
+<tr>
+<td>e</td>
+<td>Read committed, per partij</td>
+<td>Advisory lock op de run</td>
+<td>Twintig minuten is te lang voor één transactie (deel 7)</td>
+</tr>
+<tr>
+<td>f</td>
+<td><strong>Serializable</strong></td>
+<td>—</td>
+<td>Leest een telling en besluit daarop</td>
+</tr>
+</tbody>
+</table>
+<p>g) <strong>f</strong> is het scherpste voorbeeld. Twee gelijktijdige transacties tellen allebei twee dienstverbanden, besluiten allebei dat er nog een bij mag, en het worden er vier. Geen van beide heeft een rij gewijzigd die de ander ook wijzigde — dus locks helpen niet, en <code>REPEATABLE READ</code> ook niet.</p>
+<p><strong>Dit is precies de anomalie waarvoor SSI bestaat:</strong> het resultaat komt met geen enkele seriële volgorde overeen.</p>
+<p><strong>d</strong> is ook serializable, maar daar zou een expliciete <code>FOR UPDATE</code> op de saldorij het ook oplossen. Bij <strong>f</strong> is er geen rij om te vergrendelen — je vergrendelt een <em>afwezigheid</em>.</p>
+<hr>
+<h2>Uitwerking 15.10</h2>
+<p>b) Beide tellen 2, beide voegen toe, resultaat is <strong>4</strong>. Geen foutmelding.</p>
+<p>c) <strong>Nee.</strong> De bedrijfsregel zegt maximaal drie, en er staan er vier.</p>
+<p>d) De tweede <code>COMMIT</code> faalt:</p>
+<pre><code>ERROR: could not serialize access due to read/write dependencies among transactions
+DETAIL: Reason code: Canceled on identification as a pivot, during commit attempt.
+HINT: The transaction might succeed if retried.
+</code></pre>
+<p>e) SQLSTATE <strong><code>40001</code></strong>.</p>
+<p>f) Onder <code>REPEATABLE READ</code> <strong>niet.</strong> Beide transacties werken op hun eigen momentopname en zien elkaars invoeging niet. Ze schrijven verschillende rijen, dus er is geen schrijfconflict om te detecteren.</p>
+<p><strong>Dit is het onderscheid dat deelnemers moeten leren:</strong> repeatable read voorkomt dat je een <em>inconsistent beeld</em> leest. Serializable voorkomt dat je een <em>besluit neemt dat door een gelijktijdige transactie ongeldig wordt</em>.</p>
+<p>g) De doorvoer onder serializable is lager — verwacht enkele tot tientallen procenten, afhankelijk van hoeveel de transacties lezen. Bij korte, smalle transacties is het verschil klein.</p>
+<p>h) <strong>Kost:</strong> overhead voor predicate locks, en verplichte retry-logica.
+<strong>Levert op:</strong> de garantie dat de bedrijfsregel niet geschonden kan worden, zonder dat je zelf een vergrendelstrategie hoeft te bedenken voor een geval waarin er geen rij is om te vergrendelen.</p>
+<hr>
+<h2>Uitwerking 15.11</h2>
+<p>b) <strong>Opvangen:</strong> <code>40001</code> (serialisatie), <code>40P01</code> (deadlock), en eventueel <code>55P03</code> (lock niet beschikbaar).
+<strong>Niet opvangen:</strong> <code>23505</code> (unieke sleutel), <code>23503</code> (foreign key), <code>23514</code> (check). Dat zijn bedrijfsregels — opnieuw proberen levert dezelfde fout op en verbergt een echt probleem.</p>
+<p>c) Omdat de gegevens waarop het besluit is gebaseerd, zijn veranderd. Dat is de <strong>reden</strong> van de afbreking. Alleen de mislukte <code>INSERT</code> herhalen zou het besluit uit de oude telling opnieuw toepassen — precies de fout die serializable had voorkomen.</p>
+<p>d) Zonder spreiding proberen alle afgebroken transacties het na exact dezelfde wachttijd opnieuw, botsen ze opnieuw, en ontstaat er een golfpatroon dat zichzelf in stand houdt. Met een willekeurige component spreiden ze zich vanzelf uit.</p>
+<p>e) Twee sessies die dezelfde serializable transactie in een lus draaien, breken elkaar geregeld af. Met retry slagen ze allebei; zonder retry faalt de helft.</p>
+<p>f) Geef op en toon de gebruiker een begrijpelijke melding: <em>“het lukte niet om je wijziging door te voeren; probeer het opnieuw”</em>. Log de technische fout voor onderzoek. <strong>Wat je nooit toont: de SQLSTATE.</strong></p>
+<p>g) Modelantwoord (55 woorden): <em>“Dan is de handeling niet uitgevoerd terwijl de gebruiker denkt van wel. Bij een aanspraak of een adreswijziging merkt niemand dat, tot er maanden later een klacht komt en wij niet kunnen verklaren waarom de wijziging ontbreekt. Loggen is goed — maar we moeten het óók opnieuw proberen, en anders eerlijk melden dat het mislukt is.”</em></p>
+<hr>
+<h2>Uitwerking 15.12</h2>
+<p>b) Drie verwerkers met <code>SKIP LOCKED</code> werken parallel; de doorvoer is ongeveer drie keer die van één verwerker.</p>
+<p>c) <strong>Zonder <code>SKIP LOCKED</code> staan ze op elkaar te wachten.</strong> De doorvoer is niet hoger dan met één verwerker, en soms lager door de wachttijd. Dit is de meting die het patroon rechtvaardigt.</p>
+<p>d) <code>LIMIT 1000</code> is per transactie efficiënter, maar de lockduur per pakket wordt langer. Bij een fout gaat er duizend rijen werk verloren, en andere verwerkers moeten langer wachten op vrijkomende rijen. Er is een optimum, meestal tussen 50 en 200.</p>
+<p>e) Een mutatie die altijd faalt, wordt door de retry-lus telkens opnieuw opgepakt. De verwerking komt niet vooruit en de fout herhaalt zich eindeloos in de log.</p>
+<p>f)</p>
+<pre><code class="language-sql">ALTER TABLE mutatie ADD COLUMN pogingen smallint NOT NULL DEFAULT 0;
+
+-- in de selectie:
+WHERE verwerkt_op IS NULL AND pogingen &lt; 3
+-- bij een fout:
+UPDATE mutatie SET pogingen = pogingen + 1 WHERE mutatie_id = …;
+</code></pre>
+<p>Mutaties met <code>pogingen &gt;= 3</code> vallen uit de werkvoorraad en komen op een uitvalslijst voor handmatige beoordeling.</p>
+<p>g) Met <code>pg_sleep(2)</code> binnen de transactie houdt elke verwerker zijn pakket twee seconden extra vergrendeld. De doorvoer stort in, en andere verwerkers vinden minder beschikbare rijen.</p>
+<p>h) Buiten de transactie: de rijen worden vergrendeld, opgehaald, de transactie sluit, de externe aanroep gebeurt, en daarna wordt in een tweede korte transactie de status bijgewerkt. De doorvoer herstelt.</p>
+<p><strong>De prijs:</strong> tussen de twee transacties in is de mutatie niet vergrendeld. Crasht de verwerker daar, dan wordt hij opnieuw opgepakt — dus de verwerking moet idempotent zijn. Dat is een ontwerpeis die uit deze afweging volgt.</p>
+<hr>
+<h2>Uitwerking 15.13</h2>
+<p>b) <strong>Nee, niet drie keer zo snel</strong> — vaak nauwelijks sneller dan één sessie, soms langzamer. Alle drie de sessies willen dezelfde rij bijwerken en staan in de rij.</p>
+<p>c) <code>wait_event_type = 'Lock'</code>, <code>wait_event = 'transactionid'</code>. Alle wachtende sessies wachten op dezelfde transactie.</p>
+<p>d) Met honderd tellerrijen verdeelt de druk zich; de doorvoer schaalt vrijwel lineair met het aantal sessies. Lezen wordt een <code>SELECT sum(aantal) FROM teller WHERE naam = …</code>.</p>
+<p>e) Invoegen concurreert helemaal niet: elke rij gaat naar zijn eigen plek. Dit is de snelste variant.</p>
+<p>f)</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Doorvoer</th>
+<th>Lezen</th>
+<th>Opslag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eén rij</td>
+<td>Slecht</td>
+<td>Triviaal</td>
+<td>Minimaal</td>
+</tr>
+<tr>
+<td>Opdelen</td>
+<td>Goed</td>
+<td>Een <code>sum</code> over 100 rijen</td>
+<td>Minimaal</td>
+</tr>
+<tr>
+<td>Invoegen</td>
+<td><strong>Best</strong></td>
+<td>Aggregatie of materialized view</td>
+<td><strong>Groeit; opruimen nodig</strong></td>
+</tr>
+</tbody>
+</table>
+<p>g) Voor Meridiaan: <strong>invoegen</strong>, met een materialized view voor het getal (deel 8) en een bewaartermijn. Dat sluit bovendien aan bij het patroon dat in deel 16 terugkomt bij partitionering — oude perioden weggooien wordt dan gratis.</p>
+<p>Nuance die je mag maken: als het getal werkelijk alleen een teller is en niemand de detailregels ooit nodig heeft, is <strong>opdelen</strong> eenvoudiger en goedkoper. De vraag is of je de gebeurtenissen zelf wilt bewaren.</p>
+<p>h) In de monitoring: veel sessies met <code>wait_event = 'transactionid'</code> op dezelfde tabel, terwijl CPU en I/O laag blijven. In <code>pg_stat_user_tables</code> een extreem hoge <code>n_tup_upd</code> op een tabel met weinig rijen — dat is het duidelijkste signaal.</p>
+<hr>
+<h2>Uitwerking 15.14 — modelantwoord (verkort)</h2>
+<p><strong>Gelijktijdigheidsplan Meridiaan</strong></p>
+<p><strong>1. Per bedrijfshandeling</strong></p>
+<table>
+<thead>
+<tr>
+<th>Handeling</th>
+<th>Transactiegrens</th>
+<th>Niveau</th>
+<th>Vergrendeling</th>
+<th>Retry</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Portaal: gegevens tonen</td>
+<td>Eén query</td>
+<td>Read committed</td>
+<td>Geen</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Adreswijziging</td>
+<td>Ná het versturen van het formulier</td>
+<td>Read committed</td>
+<td>Versiekolom + exclusion constraint</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Mutatieverwerking</td>
+<td>Per pakket van 50</td>
+<td>Read committed</td>
+<td><code>FOR UPDATE SKIP LOCKED</code></td>
+<td>Ja (deadlock)</td>
+</tr>
+<tr>
+<td>Kwartaalrapportage</td>
+<td>Om alle deelquery’s</td>
+<td><strong>Repeatable read</strong></td>
+<td>Geen</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Premienotarun</td>
+<td>Per werkgever</td>
+<td>Read committed</td>
+<td><code>pg_try_advisory_xact_lock</code> op de run</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Waardeoverdracht</td>
+<td>Om de hele handeling</td>
+<td><strong>Serializable</strong></td>
+<td>Geen</td>
+<td><strong>Ja, verplicht</strong></td>
+</tr>
+<tr>
+<td>Max. drie dienstverbanden</td>
+<td>Om de controle en de invoeging</td>
+<td><strong>Serializable</strong></td>
+<td>Geen</td>
+<td><strong>Ja, verplicht</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>2. Migratieprotocol</strong></p>
+<p>Elke DDL op productie volgt deze stappen:</p>
+<ol>
+<li>Controleer op lange transacties en wachtende sessies.</li>
+<li><code>SET lock_timeout = '3s'; SET statement_timeout = 0;</code></li>
+<li>Splits waar mogelijk: <code>NOT VALID</code> + <code>VALIDATE</code>, <code>CONCURRENTLY</code> bij indexen.</li>
+<li>Voer uit. Faalt hij op de lock: wacht en herhaal, maximaal vijf keer.</li>
+<li>Controleer het resultaat (<code>convalidated</code>, <code>indisvalid</code>).</li>
+<li>Lees de log op <code>still waiting for</code>-regels.</li>
+</ol>
+<p><strong>3. Teamafspraken</strong></p>
+<ul>
+<li>Rijen binnen een transactie altijd in oplopende volgorde van de primaire sleutel; batchlijsten vooraf sorteren.</li>
+<li>Geen gebruikersinteractie en geen externe aanroepen binnen een transactie.</li>
+<li>Transacties boven 30 seconden vereisen een gedocumenteerde reden.</li>
+<li>In gepoolde omgevingen: <code>SET LOCAL</code> en <code>pg_advisory_xact_lock</code>, nooit de sessievarianten.</li>
+</ul>
+<p><strong>4. Ontwerpwijziging</strong></p>
+<p><em>Voorstel:</em> de dagteller van verwerkte mutaties niet in één rij bijhouden, maar afleiden uit de mutatietabel met een materialized view die per uur ververst.</p>
+<p><em>Onderbouwing:</em> meting met drie gelijktijdige sessies op één tellerrij gaf een doorvoer van ongeveer 340 updates per seconde, tegenover meer dan 4.000 bij invoegen. Bij de beoogde vier verwerkers en een piek van 150 portaalsessies wordt die ene rij het knelpunt van de hele verwerking.</p>
+<p><em>Kosten:</em> de teller is maximaal een uur oud. Dat is voor een stuurgetal aanvaardbaar; is het dat niet, dan is opdelen over honderd rijen het alternatief.</p>
+<p><strong>5. Monitoring</strong></p>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Bron</th>
+<th>Drempel</th>
+<th>Actie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sessies wachtend op een lock</td>
+<td><code>pg_stat_activity</code></td>
+<td>&gt;5, of &gt;30 s</td>
+<td>Wortel opzoeken met <code>pg_blocking_pids</code></td>
+</tr>
+<tr>
+<td>Langste transactie</td>
+<td>idem</td>
+<td>&gt;5 min</td>
+<td>Onderzoeken; boven 30 min beëindigen</td>
+</tr>
+<tr>
+<td><code>idle in transaction</code></td>
+<td>idem</td>
+<td>&gt;2 of &gt;1 min</td>
+<td>Applicatie onderzoeken</td>
+</tr>
+<tr>
+<td>Deadlocks</td>
+<td><code>pg_stat_database</code></td>
+<td>&gt;5 per dag</td>
+<td>Benaderingsvolgorde controleren</td>
+</tr>
+<tr>
+<td>Serialisatiefouten</td>
+<td>Applicatielog</td>
+<td>Retry-percentage &gt;5%</td>
+<td>Transacties smaller maken</td>
+</tr>
+<tr>
+<td>Actief / verbonden</td>
+<td><code>pg_stat_activity</code></td>
+<td>&gt;50% actief</td>
+<td>Poolinstellingen (deel 19)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Beoordelingspunten:</strong></p>
+<ul>
+<li>Bij elk isolatieniveau een reden die verwijst naar de vraag uit paragraaf 14: <em>leest deze transactie iets waarop hij een besluit baseert?</em></li>
+<li>Het migratieprotocol moet <code>lock_timeout</code> <strong>en</strong> het tweestapspatroon bevatten.</li>
+<li>De ontwerpwijziging moet een gemeten cijfer bevatten, niet een vermoeden.</li>
+<li>Groepen die overal serializable kiezen: vraag wie de retry-logica schrijft en wat het aan doorvoer kost.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 15.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">69 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">32 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">540 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-14-geavanceerde-indexering/reader.html">&larr; Deel 14 — Geavanceerde indexering</a><a class="dbm-prevnext next" href="../deel-16-partitionering/reader.html">Deel 16 — Partitionering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

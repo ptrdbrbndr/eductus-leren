@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Replicatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 18 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 18 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 18: Replicatie</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Vandaag heb je <strong>twee draaiende PostgreSQL-instanties</strong> nodig — een primary (je bestaande server) en een replica (een tweede instantie, lokaal op een andere poort, of een tweede container).</p>
+<p><strong>Met Docker</strong> (zie Toolbijlage A): breid je compose-bestand uit met een tweede dienst, of start een tweede container die naar dezelfde image wijst maar een eigen datadirectory heeft.</p>
+<p><strong>Lokaal:</strong> initialiseer een tweede datadirectory op een andere poort:</p>
+<pre><code class="language-bash">initdb -D ~/oefening18/replica_data
+</code></pre>
+<p>(je vult dit datadirectory niet zelf — dat doet <code>pg_basebackup</code> in opdracht 18.2)</p>
+<pre><code class="language-sql">CREATE ROLE repl_rol LOGIN REPLICATION PASSWORD 'wachtwoord';
+</code></pre>
+<p>En in <code>pg_hba.conf</code> van de primary een regel die replicatieverbindingen van deze rol toestaat.</p>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 18.1 — Back-up of replicatie? (10 min, individueel)</h2>
+<p>Bepaal per situatie of back-up, replicatie, of beide het juiste antwoord zijn.</p>
+<p>a) Iemand voert per ongeluk <code>DELETE FROM deelnemer;</code> uit zonder <code>WHERE</code>.
+b) De primary-server verliest stroom en start niet meer op.
+c) Karin wil rapportagequery’s draaien zonder het portaal te vertragen.
+d) Een schijfcontroller faalt en corrumpeert een deel van het datadirectory.
+e) Het datacenter waar de primary staat, is voor een dag onbereikbaar.</p>
+<p>f) Voor elke situatie waar je “beide” antwoordde: verklaar waarom het ene het andere niet vervangt.</p>
+<hr>
+<h2>Opdracht 18.2 — Een replica opzetten (25 min, tweetallen)</h2>
+<p>a) Voer <code>pg_basebackup -R</code> uit vanaf de primary naar het datadirectory van je replica.
+b) Bekijk het gegenereerde <code>postgresql.auto.conf</code> op de replica. Wat staat erin?
+c) Start de replica. Wat gebeurt er in de eerste seconden — kijk in de log van de replica.
+d) Controleer op de primary met <code>pg_stat_replication</code> of de replica verschijnt.
+e) Controleer op de replica met <code>pg_is_in_recovery()</code>.
+f) Voer op de primary een <code>INSERT</code> uit. Hoe snel verschijnt die op de replica?
+g) Probeer een <code>INSERT</code> rechtstreeks op de replica. Wat gebeurt er?</p>
+<hr>
+<h2>Opdracht 18.3 — Synchroon versus asynchroon (20 min, drietallen)</h2>
+<p>a) Meet de tijd van tien <code>INSERT</code>-commits onder de standaard (asynchrone) instelling.
+b) Zet <code>synchronous_standby_names</code> op de primary zodat je replica synchroon wordt, en herlaad.
+c) Herhaal de meting. Wat is het verschil?
+d) Stop de replica (zonder de configuratie terug te draaien). Wat gebeurt er als je nu een <code>INSERT</code> op de primary probeert?
+e) Verklaar d) met paragraaf 5 van de reader.
+f) Zet <code>synchronous_commit = 'local'</code> <strong>per sessie</strong> op de primary en herhaal de test uit d). Wat verandert er?
+g) Formuleer de afweging die je bij Meridiaan zou maken voor de mutatietabel (RPO: enkele minuten) versus een hypothetische financiële afschrijvingstabel (RPO: nul).</p>
+<hr>
+<h2>Opdracht 18.4 — Vertraging meten en veroorzaken (20 min, drietallen)</h2>
+<p>a) Bekijk <code>write_lag</code>, <code>flush_lag</code> en <code>replay_lag</code> in rust (geen belasting).
+b) Genereer belasting op de primary: voeg in een lus 50.000 rijen toe aan een testtabel.
+c) Meet de drie lag-waarden tijdens het invoegen. Welke loopt het meest op?
+d) Simuleer een trage replica: draai op de replica een lang lopende query (<code>pg_sleep</code> in een functie, of een zware sortering) terwijl de primary blijft schrijven. Wat gebeurt er met <code>replay_lag</code>?
+e) Wat betekent een oplopende <code>replay_lag</code> voor je werkelijke RPO, ook al staat <code>synchronous_commit</code> op asynchroon met een doelstelling van vijf minuten?
+f) Schrijf een monitoringquery die waarschuwt als <code>replay_lag</code> boven een drempel komt.</p>
+<hr>
+<h2>Opdracht 18.5 — Replicatieslots (15 min, tweetallen)</h2>
+<p>a) Maak een replicatieslot aan op de primary en koppel je replica eraan.
+b) Stop de replica.
+c) Genereer op de primary voldoende schrijfverkeer om meerdere WAL-segmenten te produceren.
+d) Bekijk <code>pg_replication_slots</code>. Wat gebeurt er met <code>restart_lsn</code> en de hoeveelheid opgehoopte WAL?
+e) Bekijk de schijfruimte van <code>pg_wal/</code> op de primary. Groeit die?
+f) Start de replica weer. Wat gebeurt er?
+g) Wat was het risico geweest als de replica nooit meer was teruggekomen? Hoe had je dat op tijd ontdekt?</p>
+<hr>
+<h2>Opdracht 18.6 — Lezen op de replica (15 min, tweetallen)</h2>
+<p>a) Verbind met de replica en draai een zware aggregatiequery (vergelijkbaar met Karins rapportage).
+b) Verbind tegelijkertijd met de primary en meet de reactietijd van een eenvoudige portaalquery. Beïnvloedt de replicaquery de primary?
+c) Kijk op de primary in <code>pg_stat_user_indexes</code> naar het gebruik van een index die je weet dat de replica-query nodig heeft. Wat zie je, en waarom?
+d) Wat is het praktische gevolg van c) voor hoe je “ongebruikte indexen” beoordeelt in een omgeving met replica’s?</p>
+<hr>
+<h2>Opdracht 18.7 — Een replicatieconflict veroorzaken (15 min, drietallen)</h2>
+<p>a) Zet <code>hot_standby_feedback = off</code> en een korte <code>max_standby_streaming_delay</code> (bijvoorbeeld 5s) op de replica.
+b) Start op de replica een lang lopende query op een tabel.
+c) Voer op de primary een <code>VACUUM</code> uit op diezelfde tabel, met genoeg schrijfactiviteit eromheen om opruiming te forceren.
+d) Wat gebeurt er met de query op de replica?
+e) Herhaal met <code>hot_standby_feedback = on</code>. Verandert het resultaat?
+f) Wat is de prijs die de primary betaalt voor die verandering? Verwijs naar deel 12.
+g) Welke instelling zou je bij Meridiaan kiezen voor de rapportagereplica, en waarom?</p>
+<hr>
+<h2>Opdracht 18.8 — Promotie (15 min, tweetallen)</h2>
+<p>a) Promoveer je replica met <code>pg_promote()</code>.
+b) Probeer nu een <code>INSERT</code> op de voorheen read-only instantie. Werkt het?
+c) Wat is er met de oorspronkelijke primary gebeurd — weet die dat er een nieuwe primary is?
+d) Simuleer een split-brain: laat de oude primary ook schrijfopdrachten accepteren terwijl de gepromoveerde replica dat ook doet. Voeg op beide een rij toe met dezelfde primaire sleutel (als de structuur dat toelaat) of gewoon verschillende rijen. Wat is het probleem als je deze twee ooit weer wilt samenvoegen?
+e) Wat had dit voorkomen? Noem het mechanisme dat in deel 19 aan bod komt.</p>
+<hr>
+<h2>Opdracht 18.9 — Het replicatieontwerp (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Lever een <strong>replicatieontwerp</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>Topologie:</strong> hoeveel replica’s, waar (fysiek/logisch onderscheid maken), en met welk doel elk.</li>
+<li><strong>Synchroon/asynchroon per verbinding</strong>, met onderbouwing vanuit de RPO-tabel uit deel 17.</li>
+<li><strong>De rapportagereplica:</strong> instellingen voor <code>hot_standby_feedback</code> en <code>max_standby_streaming_delay</code>, met motivering.</li>
+<li><strong>Monitoring:</strong> welke lag-metrieken, welke drempels.</li>
+<li><strong>Eén scenario waarin je logische in plaats van fysieke replicatie zou inzetten</strong>, met reden.</li>
+<li><strong>Wat er gebeurt bij het uitvallen van de primary</strong> — met de expliciete constatering van wat dit ontwerp <strong>niet</strong> automatisch regelt (vooruitwijzend naar deel 19).</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is de synchroon/asynchroon-keuze gekoppeld aan een concreet RPO-getal?</li>
+<li>Is het onderscheid fysiek/logisch functioneel gemotiveerd, niet willekeurig?</li>
+<li>Erkent punt 6 expliciet de grens van dit deel (promotie ≠ failover)?</li>
+<li>Bevat de monitoring een concrete drempel, geen “in de gaten houden”?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 18.1</h2>
+<p>a) <strong>Alleen back-up</strong> helpt hier — replicatie repliceert de <code>DELETE</code> binnen seconden mee naar elke volger. Herstel via PITR (deel 17) naar het moment vóór de fout.</p>
+<p>b) <strong>Replicatie</strong> lost dit direct op (een replica promoveren kost seconden tot minuten); back-up zou hier een langer herstel betekenen. Beide zijn nuttig: replicatie voor snelheid, back-up als de replica er om een andere reden ook niet is.</p>
+<p>c) <strong>Replicatie</strong> (hot standby, paragraaf 8) — dit is precies het gebruiksdoel.</p>
+<p>d) <strong>Back-up.</strong> Een fysieke schijfcorruptie kan zich, afhankelijk van waar hij optreedt, ook via replicatie voortplanten als de beschadigde pagina wordt gelezen en de checksum-controle (deel 11) hem opmerkt vóórdat hij gerepliceerd wordt — maar dat is geen garantie. Een onafhankelijke back-up op andere media is de zekere bescherming.</p>
+<p>e) <strong>Replicatie naar een andere locatie</strong> (indien opgezet) lost uitvaltijd op; <strong>back-up op een derde locatie</strong> blijft nodig als vangnet voor scenario’s die beide replica’s raken (bijvoorbeeld een fout die zich naar alle volgers repliceert).</p>
+<p>f) Bij b, d en e: replicatie beschermt tegen het <strong>uitvallen van een machine of locatie</strong>; back-up beschermt tegen <strong>fouten die zich door de tijd voortplanten</strong> (menselijke fouten, corrupte schrijfacties die gerepliceerd worden vóór ontdekking). Ze dekken verschillende faalmodi.</p>
+<hr>
+<h2>Uitwerking 18.2</h2>
+<p>a)</p>
+<pre><code class="language-bash">pg_basebackup -D ~/oefening18/replica_data -h localhost -p 5432 \
+    -U repl_rol -R -X stream -P
+</code></pre>
+<p>b) <code>primary_conninfo</code> met host, poort, gebruiker en wachtwoord (of verwijzing naar <code>.pgpass</code>), plus een <code>standby.signal</code>-bestand in het datadirectory (niet in <code>postgresql.auto.conf</code> zelf, maar als apart bestand aangemaakt door <code>-R</code>).</p>
+<p>c) De replica start op, herkent <code>standby.signal</code>, gaat in recovery-modus, en begint WAL te ontvangen en toe te passen. In de log: regels over het verbinden met de primary en het starten van streaming replicatie.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT application_name, client_addr, state FROM pg_stat_replication;
+</code></pre>
+<p>De replica verschijnt met <code>state = streaming</code>.</p>
+<p>e) <code>SELECT pg_is_in_recovery();</code> → <code>true</code> op de replica, <code>false</code> op de primary.</p>
+<p>f) Vrijwel onmiddellijk — enkele milliseconden tot een fractie van een seconde bij lage belasting, wat de normale <code>replay_lag</code> is.</p>
+<p>g)</p>
+<pre><code>ERROR: cannot execute INSERT in a read-only transaction
+</code></pre>
+<p>Bevestigt dat de replica strikt read-only is voor gewone gebruikers.</p>
+<hr>
+<h2>Uitwerking 18.3</h2>
+<p>a) en b)</p>
+<pre><code class="language-sql">ALTER SYSTEM SET synchronous_standby_names = 'FIRST 1 (replica1)';
+SELECT pg_reload_conf();
+</code></pre>
+<p>(De <code>application_name</code> van de replica moet overeenkomen; standaard is dat vaak de servernaam — controleer met <code>pg_stat_replication</code>.)</p>
+<p>c) De commits duren merkbaar langer — de primary wacht nu op een bevestiging over het netwerk vóór hij de commit aan de client meldt. Op een lokale opstelling is het verschil klein maar meetbaar; over een echt netwerk met latency zou het groter zijn.</p>
+<p>d) De <code>INSERT</code> <strong>hangt</strong> — de primary wacht op een replica die niet meer reageert. Dit is een blokkade, geen foutmelding; de sessie lijkt vast te zitten.</p>
+<p>e) Dit is precies de derde rij van de afruil-tabel in paragraaf 5: synchrone replicatie zonder terugvalplan (bijvoorbeeld een kworum met meerdere replica’s) betekent dat de <strong>beschikbaarheid van de primary afhangt van de replica</strong>.</p>
+<p>f)</p>
+<pre><code class="language-sql">SET synchronous_commit = 'local';
+INSERT INTO ...;  -- gaat nu direct door
+</code></pre>
+<p>Deze ene sessie wacht niet meer op de replica, ongeacht de globale instelling — nuttig voor een specifieke, minder kritieke bewerking binnen een verder synchrone omgeving.</p>
+<p>g) Modelantwoord: <em>“Voor de mutatietabel met een RPO van vijf minuten voegt synchrone replicatie alleen latency toe zonder een reëel risico te verkleinen — vijf minuten is ordes van grootte groter dan normale replicatievertraging, dus asynchroon is ruim voldoende. Voor een hypothetische tabel met RPO nul (een financiële afschrijving die nooit verloren mag gaan) zou synchroon met een kworum van minimaal twee replica’s de juiste keuze zijn, ondanks de latencykosten — daar weegt het risico zwaarder dan de snelheid.”</em></p>
+<hr>
+<h2>Uitwerking 18.4</h2>
+<p>a) In rust: alle drie de lag-waarden liggen dicht bij nul (enkele milliseconden of NULL als er niets te meten valt).</p>
+<p>b) en c) <code>replay_lag</code> loopt doorgaans het meest op onder belasting, vooral als de replica minder rekenkracht heeft dan de primary of als er I/O-concurrentie is — hij moet niet alleen ontvangen maar ook daadwerkelijk toepassen.</p>
+<p>d) <code>replay_lag</code> loopt zichtbaar op zolang de replica bezig is met de zware query — hij kan de WAL-toepassing niet voorrang geven boven een lopende leesopdracht op dezelfde resources (afhankelijk van de instellingen uit paragraaf 9, kan de toepassing ook juist voorrang krijgen en de leesquery worden vertraagd of afgebroken — beide gedragen zijn mogelijk, wat precies de spanning is die paragraaf 9 beschrijft).</p>
+<p>e) Een oplopende <code>replay_lag</code> betekent dat de replica <strong>verder achterloopt dan je RPO-doelstelling toestaat</strong>, ook al staat de instelling nog op “asynchroon met verwacht laag RPO”. Als de primary op dat moment uitvalt, verlies je precies de hoeveelheid tijd die de <code>replay_lag</code> op dat moment aangaf — niet de theoretische waarde uit je ontwerp.</p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT client_addr, replay_lag FROM pg_stat_replication
+WHERE replay_lag &gt; interval '2 minutes';
+</code></pre>
+<hr>
+<h2>Uitwerking 18.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT pg_create_physical_replication_slot('replica1_slot');
+</code></pre>
+<p>Op de replica: <code>primary_slot_name = 'replica1_slot'</code> in de configuratie, herstart.</p>
+<p>b) Stop de replica met de gebruikelijke stopopdracht voor die instantie.</p>
+<p>c) Draai een lus die enkele tienduizenden rijen invoegt/bijwerkt op de primary, genoeg om over meerdere WAL-segmenten (elk 16 MB standaard) te gaan.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT slot_name, active, restart_lsn FROM pg_replication_slots;
+</code></pre>
+<p><code>active = false</code> (de replica is immers gestopt), en <code>restart_lsn</code> blijft “achter” op het punt waar de replica stopte — de primary houdt alle WAL vanaf dat punt vast.</p>
+<p>e) Ja, <code>pg_wal/</code> groeit met elk segment sinds het stoppen van de replica, en blijft groeien zolang het slot inactief blijft en niemand ingrijpt.</p>
+<p>f) De replica haalt de opgehoopte WAL in vanaf het slot, past hem toe, en gaat weer over op streamen. Het slot voorkwam precies het scenario uit deel 17 waar een replica na een onderbreking een geheel nieuwe basisback-up nodig zou hebben gehad.</p>
+<p>g) Zonder ingrijpen zou <code>pg_wal/</code> op de primary <strong>onbeperkt</strong> blijven groeien — uiteindelijk de schijf vullen en de primary tot stilstand brengen, ongeacht dat de replica zelf niets meer doet. Ontdekken vóór het een probleem wordt: monitoring op <code>pg_replication_slots</code> met een alarm bij <code>active = false</code> gedurende langer dan een ingestelde termijn, of bij een groeiende <code>ophoping</code> (zie de query in paragraaf 7 van de reader).</p>
+<hr>
+<h2>Uitwerking 18.6</h2>
+<p>a) en b) De portaalquery op de primary blijft normaal snel — de replica draait op eigen resources (CPU, geheugen, I/O), volledig gescheiden van de primary. Dit is het kernvoordeel dat paragraaf 8 belooft.</p>
+<p>c) De index toont mogelijk <code>idx_scan = 0</code> <strong>op de primary</strong>, ook al wordt hij intensief gebruikt — maar dan op de replica, waar <code>pg_stat_user_indexes</code> zijn eigen, aparte telling bijhoudt.</p>
+<p>d) <strong>Praktisch gevolg:</strong> het opsporen van ongebruikte indexen (deel 14) moet op <strong>elke server apart</strong> gebeuren in een omgeving met replica’s. Een index die op de primary nutteloos lijkt maar op de leesreplica onmisbaar is, mag niet worden verwijderd op basis van alleen de primary-statistieken. Dit is exact de vierde voorbehoud die in deel 14, paragraaf 17, al werd aangekondigd.</p>
+<hr>
+<h2>Uitwerking 18.7</h2>
+<p>d) De query op de replica wordt afgebroken:</p>
+<pre><code>ERROR: canceling statement due to conflict with recovery
+DETAIL: User query might have needed to see row versions that must be removed.
+</code></pre>
+<p>e) Met <code>hot_standby_feedback = on</code> wordt de query <strong>niet</strong> afgebroken — de replica heeft de primary geïnformeerd over de oudste actieve query, en de primary heeft zijn vacuum op die rijen uitgesteld.</p>
+<p>f) De primary kan nu <strong>bloat opbouwen</strong> op de rijen die de replica-query nog nodig heeft, precies zoals een lang lopende transactie op de primary zelf dat zou doen (deel 7, deel 12) — alleen is de veroorzaker nu een externe server in plaats van een lokale sessie, wat het lastiger te diagnosticeren maakt zonder expliciet naar replicatiefeedback te kijken.</p>
+<p>g) Modelantwoord: <em>“<code>hot_standby_feedback = on</code>, gecombineerd met een verlaagde autovacuum-drempel op de meest geraakte tabellen (deel 11) zodat de primary de extra druk kan verdragen. Rapportagequery’s die worden afgebroken midden in Karins maandafsluiting zijn een slechtere uitkomst dan wat extra vacuumwerk op de primary — mits we dat laatste actief monitoren.”</em></p>
+<hr>
+<h2>Uitwerking 18.8</h2>
+<p>a) <code>SELECT pg_promote();</code> op de replica-instantie.</p>
+<p>b) Ja — de instantie is nu een zelfstandige, schrijfbare primary. <code>pg_is_in_recovery()</code> geeft nu <code>false</code>.</p>
+<p>c) <strong>Nee, de oude primary weet dat niet vanzelf.</strong> Hij blijft denken dat hij de primary is en blijft normaal functioneren, tenzij iemand of iets hem expliciet stopt of ombuigt. Er is geen automatisch mechanisme dat hem informeert.</p>
+<p>d) Als beide instanties schrijfopdrachten accepteren, ontstaan er <strong>twee divergerende versies van de waarheid</strong> — nieuwe rijen die alleen op de ene kant bestaan, mogelijk conflicterende sleutelwaarden. Er is geen geautomatiseerde manier om deze twee later weer samen te voegen zonder handmatige, foutgevoelige reconciliatie, en sommige wijzigingen zijn onherroepelijk met elkaar in tegenspraak (dezelfde primaire sleutel, andere inhoud).</p>
+<p>e) <strong>Een consensusmechanisme dat garandeert dat er nooit meer dan één primary tegelijk actief is</strong> — bijvoorbeeld door de oude primary automatisch te isoleren (fencing) zodra een nieuwe is gepromoveerd. Dat is precies waar Patroni in deel 19 voor bestaat.</p>
+<hr>
+<h2>Uitwerking 18.9 — modelantwoord (verkort)</h2>
+<p><strong>Replicatieontwerp Meridiaan</strong></p>
+<p><strong>1. Topologie</strong></p>
+<ul>
+<li><strong>Replica A (fysiek, synchroon-kworum niet nodig bij RPO=5min):</strong> hot standby, primair doel: failover-gereedheid.</li>
+<li><strong>Replica B (fysiek, asynchroon):</strong> hot standby op een tweede locatie, voor geografische spreiding.</li>
+<li><strong>Rapportage-abonnee (logisch):</strong> alleen <code>mutatie</code>, <code>premienota</code>, <code>werkgever</code> — geen <code>deelnemer</code> met BSN — naar een aparte analytische database voor het BI-team (dataminimalisatie, deel 9).</li>
+</ul>
+<p><strong>2. Synchroon/asynchroon</strong></p>
+<p>Gebaseerd op de RPO-tabel uit deel 17 (§1): mutaties en productiedata hebben een RPO van vijf minuten. Normale replicatievertraging ligt ver onder die grens, dus <strong>asynchroon volstaat voor Replica A en B</strong> — synchroon zou alleen latency toevoegen. Mocht een toekomstige financiële afschrijvingsfunctie een RPO van nul vereisen, dan is dat een apart, specifiek synchroon pad met kworum.</p>
+<p><strong>3. Rapportagereplica</strong></p>
+<p><code>hot_standby_feedback = on</code>: Karins maandafsluiting mag niet halverwege worden afgebroken. Gecombineerd met verlaagde autovacuum-drempels op <code>mutatie</code> en <code>premienota</code> op de primary (deel 11), zodat de primary de extra bloatdruk kan bijbenen. <code>max_standby_streaming_delay</code> ruim (enkele minuten) als tweede vangnet.</p>
+<p><strong>4. Monitoring</strong></p>
+<table>
+<thead>
+<tr>
+<th>Metriek</th>
+<th>Drempel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>replay_lag</code> op elke replica</td>
+<td>Alarm boven 2 minuten (ruim onder het RPO van 5 min)</td>
+</tr>
+<tr>
+<td>Inactieve replicatieslots</td>
+<td>Alarm bij <code>active=false</code> langer dan 1 uur</td>
+</tr>
+<tr>
+<td>WAL-ophoping per slot</td>
+<td>Alarm bij groei boven een vaste grens (bijv. 1 GB)</td>
+</tr>
+<tr>
+<td><code>pg_stat_replication</code> aanwezigheid</td>
+<td>Alarm als een verwachte replica ontbreekt</td>
+</tr>
+</tbody>
+</table>
+<p><strong>5. Logische replicatie: het scenario</strong></p>
+<p>De partitioneringsmigratie uit deel 16 voor toekomstige, grotere versies van <code>mutatie</code>: een publicatie op de bestaande tabel, een abonnement dat naar de nieuwe gepartitioneerde structuur schrijft, laten inlopen zonder downtime, controleren, en pas dan omschakelen — in plaats van een applicatie die dubbel moet schrijven.</p>
+<p><strong>6. Bij het uitvallen van de primary</strong></p>
+<p>Dit ontwerp maakt promotie <strong>mogelijk</strong> (<code>pg_promote()</code> op Replica A), maar regelt <strong>niet automatisch</strong>:</p>
+<ul>
+<li>de detectie dat de primary is uitgevallen;</li>
+<li>de beslissing welke replica gepromoveerd wordt;</li>
+<li>het isoleren van de oude primary om split-brain te voorkomen;</li>
+<li>het omleiden van applicatieverkeer naar de nieuwe primary.</li>
+</ul>
+<p><strong>Deze vier punten zijn het onderwerp van deel 19.</strong> Tot die tijd is failover een handmatige procedure met een reëel risico op fouten onder tijdsdruk.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Synchroon/asynchroon gekoppeld aan een RPO-getal</strong>, niet aan een voorkeur. Groepen die overal synchroon kiezen “voor de zekerheid”: vraag naar de latencykosten en het blokkeerrisico.</li>
+<li><strong>Fysiek/logisch functioneel onderscheiden.</strong> De rapportagereplica als logisch (selectief, privacy) versus de failover-replica’s als fysiek (volledig, snel) moet een bewuste keuze zijn.</li>
+<li><strong>Punt 6 moet de grens expliciet erkennen.</strong> Groepen die doen alsof promotie hetzelfde is als failover, hebben het onderscheid uit paragraaf 14 gemist.</li>
+<li><strong>Concrete drempels</strong>, geen “monitoren”.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 18.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">338 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-17-back-up-en-herstel/reader.html">&larr; Deel 17 — Back-up en herstel</a><a class="dbm-prevnext next" href="../deel-19-hoge-beschikbaarheid/reader.html">Deel 19 — Hoge beschikbaarheid &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

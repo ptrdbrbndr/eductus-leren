@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Het relationele model en de PostgreSQL-architectuur — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 2 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 2 — Slidedeck</h1>
+<p><strong>Het relationele model en de PostgreSQL-architectuur</strong>
+Niveau 1, dagdeel 2 | 42 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst, niet op de slide.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Het relationele model</h1>
+<h1>en de PostgreSQL-architectuur</h1>
+<h3>Niveau 1 — Deel 2</h3>
+<p><em>Wat gebeurt er tussen Enter en het antwoord?</em></p>
+<hr>
+<h2>Slide 2 — Vandaag in twee helften</h2>
+<p><strong>Model</strong> — relatie, sleutels, integriteit, NULL</p>
+<p><strong>Machine</strong> — processen, geheugen, opslag, WAL, MVCC, de planner</p>
+<p><strong>Notities:</strong> waarschuw dat dit het zwaarste dagdeel van niveau 1 is.</p>
+<hr>
+<h2>Slide 3 — Leerdoelen</h2>
+<ol>
+<li>Modeltermen correct gebruiken</li>
+<li>Sleutelkeuze motiveren</li>
+<li>De drie integriteitsregels toepassen</li>
+<li>NULL-vallen herkennen</li>
+<li>De PostgreSQL-processen benoemen</li>
+<li>Cluster / database / schema onderscheiden</li>
+<li>De reis van een query beschrijven</li>
+<li>WAL, MVCC en vacuum uitleggen</li>
+</ol>
+<hr>
+<h2>Slide 4 — 1970, dertien pagina’s</h2>
+<p><strong>E.F. Codd</strong> — <em>A Relational Model of Data for Large Shared Data Banks</em></p>
+<p>Geen product, maar een <strong>wiskundige basis</strong>.</p>
+<p>Bewerkingen zijn <strong>gesloten</strong>: relatie in → relatie uit.</p>
+<p>→ Daarom mag een optimalisator je query herschrijven.</p>
+<hr>
+<h2>Slide 5 — De bouwstenen</h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>SQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relatie</td>
+<td>Tabel</td>
+</tr>
+<tr>
+<td>Tupel</td>
+<td>Rij</td>
+</tr>
+<tr>
+<td>Attribuut</td>
+<td>Kolom</td>
+</tr>
+<tr>
+<td>Domein</td>
+<td>Datatype + constraints</td>
+</tr>
+<tr>
+<td>Cardinaliteit</td>
+<td>Aantal rijen</td>
+</tr>
+<tr>
+<td>Graad</td>
+<td>Aantal kolommen</td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-1.png" alt="Figuur 2-1" loading="lazy"><figcaption>Figuur 2-1</figcaption></figure>
+<hr>
+<h2>Slide 6 — Het domein wordt onderschat</h2>
+<p><code>varchar(200)</code> staat toe:</p>
+<blockquote>
+<p>“Nvt” · “onbekend” · “zie mail Karin”</p>
+</blockquote>
+<p>Bij Meridiaan: <strong>negen varianten van “gehuwd”</strong> in één kolom.</p>
+<h1>Geen schoonmaakklus.</h1>
+<h1>Een ontwerpbeslissing.</h1>
+<hr>
+<h2>Slide 7 — Sleutels</h2>
+<ul>
+<li><strong>Supersleutel</strong> — identificeert uniek (meestal veel en nutteloos)</li>
+<li><strong>Kandidaatsleutel</strong> — minimaal uniek</li>
+<li><strong>Primaire sleutel</strong> — de gekozen kandidaat, nooit NULL</li>
+<li><strong>Alternatieve sleutel</strong> — de niet-gekozen kandidaten → <code>UNIQUE</code></li>
+<li><strong>Vreemde sleutel</strong> — verwijzing naar een andere tabel</li>
+</ul>
+<hr>
+<h2>Slide 8 — Natuurlijk of surrogaat?</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Natuurlijk</th>
+<th>Surrogaat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Betekenisvol</td>
+<td>Ja</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Stabiel</td>
+<td>Vaak niet</td>
+<td>Altijd</td>
+</tr>
+<tr>
+<td>Altijd aanwezig</td>
+<td>Nee</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Privacygevoelig</td>
+<td>Vaak</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Extra join nodig</td>
+<td>Nee</td>
+<td>Ja</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 9 — Het BSN-probleem bij Meridiaan</h2>
+<ul>
+<li>Niet elke deelnemer heeft er een</li>
+<li>Bijzonder persoonsgegeven → <strong>verspreidt zich via elke foreign key</strong></li>
+<li>Kan in uitzonderingsgevallen wijzigen</li>
+</ul>
+<p><strong>Cursusregel:</strong> surrogaat als primaire sleutel, natuurlijke sleutel als <code>UNIQUE</code>.</p>
+<p><strong>Notities:</strong> benoem dat dit een keuze is, niet de enige verdedigbare.</p>
+<hr>
+<h2>Slide 10 — Opdracht 2.1 &amp; 2.2</h2>
+<p><strong>2.1</strong> Modeltermen op de tabel <code>deelnemer</code> — <em>10 min, individueel</em></p>
+<p><strong>2.2</strong> Tarik wil overal BSN als primaire sleutel. Reageer in 120 woorden — <em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 11 — Pauze</h2>
+<hr>
+<h2>Slide 12 — Drie integriteitsregels</h2>
+<p><strong>Entiteit</strong> — geen NULL in de primaire sleutel</p>
+<p><strong>Referentieel</strong> — vreemde sleutel wijst naar iets dat bestaat</p>
+<p><strong>Domein</strong> — waarden binnen het toegestane bereik</p>
+<hr>
+<h2>Slide 13 — Terug naar werkgever 8842</h2>
+<p>Deel 1: <em>“In de SharePoint-lijst staat een mutatie op werkgeversnummer 8842. Dat nummer bestaat niet.”</em></p>
+<h1>Referentiële integriteit maakt dit onmogelijk.</h1>
+<hr>
+<h2>Slide 14 — Verwijdergedrag</h2>
+<table>
+<thead>
+<tr>
+<th>Optie</th>
+<th>Gedrag</th>
+<th>Wanneer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RESTRICT</code></td>
+<td>Weiger</td>
+<td>Standaard, meestal juist</td>
+</tr>
+<tr>
+<td><code>CASCADE</code></td>
+<td>Verwijder mee</td>
+<td>Alleen bij echt eigendom</td>
+</tr>
+<tr>
+<td><code>SET NULL</code></td>
+<td>Zet op NULL</td>
+<td>Optionele relatie</td>
+</tr>
+<tr>
+<td><code>SET DEFAULT</code></td>
+<td>Standaardwaarde</td>
+<td>Zelden</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 15 — Waarschuwing</h2>
+<h1><code>CASCADE</code> verandert foutmeldingen</h1>
+<h1>niet in correct gedrag,</h1>
+<h1>maar in stille gegevensvernietiging.</h1>
+<p>Eén werkgever verwijderd → 800 deelnemers → al hun aanspraken.</p>
+<hr>
+<h2>Slide 16 — Opdracht 2.3</h2>
+<h1>Verwijdergedrag kiezen</h1>
+<p>Vier situaties bij Meridiaan.</p>
+<p><em>15 min, individueel</em></p>
+<hr>
+<h2>Slide 17 — NULL is niet nul</h2>
+<p><strong>NULL = onbekend of niet van toepassing</strong></p>
+<p>Niet 0. Niet “”. Niet leeg.</p>
+<p>→ Logica met <strong>drie</strong> waarden: waar, onwaar, <strong>onbekend</strong></p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-2.png" alt="Figuur 2-2" loading="lazy"><figcaption>Figuur 2-2</figcaption></figure>
+<hr>
+<h2>Slide 18 — Voorspel het resultaat</h2>
+<pre><code class="language-sql">SELECT NULL = NULL;
+SELECT NULL IS NULL;
+SELECT 5 &gt; NULL;
+</code></pre>
+<p><strong>Notities:</strong> live in psql typen. Zaal hardop laten voorspellen vóór elke uitvoering.</p>
+<hr>
+<h2>Slide 19 — Vier vallen</h2>
+<ol>
+<li><code>WHERE x &lt;&gt; 100</code> laat NULL-rijen weg</li>
+<li><code>AVG</code> en <code>COUNT(kolom)</code> negeren NULL — <code>COUNT(*)</code> niet</li>
+<li><code>NOT IN</code> met NULL in de lijst → <strong>nooit rijen</strong></li>
+<li><code>UNIQUE</code> staat meerdere NULL’s toe</li>
+</ol>
+<hr>
+<h2>Slide 20 — De oplossingen</h2>
+<table>
+<thead>
+<tr>
+<th>In plaats van</th>
+<th>Gebruik</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x &lt;&gt; waarde</code></td>
+<td><code>x IS DISTINCT FROM waarde</code></td>
+</tr>
+<tr>
+<td><code>NOT IN (subquery)</code></td>
+<td><code>NOT EXISTS (...)</code></td>
+</tr>
+<tr>
+<td><code>COUNT(kolom)</code> als je rijen bedoelt</td>
+<td><code>COUNT(*)</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 21 — Herinner je deel 1</h2>
+<blockquote>
+<p><em>Drie afdelingen, drie deelnemersaantallen, alle drie verdedigbaar.</em></p>
+</blockquote>
+<h1>Nu weet je hoe dat gebeurt.</h1>
+<hr>
+<h2>Slide 22 — Ontwerpregel</h2>
+<p>Gebruik NULL <strong>alleen</strong> als “onbekend of niet van toepassing” een geldige toestand is.</p>
+<p>Nooit als verkapte statuskolom.</p>
+<hr>
+<h2>Slide 23 — Opdracht 2.4</h2>
+<h1>NULL-vallen</h1>
+<p>Achter de machine. Voorspel eerst, voer dan uit.</p>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 24 — Relationele algebra</h2>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>SQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Selectie σ</td>
+<td><code>WHERE</code></td>
+</tr>
+<tr>
+<td>Projectie π</td>
+<td><code>SELECT</code>-lijst</td>
+</tr>
+<tr>
+<td>Vereniging ∪</td>
+<td><code>UNION</code></td>
+</tr>
+<tr>
+<td>Verschil −</td>
+<td><code>EXCEPT</code></td>
+</tr>
+<tr>
+<td>Product ×</td>
+<td><code>CROSS JOIN</code></td>
+</tr>
+<tr>
+<td>Join ⋈</td>
+<td><code>JOIN ... ON</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 25 — Onthoud dit ene ding</h2>
+<h1>Een join is een cartesisch product</h1>
+<h1>met een filter.</h1>
+<p>340.000 × 4.100 als je de voorwaarde vergeet.</p>
+<hr>
+<h2>Slide 26 — Waar SQL afwijkt van het model</h2>
+<ol>
+<li>Bags, geen sets → duplicaten bestaan</li>
+<li>Volgorde bestaat (en is <strong>niet</strong> gegarandeerd zonder <code>ORDER BY</code>)</li>
+<li>NULL en driewaardige logica</li>
+<li>Kolomvolgorde is betekenisvol</li>
+<li>Niet-atomaire waarden: arrays, <code>jsonb</code></li>
+</ol>
+<hr>
+<h2>Slide 27 — Pauze</h2>
+<hr>
+<h2>Slide 28 — Procesmodel, geen threadmodel</h2>
+<h1>Elke verbinding = een eigen OS-proces</h1>
+<p>Gevolg: robuust, maar verbindingen zijn <strong>duur</strong>.</p>
+<hr>
+<h2>Slide 29 — De processen</h2>
+<p><strong>Postmaster</strong> — luistert, start backends, bewaakt
+<strong>Backend</strong> — één per verbinding</p>
+<table>
+<thead>
+<tr>
+<th>Achtergrond</th>
+<th>Taak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Background writer</td>
+<td>Vuile pagina’s geleidelijk wegschrijven</td>
+</tr>
+<tr>
+<td>Checkpointer</td>
+<td>Checkpoints</td>
+</tr>
+<tr>
+<td>WAL writer</td>
+<td>WAL-buffers → schijf</td>
+</tr>
+<tr>
+<td>Autovacuum</td>
+<td>Dode rijversies + statistieken</td>
+</tr>
+<tr>
+<td>Archiver</td>
+<td>WAL-segmenten archiveren</td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-3.png" alt="Figuur 2-3" loading="lazy"><figcaption>Figuur 2-3</figcaption></figure>
+<p><strong>Notities:</strong> live opbouwen op het whiteboard. Vraag per proces: wat gaat er mis zonder?</p>
+<hr>
+<h2>Slide 30 — Geheugen</h2>
+<p><strong>Gedeeld:</strong> <code>shared_buffers</code> (pagina’s van 8 kB), WAL buffers</p>
+<p><strong>Per backend:</strong> <code>work_mem</code>, <code>maintenance_work_mem</code>, <code>temp_buffers</code></p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-4.png" alt="Figuur 2-4" loading="lazy"><figcaption>Figuur 2-4</figcaption></figure>
+<hr>
+<h2>Slide 31 — De belangrijkste zin over geheugen</h2>
+<h1><code>shared_buffers</code> is één keer,</h1>
+<h1>voor het hele cluster.</h1>
+<h1><code>work_mem</code> is **per bewerking,</h1>
+<h1>per verbinding** — en vermenigvuldigt.</h1>
+<hr>
+<h2>Slide 32 — Cluster ≠ meerdere machines</h2>
+<p><strong>Cluster</strong> — één instantie, één datadirectory, één poort
+<strong>Database</strong> — geïsoleerde verzameling schema’s
+<strong>Schema</strong> — naamruimte
+<strong>Tabel</strong> — de gegevens</p>
+<p><strong>Notities:</strong> waarschuw voor het misverstand in overleg met infrastructuur.</p>
+<hr>
+<h2>Slide 33 — Scheiden: hoe ver?</h2>
+<table>
+<thead>
+<tr>
+<th>Niveau</th>
+<th>Wat je houdt</th>
+<th>Wat je verliest</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Schema</td>
+<td>Joins, één transactie, één back-up</td>
+<td>Minder isolatie</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Meer isolatie</td>
+<td>Joins, transacties over beide</td>
+</tr>
+<tr>
+<td>Cluster</td>
+<td>Volledige isolatie</td>
+<td>Dubbel beheer</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Vuistregel: het lichtste niveau dat de eis afdekt.</strong></p>
+<hr>
+<h2>Slide 34 — Het datadirectory</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>base/</code></td>
+<td>De databases</td>
+</tr>
+<tr>
+<td><code>global/</code></td>
+<td>Clusterbrede objecten</td>
+</tr>
+<tr>
+<td><code>pg_wal/</code></td>
+<td>Write-ahead log</td>
+</tr>
+<tr>
+<td><code>postgresql.conf</code></td>
+<td>Configuratie</td>
+</tr>
+<tr>
+<td><code>pg_hba.conf</code></td>
+<td>Wie mag van waar verbinden</td>
+</tr>
+</tbody>
+</table>
+<h1>Verwijder nooit met de hand iets uit <code>base/</code> of <code>pg_wal/</code>.</h1>
+<hr>
+<h2>Slide 35 — Opdracht 2.5 &amp; 2.6</h2>
+<p><strong>2.5</strong> Architectuur zichtbaar maken — achter de machine, <em>20 min</em></p>
+<p><strong>2.6</strong> Cluster, database of schema? — drietallen, <em>15 min</em></p>
+<hr>
+<h2>Slide 36 — WAL: het principe</h2>
+<ol>
+<li>Wijziging → WAL-record</li>
+<li>WAL-record <strong>afgedwongen</strong> naar schijf</li>
+<li><strong>Pas dan</strong> commit bevestigd</li>
+<li>Gegevensbestanden volgen later</li>
+</ol>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-5.png" alt="Figuur 2-5" loading="lazy"><figcaption>Figuur 2-5</figcaption></figure>
+<hr>
+<h2>Slide 37 — Waarom WAL ook sneller is</h2>
+<p><strong>WAL</strong> = sequentieel schrijven, achter elkaar
+<strong>Gegevensbestanden</strong> = willekeurig verspreid over de schijf</p>
+<p>→ Duurzaamheid tegen een fractie van de kosten</p>
+<hr>
+<h2>Slide 38 — MVCC</h2>
+<p><code>UPDATE</code> wijzigt niets. Er komt een <strong>nieuwe versie</strong> bij.</p>
+<h1>Lezers blokkeren geen schrijvers.</h1>
+<h1>Schrijvers blokkeren geen lezers.</h1>
+<hr>
+<h2>Slide 39 — De prijs van MVCC</h2>
+<p>Dode rijversies blijven staan → iemand moet opruimen → <strong>vacuum</strong></p>
+<p>Autovacuum uitzetten “omdat het I/O kost”:</p>
+<h1>de bekendste manier om een</h1>
+<h1>PostgreSQL-productieomgeving te slopen</h1>
+<hr>
+<h2>Slide 40 — De reis van een query</h2>
+<ol>
+<li><strong>Parser</strong> — syntaxis → parseboom</li>
+<li><strong>Analyzer/rewriter</strong> — objecten, typen, <strong>rechten</strong>, views</li>
+<li><strong>Planner</strong> — welke index, welke joinvolgorde, welk algoritme</li>
+<li><strong>Executor</strong> — uitvoeren, rijen terug</li>
+</ol>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-6.png" alt="Figuur 2-6" loading="lazy"><figcaption>Figuur 2-6</figcaption></figure>
+<hr>
+<h2>Slide 41 — Het inzicht van vandaag</h2>
+<h1>SQL is declaratief.</h1>
+<h3>Jij zegt <em>wat</em>. De planner bepaalt <em>hoe</em>.</h3>
+<p>Daarom kan dezelfde query vandaag snel zijn en morgen traag —
+zonder dat query, data of hardware veranderd is.</p>
+<hr>
+<h2>Slide 42 — Volgende keer</h2>
+<h1>Deel 3 — SQL basis</h1>
+<p><code>SELECT</code>, filteren, sorteren, aggregeren op de Meridiaan-database.</p>
+<p><strong>Vooraf:</strong> casusdatabase laden volgens de Toolbijlage.
+Controle: <code>SELECT count(*) FROM deelnemer;</code></p>
+<hr>
+<p><em>Einde slidedeck deel 2.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">262 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">666 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-01-databases-en-het-dbms-landschap-waarom-postgresql/reader.html">&larr; Deel 1 — Databases en het DBMS-landschap: waarom PostgreSQL</a><a class="dbm-prevnext next" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

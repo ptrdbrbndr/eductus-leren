@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Het relationele model en de PostgreSQL-architectuur — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 2 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 2 — Het relationele model en de PostgreSQL-architectuur</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 2 van 10
+Aansluiting: EDB PostgreSQL Associate — domein “Architecture” (zwaar wegend examenonderdeel)</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom een model vóór een product</li>
+<li>Het relationele model: de bouwstenen</li>
+<li>Sleutels</li>
+<li>De drie integriteitsregels</li>
+<li>NULL en de driewaardige logica</li>
+<li>Relationele algebra in vogelvlucht</li>
+<li>Waar SQL afwijkt van het model</li>
+<li>PostgreSQL-architectuur: het procesmodel</li>
+<li>Geheugen: shared buffers en de rest</li>
+<li>Opslag op schijf: cluster, database, schema, bestand</li>
+<li>De systeemcatalogus</li>
+<li>WAL: de belofte van duurzaamheid</li>
+<li>MVCC in één pagina</li>
+<li>De reis van een query</li>
+<li>Verbindingen en waarom pooling bestaat</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+<li>Verder lezen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de begrippen relatie, tupel, attribuut en domein correct gebruiken en koppelen aan hun SQL-tegenhangers;</li>
+<li>de soorten sleutels onderscheiden en een sleutelkeuze motiveren;</li>
+<li>de drie integriteitsregels benoemen en per regel aangeven wat er misgaat als je hem loslaat;</li>
+<li>uitleggen waarom <code>NULL = NULL</code> niet waar is en welke gevolgen dat heeft voor je query’s;</li>
+<li>de belangrijkste PostgreSQL-processen benoemen en zeggen wat elk doet;</li>
+<li>het onderscheid cluster / database / schema toepassen bij het inrichten van een omgeving;</li>
+<li>de reis van een query door parser, rewriter, planner en executor beschrijven;</li>
+<li>uitleggen waarom WAL bestaat en wat er zonder WAL misgaat bij een crash;</li>
+<li>verklaren waarom PostgreSQL-verbindingen duur zijn en wanneer pooling nodig is.</li>
+</ul>
+<p>Dit is inhoudelijk het zwaarste deel van niveau 1. Het examen weegt architectuur zwaar, en alles wat je in latere delen leert over indexen, tuning, back-up en replicatie veronderstelt het model uit dit deel.</p>
+<hr>
+<h2>2. Waarom een model vóór een product</h2>
+<p>Het relationele model is in 1970 beschreven door Edgar F. Codd in een artikel van dertien pagina’s. Het is opmerkelijk dat een model uit 1970 nog steeds de basis vormt van vrijwel alle administratieve systemen ter wereld. De reden is dat Codd geen product beschreef maar een <em>wiskundige</em> basis: relaties als verzamelingen, met bewerkingen die gesloten zijn (het resultaat van een bewerking op relaties is zelf weer een relatie).</p>
+<p>Die geslotenheid is de reden dat je in SQL een query op het resultaat van een query kunt loslaten, en dat een optimalisator een query mag herschrijven zolang het resultaat gelijk blijft. Zonder wiskundige basis was query-optimalisatie (deel 8, en niveau 2 deel 13) onmogelijk geweest.</p>
+<p>Praktisch belang voor jou: <strong>als je het model kent, herken je wanneer een product ervan afwijkt.</strong> Dat gebeurt vaker dan je denkt, en het is meestal precies daar waar de verrassingen zitten.</p>
+<hr>
+<h2>3. Het relationele model: de bouwstenen</h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>SQL</th>
+<th>Alledaags</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relatie</td>
+<td>Tabel</td>
+<td>Verzameling gelijksoortige gegevens</td>
+</tr>
+<tr>
+<td>Tupel</td>
+<td>Rij</td>
+<td>Eén exemplaar</td>
+</tr>
+<tr>
+<td>Attribuut</td>
+<td>Kolom</td>
+<td>Eigenschap</td>
+</tr>
+<tr>
+<td>Domein</td>
+<td>Datatype (+ constraints)</td>
+<td>De toegestane waarden</td>
+</tr>
+<tr>
+<td>Cardinaliteit</td>
+<td>Aantal rijen</td>
+<td></td>
+</tr>
+<tr>
+<td>Graad</td>
+<td>Aantal kolommen</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Twee eigenschappen van een relatie die SQL <em>niet</em> naleeft, maar die je moet kennen:</p>
+<ol>
+<li><strong>Een relatie is een verzameling.</strong> Dubbele tupels bestaan niet, en er is geen volgorde. In SQL kan een tabel wél dubbele rijen bevatten (tenzij je dat verbiedt) en heeft een resultaat wél een volgorde zodra je <code>ORDER BY</code> gebruikt.</li>
+<li><strong>Attributen zijn atomair.</strong> Eén waarde per cel, niet een lijstje. PostgreSQL biedt arrays en <code>jsonb</code> en schendt hiermee bewust de eerste normaalvorm — soms terecht, vaak niet. Deel 5 gaat over wanneer wel en wanneer niet.</li>
+</ol>
+<h3>Het domein</h3>
+<p>Het domein wordt onderschat. <code>varchar(200)</code> is een zwak domein: het staat “Nvt”, “onbekend” en “zie mail Karin” toe. Een sterk domein is een datatype plus constraints plus, waar mogelijk, een referentie naar een tabel met toegestane waarden.</p>
+<p>Bij Meridiaan is <code>burgerlijke_staat</code> in de oude Access-schil een vrij tekstveld. Er staan negen varianten van “gehuwd” in. Dat is geen datakwaliteitsprobleem dat je met een schoonmaakactie oplost; het is een domeinprobleem dat je met een ontwerpbeslissing oplost.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-1.png" alt="Relatie, tupel, attribuut en domein op één voorbeeldtabel `deelnemer`" loading="lazy"><figcaption>Figuur 2-1 — Relatie, tupel, attribuut en domein op één voorbeeldtabel `deelnemer`</figcaption></figure>
+<hr>
+<h2>4. Sleutels</h2>
+<p><strong>Supersleutel</strong> — elke verzameling attributen die een tupel uniek identificeert. Meestal zijn er veel, en de meeste zijn nutteloos (“bsn + achternaam + postcode”).</p>
+<p><strong>Kandidaatsleutel</strong> — een supersleutel waaruit je geen attribuut kunt weglaten zonder de uniciteit te verliezen. Minimaal, dus.</p>
+<p><strong>Primaire sleutel</strong> — de kandidaatsleutel die je kiest als officiële identificatie. Eén per tabel, mag nooit NULL zijn.</p>
+<p><strong>Alternatieve sleutel</strong> — de kandidaatsleutels die je niet koos. Die verdienen alsnog een <code>UNIQUE</code>-constraint; het feit dat je ze niet als primaire sleutel gebruikt, betekent niet dat duplicaten toegestaan zijn.</p>
+<p><strong>Vreemde sleutel (foreign key)</strong> — een attribuut dat verwijst naar de primaire sleutel van een andere (of dezelfde) tabel.</p>
+<p><strong>Samengestelde sleutel</strong> — een sleutel die uit meerdere attributen bestaat.</p>
+<h3>Natuurlijk of surrogaat?</h3>
+<p>De keuze die in elk project terugkomt.</p>
+<p>Een <strong>natuurlijke sleutel</strong> komt uit het domein zelf: burgerservicenummer, KvK-nummer, ISBN.
+Een <strong>surrogaatsleutel</strong> is betekenisloos en door het systeem gegenereerd: een volgnummer of een UUID.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Natuurlijk</th>
+<th>Surrogaat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Betekenisvol voor mensen</td>
+<td>Ja</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Stabiel over de tijd</td>
+<td>Vaak niet</td>
+<td>Altijd</td>
+</tr>
+<tr>
+<td>Bruikbaar bij ontbreken</td>
+<td>Nee (buitenlandse deelnemer zonder BSN)</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Privacygevoelig</td>
+<td>Vaak</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Extra join nodig om te herkennen</td>
+<td>Nee</td>
+<td>Ja</td>
+</tr>
+</tbody>
+</table>
+<p>Voor Meridiaan is dit geen theoretische kwestie. Het burgerservicenummer lijkt de perfecte sleutel voor <code>deelnemer</code>, maar:</p>
+<ul>
+<li>niet elke deelnemer heeft er een (grensarbeiders, gepensioneerden in het buitenland);</li>
+<li>het is bijzonder persoonsgegeven en verspreidt zich via foreign keys door je hele model;</li>
+<li>het kan in uitzonderingsgevallen wijzigen.</li>
+</ul>
+<p><strong>Advies dat in deze cursus consequent wordt aangehouden:</strong> gebruik een surrogaatsleutel als primaire sleutel, en leg de natuurlijke sleutel vast als <code>UNIQUE</code>-constraint waar hij bestaat en werkelijk uniek is. Zo krijg je stabiliteit én bewaakte betekenis. In deel 5 en 6 werken we dit uit.</p>
+<hr>
+<h2>5. De drie integriteitsregels</h2>
+<p><strong>Entiteitsintegriteit.</strong> Geen enkel attribuut van de primaire sleutel mag NULL zijn. Logisch: een identificatie die “onbekend” kan zijn, identificeert niet.</p>
+<p><strong>Referentiële integriteit.</strong> Een vreemde sleutel verwijst naar een bestaande rij, of is volledig NULL. Dit is de regel die het SharePoint-probleem uit deel 1 (mutatie op niet-bestaand werkgeversnummer 8842) onmogelijk maakt.</p>
+<p>Bij referentiële integriteit hoort een gedragskeuze bij verwijderen of wijzigen van de verwezen rij:</p>
+<table>
+<thead>
+<tr>
+<th>Optie</th>
+<th>Betekenis</th>
+<th>Wanneer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NO ACTION</code> / <code>RESTRICT</code></td>
+<td>Weiger de bewerking</td>
+<td>Standaard en meestal juist</td>
+</tr>
+<tr>
+<td><code>CASCADE</code></td>
+<td>Verwijder/wijzig mee</td>
+<td>Alleen bij echte eigendomsrelaties</td>
+</tr>
+<tr>
+<td><code>SET NULL</code></td>
+<td>Zet verwijzing op NULL</td>
+<td>Als de relatie optioneel is</td>
+</tr>
+<tr>
+<td><code>SET DEFAULT</code></td>
+<td>Zet op standaardwaarde</td>
+<td>Zelden</td>
+</tr>
+</tbody>
+</table>
+<p><code>CASCADE</code> op een deelnemertabel is levensgevaarlijk: één verwijderde deelnemer neemt zijn hele aansprakenhistorie mee. Gebruik het alleen waar het kind zonder de ouder werkelijk geen bestaansrecht heeft.</p>
+<p><strong>Domeinintegriteit.</strong> Elke waarde valt binnen het domein van het attribuut. In PostgreSQL: datatypen, <code>CHECK</code>-constraints, <code>NOT NULL</code>, en eigen domeinen (<code>CREATE DOMAIN</code>).</p>
+<hr>
+<h2>6. NULL en de driewaardige logica</h2>
+<p>NULL is niet nul, niet een lege string, en niet “leeg”. NULL betekent <strong>onbekend of niet van toepassing</strong>.</p>
+<p>Daaruit volgt logica met drie waarden: waar, onwaar, <strong>onbekend</strong>.</p>
+<pre><code class="language-sql">SELECT NULL = NULL;        -- onbekend, niet waar
+SELECT NULL &lt;&gt; NULL;       -- onbekend
+SELECT NULL IS NULL;       -- waar
+SELECT 5 &gt; NULL;           -- onbekend
+</code></pre>
+<p>Gevolgen die in de praktijk fout gaan:</p>
+<ol>
+<li><strong><code>WHERE</code>-clausules filteren onbekend weg.</strong> <code>WHERE einddatum &lt;&gt; '2026-01-01'</code> levert géén rijen op waar <code>einddatum</code> NULL is. Wie alle rijen wil behalve die ene datum, moet schrijven: <code>WHERE einddatum IS DISTINCT FROM DATE '2026-01-01'</code>.</li>
+<li><strong>Aggregaties negeren NULL.</strong> <code>AVG(premie)</code> rekent over de niet-NULL waarden. <code>COUNT(premie)</code> telt alleen niet-NULL; <code>COUNT(*)</code> telt alle rijen. Dat verschil verklaart de meeste “de aantallen kloppen niet”-meldingen.</li>
+<li><strong><code>NOT IN</code> met NULL in de lijst levert nooit rijen op.</strong> Berucht. Gebruik <code>NOT EXISTS</code>.</li>
+<li><strong><code>UNIQUE</code> staat meerdere NULL’s toe.</strong> Twee rijen met NULL in dezelfde unieke kolom zijn toegestaan, want ze zijn niet aantoonbaar gelijk.</li>
+</ol>
+<p><strong>Ontwerpregel:</strong> gebruik NULL alleen als “onbekend of niet van toepassing” werkelijk een geldige toestand is. Gebruik het nooit als vervanging voor een status. Een <code>einddatum</code> die NULL is omdat het dienstverband loopt, is verdedigbaar; een <code>bedrag</code> dat NULL is omdat de berekening nog moet draaien, is een verkapte statuskolom.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-2.png" alt="Waarheidstabel driewaardige logica voor AND, OR, NOT" loading="lazy"><figcaption>Figuur 2-2 — Waarheidstabel driewaardige logica voor AND, OR, NOT</figcaption></figure>
+<hr>
+<h2>7. Relationele algebra in vogelvlucht</h2>
+<p>Je hoeft geen algebra te kunnen schrijven, maar je moet de operatoren herkennen — de queryplannen die je in deel 8 en in niveau 2 gaat lezen, zijn er letterlijk in opgesteld.</p>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Betekenis</th>
+<th>SQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Selectie (σ)</td>
+<td>Rijen kiezen</td>
+<td><code>WHERE</code></td>
+</tr>
+<tr>
+<td>Projectie (π)</td>
+<td>Kolommen kiezen</td>
+<td><code>SELECT</code>-lijst</td>
+</tr>
+<tr>
+<td>Vereniging (∪)</td>
+<td>Rijen samenvoegen</td>
+<td><code>UNION</code></td>
+</tr>
+<tr>
+<td>Doorsnede (∩)</td>
+<td>Gemeenschappelijke rijen</td>
+<td><code>INTERSECT</code></td>
+</tr>
+<tr>
+<td>Verschil (−)</td>
+<td>Rijen die niet in de tweede staan</td>
+<td><code>EXCEPT</code></td>
+</tr>
+<tr>
+<td>Cartesisch product (×)</td>
+<td>Elke rij met elke rij</td>
+<td><code>CROSS JOIN</code></td>
+</tr>
+<tr>
+<td>Join (⋈)</td>
+<td>Product plus voorwaarde</td>
+<td><code>JOIN ... ON</code></td>
+</tr>
+<tr>
+<td>Hernoeming (ρ)</td>
+<td>Alias</td>
+<td><code>AS</code></td>
+</tr>
+</tbody>
+</table>
+<p>Onthoud vooral: <strong>een join is een cartesisch product met een filter.</strong> Wie dat begrijpt, begrijpt onmiddellijk waarom een vergeten joinvoorwaarde 340.000 × 4.100 rijen oplevert en waarom de planner joins probeert om te zetten in iets goedkopers.</p>
+<hr>
+<h2>8. Waar SQL afwijkt van het model</h2>
+<p>Puristen ergeren zich hieraan; jij moet het simpelweg weten omdat het je query’s beïnvloedt.</p>
+<ol>
+<li><strong>Bags in plaats van sets.</strong> SQL-tabellen en -resultaten kunnen duplicaten bevatten. Vandaar <code>DISTINCT</code>.</li>
+<li><strong>Volgorde bestaat.</strong> In het model niet, in SQL wel via <code>ORDER BY</code> — en zonder <code>ORDER BY</code> is de volgorde <em>niet gegarandeerd</em>, ook al lijkt hij stabiel. Vertrouw daar nooit op.</li>
+<li><strong>NULL.</strong> Het model in zijn zuivere vorm kent geen NULL; Codd zelf stelde later een uitgebreider systeem voor. SQL koos voor NULL en de driewaardige logica.</li>
+<li><strong>Kolomvolgorde is betekenisvol.</strong> <code>SELECT *</code> levert kolommen in de volgorde van definitie. In het model heeft een relatie geen kolomvolgorde.</li>
+<li><strong>Niet-atomaire waarden.</strong> Arrays, <code>jsonb</code>, samengestelde typen.</li>
+</ol>
+<hr>
+<h2>9. PostgreSQL-architectuur: het procesmodel</h2>
+<p>Hier gaan we van theorie naar machine.</p>
+<p>PostgreSQL gebruikt een <strong>procesmodel</strong>, geen threadmodel: elke clientverbinding krijgt een eigen besturingssysteemproces. Dat is een fundamentele ontwerpkeuze met zichtbare gevolgen (zie paragraaf 16).</p>
+<h3>De processen</h3>
+<p><strong>Postmaster (de hoofdserver).</strong> Het eerste proces dat start. Luistert op de poort, accepteert verbindingen, start voor elke verbinding een backend, start en bewaakt de achtergrondprocessen, en herstart alles na een crash van een backend.</p>
+<p><strong>Backend.</strong> Eén per verbinding. Voert de query’s van die ene client uit. Sterft als de verbinding sluit.</p>
+<p><strong>Achtergrondprocessen:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Proces</th>
+<th>Taak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Background writer</strong></td>
+<td>Schrijft “vuile” pagina’s uit shared buffers geleidelijk naar schijf, zodat backends dat niet zelf hoeven</td>
+</tr>
+<tr>
+<td><strong>Checkpointer</strong></td>
+<td>Voert checkpoints uit: alle vuile pagina’s naar schijf, zodat herstel na crash niet vanaf het begin van de WAL hoeft</td>
+</tr>
+<tr>
+<td><strong>WAL writer</strong></td>
+<td>Schrijft de WAL-buffers naar het WAL-bestand</td>
+</tr>
+<tr>
+<td><strong>Autovacuum launcher</strong> en <strong>workers</strong></td>
+<td>Ruimen dode rijversies op en verversen statistieken (essentieel — zie MVCC)</td>
+</tr>
+<tr>
+<td><strong>Archiver</strong></td>
+<td>Kopieert volle WAL-segmenten naar de archieflocatie (nodig voor PITR, niveau 2 deel 17)</td>
+</tr>
+<tr>
+<td><strong>Logger</strong></td>
+<td>Schrijft de serverlog</td>
+</tr>
+<tr>
+<td><strong>Statistics collector / cumulative statistics</strong></td>
+<td>Verzamelt gebruiksstatistieken voor de planner en voor monitoring</td>
+</tr>
+<tr>
+<td><strong>WAL sender / WAL receiver</strong></td>
+<td>Alleen bij replicatie (niveau 2 deel 18)</td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-3.png" alt="Procesdiagram — postmaster, backends, achtergrondprocessen, gedeeld geheugen" loading="lazy"><figcaption>Figuur 2-3 — Procesdiagram — postmaster, backends, achtergrondprocessen, gedeeld geheugen</figcaption></figure>
+<p><strong>Waarom je dit moet kennen:</strong> als in niveau 2 een productieprobleem zich manifesteert als “de schijf loopt vol”, is het antwoord vrijwel altijd terug te voeren op één van deze processen dat zijn werk niet doet — meestal autovacuum of de archiver.</p>
+<hr>
+<h2>10. Geheugen: shared buffers en de rest</h2>
+<h3>Gedeeld geheugen (voor alle processen samen)</h3>
+<p><strong>shared_buffers</strong> — de bufferpool: het gedeelte van het RAM waarin PostgreSQL datapagina’s vasthoudt. Elke lees- of schrijfbewerking gaat hierdoorheen. Een pagina is standaard 8 kB.</p>
+<p><strong>WAL buffers</strong> — waar WAL-records verzamelen voordat ze naar schijf gaan.</p>
+<p>Belangrijk en contra-intuïtief: PostgreSQL vertrouwt bewust ook op de <strong>cache van het besturingssysteem</strong>. Het zet <code>shared_buffers</code> daarom niet op 90% van het geheugen, zoals sommige andere DBMS’en doen. De vuistregel (25% van het RAM, met nuances) komt in niveau 2, deel 11.</p>
+<h3>Lokaal geheugen (per backend)</h3>
+<p><strong>work_mem</strong> — per sorteer- of hash-bewerking. Te laag: de sortering gaat naar schijf en de query wordt traag. Te hoog: bij veel gelijktijdige query’s raakt het geheugen op, want dit geldt <em>per bewerking, per verbinding</em>. Dit is de meest verkeerd ingestelde parameter in PostgreSQL.</p>
+<p><strong>maintenance_work_mem</strong> — voor <code>VACUUM</code>, <code>CREATE INDEX</code> en dergelijke.</p>
+<p><strong>temp_buffers</strong> — voor tijdelijke tabellen.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-4.png" alt="Geheugenlagen — client, backend-lokaal geheugen, gedeeld geheugen, OS-cache, schijf" loading="lazy"><figcaption>Figuur 2-4 — Geheugenlagen — client, backend-lokaal geheugen, gedeeld geheugen, OS-cache, schijf</figcaption></figure>
+<hr>
+<h2>11. Opslag op schijf: cluster, database, schema, bestand</h2>
+<p>Dit onderscheid is een klassieke examenvraag én een klassieke bron van verwarring in projecten.</p>
+<p><strong>Cluster</strong> — één draaiende PostgreSQL-installatie op één datadirectory, met één postmaster en één poort. Bevat meerdere databases. <em>Let op: “cluster” betekent hier dus niet “meerdere machines”. Dat is een bekende bron van misverstanden in overleggen met infrastructuurcollega’s.</em></p>
+<p><strong>Database</strong> — een geïsoleerde verzameling schema’s. Een verbinding maakt verbinding met precies één database en kan niet zomaar bij een andere (daarvoor bestaan foreign data wrappers en <code>dblink</code>).</p>
+<p><strong>Schema</strong> — een naamruimte binnen een database. Bevat tabellen, views, functies, typen. Standaard bestaat <code>public</code>.</p>
+<p><strong>Tabel</strong> — waar de gegevens werkelijk staan.</p>
+<h3>Waarom dit ertoe doet bij Meridiaan</h3>
+<p>Vraag uit de casus: moeten de nieuwe deelnemersgegevens en de nieuwe werkgeversgegevens in dezelfde database?</p>
+<ul>
+<li><strong>Zelfde database, verschillende schema’s</strong> → je kunt joinen, één back-up, één transactie over beide. Rechten scheid je op schemaniveau.</li>
+<li><strong>Verschillende databases</strong> → harde scheiding, maar geen joins en geen transactie over beide heen.</li>
+</ul>
+<p>De vuistregel: <strong>scheid met schema’s tenzij je een harde isolatie-eis hebt.</strong> Verschillende databases lijken netter, maar de eerste keer dat iemand een rapport wil dat beide bronnen combineert, betaal je de prijs.</p>
+<h3>Het datadirectory</h3>
+<table>
+<thead>
+<tr>
+<th>Map/bestand</th>
+<th>Inhoud</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>base/</code></td>
+<td>De databases; per database een submap, per tabel een of meer bestanden</td>
+</tr>
+<tr>
+<td><code>global/</code></td>
+<td>Objecten die voor het hele cluster gelden (o.a. de rollenlijst)</td>
+</tr>
+<tr>
+<td><code>pg_wal/</code></td>
+<td>De write-ahead log-segmenten</td>
+</tr>
+<tr>
+<td><code>pg_tblspc/</code></td>
+<td>Verwijzingen naar tablespaces buiten het datadirectory</td>
+</tr>
+<tr>
+<td><code>postgresql.conf</code></td>
+<td>Hoofdconfiguratie</td>
+</tr>
+<tr>
+<td><code>pg_hba.conf</code></td>
+<td>Wie mag van waar op welke manier verbinden</td>
+</tr>
+<tr>
+<td><code>postmaster.pid</code></td>
+<td>Draaiende instantie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Waarschuwing die je nooit moet vergeten:</strong> verwijder nooit met de hand bestanden uit <code>base/</code> of <code>pg_wal/</code>. Een volgelopen <code>pg_wal/</code> is een symptoom (meestal een gefaalde archiver of een vergeten replicatieslot), en handmatig opruimen maakt de database onherstelbaar. Niveau 2, deel 17, behandelt de juiste aanpak.</p>
+<p>Padnamen per besturingssysteem en installatiemethode: <strong>Toolbijlage</strong>.</p>
+<hr>
+<h2>12. De systeemcatalogus</h2>
+<p>PostgreSQL beschrijft zichzelf in gewone tabellen. Dat is elegant én praktisch: je bevraagt metadata met dezelfde SQL als gewone gegevens.</p>
+<ul>
+<li><strong><code>pg_catalog</code></strong> — de echte systeemtabellen: <code>pg_class</code> (tabellen, indexen, views), <code>pg_attribute</code> (kolommen), <code>pg_namespace</code> (schema’s), <code>pg_type</code> (datatypen), <code>pg_roles</code>.</li>
+<li><strong><code>information_schema</code></strong> — een gestandaardiseerde, draagbare view over dezelfde informatie. Trager en minder volledig, maar werkt ook op andere DBMS’en.</li>
+<li><strong><code>pg_stat_*</code>-views</strong> — actueel gedrag: <code>pg_stat_activity</code> (wie doet nu wat), <code>pg_stat_user_tables</code> (leesgedrag en vacuumhistorie per tabel).</li>
+</ul>
+<p><code>pg_stat_activity</code> is het eerste wat je opent als iemand belt dat “de database traag is”. Vanaf deel 3 gebruik je deze views actief.</p>
+<hr>
+<h2>13. WAL: de belofte van duurzaamheid</h2>
+<p>De <strong>write-ahead log</strong> is het mechanisme achter de D van ACID, en het is bovendien de basis van back-up (niveau 2 deel 17) en replicatie (deel 18). Één concept, drie toepassingen — vandaar dat het hier al aan bod komt.</p>
+<p><strong>Het principe:</strong> vóór een wijziging naar het eigenlijke gegevensbestand gaat, wordt hij als record naar de WAL geschreven en daar afgedwongen naar schijf (<code>fsync</code>). Pas dan bevestigt de database de commit.</p>
+<p><strong>Waarom dit werkt bij een crash:</strong> de gegevensbestanden mogen achterlopen. Bij het opstarten leest PostgreSQL de WAL vanaf het laatste checkpoint en speelt de wijzigingen opnieuw af. Wat gecommit was, komt terug; wat niet gecommit was, verdwijnt.</p>
+<p><strong>Waarom dit ook sneller is:</strong> WAL-schrijfacties zijn sequentieel — achter elkaar in hetzelfde bestand. Het bijwerken van gegevensbestanden is willekeurig verspreid over de schijf. Door alleen de WAL synchroon te schrijven en de rest asynchroon te laten volgen, krijg je duurzaamheid tegen een fractie van de kosten.</p>
+<p><strong>Checkpoint:</strong> het moment waarop alle vuile pagina’s naar de gegevensbestanden gaan. Daarmee wordt de WAL vóór dat punt niet meer nodig voor crashherstel. Checkpoints te vaak → veel schrijf-I/O; te zelden → lange hersteltijd na crash. De afstelling komt in niveau 2.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-5.png" alt="WAL-stroom — wijziging → WAL-buffer → WAL-bestand (fsync) → commit bevestigd → later pas gegevensbestand" loading="lazy"><figcaption>Figuur 2-5 — WAL-stroom — wijziging → WAL-buffer → WAL-bestand (fsync) → commit bevestigd → later pas gegevensbestand</figcaption></figure>
+<hr>
+<h2>14. MVCC in één pagina</h2>
+<p><strong>Multiversion Concurrency Control</strong> is de manier waarop PostgreSQL gelijktijdigheid regelt. De volledige behandeling volgt in deel 7 en in niveau 2 deel 15; hier het minimum dat je nodig hebt om de architectuur te begrijpen.</p>
+<p><strong>Kernidee:</strong> een <code>UPDATE</code> wijzigt de bestaande rij niet. Er wordt een <em>nieuwe versie</em> van de rij geschreven; de oude versie blijft staan, gemarkeerd als geldig tot een bepaald transactiemoment. Elke transactie ziet de versies die geldig waren op het moment dat zij begon.</p>
+<p><strong>Het gevolg dat alles verklaart:</strong></p>
+<blockquote>
+<p>Lezers blokkeren geen schrijvers, en schrijvers blokkeren geen lezers.</p>
+</blockquote>
+<p>Dat is de reden dat PostgreSQL onder gemengde belasting zo goed presteert — en het verklaart waarom een lang lopende rapportagequery in PostgreSQL de administratie niet stilzet, terwijl dat in sommige andere systemen wel gebeurt.</p>
+<p><strong>De prijs:</strong> dode rijversies blijven op schijf staan. Iemand moet ze opruimen. Dat is <code>VACUUM</code>, en daarom draait autovacuum permanent op de achtergrond. Zet iemand autovacuum uit “omdat het I/O kost”, dan groeit de tabel onbeperkt (<em>table bloat</em>) en loopt op termijn de transactie-ID-teller in gevaar. Dat is niet theoretisch: het is de bekendste manier om een PostgreSQL-productieomgeving te slopen.</p>
+<hr>
+<h2>15. De reis van een query</h2>
+<p>Vier fasen, en elke fase heeft een deel in deze cursus.</p>
+<p><strong>1. Parser.</strong> Controleert de syntaxis en bouwt een parseboom. Onbekende kolomnaam of ontbrekende komma: hier gaat het mis. De foutmelding wijst met een positieaanduiding naar de plek.</p>
+<p><strong>2. Analyzer/rewriter.</strong> Zoekt de genoemde objecten op in de catalogus, controleert typen en rechten, en herschrijft de query waar nodig — hier worden views vervangen door hun onderliggende definitie en worden regels toegepast.</p>
+<p><strong>3. Planner/optimizer.</strong> Bepaalt <em>hoe</em> de vraag beantwoord wordt: welke index, welke joinvolgorde, welk joinalgoritme (nested loop, hash, merge), sequentiële scan of indexscan. De planner gebruikt daarvoor statistieken die door autovacuum/<code>ANALYZE</code> worden bijgehouden en kiest het plan met de laagste geschatte kosten.</p>
+<p>Dit is de fase waar in de praktijk de meeste prestatieproblemen zitten, en waarom <code>EXPLAIN</code> (deel 8, uitputtend in niveau 2 deel 13) het belangrijkste gereedschap van een DBA is. Merk op: <strong>verouderde statistieken leiden tot slechte plannen.</strong> Dat verbindt de planner rechtstreeks met autovacuum uit de vorige paragraaf.</p>
+<p><strong>4. Executor.</strong> Voert het plan uit, haalt pagina’s op via shared buffers, en levert rijen terug aan de client.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-2-6.png" alt="Query-pijplijn — SQL → parseboom → herschreven boom → plan → resultaat, met per fase het cursusdeel" loading="lazy"><figcaption>Figuur 2-6 — Query-pijplijn — SQL → parseboom → herschreven boom → plan → resultaat, met per fase het cursusdeel</figcaption></figure>
+<blockquote>
+<p><strong>Het belangrijkste inzicht van dit deel:</strong> SQL is <em>declaratief</em>. Je beschrijft welk resultaat je wilt, niet hoe het opgehaald moet worden. Het “hoe” bepaalt de planner. Daarom kan dezelfde query vandaag snel en morgen traag zijn — en daarom leer je in deze cursus niet alleen SQL schrijven, maar ook plannen lezen.</p>
+</blockquote>
+<hr>
+<h2>16. Verbindingen en waarom pooling bestaat</h2>
+<p>Terug naar het procesmodel. Elke verbinding is een besturingssysteemproces, met eigen geheugen en opstartkosten (enkele milliseconden en enkele megabytes).</p>
+<p>Gevolgen:</p>
+<ul>
+<li><strong>Verbindingen zijn duur.</strong> Een applicatie die per HTTP-verzoek een nieuwe verbinding opent, verspilt meer tijd aan verbinden dan aan de query.</li>
+<li><strong>Veel verbindingen schalen slecht.</strong> Ver boven de honderd actieve verbindingen daalt de doorvoer meestal, door contentie op gedeelde structuren en door de geheugenkosten. De relevante grens is niet <code>max_connections</code>, maar het aantal <em>gelijktijdig actieve</em> backends.</li>
+<li><strong><code>work_mem</code> vermenigvuldigt.</strong> 200 verbindingen × meerdere sorteringen × <code>work_mem</code> is geen theoretisch getal.</li>
+</ul>
+<p>Daarom bestaat <strong>connection pooling</strong>: een tussenlaag houdt een beperkt aantal verbindingen open en deelt die tussen veel clients. Applicatiekaders hebben vaak een eigen pool; op infrastructuurniveau is <strong>PgBouncer</strong> de standaard. Volledige behandeling: niveau 2, deel 19.</p>
+<p>Voor Meridiaan: het deelnemersportaal met duizenden gelijktijdige bezoekers heeft geen duizenden databaseverbindingen nodig, en mag ze ook niet openen. Dat is een ontwerpbeslissing die vroeg genomen moet worden, want achteraf een pool inbouwen betekent vrijwel altijd wijzigingen in transactieafhandeling.</p>
+<hr>
+<h2>17. Aansluiting op de certificering</h2>
+<p>Architectuur is een zwaarwegend domein in de EDB Associate-certificering. Wat je uit dit deel paraat moet hebben:</p>
+<ul>
+<li>de rol van postmaster, backend, background writer, checkpointer, WAL writer en autovacuum;</li>
+<li>het doel van shared buffers en het verschil met <code>work_mem</code> (gedeeld versus per bewerking per verbinding);</li>
+<li>het onderscheid cluster / database / schema;</li>
+<li>de inhoud van het datadirectory op hoofdlijnen, in het bijzonder <code>base/</code>, <code>global/</code> en <code>pg_wal/</code>;</li>
+<li>waarom WAL bestaat en hoe crashherstel verloopt;</li>
+<li>de vier fasen van queryverwerking;</li>
+<li>het principe van MVCC en de noodzaak van vacuum.</li>
+</ul>
+<p>Herinnering uit deel 1: deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal, en de exacte blauwdruk kan per examenversie verschillen — raadpleeg de actuele EDB-onderwerplijst. Versiegebonden details staan in de Toolbijlage.</p>
+<hr>
+<h2>18. Kernbegrippen</h2>
+<p><strong>Relatie / tupel / attribuut / domein</strong> — model-termen voor tabel, rij, kolom, toegestane waarden.
+<strong>Kandidaatsleutel</strong> — minimale unieke identificatie.
+<strong>Surrogaatsleutel</strong> — betekenisloze, door het systeem gegenereerde sleutel.
+<strong>Referentiële integriteit</strong> — vreemde sleutels verwijzen naar bestaande rijen.
+<strong>Driewaardige logica</strong> — waar, onwaar, onbekend.
+<strong>Cluster</strong> — één PostgreSQL-instantie op één datadirectory.
+<strong>Schema</strong> — naamruimte binnen een database.
+<strong>Shared buffers</strong> — gedeelde bufferpool voor datapagina’s.
+<strong>work_mem</strong> — geheugen per sorteer-/hashbewerking per backend.
+<strong>WAL</strong> — write-ahead log; wijzigingen eerst loggen, dan pas toepassen.
+<strong>Checkpoint</strong> — moment waarop vuile pagina’s naar de gegevensbestanden gaan.
+<strong>MVCC</strong> — meerdere rijversies naast elkaar voor gelijktijdigheid zonder blokkeren.
+<strong>Bloat</strong> — ruimte ingenomen door niet-opgeruimde dode rijversies.
+<strong>Planner</strong> — component die bepaalt hoe een query wordt uitgevoerd.
+<strong>Connection pooling</strong> — hergebruik van een beperkt aantal verbindingen.</p>
+<hr>
+<h2>19. Verder lezen</h2>
+<ul>
+<li>E.F. Codd, <em>A Relational Model of Data for Large Shared Data Banks</em> (1970) — dertien pagina’s, nog steeds leesbaar en de moeite waard.</li>
+<li>PostgreSQL-documentatie, hoofdstuk “Internals” → “Overview of PostgreSQL Internals” — de officiële beschrijving van de query-pijplijn.</li>
+<li>PostgreSQL-documentatie, hoofdstuk “Reliability and the Write-Ahead Log”.</li>
+<li>C.J. Date, <em>Database Design and Relational Theory</em> — voor wie sleutels en normalisatie tot op de bodem wil begrijpen; nuttige voorbereiding op deel 5.</li>
+</ul>
+<hr>
+<p><em>Volgende deel: SQL basis. Je schrijft je eerste query’s tegen de Meridiaan-database — en je zult merken dat je nu al kunt uitleggen waarom sommige daarvan traag zijn.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">262 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">666 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-01-databases-en-het-dbms-landschap-waarom-postgresql/reader.html">&larr; Deel 1 — Databases en het DBMS-landschap: waarom PostgreSQL</a><a class="dbm-prevnext next" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

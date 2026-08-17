@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Rollen, rechten en security — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 9 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 9 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 9: Rollen, rechten en security</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Voor dit dagdeel heb je <strong>superuser-rechten</strong> nodig om rollen aan te maken. Verbind als <code>postgres</code> (of een rol met <code>CREATEROLE</code>).</p>
+<pre><code class="language-bash">psql -U postgres -d meridiaan
+</code></pre>
+<pre><code class="language-sql">SET search_path TO meridiaan, public;
+</code></pre>
+<p>Je hebt daarnaast een <strong>tweede sessie</strong> nodig om als de aangemaakte rollen te testen. Testen als superuser levert misleidende resultaten op — dat is opdracht 9.2c.</p>
+<p>Ruim aan het eind op met het script in opdracht 9.10.</p>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 9.1 — Inventariseren (15 min, individueel)</h2>
+<p>Je neemt de Meridiaan-database over van een collega. Breng in kaart wat er is.</p>
+<p>a) Welke rollen bestaan er, en welke daarvan mogen inloggen?
+b) Welke rollen zijn superuser? Wat vind je van dat aantal?
+c) Welke rol bezit de tabellen in het schema <code>meridiaan</code>?
+d) Welke rechten heeft <code>PUBLIC</code> op de database <code>meridiaan</code>?
+e) Wie is lid van welke rol?
+f) Welke drie bevindingen zou je in een overdrachtsdocument zetten?</p>
+<hr>
+<h2>Opdracht 9.2 — Je eerste rol (20 min, tweetallen)</h2>
+<p>a) Maak een groepsrol <code>analist</code> zonder loginrecht.
+b) Maak een inlogbare rol <code>stagiair</code> met een wachtwoord en een vervaldatum over dertig dagen.
+c) Maak <code>stagiair</code> lid van <code>analist</code>.
+d) Verbind in je tweede sessie als <code>stagiair</code> en probeer <code>SELECT * FROM deelnemer;</code>. Wat gebeurt er?
+e) Geef <code>analist</code> leesrecht op de tabel <code>deelnemer</code>. Probeer opnieuw. Werkt het nu?
+f) Zo niet: welke laag ontbreekt nog? Los het op en test opnieuw.
+g) Noteer de volledige set commando’s die nodig was. Hoeveel <code>GRANT</code>s waren het?</p>
+<hr>
+<h2>Opdracht 9.3 — De publieke valkuil (15 min, individueel)</h2>
+<p>a) Maak een rol <code>buitenstaander</code> met loginrecht, en geef hem <strong>geen enkel</strong> recht.
+b) Verbind als <code>buitenstaander</code> met de database <code>meridiaan</code>. Lukt dat?
+c) Verklaar het resultaat.
+d) Trek het recht in dat dit mogelijk maakt, en test opnieuw.
+e) Kan <code>buitenstaander</code> nu nog iets? Probeer <code>SELECT current_user;</code> en <code>SELECT * FROM pg_roles;</code>.
+f) Verbind je antwoord met de stagiair uit deel 1.</p>
+<hr>
+<h2>Opdracht 9.4 — Standaardrechten (15 min, tweetallen)</h2>
+<p>a) Geef <code>analist</code> leesrecht op alle tabellen in <code>meridiaan</code>.
+b) Maak als <code>postgres</code> een nieuwe tabel <code>meridiaan.testtabel</code>.
+c) Kan <code>stagiair</code> die tabel lezen? Verklaar.
+d) Stel standaardrechten in zodat nieuwe tabellen automatisch leesbaar zijn voor <code>analist</code>.
+e) Maak nog een tabel en test opnieuw.
+f) Maak nu een tabel onder een <strong>andere</strong> rol dan degene die de standaardrechten instelde. Werkt het nog? Waarom (niet)?
+g) Waarom is dit de subtielste valkuil van dit dagdeel?</p>
+<hr>
+<h2>Opdracht 9.5 — Het BSN afschermen (20 min, drietallen)</h2>
+<p>De rol <code>analist</code> mag deelnemersgegevens analyseren maar het burgerservicenummer niet zien.</p>
+<p>a) Los het op met <strong>kolomrechten</strong>. Test als <code>stagiair</code> met <code>SELECT *</code> en met een expliciete kolomlijst.
+b) Wat gebeurt er als er morgen een kolom <code>e_mailadres</code> aan <code>deelnemer</code> wordt toegevoegd? Test het.
+c) Los hetzelfde probleem op met een <strong>view</strong>. Trek alle rechten op de tabel in.
+d) Test opnieuw. Kan <code>stagiair</code> via de view lezen, ook zonder rechten op de onderliggende tabel? Waarom?
+e) Vergelijk beide oplossingen op onderhoudbaarheid.
+f) Welke zou je bij Meridiaan kiezen, en waarom?</p>
+<hr>
+<h2>Opdracht 9.6 — Het rollenmodel bouwen (25 min, drietallen)</h2>
+<p>Bouw het volledige rollenmodel uit paragraaf 10 van de reader.</p>
+<p>a) Maak <code>meridiaan_eigenaar</code>, <code>meridiaan_lezer</code> en <code>meridiaan_schrijver</code>.
+b) Ken de rechten toe zodat schrijver ook kan lezen, zonder rechten te dupliceren.
+c) Maak <code>portaal_app</code> en <code>rapportage</code> als inlogbare rollen met het juiste lidmaatschap.
+d) Test als <code>rapportage</code>: lezen moet werken, een <code>INSERT</code> moet falen. Noteer de foutmelding.
+e) Test als <code>portaal_app</code>: een <code>INSERT</code> in <code>mutatie</code> moet werken. Werkt het? Zo niet, wat ontbreekt er?
+f) Stel de standaardrechten zo in dat dit model blijft werken als er nieuwe tabellen bijkomen.
+g) Waarom logt <code>meridiaan_eigenaar</code> niet in? Formuleer het argument in twee zinnen.</p>
+<hr>
+<h2>Opdracht 9.7 — Row level security (20 min, drietallen)</h2>
+<p>Het deelnemersportaal mag alleen de gegevens van de ingelogde deelnemer tonen.</p>
+<p>a) Zet RLS aan op een kopie van <code>deelnemer</code> in je oefeningschema.
+b) Maak een policy die alleen de eigen rij toont, op basis van een sessie-instelling.
+c) Test als <code>portaal_app</code>: zet de instelling op deelnemer 1001 en doe <code>SELECT * FROM deelnemer;</code>.
+d) Test wat er gebeurt als je de instelling op een andere deelnemer zet.
+e) Test als de <strong>eigenaar</strong> van de tabel. Wat zie je, en waarom is dat verwarrend?
+f) Zorg dat de eigenaar de policy ook ondergaat.
+g) Welke index heb je nodig om dit op schaal werkbaar te houden? Verwijs naar deel 8.
+h) Wat gebeurt er als de applicatie vergeet de sessie-instelling te zetten? Is dat veilig of onveilig gedrag?</p>
+<hr>
+<h2>Opdracht 9.8 — SECURITY DEFINER (15 min, tweetallen)</h2>
+<p>De klantenservice mag een mutatie als verwerkt markeren, maar niet zomaar in <code>mutatie</code> schrijven.</p>
+<p>a) Maak een functie <code>mutatie_afronden(integer)</code> met <code>SECURITY DEFINER</code>.
+b) Geef <code>analist</code> uitvoerrecht en test als <code>stagiair</code>.
+c) Controleer dat <code>stagiair</code> nog steeds geen rechtstreekse <code>UPDATE</code> op <code>mutatie</code> kan doen.
+d) Verwijder de regel <code>SET search_path</code> uit de functie. Leg uit welk risico daarmee ontstaat.
+e) Waarom is dit patroon beter dan <code>UPDATE</code>-recht geven op de hele tabel?</p>
+<hr>
+<h2>Opdracht 9.9 — Beveiligingsonderzoek (20 min, drietallen)</h2>
+<p>Hoofdopdracht. Meridiaan laat een beveiligingsonderzoek uitvoeren op de nieuwe datalaag. Jij levert de bevindingen.</p>
+<p>Onderzoek de database die je in dit dagdeel hebt opgebouwd én de oorspronkelijke casusdatabase, en lever een rapport van maximaal twee A4 met:</p>
+<ol>
+<li><strong>Bevindingen</strong>, elk met: wat je aantrof, waarom het een risico is, en de maatregel.</li>
+<li><strong>Een prioritering</strong> op risico, niet op hoe makkelijk het op te lossen is.</li>
+<li><strong>Een rollenmatrix</strong>: welke rol mag wat, in één tabel die Karin begrijpt.</li>
+<li><strong>Eén bevinding die geen technische maar een organisatorische maatregel vereist.</strong></li>
+</ol>
+<p>Onderzoek in elk geval:</p>
+<ul>
+<li>superusers en wie ze gebruikt;</li>
+<li><code>PUBLIC</code>-rechten;</li>
+<li>rollen zonder vervaldatum die tijdelijk bedoeld waren;</li>
+<li>rechten die rechtstreeks aan personen zijn gegeven;</li>
+<li>of het BSN afgeschermd is;</li>
+<li>of standaardrechten ingesteld zijn;</li>
+<li>of er versleuteld verbonden wordt;</li>
+<li>of te herleiden is wie welke deelnemersgegevens heeft ingezien.</li>
+</ul>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is er onderscheid tussen “kan misgaan” en “gaat waarschijnlijk mis”?</li>
+<li>Staat er bij elke bevinding een concrete maatregel, of alleen een constatering?</li>
+<li>Is de rollenmatrix leesbaar voor een niet-technicus?</li>
+<li>Is de organisatorische bevinding een echte, of een verkapt technisch punt?</li>
+</ul>
+<hr>
+<h2>Opdracht 9.10 — Opruimen (5 min)</h2>
+<pre><code class="language-sql">-- Testrollen verwijderen (eerst hun rechten intrekken)
+REASSIGN OWNED BY meridiaan_eigenaar TO postgres;
+DROP OWNED BY analist, stagiair, buitenstaander, portaal_app,
+              rapportage, meridiaan_lezer, meridiaan_schrijver,
+              meridiaan_eigenaar;
+DROP ROLE IF EXISTS analist, stagiair, buitenstaander, portaal_app,
+                    rapportage, meridiaan_lezer, meridiaan_schrijver,
+                    meridiaan_eigenaar;
+
+DROP SCHEMA IF EXISTS oefening CASCADE;
+</code></pre>
+<p>a) Waarom moet <code>DROP OWNED BY</code> vóór <code>DROP ROLE</code>?
+b) Wat doet <code>REASSIGN OWNED BY</code>, en wanneer heb je het nodig?</p>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 9.1</h2>
+<p>a)</p>
+<pre><code class="language-sql">\du
+-- of:
+SELECT rolname, rolcanlogin, rolsuper, rolvaliduntil FROM pg_roles ORDER BY rolname;
+</code></pre>
+<p>Op een verse installatie: <code>postgres</code> plus de ingebouwde <code>pg_*</code>-rollen (die loggen niet in). Als je het casusscript hebt gedraaid, ook <code>meridiaan_lezer</code> en <code>meridiaan_beheer</code>.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT rolname FROM pg_roles WHERE rolsuper;
+</code></pre>
+<p>Normaal alleen <code>postgres</code>. <strong>Dit is de eerste query die je draait bij een overname.</strong> Is de lijst lang, dan is dat je eerste bevinding — elke extra superuser is een volledige omzeiling van alle andere maatregelen.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'meridiaan';
+</code></pre>
+<p>In de casus is dat <code>postgres</code>, want die heeft de scripts gedraaid. <strong>Dat is zelf een bevinding:</strong> objecten horen niet in bezit te zijn van de superuser die toevallig de migratie draaide.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT datname, datacl FROM pg_database WHERE datname = 'meridiaan';
+</code></pre>
+<p>Is <code>datacl</code> leeg (NULL), dan gelden de standaardrechten — en die omvatten <code>CONNECT</code> voor <code>PUBLIC</code>. Leeg betekent hier dus <em>niet</em> “niemand mag iets”.</p>
+<p>e)</p>
+<pre><code class="language-sql">SELECT r.rolname AS rol, m.rolname AS lid
+FROM pg_auth_members am
+JOIN pg_roles r ON r.oid = am.roleid
+JOIN pg_roles m ON m.oid = am.member
+ORDER BY 1, 2;
+</code></pre>
+<p>f) Drie voor de hand liggende bevindingen: tabellen zijn in bezit van <code>postgres</code>; <code>PUBLIC</code> heeft nog <code>CONNECT</code>; er bestaan rollen (<code>meridiaan_lezer</code>, <code>meridiaan_beheer</code>) waaraan geen rechten zijn toegekend en die dus niets doen — dode rollen zijn verwarrend en moeten weg of ingericht worden.</p>
+<hr>
+<h2>Uitwerking 9.2</h2>
+<p>a) t/m c)</p>
+<pre><code class="language-sql">CREATE ROLE analist NOLOGIN;
+CREATE ROLE stagiair LOGIN PASSWORD 'tijdelijk'
+    VALID UNTIL '2026-09-10';       -- pas de datum aan
+GRANT analist TO stagiair;
+</code></pre>
+<p>d) Verbinden lukt (via <code>PUBLIC</code>, zie opdracht 9.3), maar:</p>
+<pre><code>ERROR: permission denied for table deelnemer
+</code></pre>
+<p>e)</p>
+<pre><code class="language-sql">GRANT SELECT ON meridiaan.deelnemer TO analist;
+</code></pre>
+<p>Nog steeds een fout — nu op het <strong>schema</strong>:</p>
+<pre><code>ERROR: permission denied for schema meridiaan
+</code></pre>
+<p>f)</p>
+<pre><code class="language-sql">GRANT USAGE ON SCHEMA meridiaan TO analist;
+</code></pre>
+<p>Nu werkt het.</p>
+<p>g) Drie <code>GRANT</code>s: schema-<code>USAGE</code>, tabel-<code>SELECT</code>, en het rollidmaatschap. De <code>CONNECT</code> op de database kwam gratis via <code>PUBLIC</code> — wat in productie juist níét zo hoort te zijn, en dan is het er vier.</p>
+<p><strong>De les:</strong> rechten zijn hiërarchisch en elke laag moet apart. Wie alleen <code>SELECT</code> geeft, krijgt een gebruiker met een foutmelding die niets zegt over de werkelijke oorzaak.</p>
+<hr>
+<h2>Uitwerking 9.3</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE ROLE buitenstaander LOGIN PASSWORD 'test';
+</code></pre>
+<p>b) <strong>Verbinden lukt.</strong> Dat verrast vrijwel iedereen.</p>
+<p>c) De rol <code>PUBLIC</code> heeft standaard <code>CONNECT</code> op elke nieuwe database, en iedereen is automatisch lid van <code>PUBLIC</code>. Er is dus nooit iemand die dit recht bewust heeft gegeven — het stond aan.</p>
+<p>d)</p>
+<pre><code class="language-sql">REVOKE CONNECT ON DATABASE meridiaan FROM PUBLIC;
+</code></pre>
+<p>Nu:</p>
+<pre><code>FATAL: permission denied for database &quot;meridiaan&quot;
+DETAIL: User does not have CONNECT privilege.
+</code></pre>
+<p>e) Kon hij vóór het intrekken nog verbinden, dan werkte <code>SELECT current_user;</code> gewoon, en <code>SELECT * FROM pg_roles;</code> ook — de systeemcatalogus is standaard leesbaar. Een rol zonder enige toekenning kan dus de <strong>volledige rollenlijst van het cluster</strong> opvragen, inclusief wie superuser is.</p>
+<p>Dat is geen ramp maar wel informatie die een aanvaller graag heeft: hij weet nu welke accounts de moeite waard zijn.</p>
+<p>f) De stagiair kreeg een account voor de werkgeversanalyse. Via <code>PUBLIC</code> kon hij verbinden met <strong>elke</strong> database op het cluster. Niemand had hem dat gegeven; niemand had het ook maar overwogen. Dat is precies de vorm die dit soort problemen aanneemt: geen inbraak, maar standaardinstellingen die niemand heeft aangepast.</p>
+<hr>
+<h2>Uitwerking 9.4</h2>
+<p>a)</p>
+<pre><code class="language-sql">GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO analist;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">CREATE TABLE meridiaan.testtabel (id int);
+</code></pre>
+<p>c) <strong>Nee.</strong> <code>ON ALL TABLES</code> gold alleen voor de tabellen die op dat moment bestonden. De nieuwe tabel valt erbuiten.</p>
+<p>Dit is de oorzaak van het klassieke “het werkte gisteren nog”: er is een release geweest met een nieuwe tabel, en de rapportagegebruiker kan er niet bij.</p>
+<p>d)</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO analist;
+</code></pre>
+<p>e) Een nieuwe tabel is nu wel meteen leesbaar.</p>
+<p>f) <strong>Niet meer.</strong> Standaardrechten gelden per <strong>aanmakende rol</strong>. Heb je ze ingesteld terwijl je als <code>postgres</code> was ingelogd, dan gelden ze alleen voor tabellen die <code>postgres</code> aanmaakt. Voor een andere rol:</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO analist;
+</code></pre>
+<p>g) Omdat het <strong>stil faalt en pas veel later opvalt.</strong> Je stelt standaardrechten in, test ze, ze werken. Maanden later draait het migratieproces onder een servicerol in plaats van onder jouw account, en vanaf dat moment zijn nieuwe tabellen onzichtbaar — zonder dat er iets is veranderd aan wat je hebt ingesteld.</p>
+<hr>
+<h2>Uitwerking 9.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">REVOKE SELECT ON meridiaan.deelnemer FROM analist;
+GRANT SELECT (deelnemer_id, voorletters, tussenvoegsel, achternaam,
+              woonplaats, startdatum_deelname, einddatum_deelname)
+    ON meridiaan.deelnemer TO analist;
+</code></pre>
+<p>Als <code>stagiair</code>:</p>
+<pre><code class="language-sql">SELECT * FROM deelnemer;              -- ERROR: permission denied for column bsn
+SELECT achternaam FROM deelnemer;     -- werkt
+</code></pre>
+<p>b) De nieuwe kolom is <strong>niet</strong> zichtbaar voor <code>analist</code>, want die staat niet in de lijst. Dat is veilig gedrag (nieuwe kolommen zijn standaard dicht), maar het betekent dat iemand bij elke schemawijziging aan de rechten moet denken. In de praktijk gebeurt dat niet.</p>
+<p>c)</p>
+<pre><code class="language-sql">CREATE VIEW meridiaan.deelnemer_beperkt AS
+SELECT deelnemer_id, voorletters, tussenvoegsel, achternaam,
+       woonplaats, land, startdatum_deelname, einddatum_deelname
+FROM meridiaan.deelnemer;
+
+REVOKE ALL ON meridiaan.deelnemer FROM analist;
+GRANT SELECT ON meridiaan.deelnemer_beperkt TO analist;
+</code></pre>
+<p>d) <strong>Ja, dat werkt</strong> — de view draait met de rechten van zijn <strong>eigenaar</strong>, niet van de aanroeper. <code>stagiair</code> heeft nul rechten op <code>deelnemer</code> en kan de view toch bevragen.</p>
+<p>Test ook: <code>SELECT * FROM deelnemer;</code> als <code>stagiair</code> levert nu een foutmelding op. De tabel is volledig dicht.</p>
+<p>e) <strong>Kolomrechten:</strong> fijnmazig, maar elke schemawijziging vereist onderhoud, en de toekenning is verspreid over de rechtenadministratie.
+<strong>View:</strong> één object, leesbare definitie, één plek om te wijzigen. Bovendien kun je er berekeningen of filters in stoppen (bijvoorbeeld alleen actieve deelnemers).</p>
+<p>f) De <strong>view</strong>, om twee redenen. Onderhoudbaarheid, en zichtbaarheid: de definitie van “wat een analist mag zien” staat als leesbare SQL in de database in plaats van in een rechtentabel die niemand opvraagt. Dat is dezelfde reden als in deel 8 — een view legt een definitie vast op één plek.</p>
+<p>Kolomrechten blijven nuttig als aanvullende laag, of voor <code>UPDATE</code>-rechten op specifieke kolommen.</p>
+<hr>
+<h2>Uitwerking 9.6</h2>
+<p>a) t/m c)</p>
+<pre><code class="language-sql">CREATE ROLE meridiaan_eigenaar NOLOGIN;
+CREATE ROLE meridiaan_lezer NOLOGIN;
+CREATE ROLE meridiaan_schrijver NOLOGIN;
+
+GRANT CONNECT ON DATABASE meridiaan TO meridiaan_lezer;
+GRANT USAGE ON SCHEMA meridiaan TO meridiaan_lezer;
+GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_lezer;
+
+GRANT meridiaan_lezer TO meridiaan_schrijver;    -- geen duplicatie
+GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA meridiaan
+    TO meridiaan_schrijver;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;
+
+CREATE ROLE portaal_app LOGIN PASSWORD '…';
+CREATE ROLE rapportage  LOGIN PASSWORD '…';
+GRANT meridiaan_schrijver TO portaal_app;
+GRANT meridiaan_lezer     TO rapportage;
+</code></pre>
+<p>d) Als <code>rapportage</code>:</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer;        -- werkt
+INSERT INTO plaats (naam) VALUES ('X'); -- ERROR: permission denied for table plaats
+</code></pre>
+<p>e) Als <code>portaal_app</code> in <code>mutatie</code>: dit <strong>faalt</strong> als je de sequentie bent vergeten:</p>
+<pre><code>ERROR: permission denied for sequence mutatie_mutatie_id_seq
+</code></pre>
+<p>De <code>GRANT USAGE ON ALL SEQUENCES</code> lost het op. Dit is een van de vaakst gemiste rechten, omdat de foutmelding over een object gaat dat je nooit expliciet hebt aangemaakt.</p>
+<p>f)</p>
+<pre><code class="language-sql">ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO meridiaan_lezer;
+ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT INSERT, UPDATE, DELETE ON TABLES TO meridiaan_schrijver;
+ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT USAGE ON SEQUENCES TO meridiaan_schrijver;
+</code></pre>
+<p>g) Modelantwoord: <em>“De eigenaar bezit de objecten en mag ze dus wijzigen en verwijderen. Door die rol niet inlogbaar te maken, kan een gecompromitteerd applicatieaccount geen tabellen droppen of aanpassen — migraties draaien bewust met <code>SET ROLE</code>, wat een expliciete handeling is in plaats van een permanente mogelijkheid.”</em></p>
+<hr>
+<h2>Uitwerking 9.7</h2>
+<p>a) en b)</p>
+<pre><code class="language-sql">CREATE SCHEMA IF NOT EXISTS oefening;
+CREATE TABLE oefening.deelnemer (LIKE meridiaan.deelnemer INCLUDING ALL);
+INSERT INTO oefening.deelnemer OVERRIDING SYSTEM VALUE
+SELECT * FROM meridiaan.deelnemer;
+
+ALTER TABLE oefening.deelnemer ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY deelnemer_eigen ON oefening.deelnemer
+    FOR SELECT TO portaal_app
+    USING (deelnemer_id = current_setting('app.deelnemer_id', true)::integer);
+
+GRANT USAGE ON SCHEMA oefening TO portaal_app;
+GRANT SELECT ON oefening.deelnemer TO portaal_app;
+</code></pre>
+<p>Let op de tweede parameter in <code>current_setting(…, true)</code>: die zorgt dat er NULL uitkomt in plaats van een fout als de instelling ontbreekt. Zie h).</p>
+<p>c) Als <code>portaal_app</code>:</p>
+<pre><code class="language-sql">SET app.deelnemer_id = '1001';
+SELECT * FROM oefening.deelnemer;   -- precies één rij
+</code></pre>
+<p>d) Een andere waarde geeft die andere deelnemer. Merk op: de applicatie moet deze instelling betrouwbaar zetten — kan een gebruiker hem beïnvloeden, dan is de hele maatregel waardeloos.</p>
+<p>e) Als <strong>eigenaar</strong> zie je <strong>alle rijen</strong>. De tabeleigenaar omzeilt RLS standaard.</p>
+<p>Dit is de klassieke testfout: je test als de rol die de tabel bezit, ziet alles, en concludeert dat je policy niet werkt. Vervolgens ga je hem “repareren” terwijl hij goed was.</p>
+<p>f)</p>
+<pre><code class="language-sql">ALTER TABLE oefening.deelnemer FORCE ROW LEVEL SECURITY;
+</code></pre>
+<p>Nu ondergaat ook de eigenaar de policy. Superusers blijven hem omzeilen — nog een reden waarom applicaties geen superuser zijn.</p>
+<p>g) Een index op <code>deelnemer_id</code> — die is er al, want het is de primaire sleutel. Het punt is algemener: <strong>de kolom in de policy-voorwaarde wordt aan elke query toegevoegd</strong> en moet dus geïndexeerd zijn. Bij een policy op een niet-geïndexeerde kolom wordt elke query een sequentiële scan (deel 8).</p>
+<p>h) Met <code>current_setting('app.deelnemer_id', true)</code> levert een ontbrekende instelling NULL op, de vergelijking wordt <code>unknown</code>, en er komen <strong>nul rijen</strong> terug. Dat is <strong>veilig gedrag</strong>: bij een fout in de applicatie zie je niets in plaats van alles.</p>
+<p>Zonder die tweede parameter krijg je een foutmelding — ook veilig, maar zichtbaarder voor de gebruiker. Beide zijn verdedigbaar; wat je nooit wilt is een variant die bij een ontbrekende instelling álles toont.</p>
+<hr>
+<h2>Uitwerking 9.8</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE FUNCTION meridiaan.mutatie_afronden(p_mutatie_id integer)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = meridiaan, pg_temp
+AS $$
+    UPDATE mutatie SET verwerkt_op = now()
+    WHERE mutatie_id = p_mutatie_id AND verwerkt_op IS NULL;
+$$;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">GRANT EXECUTE ON FUNCTION meridiaan.mutatie_afronden(integer) TO analist;
+-- als stagiair:
+SELECT meridiaan.mutatie_afronden(5);   -- werkt
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">UPDATE meridiaan.mutatie SET verwerkt_op = now() WHERE mutatie_id = 6;
+-- ERROR: permission denied for table mutatie
+</code></pre>
+<p>Precies de bedoeling: de rol kan één afgebakende handeling uitvoeren en verder niets.</p>
+<p>d) Zonder vast zoekpad kan een aanvaller met <code>CREATE</code>-recht op een schema dat eerder in zijn zoekpad staat, een eigen tabel <code>mutatie</code> of een eigen functie aanmaken. De <code>SECURITY DEFINER</code>-functie draait dan <strong>met verhoogde rechten</strong> op dat object van de aanvaller. Dat is een bekende vorm van rechtenescalatie.</p>
+<p>Elke <code>SECURITY DEFINER</code>-functie hoort daarom <code>SET search_path</code> te hebben, met <code>pg_temp</code> als laatste zodat tijdelijke objecten nooit voorrang krijgen.</p>
+<p>e) Omdat <code>UPDATE</code>-recht op de hele tabel betekent: elke kolom van elke rij mag gewijzigd worden, zonder voorwaarden. De functie legt de <strong>bedrijfsregel</strong> vast: alleen <code>verwerkt_op</code>, alleen als hij nog leeg is, alleen op één rij. Dat is niet alleen veiliger, het documenteert ook wat de toegestane handeling ís.</p>
+<hr>
+<h2>Uitwerking 9.9 — modelantwoord (verkort)</h2>
+<p><strong>Beveiligingsonderzoek Meridiaan-datalaag</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Bevinding</th>
+<th>Risico</th>
+<th>Maatregel</th>
+<th>Prio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Tabellen zijn in bezit van <code>postgres</code>; de applicatie verbindt met dezelfde rol</td>
+<td>Bij een SQL-injectie in het portaal ligt het hele cluster open; alle andere maatregelen worden omzeild</td>
+<td>Eigenaarsrol zonder login; applicatie krijgt een eigen rol met minimale rechten</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>PUBLIC</code> heeft <code>CONNECT</code> op alle databases</td>
+<td>Elk account, ook een tijdelijk analyseaccount, kan bij elke database op het cluster</td>
+<td><code>REVOKE CONNECT … FROM PUBLIC</code>, daarna gericht toekennen</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Het BSN is voor elke lezende rol zichtbaar</td>
+<td>Persoonsgegevens beschikbaar voor rollen die ze niet nodig hebben; geen dataminimalisatie</td>
+<td>Afgeschermde view; rechtstreekse tabelrechten intrekken</td>
+<td><strong>Hoog</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Geen auditlog: niet te herleiden wie welke deelnemergegevens inzag</td>
+<td>Geen verantwoording bij een toezichtvraag of klacht</td>
+<td><code>pgaudit</code> inrichten voor de tabellen met persoonsgegevens</td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Geen standaardrechten ingesteld</td>
+<td>Nieuwe tabellen zijn onbereikbaar of juist te ruim toegankelijk; loopt stil uit de pas</td>
+<td><code>ALTER DEFAULT PRIVILEGES FOR ROLE &lt;eigenaar&gt;</code></td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Verbindingen niet afgedwongen versleuteld</td>
+<td>Wachtwoorden en persoonsgegevens leesbaar op het netwerk</td>
+<td><code>ssl = on</code>, en <code>hostssl</code> in plaats van <code>host</code></td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Rollen zonder vervaldatum voor tijdelijke medewerkers</td>
+<td>Toegang blijft bestaan na vertrek; niemand ruimt op</td>
+<td><code>VALID UNTIL</code> verplicht bij tijdelijke accounts</td>
+<td>Laag</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rollenmatrix voor Karin</strong></p>
+<table>
+<thead>
+<tr>
+<th>Rol</th>
+<th>Deelnemergegevens</th>
+<th>BSN</th>
+<th>Aanspraken</th>
+<th>Wijzigen</th>
+<th>Structuur wijzigen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deelnemersportaal</td>
+<td>Alleen de eigen deelnemer</td>
+<td>Nee</td>
+<td>Alleen de eigen</td>
+<td>Ja, beperkt</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Klantenservice</td>
+<td>Alle</td>
+<td>Nee</td>
+<td>Alle</td>
+<td>Via afgebakende functies</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Rapportage</td>
+<td>Alle, zonder BSN</td>
+<td>Nee</td>
+<td>Alle</td>
+<td>Nee</td>
+<td>Nee</td>
+</tr>
+<tr>
+<td>Beheer</td>
+<td>Alle</td>
+<td>Ja, met auditlog</td>
+<td>Alle</td>
+<td>Ja</td>
+<td>Ja, via migratie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Organisatorische bevinding</strong></p>
+<p><em>Er is geen proces dat toegang intrekt bij vertrek of functiewijziging.</em> Technisch is dit op te lossen met <code>VALID UNTIL</code>, maar dat werkt alleen als iemand bij het aanmaken een einddatum kiest — en dat is een afspraak, geen instelling. Voorstel: toegangsverlening loopt via een aanvraag met verplichte einddatum en een halfjaarlijkse herbeoordeling door de leidinggevende.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Bevinding 1 hoort bovenaan.</strong> Groepen die met het BSN beginnen hebben een reëel punt, maar de superuser-applicatie maakt élke andere maatregel betekenisloos — inclusief de BSN-afscherming. Vraag: <em>“wat is het nut van jullie view als de applicatie superuser is?”</em></li>
+<li><strong>Onderscheid tussen “kan misgaan” en “gaat waarschijnlijk mis”.</strong> Ontbrekende standaardrechten gaan zeker een keer misgaan; ze richten weinig schade aan. Een superuser-applicatie gaat misschien nooit mis en is dan catastrofaal. Beide horen op de lijst, met verschillende argumenten.</li>
+<li><strong>De organisatorische bevinding.</strong> Groepen schrijven hier vaak een technische maatregel op met een organisatorisch sausje. Het onderscheid: is er een instelling die dit afdwingt? Zo ja, dan is het technisch.</li>
+<li><strong>De rollenmatrix.</strong> Test of Karin hem begrijpt: staan er kolomnamen of begrippen in?</li>
+</ul>
+<hr>
+<h2>Uitwerking 9.10</h2>
+<p>a) PostgreSQL laat een rol niet verwijderen zolang er objecten van hem zijn of rechten aan hem zijn toegekend. <code>DROP OWNED BY</code> ruimt beide op: het verwijdert de objecten die de rol bezit én trekt alle rechten in die aan hem zijn gegeven.</p>
+<p>b) <code>REASSIGN OWNED BY x TO y</code> draagt het <strong>eigendom</strong> van alle objecten van x over aan y, zonder ze te verwijderen. Dat gebruik je als je een rol wilt opheffen maar zijn tabellen wilt houden — bijvoorbeeld bij het vertrek van een collega die ooit een aantal objecten heeft aangemaakt.</p>
+<p>Volgorde in de praktijk: eerst <code>REASSIGN OWNED BY</code> (behoud wat je wilt houden), dan <code>DROP OWNED BY</code> (ruim de rest en de rechten op), dan <code>DROP ROLE</code>.</p>
+<hr>
+<p><em>Einde werkboek deel 9.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">56 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">387 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-08-indexen-en-views/reader.html">&larr; Deel 8 — Indexen en views</a><a class="dbm-prevnext next" href="../deel-10-capstone-de-meridiaan-datalaag/opdrachtdocument.html">Deel 10 — Capstone: de Meridiaan-datalaag &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

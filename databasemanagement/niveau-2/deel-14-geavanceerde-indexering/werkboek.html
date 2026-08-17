@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Geavanceerde indexering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 14 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 14: Geavanceerde indexering</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan_prod, public;
+\timing on
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pgstattuple;
+CREATE SCHEMA IF NOT EXISTS oefening14;
+</code></pre>
+<p>Neem je top vijf uit <code>pg_stat_statements</code> van deel 13 erbij.</p>
+<p><strong>Maak eerst de tabel voor de GIN-opdrachten.</strong> Het opschaalscript kent hem nog niet:</p>
+<pre><code class="language-sql">CREATE TABLE oefening14.koppelvlakbericht (
+    bericht_id   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ontvangen_op timestamptz NOT NULL DEFAULT now(),
+    bron         text NOT NULL,
+    inhoud       jsonb NOT NULL
+);
+
+INSERT INTO oefening14.koppelvlakbericht (bron, inhoud)
+SELECT
+    (ARRAY['basisregistratie','werkgeversportaal','deelnemersportaal'])
+        [1 + (g % 3)],
+    jsonb_build_object(
+        'soort', (ARRAY['adreswijziging','bankrekening','naamswijziging',
+                        'burgerlijke staat'])[1 + (g % 4)],
+        'deelnemer_id', 1 + (g % 340000),
+        'bsn', lpad((100000000 + g)::text, 9, '0'),
+        'velden', jsonb_build_object(
+            'straat', 'Straat ' || (g % 500),
+            'postcode', lpad((1000 + g % 9000)::text, 4, '0') || 'AB',
+            'plaats', (ARRAY['Utrecht','Amsterdam','Rotterdam','Zwolle'])[1 + (g % 4)])
+    )
+FROM generate_series(1, 300000) g;
+
+ANALYZE oefening14.koppelvlakbericht;
+</code></pre>
+<p>Tijdsindicatie: circa 135 minuten.</p>
+<hr>
+<h2>Opdracht 14.1 — Vier vragen die B-tree niet aankan (10 min, individueel)</h2>
+<p>Probeer elk van deze vier en noteer het scantype en de tijd.</p>
+<p>a) <code>SELECT * FROM oefening14.koppelvlakbericht WHERE inhoud @&gt; '{&quot;soort&quot;:&quot;adreswijziging&quot;}';</code>
+b) <code>SELECT * FROM deelnemer WHERE achternaam ILIKE '%anss%';</code>
+c) <code>SELECT count(*) FROM mutatie WHERE aangemeld_op &gt;= '2024-03-01' AND aangemeld_op &lt; '2024-04-01';</code>
+d) Bedenk zelf een vraag over overlappende perioden op de <code>adres</code>-tabel uit deel 6.</p>
+<p>e) Voor welke van deze vier zou een B-tree wél kunnen werken, maar tegen hoge kosten?</p>
+<hr>
+<h2>Opdracht 14.2 — B-tree verfijnen (20 min, tweetallen)</h2>
+<p>a) Meet deze query en noteer het plan:</p>
+<pre><code class="language-sql">SELECT werkgever_id, periode_jaar, periode_maand, bedrag
+FROM premienota WHERE werkgever_id = 42
+ORDER BY periode_jaar DESC, periode_maand DESC LIMIT 1;
+</code></pre>
+<p>b) Maak een index op <code>(werkgever_id, periode_jaar, periode_maand)</code> en meet opnieuw. Zie je een <code>Sort</code>-knoop?
+c) Maak nu een index met <code>DESC</code> op beide periodekolommen. Verdwijnt de sortering?
+d) Verklaar het verschil.
+e) Voeg <code>INCLUDE (bedrag)</code> toe aan de tweede index. Krijg je een <code>Index Only Scan</code>? Hoeveel <code>Heap Fetches</code>?
+f) Draai <code>VACUUM premienota;</code> en meet nog eens. Wat is er veranderd?
+g) Vergelijk de omvang van de drie indexen. Wat kost <code>INCLUDE</code>?</p>
+<hr>
+<h2>Opdracht 14.3 — Partiële index op productieschaal (15 min, individueel)</h2>
+<p>a) Meet de verwerkingsquery: onverwerkte mutaties, gesorteerd op aanmelddatum, <code>LIMIT 10</code>.
+b) Maak een volledige index op <code>(aangemeld_op)</code> en meet. Noteer de omvang.
+c) Maak in plaats daarvan een partiële index met <code>WHERE verwerkt_op IS NULL</code> en meet. Noteer de omvang.
+d) Wat is de verhouding tussen beide in omvang, en klopt die met het aandeel onverwerkte mutaties?
+e) Voer nu deze query uit en kijk of de partiële index gebruikt wordt:</p>
+<pre><code class="language-sql">SELECT * FROM mutatie
+WHERE verwerkt_op &gt; now() - INTERVAL '1 day'
+ORDER BY aangemeld_op LIMIT 10;
+</code></pre>
+<p>f) Verklaar het resultaat van e).
+g) Waarom groeit de partiële index niet mee met de historie, en waarom is dat een structureel voordeel?</p>
+<hr>
+<h2>Opdracht 14.4 — GIN op jsonb (25 min, drietallen)</h2>
+<p>a) Meet zonder index:</p>
+<pre><code class="language-sql">SELECT count(*) FROM oefening14.koppelvlakbericht
+WHERE inhoud @&gt; '{&quot;soort&quot;:&quot;adreswijziging&quot;}';
+</code></pre>
+<p>b) Maak een GIN-index op <code>inhoud</code> en meet opnieuw. Wat is de winst?
+c) Noteer de omvang van de index en vergelijk met de tabel.
+d) Maak nu een tweede index met <code>jsonb_path_ops</code> in een eigen schema en vergelijk de omvang.
+e) Meet deze query met de GIN-index aanwezig:</p>
+<pre><code class="language-sql">SELECT count(*) FROM oefening14.koppelvlakbericht
+WHERE inhoud -&gt;&gt; 'soort' = 'adreswijziging';
+</code></pre>
+<p>Wordt de index gebruikt? Verklaar.
+f) Los f) op met een expressie-index en meet.
+g) Meet de schrijfkosten: voeg 20.000 rijen toe met en zonder de GIN-index. Wat is het verschil?
+h) Welk advies geef je voor de echte <code>koppelvlakbericht</code>-tabel bij Meridiaan? Betrek daarbij de vraag uit deel 5 of <code>soort</code> niet gewoon een kolom hoort te zijn.</p>
+<hr>
+<h2>Opdracht 14.5 — Zoeken op naam met pg_trgm (20 min, drietallen)</h2>
+<p>De klantenservice krijgt telefonisch namen door en typt ze verkeerd.</p>
+<p>a) Meet <code>SELECT * FROM deelnemer WHERE achternaam ILIKE '%anss%';</code> zonder index.
+b) Maak een trigram-index en meet opnieuw.
+c) Noteer de omvang van de index en vergelijk met de tabel.
+d) Zoek nu op gelijkenis:</p>
+<pre><code class="language-sql">SELECT achternaam, similarity(achternaam, 'Jansenn') AS score
+FROM deelnemer WHERE achternaam % 'Jansenn'
+ORDER BY score DESC LIMIT 10;
+</code></pre>
+<p>Werkt het? Wat levert het op?
+e) Verlaag <code>pg_trgm.similarity_threshold</code> naar 0.2 en herhaal. Wat verandert er?
+f) Vergelijk een <code>gin_trgm_ops</code>-index met een <code>gist_trgm_ops</code>-index: bouwtijd, omvang, zoeksnelheid.
+g) Dit is geen prestatiemaatregel maar een functionele verbetering. Leg in twee zinnen aan de klantenservice uit wat ze eraan hebben.
+h) Wat is het risico als je dit op elke tekstkolom van <code>deelnemer</code> zou toepassen?</p>
+<hr>
+<h2>Opdracht 14.6 — BRIN (20 min, drietallen)</h2>
+<p>a) Controleer de correlatie van alle kolommen van <code>mutatie</code>.
+b) Maak een BRIN-index op <code>aangemeld_op</code> en noteer de omvang.
+c) Maak een B-tree op dezelfde kolom en noteer de omvang. Wat is de verhouding?
+d) Meet een query over één maand met elk van de twee indexen. Welke is sneller?
+e) Maak nu een BRIN op <code>deelnemer_id</code> en meet een query op één deelnemer. Wordt hij gebruikt? Wat gebeurt er?
+f) Verklaar e) met de correlatiewaarde uit a).
+g) Zet <code>pages_per_range = 32</code> en meet opnieuw. Wat verandert er aan omvang en snelheid?
+h) Voeg 50.000 rijen toe aan <code>mutatie</code> en meet de BRIN-query opnieuw zonder te vacuümen. Wat gebeurt er? Los het op.
+i) Bij welke omvang van <code>mutatie</code> zou je van B-tree naar BRIN overstappen? Onderbouw met de cijfers uit c) en d).</p>
+<hr>
+<h2>Opdracht 14.7 — Indexhygiëne (20 min, tweetallen)</h2>
+<p>a) Zoek alle indexen in <code>meridiaan_prod</code> en <code>oefening14</code> die nog nooit zijn gebruikt.
+b) Zoek indexen die overbodig zijn omdat er een index bestaat waarvan zij een voorvoegsel zijn.
+c) Zoek ongeldige indexen (mislukte <code>CONCURRENTLY</code>-bouw).
+d) Maak er zelf een: start een <code>CREATE INDEX CONCURRENTLY</code> en breek hem af. Controleer met de query uit c).
+e) Ruim hem op.
+f) Meet de indexbloat van <code>mutatie_deelnemer_idx</code> met <code>pgstatindex</code>. Wat is <code>avg_leaf_density</code>?
+g) Bereken de totale ruimte die je met opruimen zou winnen.
+h) Noem drie redenen waarom je een index met <code>idx_scan = 0</code> toch niet zomaar verwijdert.</p>
+<hr>
+<h2>Opdracht 14.8 — Wat een index niet oplost (10 min, drietallen)</h2>
+<p>Vier meldingen. Bepaal per melding of een index het antwoord is, en zo nee wat wel.</p>
+<p><strong>A.</strong> <em>“Deze query duurde vanmorgen 40 seconden en nu weer 200 ms. De data is niet veranderd.”</em></p>
+<p><strong>B.</strong> <em>“Het overzicht laadt traag. Er komen 80.000 rijen terug en de gebruiker ziet er 25.”</em></p>
+<p><strong>C.</strong> <em>“Deze query van 2 ms staat bovenaan in <code>pg_stat_statements</code> op totale tijd.”</em></p>
+<p><strong>D.</strong> <em>“Sinds we drie indexen hebben toegevoegd, is de nachtelijke import twee keer zo traag.”</em></p>
+<p>e) Welke van de vier oorzaken uit deel 13 hoort bij elk?</p>
+<hr>
+<h2>Opdracht 14.9 — Het indexplan (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Op basis van je top vijf uit deel 13 en wat je vandaag hebt geleerd: lever een <strong>indexplan</strong> voor <code>meridiaan_prod</code>, maximaal twee A4.</p>
+<ol>
+<li><strong>Per voorgestelde index:</strong> het type, de definitie, welke query hem nodig heeft, de gemeten winst, en de geschatte kosten (omvang en schrijfkant).</li>
+<li><strong>Minimaal één index die geen B-tree is</strong>, met verantwoording waarom dat type.</li>
+<li><strong>Wat je opruimt:</strong> ongebruikt, dubbel, ongeldig.</li>
+<li><strong>Eén verzoek dat je afwijst</strong> — een index die iemand vraagt maar die je niet gaat bouwen, met reden.</li>
+<li><strong>Het invoerplan voor productie:</strong> volgorde, <code>CONCURRENTLY</code>, en de controlestappen inclusief de nameting na een week.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Staat er bij elke index een <strong>gemeten</strong> winst, en is de schrijfkant ook gemeten?</li>
+<li>Is het niet-B-tree-type gekozen omdat het moet, of omdat het nieuw is?</li>
+<li>Bevat het invoerplan de controle op <code>indisvalid</code> en de nameting op <code>idx_scan</code>?</li>
+<li>Is het afgewezen verzoek een echte afweging?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 14.1</h2>
+<p>a) <code>Seq Scan</code> over 300.000 rijen — honderden milliseconden. Een B-tree op <code>inhoud</code> zou de hele JSON-waarde indexeren en kan <code>@&gt;</code> niet beantwoorden.</p>
+<p>b) <code>Seq Scan</code> over 340.000 rijen. Zonder voorvoegsel kan een B-tree niets uitsluiten.</p>
+<p>c) Dit kán een B-tree wél, maar er is er geen. Zonder index een <code>Seq Scan</code> over 2,4 miljoen rijen.</p>
+<p>d) Bijvoorbeeld: <em>welke adressen van deze deelnemer overlappen met de periode maart 2024?</em> Zonder GiST is er geen index die “overlapt met” kan beantwoorden.</p>
+<p>e) <strong>c.</strong> Een B-tree op <code>aangemeld_op</code> werkt prima; hij kost alleen ongeveer 50 MB. Dat is de opening naar BRIN (opdracht 14.6). De andere drie kán een B-tree principieel niet.</p>
+<hr>
+<h2>Uitwerking 14.2</h2>
+<p>a) Zonder index: <code>Seq Scan</code> plus <code>Sort</code>.</p>
+<p>b)</p>
+<pre><code class="language-sql">CREATE INDEX pn_wg_per_idx ON premienota (werkgever_id, periode_jaar, periode_maand);
+</code></pre>
+<p>De index wordt gebruikt, maar er staat nog een <code>Sort</code>-knoop of een <code>Backward Index Scan</code>. PostgreSQL kan een index achterstevoren aflopen, dus vaak verdwijnt de sortering al.</p>
+<p>c)</p>
+<pre><code class="language-sql">CREATE INDEX pn_wg_desc_idx
+    ON premienota (werkgever_id, periode_jaar DESC, periode_maand DESC);
+</code></pre>
+<p>Nu loopt de index in de gevraagde richting en is er geen enkele sortering nodig.</p>
+<p>d) Een B-tree is gesorteerd. Loopt de sortering in de index gelijk aan de gevraagde <code>ORDER BY</code>, dan kan de database de index van voren aflopen en na één rij stoppen. Bij een omgekeerde richting kan hij vaak alsnog achterstevoren lezen — maar bij <strong>gemengde</strong> richtingen (<code>a ASC, b DESC</code>) lukt dat niet, en dan is een index met de juiste richtingen de enige oplossing.</p>
+<p>e)</p>
+<pre><code class="language-sql">CREATE INDEX pn_wg_desc_incl_idx
+    ON premienota (werkgever_id, periode_jaar DESC, periode_maand DESC)
+    INCLUDE (bedrag);
+</code></pre>
+<p>Nu een <code>Index Only Scan</code>. Direct na het aanmaken kan <code>Heap Fetches</code> hoog zijn.</p>
+<p>f) Na <code>VACUUM premienota;</code> wordt de visibility map bijgewerkt en zakt <code>Heap Fetches</code> naar nul of vrijwel nul. <strong>Dit is de waarschuwing uit de reader in de praktijk:</strong> <code>INCLUDE</code> toevoegen op een tabel die zelden gevacuümd wordt, levert niets op.</p>
+<p>g)</p>
+<pre><code class="language-sql">SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes WHERE relname='premienota' ORDER BY 1;
+</code></pre>
+<p>De <code>INCLUDE</code>-index is groter — de <code>bedrag</code>-kolom staat er per rij in. Op 181.000 nota’s is dat enkele megabytes. De afweging: één extra tabelbezoek per rij bespaard, tegen een grotere index die bij elke schrijfbewerking mee moet.</p>
+<hr>
+<h2>Uitwerking 14.3</h2>
+<p>a) <code>Seq Scan</code> over 2,4 miljoen rijen plus een <code>Sort</code> — orde van grootte honderden milliseconden tot seconden.</p>
+<p>b)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_vol ON mutatie (aangemeld_op);
+</code></pre>
+<p>Snel: de index is gesorteerd, dus de database loopt hem af en stopt na tien rijen die aan de filter voldoen. Omvang: orde van grootte 50 MB.</p>
+<p>c)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op) WHERE verwerkt_op IS NULL;
+</code></pre>
+<p>Nog sneller: elke gelezen indexregel is raak, want de index bevat uitsluitend onverwerkte mutaties. Omvang: orde van grootte 6 MB.</p>
+<p>d) Ongeveer <strong>een achtste</strong>, en dat klopt met het aandeel onverwerkte mutaties (12%).</p>
+<p>e) De partiële index wordt <strong>niet</strong> gebruikt.</p>
+<p>f) De planner kan alleen bewijzen dat een query binnen de indexvoorwaarde valt bij een logische match. <code>verwerkt_op &gt; now() - interval '1 day'</code> en <code>verwerkt_op IS NULL</code> sluiten elkaar zelfs uit — de query vraagt juist naar <em>verwerkte</em> mutaties. Dit is geen tekortkoming maar correct gedrag.</p>
+<p><strong>De les:</strong> de voorwaarde in de index moet overeenkomen met wat er in de <code>WHERE</code> van je query staat. Een partiële index die net anders is dan de query, wordt nooit gebruikt en kost alleen.</p>
+<p>g) Zodra een mutatie verwerkt is, voldoet hij niet meer aan de voorwaarde en verdwijnt hij uit de index. De index bevat dus altijd alleen de openstaande werkvoorraad, ongeacht hoeveel historie de tabel bevat.</p>
+<p><strong>Structureel voordeel:</strong> op een tabel die vijf jaar groeit, blijft deze index even groot. Een volledige index op <code>aangemeld_op</code> groeit lineair mee — na vijf jaar is hij 250 MB en deze nog steeds 6.</p>
+<hr>
+<h2>Uitwerking 14.4</h2>
+<p>a) <code>Seq Scan</code> over 300.000 rijen, met een filter op de JSON-inhoud. Enkele honderden milliseconden.</p>
+<p>b)</p>
+<pre><code class="language-sql">CREATE INDEX kvb_inhoud_gin ON oefening14.koppelvlakbericht USING gin (inhoud);
+</code></pre>
+<p>Een <code>Bitmap Heap Scan</code> via de GIN-index. Winst: een factor tien tot honderd.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT pg_size_pretty(pg_relation_size('oefening14.kvb_inhoud_gin')) AS index,
+       pg_size_pretty(pg_relation_size('oefening14.koppelvlakbericht')) AS tabel;
+</code></pre>
+<p>De GIN-index is fors — vaak een substantieel deel van de tabelomvang. Dat is normaal voor GIN.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE INDEX kvb_inhoud_path ON oefening14.koppelvlakbericht
+    USING gin (inhoud jsonb_path_ops);
+</code></pre>
+<p>Aanzienlijk kleiner — vaak de helft of minder. Hij indexeert alleen paden voor containment, niet elke sleutel apart.</p>
+<p>e) <strong>De index wordt niet gebruikt.</strong> <code>-&gt;&gt;</code> is een gewone functieaanroep; GIN ondersteunt alleen de containment- en bestaansoperatoren (<code>@&gt;</code>, <code>?</code>, <code>?|</code>, <code>?&amp;</code>).</p>
+<p>f)</p>
+<pre><code class="language-sql">CREATE INDEX kvb_soort_idx ON oefening14.koppelvlakbericht ((inhoud -&gt;&gt; 'soort'));
+</code></pre>
+<p>Nu een gewone indexscan, en sneller dan via GIN — want dit is een B-tree op één waarde.</p>
+<p><strong>Het onderscheid om te onthouden:</strong> GIN voor “bevat deze structuur”, B-tree op een expressie voor “deze sleutel heeft deze waarde”.</p>
+<p>g)</p>
+<pre><code class="language-sql">-- zonder GIN-index
+DROP INDEX oefening14.kvb_inhoud_gin;
+\timing on
+INSERT INTO oefening14.koppelvlakbericht (bron, inhoud) SELECT … 20000 rijen;
+
+-- met GIN-index
+CREATE INDEX kvb_inhoud_gin ON oefening14.koppelvlakbericht USING gin (inhoud);
+INSERT INTO … nog eens 20000 rijen;
+</code></pre>
+<p>Het invoegen met GIN-index is merkbaar trager — vaak een factor twee tot vier. Elke sleutel in elke JSON-waarde levert een indexbijwerking op.</p>
+<p>h) Modelantwoord: <em>“Voor de ruwe berichten zelf: <code>jsonb_path_ops</code> als we ze op inhoud moeten doorzoeken, en anders geen GIN — deze tabel wordt vooral geschreven en zelden bevraagd. Voor <code>soort</code> en <code>deelnemer_id</code> gebruiken we expressie-indexen, want daar wordt gericht op gezocht. Maar de betere vraag is of die twee velden geen echte kolommen horen te zijn: we filteren erop, we bewaken erop, en dat is precies het criterium uit deel 5 — <code>jsonb</code> voor wat je bewaart, kolommen voor wat je gebruikt.”</em></p>
+<hr>
+<h2>Uitwerking 14.5</h2>
+<p>a) <code>Seq Scan</code> over 340.000 rijen met een ILIKE-filter. Orde van grootte honderd milliseconden.</p>
+<p>b)</p>
+<pre><code class="language-sql">CREATE INDEX deelnemer_naam_trgm ON deelnemer USING gin (achternaam gin_trgm_ops);
+</code></pre>
+<p>Een <code>Bitmap Heap Scan</code>. Aanzienlijk sneller.</p>
+<p>c) De trigram-index is groot in verhouding tot wat hij indexeert — vaak groter dan de kolom zelf, want elke naam levert meerdere trigrammen op.</p>
+<p>d) Ja. Het levert namen op die <em>lijken</em> op “Jansenn”: Jansen, Janssen, Hansen. <strong>Dit is functioneel iets anders dan sneller zoeken</strong> — het vindt wat een exacte zoekopdracht mist.</p>
+<p>e) Met een lagere drempel komen er meer, minder gelijkende resultaten bij. De afweging: te hoog en je mist de deelnemer die je zoekt; te laag en de medewerker krijgt vijftig namen om uit te kiezen. Rond 0,3 werkt in de praktijk goed voor achternamen.</p>
+<p>f)</p>
+<pre><code class="language-sql">CREATE INDEX deelnemer_naam_gist ON deelnemer USING gist (achternaam gist_trgm_ops);
+</code></pre>
+<p>GiST is sneller te bouwen en kleiner; GIN is sneller bij zoeken. <strong>Voor <code>pg_trgm</code> is GIN meestal de betere keuze</strong>, tenzij je heel veel schrijft.</p>
+<p>g) Modelantwoord: <em>“Als je een naam telefonisch doorkrijgt en hem net verkeerd typt, vind je de deelnemer nu alsnog — het systeem zoekt op gelijkenis in plaats van op exacte overeenkomst. Je krijgt de tien meest lijkende namen te zien, met de beste bovenaan.”</em></p>
+<p>h) Trigram-indexen zijn groot. Op elke tekstkolom van <code>deelnemer</code> — voorletters, tussenvoegsel, achternaam, woonplaats — zou dat een veelvoud van de tabelomvang aan index opleveren, plus schrijfkosten op elke wijziging. <strong>Alleen indexeren waar men werkelijk zo zoekt</strong>, en dat is in de praktijk de achternaam en misschien de plaats.</p>
+<hr>
+<h2>Uitwerking 14.6</h2>
+<p>a) <code>mutatie_id</code> hoog (dicht bij 1), <code>aangemeld_op</code> hoog als chronologisch ingevoegd, <code>deelnemer_id</code> laag.</p>
+<p>b)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_brin ON mutatie USING brin (aangemeld_op);
+SELECT pg_size_pretty(pg_relation_size('mutatie_aangemeld_brin'));
+</code></pre>
+<p>Enkele tientallen kilobytes.</p>
+<p>c) De B-tree is orde van grootte 50 MB. <strong>Verhouding: ongeveer duizend tot één.</strong></p>
+<p>d) De B-tree is <strong>sneller</strong> bij het lezen — hij wijst rijen aan, BRIN sluit alleen blokken uit. BRIN moet de overgebleven blokken alsnog lezen en filteren.</p>
+<p><strong>Dat is de eerlijke afweging:</strong> BRIN wint op ruimte en schrijfkosten, niet op leessnelheid.</p>
+<p>e) en f)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_dn_brin ON mutatie USING brin (deelnemer_id);
+EXPLAIN ANALYZE SELECT count(*) FROM mutatie WHERE deelnemer_id = 12345;
+</code></pre>
+<p>De planner gebruikt hem meestal <strong>niet</strong> — en als hij het doet, is het resultaat slecht: bij lage correlatie bevat vrijwel elke blokgroep het hele waardebereik, dus er wordt niets uitgesloten. Je leest de hele tabel én de index.</p>
+<p>Dit is de belangrijkste waarneming van de opdracht: <strong>BRIN op een ongecorreleerde kolom is niet suboptimaal maar waardeloos.</strong></p>
+<p>g)</p>
+<pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_brin32 ON mutatie USING brin (aangemeld_op)
+    WITH (pages_per_range = 32);
+</code></pre>
+<p>Vier keer zo groot (nog steeds verwaarloosbaar) en preciezer: hij sluit meer blokken uit, dus de query wordt sneller.</p>
+<p>h) Nieuwe blokken zijn nog niet samengevat, dus de index sluit ze niet uit en ze worden allemaal gelezen. Oplossen:</p>
+<pre><code class="language-sql">SELECT brin_summarize_new_values('mutatie_aangemeld_brin');
+</code></pre>
+<p>Of <code>WITH (autosummarize = on)</code> bij het aanmaken.</p>
+<p>i) Modelantwoord: <em>“Op 600 MB is een B-tree van 50 MB prima betaalbaar en sneller — daar houden we B-tree. De overweging kantelt zodra de tabel tientallen gigabytes wordt: dan is de B-tree meerdere gigabytes, past hij niet meer in de bufferpool, en kosten de indexbijwerkingen merkbaar schrijfsnelheid. Bij ongeveer 50 GB en een groeiende tabel zou ik BRIN voorstellen, met partitionering als aanvullende maatregel (deel 16).”</em></p>
+<hr>
+<h2>Uitwerking 14.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT schemaname, relname, indexrelname, idx_scan,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS omvang
+FROM pg_stat_user_indexes
+WHERE schemaname IN ('meridiaan_prod','oefening14') AND idx_scan = 0
+ORDER BY pg_relation_size(indexrelid) DESC;
+</code></pre>
+<p>Na dit dagdeel staan hier de experimenteerindexen die je één keer hebt getest.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT indrelid::regclass AS tabel, indexrelid::regclass AS index, indkey
+FROM pg_index
+WHERE indrelid IN (SELECT oid FROM pg_class c
+                   JOIN pg_namespace n ON n.oid=c.relnamespace
+                   WHERE n.nspname='meridiaan_prod')
+ORDER BY indrelid, indkey::text;
+</code></pre>
+<p>Zoek in de uitvoer naar een <code>indkey</code> die het voorvoegsel is van een andere op dezelfde tabel — bijvoorbeeld <code>1</code> naast <code>1 2 3</code>.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT c.relname AS index, t.relname AS tabel
+FROM pg_index i
+JOIN pg_class c ON c.oid=i.indexrelid
+JOIN pg_class t ON t.oid=i.indrelid
+WHERE NOT i.indisvalid;
+</code></pre>
+<p>d) Start <code>CREATE INDEX CONCURRENTLY … ;</code> op <code>mutatie</code> en druk Ctrl-C. De query uit c) toont hem nu.</p>
+<p>e) <code>DROP INDEX CONCURRENTLY &lt;naam&gt;;</code></p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT avg_leaf_density, leaf_fragmentation
+FROM pgstatindex('mutatie_deelnemer_idx');
+</code></pre>
+<p>Op een verse index rond 90%. Onder 50% is hij opgeblazen en is <code>REINDEX INDEX CONCURRENTLY</code> zinvol.</p>
+<p>g) Tel de omvang van de indexen uit a), b) en c) op. Na een dagdeel experimenteren is dat vaak honderden megabytes.</p>
+<p>h) De drie voorbehouden uit de reader:</p>
+<ol>
+<li>De teller loopt sinds de laatste statistiekreset — een korte meetperiode zegt weinig.</li>
+<li>Seizoensgebonden indexen: de index voor de jaarafsluiting wordt elf maanden niet gebruikt.</li>
+<li>Een index die een <code>UNIQUE</code>- of <code>PRIMARY KEY</code>-constraint afdwingt, is nodig ook zonder zoekgebruik.</li>
+</ol>
+<p>Plus de vierde uit dit deel: <strong>een index die alleen op een leesreplica wordt gebruikt, telt niet mee in de statistieken van de primaire.</strong></p>
+<hr>
+<h2>Uitwerking 14.8</h2>
+<p><strong>A — soms 40 seconden, soms 200 ms, data onveranderd.</strong>
+Geen index. Dit is een <strong>plan dat omslaat</strong> — waarschijnlijk een prepared statement met een generic plan bij een scheve verdeling (deel 13), of vergrendeling. Kijk naar <code>stddev_exec_time</code> en naar <code>pg_stat_activity</code>.
+<em>Oorzaak uit deel 13:</em> verouderde statistieken of vergrendeling.</p>
+<p><strong>B — 80.000 rijen terug, gebruiker ziet 25.</strong>
+Geen index. De query haalt te veel op; het transport en de verwerking in de applicatie kosten de tijd. <strong>Oplossing: paginering</strong> — en dan keyset-paginering, niet <code>OFFSET</code> (deel 13).
+<em>Oorzaak:</em> een query die meer opvraagt dan nodig.</p>
+<p><strong>C — 2 ms maar bovenaan op totale tijd.</strong>
+Waarschijnlijk geen index. Deze query is al snel; hij wordt te váák aangeroepen. Kijk naar <code>calls</code> — dit is vermoedelijk een N+1-probleem in de applicatie. <strong>Oplossing: de applicatie laten batchen.</strong>
+<em>Oorzaak:</em> te veel aanroepen; een applicatieprobleem.</p>
+<p><strong>D — import twee keer zo traag sinds drie nieuwe indexen.</strong>
+Geen nieuwe index — het probleem <em>is</em> de index. Elke <code>INSERT</code> werkt nu drie extra structuren bij. <strong>Oplossing:</strong> controleer of alle drie werkelijk gebruikt worden (<code>idx_scan</code>), en overweeg de indexen te droppen vóór en opnieuw te bouwen ná de import.
+<em>Oorzaak:</em> de schrijfkant van indexen — de tegenkant die deel 8 al noemde.</p>
+<p>e) De vier oorzaken uit deel 13: A = statistieken/vergrendeling, B = te veel opvragen, C = te veel aanroepen, D = geen van de vier maar een neveneffect van een eerdere maatregel.</p>
+<p><strong>Bespreekpunt:</strong> bij geen van deze vier is een index het antwoord. Dat is met opzet, en het is de tegenhanger van een dagdeel over indexen.</p>
+<hr>
+<h2>Uitwerking 14.9 — modelantwoord (verkort)</h2>
+<p><strong>Indexplan <code>meridiaan_prod</code></strong></p>
+<p><strong>1. Voorgestelde indexen</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Index</th>
+<th>Type</th>
+<th>Voor</th>
+<th>Winst</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>mutatie (aangemeld_op) WHERE verwerkt_op IS NULL</code></td>
+<td>B-tree partieel</td>
+<td>Verwerkingsquery (top 1 in <code>pg_stat_statements</code>)</td>
+<td>850 → 0,3 ms</td>
+<td>6 MB; groeit niet mee</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>dienstverband (werkgever_id)</code></td>
+<td>B-tree</td>
+<td>FK zonder index; vooral <code>DELETE</code> op werkgever</td>
+<td><code>DELETE</code> 240 → 2 ms</td>
+<td>10 MB</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>premienota (werkgever_id, periode_jaar DESC, periode_maand DESC) INCLUDE (bedrag)</code></td>
+<td>B-tree covering</td>
+<td>Laatste nota per werkgever (<code>LATERAL</code>, deel 13)</td>
+<td>95 → 4 ms</td>
+<td>8 MB</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>deelnemer USING gin (achternaam gin_trgm_ops)</code></td>
+<td><strong>GIN trigram</strong></td>
+<td>Klantenservice zoekt op deel van de naam en typefouten</td>
+<td>140 → 6 ms; <strong>en fuzzy zoeken wordt mogelijk</strong></td>
+<td>45 MB; schrijven +15% op <code>deelnemer</code></td>
+</tr>
+</tbody>
+</table>
+<p><em>(Vul in met je eigen metingen.)</em></p>
+<p><strong>2. Verantwoording van het niet-B-tree-type</strong></p>
+<p>Index 4 is GIN met trigrammen, omdat een B-tree principieel niets kan met <code>LIKE '%anss%'</code> — er is geen voorvoegsel om op te zoeken. Bijkomend en belangrijker: de <code>%</code>-operator maakt zoeken op gelijkenis mogelijk, waardoor de klantenservice een telefonisch doorgegeven naam terugvindt ook als hij verkeerd is getypt. <strong>Dat is geen prestatiemaatregel maar een functionele verbetering</strong>, en het is het argument waarmee dit voorstel bij Karin verkocht wordt.</p>
+<p><em>Overwogen en afgevallen:</em> BRIN op <code>mutatie (aangemeld_op)</code>. De index zou 40 kB zijn in plaats van 50 MB, maar hij is trager bij het lezen en op 600 MB is een B-tree goed betaalbaar. <strong>Heroverwegen bij ongeveer 50 GB.</strong></p>
+<p><strong>3. Opruimen</strong></p>
+<table>
+<thead>
+<tr>
+<th>Wat</th>
+<th>Aantal</th>
+<th>Ruimte</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Experimenteerindexen uit dit dagdeel (<code>idx_scan = 0</code>)</td>
+<td>7</td>
+<td>~180 MB</td>
+</tr>
+<tr>
+<td>Voorvoegselindex <code>premienota (werkgever_id)</code> naast index 3</td>
+<td>1</td>
+<td>4 MB</td>
+</tr>
+<tr>
+<td>Ongeldige index van een afgebroken <code>CONCURRENTLY</code></td>
+<td>1</td>
+<td>30 MB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>4. Afgewezen verzoek</strong></p>
+<p>De klantenservice vraagt ook een trigram-index op <code>woonplaats</code>, “voor het geval dat”. Afgewezen: er is geen enkele query in <code>pg_stat_statements</code> die zo zoekt, de index zou circa 30 MB kosten plus schrijfkosten op elke adreswijziging, en het probleem dat men beschrijft — inconsistent gespelde plaatsnamen — is een modelprobleem dat we in deel 5 met een referentietabel oplossen. <strong>Indexeren is hier het symptoom bestrijden.</strong></p>
+<p><strong>5. Invoerplan</strong></p>
+<ol>
+<li>Alle indexen <code>CONCURRENTLY</code>, buiten de piek (na 22:00).</li>
+<li>Eén per keer, met tussentijdse meting.</li>
+<li>Na elke bouw: <code>indisvalid</code> controleren.</li>
+<li><code>EXPLAIN</code> op de doelquery: wordt hij gebruikt?</li>
+<li>Query opnieuw meten en vergelijken met de nulmeting.</li>
+<li><strong>Na één week:</strong> <code>idx_scan</code> controleren voor elke nieuwe index. Nul betekent: weg ermee.</li>
+<li>Opruimen van de oude indexen pas ná stap 6, zodat er altijd een terugvaloptie is.</li>
+</ol>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>De schrijfkant.</strong> Groepen meten de leeswinst en vergeten dat GIN het invoegen vertraagt. Vraag: <em>“wat kost index 4 aan de kant van het portaal?”</em></li>
+<li><strong>Het niet-B-tree-type.</strong> Groepen die BRIN voorstellen op een tabel van 600 MB, kiezen het type omdat het nieuw is. Het goede antwoord noemt het omslagpunt.</li>
+<li><strong>Stap 6.</strong> Dit is de stap die vrijwel iedereen overslaat, en de enige die vaststelt of de index zijn kosten waard was.</li>
+<li><strong>Het afgewezen verzoek.</strong> Het sterkste antwoord verbindt het terug naar het datamodel in plaats van naar de index.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 14.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">66 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">429 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">&larr; Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner</a><a class="dbm-prevnext next" href="../deel-15-concurrency-en-locking/reader.html">Deel 15 — Concurrency en locking &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

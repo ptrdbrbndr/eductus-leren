@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — SQL verdieping: joins, subquery&#39;s en CTE&#39;s — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 4 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 4 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 4: Joins, subquery’s en CTE’s</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO meridiaan, public;
+\timing on
+</code></pre>
+<p>Zoals in deel 3: de uitwerkingen noemen orden van grootte, geen exacte getallen. Beoordeel je antwoord op de query.</p>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 4.1 — Eerste joins (15 min)</h2>
+<p>a) Toon voor de eerste 20 dienstverbanden: achternaam van de deelnemer, naam van de werkgever, startdatum.
+b) Hoeveel dienstverbanden zijn er bij werkgevers in de sector Zorg?
+c) Toon per deelnemer de achternaam en het aantal aanspraken. Alleen deelnemers met minstens drie aanspraken.
+d) Wat is het verschil in aantal rijen tussen deze twee query’s, en waarom?</p>
+<pre><code class="language-sql">SELECT count(*) FROM dienstverband;
+SELECT count(*) FROM dienstverband JOIN deelnemer USING (deelnemer_id);
+</code></pre>
+<hr>
+<h2>Opdracht 4.2 — INNER of LEFT (20 min)</h2>
+<p>a) Toon alle werkgevers met het aantal dienstverbanden. Zorg dat werkgevers zonder dienstverbanden óók verschijnen, met 0.
+b) Voer dezelfde query uit met <code>INNER JOIN</code> en tel de rijen. Hoeveel werkgevers verdwijnen?
+c) Iemand schrijft <code>count(*)</code> in plaats van <code>count(dv.dienstverband_id)</code>. Wat gaat er mis, en waarom?
+d) Hoeveel deelnemers hebben geen enkel dienstverband? Beantwoord op twee manieren.
+e) Formuleer in één zin een vuistregel waarmee je vooraf bepaalt of je <code>INNER</code> of <code>LEFT</code> nodig hebt.</p>
+<hr>
+<h2>Opdracht 4.3 — De klassieke fout (15 min)</h2>
+<p>Deze query is bedoeld om <strong>alle</strong> werkgevers te tonen met hun aantal onbetaalde nota’s:</p>
+<pre><code class="language-sql">SELECT w.naam, count(p.premienota_id) AS onbetaald
+FROM werkgever w
+LEFT JOIN premienota p ON p.werkgever_id = w.werkgever_id
+WHERE p.betaaldatum IS NULL
+GROUP BY w.werkgever_id, w.naam
+ORDER BY onbetaald DESC;
+</code></pre>
+<p>a) Voer hem uit en tel de rijen. Klopt dat met het aantal werkgevers?
+b) Verklaar precies welke werkgevers ontbreken en waarom.
+c) Waarom verdwijnen de werkgevers zonder énige nota níét, terwijl je dat misschien wel zou verwachten?
+d) Repareer de query.
+e) Controleer je reparatie: het aantal rijen moet nu gelijk zijn aan het aantal werkgevers.</p>
+<hr>
+<h2>Opdracht 4.4 — Fan-out (15 min)</h2>
+<p>a) Voer uit en verklaar het verschil:</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer;
+SELECT count(*) FROM deelnemer JOIN aanspraak USING (deelnemer_id);
+SELECT count(*) FROM deelnemer
+  JOIN aanspraak USING (deelnemer_id)
+  JOIN dienstverband USING (deelnemer_id);
+</code></pre>
+<p>b) Deze query is bedoeld om per sector het totaal aan ouderdomsaanspraken te tonen. Hij is fout. Leg uit waarom, en geef aan of het resultaat te hoog of te laag uitvalt.</p>
+<pre><code class="language-sql">SELECT w.sector, sum(a.bedrag_jaarlijks) AS totaal
+FROM werkgever w
+JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+JOIN aanspraak a ON a.deelnemer_id = dv.deelnemer_id AND a.soort = 'ouderdom'
+GROUP BY w.sector;
+</code></pre>
+<p>c) Schrijf een correcte versie met een CTE.
+d) Waarom lost <code>sum(DISTINCT a.bedrag_jaarlijks)</code> het probleem niet op?</p>
+<hr>
+<h2>Opdracht 4.5 — Subquery’s en anti-joins (20 min)</h2>
+<p>a) Toon de dienstverbanden met een jaarsalaris boven het gemiddelde.
+b) Toon werkgevers die minstens één onbetaalde nota hebben, met <code>EXISTS</code>.
+c) Toon werkgevers zonder enige premienota, met <code>NOT EXISTS</code>.
+d) Schrijf c) ook als <code>LEFT JOIN … IS NULL</code> en als <code>EXCEPT</code>.
+e) Voer uit en verklaar:</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer
+WHERE deelnemer_id NOT IN (SELECT deelnemer_id FROM dienstverband);
+
+SELECT count(*) FROM deelnemer d
+WHERE NOT EXISTS (SELECT 1 FROM dienstverband dv WHERE dv.deelnemer_id = d.deelnemer_id);
+</code></pre>
+<p>f) Nu de valkuil. Voer uit en verklaar het verschil:</p>
+<pre><code class="language-sql">SELECT count(*) FROM werkgever
+WHERE werkgever_id NOT IN (SELECT werkgever_id FROM premienota WHERE bedrag IS NOT NULL);
+
+SELECT count(*) FROM deelnemer
+WHERE bsn NOT IN (SELECT bsn FROM deelnemer WHERE land &lt;&gt; 'NL');
+</code></pre>
+<hr>
+<h2>Opdracht 4.6 — CTE’s (20 min)</h2>
+<p>a) Herschrijf deze geneste query met CTE’s, zodat hij van boven naar beneden leesbaar wordt:</p>
+<pre><code class="language-sql">SELECT sector, round(avg(aantal), 1)
+FROM (
+  SELECT w.sector, w.werkgever_id, count(dv.deelnemer_id) AS aantal
+  FROM werkgever w
+  LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+  GROUP BY w.sector, w.werkgever_id
+) x
+GROUP BY sector;
+</code></pre>
+<p>b) Schrijf met CTE’s een overzicht per werkgever over 2025 met: naam, aantal nota’s, totaalbedrag, aantal onbetaald, en het aantal deelnemers met een lopend dienstverband bij die werkgever. Alleen werkgevers met minstens één onbetaalde nota.</p>
+<p>c) Maak met een recursieve CTE een reeks van alle maanden in 2025, en toon per maand het aantal aangemelde mutaties — inclusief maanden met nul.</p>
+<p>d) Schrijf c) ook met <code>generate_series</code>. Welke van de twee zou je in productie zetten en waarom?</p>
+<hr>
+<h2>Opdracht 4.7 — Vensterfuncties (15 min)</h2>
+<p>a) Toon per werkgever de meest recente premienota (jaar, maand, bedrag) met <code>row_number()</code>.
+b) Doe hetzelfde met <code>DISTINCT ON</code>. Welke vind je leesbaarder, en welke zou je kiezen als de query ooit naar een ander DBMS moet?
+c) Toon per sector alle werkgevers met hun aantal deelnemers én het sectortotaal ernaast.
+d) Toon per maand van 2025 het aantal mutaties en het lopende totaal sinds januari.
+e) Waarom werkt dit niet, en hoe repareer je het?</p>
+<pre><code class="language-sql">SELECT werkgever_id, bedrag,
+       row_number() OVER (PARTITION BY werkgever_id ORDER BY bedrag DESC) AS rn
+FROM premienota
+WHERE rn = 1;
+</code></pre>
+<hr>
+<h2>Opdracht 4.8 — Afstemming tussen bronnen (10 min)</h2>
+<p>Bij Meridiaan blijken twee overzichten verschillende deelnemersaantallen te geven.</p>
+<p>a) Schrijf een query die deelnemers toont die wél een dienstverband hebben maar géén ouderdomsaanspraak.
+b) En andersom: deelnemers met een ouderdomsaanspraak maar zonder enig dienstverband.
+c) Welke van de twee groepen is bedrijfsmatig verdacht, en welke is verklaarbaar?</p>
+<hr>
+<h2>Opdracht 4.9 — Het werkgeversdossier (25 min, drietallen)</h2>
+<p>Tarik vraagt om één query die de basis vormt voor een werkgeversdossier in het nieuwe portaal. Per werkgever:</p>
+<ul>
+<li>naam, sector, plaats;</li>
+<li>of de werkgever nog is aangesloten (leesbare tekst, geen NULL);</li>
+<li>aantal lopende dienstverbanden (einddatum leeg);</li>
+<li>aantal unieke deelnemers ooit;</li>
+<li>totaal gefactureerd over 2025;</li>
+<li>aantal onbetaalde nota’s;</li>
+<li>de datum van de meest recente betaling;</li>
+<li>een risicolabel: ‘hoog’ bij meer dan 3 onbetaalde nota’s, ‘midden’ bij 1 tot 3, ‘geen’ bij 0.</li>
+</ul>
+<p>Eisen:</p>
+<ul>
+<li><strong>alle</strong> werkgevers verschijnen, ook die zonder deelnemers of zonder nota’s;</li>
+<li>geen fan-out in de tellingen;</li>
+<li>geen NULL in kolommen waar de gebruiker een getal of tekst verwacht;</li>
+<li>opgebouwd met CTE’s, leesbaar van boven naar beneden.</li>
+</ul>
+<p>Beoordelingspunten: correcte outer joins, aggregatie vóór de join, <code>coalesce</code> op de juiste plekken, en een <code>CASE</code> die alle gevallen dekt.</p>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 4.1</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT d.achternaam, w.naam AS werkgever, dv.startdatum
+FROM dienstverband dv
+JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id
+JOIN werkgever w ON w.werkgever_id = dv.werkgever_id
+ORDER BY dv.dienstverband_id
+LIMIT 20;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT count(*)
+FROM dienstverband dv
+JOIN werkgever w ON w.werkgever_id = dv.werkgever_id
+WHERE w.sector = 'Zorg';
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT d.achternaam, count(*) AS aantal_aanspraken
+FROM deelnemer d
+JOIN aanspraak a ON a.deelnemer_id = d.deelnemer_id
+GROUP BY d.deelnemer_id, d.achternaam
+HAVING count(*) &gt;= 3
+ORDER BY aantal_aanspraken DESC;
+</code></pre>
+<p>Let op <code>GROUP BY d.deelnemer_id, d.achternaam</code>: groeperen op alleen <code>achternaam</code> zou verschillende deelnemers met dezelfde achternaam samenvoegen. Groeperen op de primaire sleutel is de veilige gewoonte.</p>
+<p>d) <strong>Geen verschil.</strong> Elke <code>deelnemer_id</code> in <code>dienstverband</code> verwijst dankzij de foreign key gegarandeerd naar een bestaande deelnemer, en de relatie is veel-op-één. Dit is een goed moment om te benoemen dat referentiële integriteit uit deel 2 hier concreet iets oplevert: je kunt op deze eigenschap vertrouwen.</p>
+<hr>
+<h2>Uitwerking 4.2</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT w.naam, count(dv.dienstverband_id) AS aantal
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.werkgever_id, w.naam
+ORDER BY aantal;
+</code></pre>
+<p>b) Met <code>INNER JOIN</code> verdwijnen de werkgevers zonder enig dienstverband: <strong>250 rijen worden er 235.</strong> Dat zijn precies de werkgevers die bovenaan het <code>ORDER BY aantal</code>-resultaat staan met 0.</p>
+<p>Laat deelnemers beide tellingen naast elkaar zetten. Vijftien ontbrekende rijen op 250 valt niet op als je alleen naar het resultaat kijkt — en dat is het hele punt: een <code>INNER JOIN</code> waar een <code>LEFT JOIN</code> hoorde, geeft geen foutmelding en een plausibel ogende uitkomst.</p>
+<p>c) <code>count(*)</code> telt rijen. Voor een werkgever zónder dienstverbanden bestaat er ná de <code>LEFT JOIN</code> één rij, gevuld met NULL’s aan de rechterkant. <code>count(*)</code> telt die als <strong>1</strong>; <code>count(dv.dienstverband_id)</code> telt alleen niet-NULL en levert correct <strong>0</strong>.</p>
+<p>Dit is de belangrijkste praktische toepassing van het <code>count</code>-onderscheid uit deel 2 en 3.</p>
+<p>d)</p>
+<pre><code class="language-sql">-- 1
+SELECT count(*) FROM deelnemer d
+WHERE NOT EXISTS (SELECT 1 FROM dienstverband dv WHERE dv.deelnemer_id = d.deelnemer_id);
+
+-- 2
+SELECT count(*) FROM deelnemer d
+LEFT JOIN dienstverband dv ON dv.deelnemer_id = d.deelnemer_id
+WHERE dv.dienstverband_id IS NULL;
+</code></pre>
+<p>Orde van grootte: ruim 350 (circa 4,4% van de deelnemers krijgt in het vulscript geen enkel dienstverband — de kans dat beide trekkingen mislukken is 0,08 × 0,55).</p>
+<p>e) Modelantwoord: <em>“Gaat de vraag over de linkertabel als geheel (‘alle werkgevers, met…’), dan <code>LEFT</code>; gaat de vraag over combinaties die daadwerkelijk bestaan (‘welke deelnemers werken bij een zorgwerkgever’), dan <code>INNER</code>.”</em></p>
+<hr>
+<h2>Uitwerking 4.3</h2>
+<p>a) Het aantal rijen is lager dan 250. Alleen werkgevers met minstens één onbetaalde nota (of zonder enige nota, zie c) blijven over.</p>
+<p>b) Werkgevers die al hun nota’s hebben betaald, verdwijnen. Hun samengevoegde rijen hebben allemaal een gevulde <code>betaaldatum</code>, dus <code>WHERE p.betaaldatum IS NULL</code> filtert ze allemaal weg — en daarmee de hele werkgever, want er blijft geen enkele rij over om te groeperen.</p>
+<p>c) Werkgevers zonder énige nota (de opgezegde werkgevers, want die krijgen in het vulscript geen nota’s) blijven staan doordat hun <code>LEFT JOIN</code>-rij overal NULL heeft, inclusief <code>p.betaaldatum</code>. De voorwaarde <code>IS NULL</code> is voor hen toevallig waar. Ze tellen dan 0 dankzij <code>count(p.premienota_id)</code>.</p>
+<p>Dit is verwarrend en dat is precies het punt: de query geeft een resultaat dat gedeeltelijk klopt, wat het opsporen van de fout lastiger maakt dan een schone foutmelding.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT w.naam, count(p.premienota_id) AS onbetaald
+FROM werkgever w
+LEFT JOIN premienota p
+       ON p.werkgever_id = w.werkgever_id
+      AND p.betaaldatum IS NULL
+GROUP BY w.werkgever_id, w.naam
+ORDER BY onbetaald DESC;
+</code></pre>
+<p>e) <code>SELECT count(*) FROM (…) x;</code> moet nu 250 opleveren — even veel rijen als er werkgevers zijn.</p>
+<hr>
+<h2>Uitwerking 4.4</h2>
+<p>a) Het tweede getal is hoger dan het eerste (circa 13.300 tegen 8.000): elke deelnemer verschijnt zo vaak als hij aanspraken heeft. Het derde is nog veel hoger: elke combinatie van aanspraak en dienstverband levert een rij, dus voor een deelnemer met 2 aanspraken en 2 dienstverbanden zijn dat 4 rijen.</p>
+<p>b) <strong>Fan-out.</strong> Een deelnemer met twee dienstverbanden verschijnt twee keer, en zijn ouderdomsaanspraak wordt dus twee keer gesommeerd. Het resultaat is <strong>te hoog</strong>, en systematisch te hoog bij werkgevers in sectoren waar mensen vaker meerdere dienstverbanden hebben. Er komt geen enkele waarschuwing.</p>
+<p>c)</p>
+<pre><code class="language-sql">WITH ouderdom AS (
+    SELECT deelnemer_id, sum(bedrag_jaarlijks) AS bedrag
+    FROM aanspraak
+    WHERE soort = 'ouderdom'
+    GROUP BY deelnemer_id
+),
+deelnemer_sector AS (
+    SELECT DISTINCT dv.deelnemer_id, w.sector
+    FROM dienstverband dv
+    JOIN werkgever w ON w.werkgever_id = dv.werkgever_id
+)
+SELECT ds.sector, sum(o.bedrag) AS totaal
+FROM deelnemer_sector ds
+JOIN ouderdom o USING (deelnemer_id)
+GROUP BY ds.sector
+ORDER BY totaal DESC;
+</code></pre>
+<p><strong>Bespreekpunt:</strong> een deelnemer die bij werkgevers in twéé sectoren heeft gewerkt, telt nu in beide sectoren volledig mee. Dat is geen bug maar een definitiekwestie — en precies het gesprek dat je met de opdrachtgever moet voeren vóórdat je de query schrijft. “Wat is het totaal per sector?” is geen eenduidige vraag zolang niemand heeft vastgesteld waar een deelnemer met twee sectoren thuishoort.</p>
+<p>d) <code>sum(DISTINCT bedrag)</code> ontdubbelt op <strong>bedrag</strong>, niet op aanspraak. Twee verschillende deelnemers met toevallig hetzelfde bedrag zouden dan één keer geteld worden. Het maakt de fout kleiner en onvoorspelbaarder — de slechtste combinatie.</p>
+<hr>
+<h2>Uitwerking 4.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT dienstverband_id, jaarsalaris
+FROM dienstverband
+WHERE jaarsalaris &gt; (SELECT avg(jaarsalaris) FROM dienstverband)
+ORDER BY jaarsalaris DESC;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT w.naam FROM werkgever w
+WHERE EXISTS (SELECT 1 FROM premienota p
+              WHERE p.werkgever_id = w.werkgever_id AND p.betaaldatum IS NULL);
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT w.naam FROM werkgever w
+WHERE NOT EXISTS (SELECT 1 FROM premienota p WHERE p.werkgever_id = w.werkgever_id);
+</code></pre>
+<p>Dit levert de opgezegde werkgevers: die krijgen in het vulscript geen nota’s.</p>
+<p>d)</p>
+<pre><code class="language-sql">-- LEFT JOIN
+SELECT w.naam FROM werkgever w
+LEFT JOIN premienota p ON p.werkgever_id = w.werkgever_id
+WHERE p.premienota_id IS NULL;
+
+-- EXCEPT
+SELECT werkgever_id FROM werkgever
+EXCEPT
+SELECT werkgever_id FROM premienota;
+</code></pre>
+<p>e) Beide geven hetzelfde antwoord. <code>deelnemer_id</code> in <code>dienstverband</code> is <code>NOT NULL</code>, dus <code>NOT IN</code> is hier veilig — vandaag. De les: het werkt, maar het werkt om een reden die buiten je query ligt en die kan veranderen.</p>
+<p>f) <strong>Eerste query:</strong> <code>werkgever_id</code> in <code>premienota</code> is <code>NOT NULL</code>, dus die werkt en geeft een normaal antwoord.</p>
+<p><strong>Tweede query:</strong> <code>bsn</code> is nullable, en de subquery levert de BSN’s van buitenlandse deelnemers — waaronder vrijwel zeker minstens één NULL. Zodra dat het geval is, geeft <code>NOT IN</code> <strong>nul rijen</strong>, ongeacht de data. Geen foutmelding, geen waarschuwing.</p>
+<p>Repareer met:</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer d
+WHERE NOT EXISTS (
+    SELECT 1 FROM deelnemer x WHERE x.land &lt;&gt; 'NL' AND x.bsn = d.bsn
+);
+</code></pre>
+<p>(En merk op dat ook deze variant deelnemers zonder BSN niet als match kan behandelen — een tweede reden waarom een surrogaatsleutel prettiger werkt dan een natuurlijke.)</p>
+<hr>
+<h2>Uitwerking 4.6</h2>
+<p>a)</p>
+<pre><code class="language-sql">WITH per_werkgever AS (
+    SELECT w.sector, w.werkgever_id, count(dv.deelnemer_id) AS aantal
+    FROM werkgever w
+    LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+    GROUP BY w.sector, w.werkgever_id
+)
+SELECT sector, round(avg(aantal), 1) AS gem_per_werkgever
+FROM per_werkgever
+GROUP BY sector
+ORDER BY gem_per_werkgever DESC;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">WITH notas AS (
+    SELECT werkgever_id,
+           count(*)                                    AS aantal_notas,
+           sum(bedrag)                                 AS totaal,
+           count(*) FILTER (WHERE betaaldatum IS NULL) AS onbetaald
+    FROM premienota
+    WHERE periode_jaar = 2025
+    GROUP BY werkgever_id
+),
+lopend AS (
+    SELECT werkgever_id, count(DISTINCT deelnemer_id) AS lopende_deelnemers
+    FROM dienstverband
+    WHERE einddatum IS NULL
+    GROUP BY werkgever_id
+)
+SELECT w.naam,
+       n.aantal_notas,
+       n.totaal,
+       n.onbetaald,
+       coalesce(l.lopende_deelnemers, 0) AS lopende_deelnemers
+FROM notas n
+JOIN werkgever w USING (werkgever_id)
+LEFT JOIN lopend l USING (werkgever_id)
+WHERE n.onbetaald &gt; 0
+ORDER BY n.onbetaald DESC;
+</code></pre>
+<p>Het patroon om te onthouden: <strong>aggregeer per bron in een eigen CTE en join daarna de resultaten.</strong> Zo kan er geen fan-out ontstaan, want elke CTE levert hoogstens één rij per werkgever.</p>
+<p>c)</p>
+<pre><code class="language-sql">WITH RECURSIVE maanden AS (
+    SELECT DATE '2025-01-01' AS maand
+    UNION ALL
+    SELECT maand + INTERVAL '1 month' FROM maanden WHERE maand &lt; DATE '2025-12-01'
+)
+SELECT m.maand, count(mu.mutatie_id) AS aantal
+FROM maanden m
+LEFT JOIN mutatie mu
+       ON mu.aangemeld_op &gt;= m.maand
+      AND mu.aangemeld_op &lt;  m.maand + INTERVAL '1 month'
+GROUP BY m.maand
+ORDER BY m.maand;
+</code></pre>
+<p>Let op de <code>LEFT JOIN</code>: zonder die keuze verdwijnen maanden zonder mutaties alsnog, en dan was de hele reeks voor niets.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT generate_series(DATE '2025-01-01', DATE '2025-12-01', INTERVAL '1 month') AS maand;
+</code></pre>
+<p>In productie: <code>generate_series</code>. Korter, geen risico op een ontbrekende stopvoorwaarde, en voor iedere lezer meteen duidelijk. Recursie bewaar je voor echte hiërarchieën.</p>
+<hr>
+<h2>Uitwerking 4.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT werkgever_id, periode_jaar, periode_maand, bedrag
+FROM (
+    SELECT p.*, row_number() OVER (PARTITION BY werkgever_id
+                                   ORDER BY periode_jaar DESC, periode_maand DESC) AS rn
+    FROM premienota p
+) x
+WHERE rn = 1
+ORDER BY werkgever_id;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT DISTINCT ON (werkgever_id) werkgever_id, periode_jaar, periode_maand, bedrag
+FROM premienota
+ORDER BY werkgever_id, periode_jaar DESC, periode_maand DESC;
+</code></pre>
+<p><code>DISTINCT ON</code> is korter en meestal sneller, maar is een PostgreSQL-uitbreiding. Moet de query draagbaar zijn, kies dan <code>row_number()</code>. Bespreekpunt voor de groep: draagbaarheid is vaak een theoretische eis waar in de praktijk nooit gebruik van wordt gemaakt — weeg dat eerlijk.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT w.sector, w.naam,
+       count(dv.deelnemer_id)                                   AS deelnemers,
+       sum(count(dv.deelnemer_id)) OVER (PARTITION BY w.sector) AS sectortotaal
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.sector, w.werkgever_id, w.naam
+ORDER BY w.sector, deelnemers DESC;
+</code></pre>
+<p>De geneste <code>sum(count(...)) OVER (...)</code> verrast deelnemers: de vensterfunctie werkt over het resultaat van de groepering, niet over de brontabel. Dat volgt uit de uitvoeringsvolgorde — vensterfuncties komen na <code>GROUP BY</code>.</p>
+<p>d)</p>
+<pre><code class="language-sql">WITH per_maand AS (
+    SELECT date_trunc('month', aangemeld_op) AS maand, count(*) AS aantal
+    FROM mutatie
+    WHERE aangemeld_op &gt;= TIMESTAMPTZ '2025-01-01 00:00+01'
+      AND aangemeld_op &lt;  TIMESTAMPTZ '2026-01-01 00:00+01'
+    GROUP BY 1
+)
+SELECT maand, aantal,
+       sum(aantal) OVER (ORDER BY maand) AS lopend_totaal
+FROM per_maand
+ORDER BY maand;
+</code></pre>
+<p>e) Een vensterfunctie wordt in de <code>SELECT</code>-fase berekend en bestaat in <code>WHERE</code> nog niet — dezelfde uitvoeringsvolgorde als bij aliassen in deel 3. Repareer door de vensterfunctie in een subquery of CTE te zetten en in de omhullende query op <code>rn = 1</code> te filteren, zoals bij a).</p>
+<hr>
+<h2>Uitwerking 4.8</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT DISTINCT d.deelnemer_id, d.achternaam
+FROM deelnemer d
+JOIN dienstverband dv ON dv.deelnemer_id = d.deelnemer_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM aanspraak a
+    WHERE a.deelnemer_id = d.deelnemer_id AND a.soort = 'ouderdom'
+);
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT d.deelnemer_id, d.achternaam
+FROM deelnemer d
+JOIN aanspraak a ON a.deelnemer_id = d.deelnemer_id AND a.soort = 'ouderdom'
+WHERE NOT EXISTS (
+    SELECT 1 FROM dienstverband dv WHERE dv.deelnemer_id = d.deelnemer_id
+);
+</code></pre>
+<p>c) <strong>Groep a is verdacht:</strong> iemand werkt bij een aangesloten werkgever maar bouwt geen ouderdomspensioen op. Dat is óf een administratieve fout, óf een terechte uitzondering die iemand moet kunnen uitleggen. Dit hoort op een uitvalslijst.</p>
+<p><strong>Groep b is verklaarbaar:</strong> een deelnemer met een aanspraak maar zonder dienstverband is doorgaans een slaper of gepensioneerde — opgebouwde rechten zonder lopend dienstverband. In de casusdata ontstaat deze groep doordat het vulscript sommige deelnemers geen dienstverband geeft.</p>
+<p>Het onderscheid maken is de kern van deze opdracht: een verschil tussen twee tellingen is niet automatisch een fout. Eerst verklaren, dan corrigeren.</p>
+<hr>
+<h2>Uitwerking 4.9 — modelantwoord</h2>
+<pre><code class="language-sql">WITH dienstverbanden AS (
+    SELECT werkgever_id,
+           count(*) FILTER (WHERE einddatum IS NULL) AS lopend,
+           count(DISTINCT deelnemer_id)              AS deelnemers_ooit
+    FROM dienstverband
+    GROUP BY werkgever_id
+),
+notas AS (
+    SELECT werkgever_id,
+           sum(bedrag) FILTER (WHERE periode_jaar = 2025)  AS totaal_2025,
+           count(*) FILTER (WHERE betaaldatum IS NULL)      AS onbetaald,
+           max(betaaldatum)                                 AS laatste_betaling
+    FROM premienota
+    GROUP BY werkgever_id
+)
+SELECT
+    w.naam,
+    w.sector,
+    w.plaats,
+    CASE WHEN w.opzegdatum IS NULL THEN 'aangesloten'
+         ELSE 'opgezegd per ' || to_char(w.opzegdatum, 'DD-MM-YYYY') END AS status,
+    coalesce(dv.lopend, 0)            AS lopende_dienstverbanden,
+    coalesce(dv.deelnemers_ooit, 0)   AS deelnemers_ooit,
+    coalesce(n.totaal_2025, 0)        AS totaal_2025,
+    coalesce(n.onbetaald, 0)          AS onbetaalde_notas,
+    n.laatste_betaling,
+    CASE
+        WHEN coalesce(n.onbetaald, 0) &gt; 3 THEN 'hoog'
+        WHEN coalesce(n.onbetaald, 0) &gt; 0 THEN 'midden'
+        ELSE 'geen'
+    END AS risicolabel
+FROM werkgever w
+LEFT JOIN dienstverbanden dv USING (werkgever_id)
+LEFT JOIN notas n           USING (werkgever_id)
+ORDER BY coalesce(n.onbetaald, 0) DESC, w.naam;
+</code></pre>
+<p><strong>Bespreekpunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Aggregeren vóór joinen.</strong> Groepen die <code>werkgever</code> rechtstreeks met beide detailtabellen joinen, krijgen fan-out: het aantal deelnemers wordt vermenigvuldigd met het aantal nota’s. Dit is de kernvaardigheid van dit deel.</li>
+<li><strong>Twee <code>LEFT JOIN</code>s.</strong> Een <code>INNER</code> op één van beide laat werkgevers zonder deelnemers óf zonder nota’s verdwijnen, en de eis was expliciet “alle werkgevers”.</li>
+<li><strong><code>coalesce</code> overal waar de gebruiker een getal verwacht.</strong> Een leeg vakje in een portaal leest als “onbekend”; hier is het aantoonbaar nul. <code>laatste_betaling</code> mag wél NULL blijven — daar is “nooit betaald” de juiste betekenis, en dan is leeg eerlijker dan een verzonnen datum.</li>
+<li><strong><code>sum(bedrag) FILTER (WHERE periode_jaar = 2025)</code></strong> binnen een CTE die álle jaren bevat: dat is nodig omdat <code>onbetaald</code> en <code>laatste_betaling</code> over de hele historie moeten gaan en het totaalbedrag alleen over 2025. Groepen die de hele CTE op 2025 filteren, geven een verkeerd antwoord op de andere kolommen. Dit is het subtielste punt van de opdracht.</li>
+<li><strong>De <code>CASE</code>.</strong> Dekt alle gevallen, inclusief <code>ELSE</code>. Groepen die <code>WHEN n.onbetaald &gt; 0</code> schrijven zonder <code>coalesce</code>, krijgen NULL voor werkgevers zonder nota’s — en NULL valt door naar <code>ELSE</code>, dus het valt hier toevallig goed uit. Wijs erop dat “toevallig goed” geen ontwerp is.</li>
+</ul>
+<p><strong>Uitbreiding voor snelle groepen:</strong> voeg het aantal dagen sinds de laatste betaling toe, en laat ze bepalen wat een zinvolle waarde is voor werkgevers die nooit betaald hebben.</p>
+<hr>
+<p><em>Einde werkboek deel 4.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">68 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">423 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">&larr; Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren</a><a class="dbm-prevnext next" href="../deel-05-datamodellering-en-normalisatie/reader.html">Deel 5 — Datamodellering en normalisatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

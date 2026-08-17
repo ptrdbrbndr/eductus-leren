@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Hoge beschikbaarheid — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 19 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 19 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 19: Hoge beschikbaarheid</strong>
+Werkboek met opdrachten en volledige uitwerkingen — twee dagdelen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>⚠ <strong>Dit dagdeel vraagt de zwaarste omgeving van de hele cursus.</strong> Een volledig Patroni-cluster met drie PostgreSQL-nodes en drie etcd-nodes op één laptop is zwaar, maar haalbaar met Docker Compose. Als je dit niet lokaal kunt opzetten, volg dan de opdrachten als <strong>demonstratie mee met de docent</strong> — de uitwerkingen zijn zo geschreven dat je ze ook kunt volgen zonder zelf elke stap uit te voeren.</p>
+<p><strong>Aanbevolen opzet:</strong> een Docker Compose-bestand met zes diensten (drie Patroni+PostgreSQL, drie etcd), gedeeld door de klas of per tweetal. Zie Toolbijlage A voor een uitgebreide route; dit werkboek gaat ervan uit dat de omgeving al draait.</p>
+<pre><code class="language-bash">docker compose ps
+patronictl -c patroni.yml list
+</code></pre>
+<p>Tijdsindicatie: <strong>dagdeel A circa 125 minuten, dagdeel B circa 130 minuten.</strong></p>
+<hr>
+<hr>
+<h1>DAGDEEL A — Automatische failover</h1>
+<h2>Opdracht 19.1 — Het probleem zelf ervaren (10 min, drietallen)</h2>
+<p>Voordat je Patroni gebruikt: denk het probleem door.</p>
+<p>a) Twee PostgreSQL-servers, geen derde partij. Er treedt een netwerkstoring op tussen hen. Beide kunnen niet meer met elkaar praten. Bedenk een regel (“als ik de ander niet meer zie, dan…”) die één van beide zou kunnen volgen om te beslissen of hij moet promoveren.
+b) Laat zien dat je regel faalt in het scenario waarin de connectie tussen de twee servers is verbroken, maar beide nog prima bereikbaar zijn voor cliënten.
+c) Waarom lost een derde, onafhankelijke server dit wél op — beschrijf het zonder Patroni of etcd te noemen, puur redenerend.
+d) Wat is het minimale aantal onafhankelijke waarnemers waarbij een meerderheid altijd eenduidig is, ook als er één uitvalt?</p>
+<hr>
+<h2>Opdracht 19.2 — Het cluster verkennen (15 min, tweetallen)</h2>
+<p>a) Draai <code>patronictl list</code>. Welke node is primary? Wat is de vertraging (lag) van de replica’s?
+b) Bekijk de status via de REST API: <code>curl http://&lt;primary-node&gt;:8008/patroni</code>. Welke informatie staat erin die niet in <code>patronictl list</code> stond?
+c) Bevraag <code>/primary</code> en <code>/replica</code> op elke node. Welke antwoorden krijg je?
+d) Zoek in etcd (of via <code>patronictl</code>) het huidige leiderschapsslot en de <code>ttl</code> ervan op.
+e) Wijzig <code>maximum_lag_on_failover</code> naar een zeer lage waarde (bijvoorbeeld 100 bytes) en probeer te begrijpen wat dat voor een toekomstige failover zou betekenen op een cluster met normale schrijfbelasting.</p>
+<hr>
+<h2>Opdracht 19.3 — Failover meemaken (25 min, drietallen)</h2>
+<p>Dit is de kernopdracht van dagdeel A.</p>
+<p>a) Noteer de huidige primary en het tijdstip.
+b) Start op een andere sessie een lus die elke seconde probeert een rij te schrijven naar een testtabel, met een tijdstempel en of het lukte.
+c) Stop de primary hard (<code>pkill -9</code>, of stop de container abrupt — niet netjes afsluiten).
+d) Volg <code>patronictl list</code> totdat er een nieuwe primary is.
+e) Hoeveel schrijfpogingen faalden er in je lus uit b), en hoe lang duurde dat venster?
+f) Vergelijk dat getal met <code>ttl</code> uit je configuratie. Klopt de orde van grootte?
+g) Start de oude primary weer op. Wat doet hij? Bekijk <code>patronictl list</code> opnieuw.
+h) Is er dataverlies opgetreden? Vergelijk het aantal succesvolle schrijfacties met wat je verwachtte.</p>
+<hr>
+<h2>Opdracht 19.4 — Fencing zien werken (15 min, tweetallen)</h2>
+<p>a) Simuleer een netwerkisolatie in plaats van een crash: blokkeer (met een firewallregel, of door het netwerk van die container los te koppelen) het verkeer tussen de huidige primary en de andere nodes — maar laat de primary zelf draaien.
+b) Wat gebeurt er met <code>patronictl list</code> gezien vanaf een andere node?
+c) Probeer, als je nog een pad naar de geïsoleerde primary hebt (bijvoorbeeld rechtstreeks, buiten het Patroni-verkeer om), daar een schrijfopdracht op uit te voeren. Lukt dat nog?
+d) Bekijk de Patroni-log van de geïsoleerde node. Wat meldt hij over zichzelf?
+e) Herstel de netwerkverbinding. Wat gebeurt er met de voorheen geïsoleerde node?
+f) Wat was het venster waarin de geïsoleerde primary mogelijk nog schrijfopdrachten had kunnen accepteren? Waarom is dat venster nooit helemaal tot nul te herleiden?</p>
+<hr>
+<h2>Opdracht 19.5 — Switchover (15 min, tweetallen)</h2>
+<p>a) Voer een geplande <code>patronictl switchover</code> uit naar een specifieke, door jou gekozen node.
+b) Meet de tijd en vergelijk met je failovertijd uit opdracht 19.3.
+c) Was er dataverlies? Verklaar het verschil met failover.
+d) Bedenk een onderhoudsscenario bij Meridiaan waarbij switchover het juiste gereedschap is, en één waarbij het dat niet is (te traag, of het probleem is al opgetreden).</p>
+<hr>
+<h2>Opdracht 19.6 — Wat Patroni niet oplost (10 min, drietallen)</h2>
+<p>a) Voer op de huidige primary een <code>DROP TABLE</code> uit op een testtabel.
+b) Controleer op de replica’s: is die tabel daar ook weg?
+c) Wat had een failover op dit moment veranderd aan het probleem?
+d) Stop twee van de drie etcd-nodes. Wat gebeurt er met de huidige primary — blijft hij werken? Probeer een schrijfopdracht.
+e) Probeer nu een switchover of wacht op een failover-aanleiding. Wat gebeurt er, en waarom is dat een bewuste, veilige keuze in plaats van een storing?
+f) Herstel de etcd-nodes en controleer dat het cluster weer normaal functioneert.</p>
+<hr>
+<hr>
+<h1>DAGDEEL B — Connection pooling en het geheel testen</h1>
+<h2>Opdracht 19.7 — PgBouncer opzetten (20 min, tweetallen)</h2>
+<p>a) Configureer PgBouncer met <code>pool_mode = transaction</code>, wijzend naar de huidige Patroni-primary.
+b) Verbind via PgBouncer in plaats van rechtstreeks en voer een eenvoudige query uit.
+c) Open twee sessies via PgBouncer en bekijk <code>SHOW POOLS;</code> en <code>SHOW CLIENTS;</code> in de PgBouncer-beheerconsole. Hoeveel achterliggende serververbindingen zijn er, tegenover hoeveel clientverbindingen?
+d) Verlaag <code>default_pool_size</code> naar 2 en open vijf gelijktijdige sessies die elk een korte query doen. Wat gebeurt er?</p>
+<hr>
+<h2>Opdracht 19.8 — Wat breekt in transaction-pooling (20 min, drietallen)</h2>
+<p>a) Probeer via PgBouncer (transaction mode): <code>SET application_name = 'test';</code> buiten een transactie, gevolgd door een losse query die de instelling controleert. Werkt het betrouwbaar bij herhaling?
+b) Probeer <code>pg_advisory_lock(1)</code> via PgBouncer, gevolgd door <code>pg_advisory_unlock(1)</code> in een aparte losse opdracht. Werkt dat?
+c) Herhaal b) met <code>pg_advisory_xact_lock(1)</code> binnen één expliciete transactie (<code>BEGIN … COMMIT</code>). Werkt dat betrouwbaarder?
+d) Probeer een <code>PREPARE</code>-statement te maken en in een latere, aparte opdracht uit te voeren. Wat gebeurt er?
+e) Vat in een tabel samen: welke van deze vier werkten wel, welke niet, en wat is de gemeenschappelijke oorzaak?
+f) Stel voor Meridiaan vast: welke van deze constructies komen voor in het portaal (deel 1-10), en moeten dus vermeden of aangepast worden?</p>
+<hr>
+<h2>Opdracht 19.9 — PgBouncer en Patroni samen (20 min, drietallen)</h2>
+<p>a) Bevraag <code>/primary</code> op elke node om te bepalen wie nu primary is.
+b) Configureer (of simuleer met een script) dat PgBouncer’s databasedoel wordt bepaald door welke node op dit moment <code>/primary</code> met 200 beantwoordt.
+c) Voer een switchover uit (zoals in 19.5).
+d) Hoe snel merkt je PgBouncer-configuratie dat de primary is veranderd? Wat moest daarvoor gebeuren (herladen, een externe check, iets anders)?
+e) Wat zou een volwaardige HAProxy-laag hier automatiseren dat je handmatige route in b) niet deed?</p>
+<hr>
+<h2>Opdracht 19.10 — Chaos (30 min, drietallen)</h2>
+<p>Voer de vier scenario’s uit paragraaf 18 van de reader uit, in oplopende moeilijkheid. Voor elk: voorspel eerst, voer dan uit, en noteer het werkelijke resultaat.</p>
+<p>a) <strong>Scenario 1 — primary hard stoppen.</strong> (Herhaling van 19.3, nu met PgBouncer ertussen: blijft de applicatiekant überhaupt verbonden?)
+b) <strong>Scenario 2 — één etcd-node uitschakelen.</strong> Voorspel: geen effect. Klopt dat?
+c) <strong>Scenario 3 — twee van de drie etcd-nodes uitschakelen.</strong> Voorspel wat er gebeurt met schrijven, lezen, en de mogelijkheid tot failover. Test elk apart.
+d) <strong>Scenario 4 — netwerkpartitie van de primary, zelf nog draaiend.</strong> Meet het venster waarin de geïsoleerde primary nog bereikbaar zou kunnen zijn voor een deel van de clients.
+e) Welk van de vier scenario’s vond je het meest verontrustend, en waarom?</p>
+<hr>
+<h2>Opdracht 19.11 — RTO in de praktijk (15 min, drietallen)</h2>
+<p>a) Voor scenario 1 uit opdracht 19.10: meet apart de detectietijd, de beslistijd, de promotietijd en de routeringstijd (voor zover je die kunt onderscheiden met de gereedschappen die je hebt).
+b) Tel op tot een totaal. Vergelijk met je RTO-doelstelling uit deel 17, opdracht 17.1.
+c) Was de investering in dit hele dagdeel op basis van dat getal gerechtvaardigd, of had een handmatige procedure (deel 17-18) ook volstaan?
+d) Formuleer je antwoord op c) als een advies aan Ruud, in maximaal 80 woorden.</p>
+<hr>
+<h2>Opdracht 19.12 — Het HA-ontwerp (25 min, drietallen)</h2>
+<p>Hoofdopdracht van beide dagdelen samen. Lever een <strong>HA-ontwerp</strong> voor Meridiaan, maximaal twee A4.</p>
+<ol>
+<li><strong>De architectuur:</strong> aantal PostgreSQL-nodes, aantal etcd-nodes, hun fysieke/logische spreiding (verschillende faalgebieden), en de pooling-/routeringslaag.</li>
+<li><strong>Onderbouwing vanuit RTO:</strong> het gemeten getal uit opdracht 19.11, vergeleken met de doelstelling uit deel 17.</li>
+<li><strong>De poolconfiguratie:</strong> modus per werklast (portaal versus rapportage), met reden.</li>
+<li><strong>Het testregime:</strong> welke chaos-scenario’s, met welke frequentie herhaald.</li>
+<li><strong>Wat dit ontwerp niet oplost</strong> — expliciet, met verwijzing naar back-up (deel 17) voor menselijke fouten.</li>
+<li><strong>Eén afweging die je bewust maakt</strong>, bijvoorbeeld tussen <code>maximum_lag_on_failover</code> en dataverlies, of tussen investering en gemeten noodzaak.</li>
+</ol>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is de architectuur met faalgebieden onderbouwd, niet alleen met aantallen?</li>
+<li>Staat er een echt gemeten RTO-getal, geen schatting?</li>
+<li>Erkent punt 5 expliciet dat dit geen vervanging is voor back-up?</li>
+<li>Is punt 6 een echte afweging met een cijfer erbij?</li>
+</ul>
+<hr>
+<hr>
+<h1>UITWERKINGEN — DAGDEEL A</h1>
+<h2>Uitwerking 19.1</h2>
+<p>a) Een voor de hand liggende, foute regel: <em>“als ik de andere server niet meer kan bereiken, promoveer ik mezelf.”</em></p>
+<p>b) Bij een netwerkstoring <strong>tussen</strong> de twee servers, terwijl beide nog voor clients bereikbaar zijn: beide servers zien elkaar niet meer, en volgens de regel promoveren <strong>beide</strong> zichzelf. Nu zijn er twee primaries — split-brain, precies het probleem dat de regel had moeten voorkomen.</p>
+<p>c) Zonder Patroni/etcd te noemen: een derde, onafhankelijke waarnemer die met beide kan praten, kan onderscheiden of de primary werkelijk is uitgevallen (de waarnemer ziet hem ook niet meer) of dat er alleen een verbinding tussen de twee databaseservers stuk is (de waarnemer ziet de primary nog wél). Die extra informatie is precies wat de twee servers zelf missen.</p>
+<p>d) <strong>Drie.</strong> Bij drie waarnemers vormen twee altijd een meerderheid, ook als één uitvalt. Bij twee waarnemers is er nooit een eenduidige meerderheid bij onenigheid (1-tegen-1).</p>
+<hr>
+<h2>Uitwerking 19.2</h2>
+<p>a) <code>patronictl list</code> toont de rol (Leader/Replica) per node, hun staat, en <code>Lag in MB</code> — rechtstreeks de <code>replay_lag</code> uit deel 18, nu door Patroni bewaakt en gebruikt voor beslissingen.</p>
+<p>b) De REST API toont meer detail: de exacte PostgreSQL-versie, de timeline, of de node “streaming” is, en de laatst bekende WAL-positie.</p>
+<p>c) De huidige primary geeft <code>200</code> op <code>/primary</code> en <code>503</code> op <code>/replica</code> (of vergelijkbaar); de replica’s precies andersom. Dit is het mechanisme waarop een load balancer in paragraaf 16 leunt.</p>
+<p>d) Via <code>patronictl list</code> of de etcd-sleutel die het cluster gebruikt (<code>/service/&lt;scope&gt;/leader</code> is een gangbaar pad); de <code>ttl</code> staat in de configuratie (paragraaf 6, standaard 30 seconden in het voorbeeld).</p>
+<p>e) Een zeer lage <code>maximum_lag_on_failover</code> betekent dat bij een normale schrijfbelasting vrijwel <strong>geen enkele replica</strong> in aanmerking komt om te promoveren — ze lopen bijna altijd meer dan 100 bytes achter. Het gevolg: bij een echte storing kan het cluster besluiten dat er geen geschikte kandidaat is, en blijft het zonder primary totdat een replica wél voldoende is bijgewerkt (of totdat een beheerder ingrijpt). Dit is de expliciete RTO/RPO-afweging uit paragraaf 6: strenger op RPO betekent potentieel trager (of zelfs helemaal geen) failover.</p>
+<hr>
+<h2>Uitwerking 19.3</h2>
+<p>e) t/m f) Het venster waarin schrijfpogingen falen, komt overeen met ongeveer de <code>ttl</code>-waarde plus de tijd die de replica’s nodig hebben om te onderhandelen en te promoveren — in de praktijk vaak 15 tot 45 seconden bij een <code>ttl</code> van 30, afhankelijk van <code>loop_wait</code> en netwerkomstandigheden.</p>
+<p>g) De oude primary, bij het opnieuw opstarten, ontdekt via Patroni dat een ander knooppunt inmiddels het leiderschapsslot heeft. Patroni configureert hem automatisch als replica van de nieuwe primary — hij voegt zich in, in plaats van te proberen zelf weer primary te worden. Dit vereist wel dat zijn WAL-geschiedenis niet te ver divergeert; in sommige gevallen is een <code>pg_rewind</code> of een nieuwe basisback-up nodig.</p>
+<p>h) Schrijfacties die vielen binnen het foutvenster uit e) zijn niet gelukt — dat is geen dataverlies maar een correcte weigering (de client kreeg een foutmelding en wist dat de actie niet doorging). <strong>Echt dataverlies</strong> zou optreden als een schrijfactie leek te slagen op de oude primary maar nooit naar de nieuwe primary was gerepliceerd vóór de failover — dat hangt af van <code>maximum_lag_on_failover</code> en het isolatieniveau; met een goed ingestelde waarde hoort dit niet voor te komen, of alleen voor de allerlaatste, nog niet-gerepliceerde transacties.</p>
+<hr>
+<h2>Uitwerking 19.4</h2>
+<p>b) Vanaf een andere node toont <code>patronictl list</code> na enige tijd (rond de <code>ttl</code>) een <strong>nieuwe</strong> primary; de geïsoleerde oude primary verschijnt met een status die aangeeft dat hij niet bereikbaar is voor het consensussysteem.</p>
+<p>c) <strong>Mogelijk, afhankelijk van hoe de isolatie is opgezet</strong> — als het alleen het verkeer tussen de databasenodes blokkeert en niet het clientverkeer, kan een client die rechtstreeks (buiten Patroni’s routering om) met die node verbindt, in het venster vóórdat Patroni zichzelf degradeert, nog een schrijfopdracht laten slagen. Dit is precies het gevaarlijke venster uit paragraaf 8.</p>
+<p>d) De log toont dat de node zijn leiderschapsslot niet kan vernieuwen omdat hij geen (meerderheid van) etcd-verbindingen meer heeft, en dat hij zichzelf degradeert.</p>
+<p>e) Zodra de netwerkverbinding hersteld is, ontdekt de voorheen geïsoleerde node (net als in opdracht 19.3g) dat een ander al primary is, en voegt hij zich als replica.</p>
+<p>f) Het venster is nooit exact tot nul te herleiden omdat er altijd een kleine vertraging zit tussen “het slot is verlopen in etcd” en “Patroni op de geïsoleerde node heeft dat gemerkt en heeft zijn PostgreSQL daadwerkelijk in een niet-schrijvende toestand gezet”. Dat venster is te <strong>minimaliseren</strong> (kortere <code>ttl</code>, kortere <code>loop_wait</code>) maar niet weg te nemen — een fundamentele grens van elk consensussysteem dat over een netwerk werkt.</p>
+<hr>
+<h2>Uitwerking 19.5</h2>
+<p>b) Switchover is doorgaans <strong>sneller en voorspelbaarder</strong> dan failover, omdat er geen wachttijd is voor het verlopen van een slot — de huidige primary werkt actief mee in plaats van uit te vallen.</p>
+<p>c) <strong>Geen dataverlies</strong>, want Patroni wacht tot de doelnode volledig is bijgewerkt vóórdat de oude primary stopt met schrijven. Bij failover is er een klein risico op verlies van de allerlaatste, nog niet-gerepliceerde transacties (begrensd door <code>maximum_lag_on_failover</code>).</p>
+<p>d) <strong>Switchover geschikt:</strong> een geplande OS-patch die een herstart van de huidige primary-server vereist.
+<strong>Switchover ongeschikt:</strong> de primary is al onbereikbaar (switchover vereist juist medewerking van de huidige primary) — dan is het per definitie een failover-scenario.</p>
+<hr>
+<h2>Uitwerking 19.6</h2>
+<p>b) <strong>Ja, de tabel is ook op de replica’s verdwenen.</strong> De <code>DROP TABLE</code> is via WAL gerepliceerd, ongeacht welke node primary was.</p>
+<p>c) <strong>Niets.</strong> Een failover verplaatst het probleem niet weg, hij verplaatst alleen wie primary is — en op elke node in het cluster is de tabel weg. Dit is precies de herhaling van de kernboodschap uit deel 18, paragraaf 2, nu toegepast op een volledig HA-cluster: <strong>replicatie (en dus ook HA erbovenop) beschermt niet tegen deze fout. Alleen een back-up (deel 17) doet dat.</strong></p>
+<p>d) De huidige primary <strong>blijft normaal werken</strong> — hij hoeft zijn leiderschapsslot alleen periodiek te vernieuwen, niet bij elke query te bewijzen. Zolang zijn <code>ttl</code> nog niet verstreken is sinds de laatste succesvolle vernieuwing (die net vóór het uitvallen van de twee etcd-nodes gebeurde), blijft hij gewoon primary en accepteert hij schrijfopdrachten.</p>
+<p>e) Een switchover-poging of een failover-aanleiding <strong>mislukt</strong> — er is geen meerderheid meer om een nieuwe rolwisseling te bevestigen. Het cluster “bevriest” in zijn huidige rolverdeling. Dit is bewust veilig: <strong>liever een cluster dat niet meer kan wisselen dan een cluster dat een ongecontroleerde wisseling toestaat zonder consensus.</strong> De primary blijft beschikbaar; alleen de bescherming tegen een tweede storing is tijdelijk weg.</p>
+<p>f) Na het herstellen van voldoende etcd-nodes hervat het cluster normale werking; <code>patronictl list</code> toont weer een consistente status en switchover/failover is weer mogelijk.</p>
+<hr>
+<hr>
+<h1>UITWERKINGEN — DAGDEEL B</h1>
+<h2>Uitwerking 19.7</h2>
+<p>a)</p>
+<pre><code class="language-ini">[databases]
+meridiaan = host=&lt;huidige-primary&gt; port=5432 dbname=meridiaan
+[pgbouncer]
+pool_mode = transaction
+listen_port = 6432
+</code></pre>
+<p>c) Met <code>default_pool_size = 25</code> en bijvoorbeeld twee gelijktijdige, korte clientsessies: <code>SHOW CLIENTS;</code> toont twee clientverbindingen, <code>SHOW POOLS;</code> toont dat er (voor deze lichte belasting) waarschijnlijk maar één of twee achterliggende serververbindingen actief zijn — al bij deze kleine schaal is de vermindering zichtbaar.</p>
+<p>d) Bij vijf gelijktijdige sessies en een <code>default_pool_size</code> van 2: de eerste twee krijgen meteen een serververbinding, de overige drie <strong>wachten</strong> in de PgBouncer-wachtrij tot er een vrijkomt (na afloop van een transactie bij de anderen). Dit is zichtbaar in <code>SHOW POOLS;</code> als een niet-nul <code>cl_waiting</code>.</p>
+<hr>
+<h2>Uitwerking 19.8</h2>
+<p>a) <strong>Onbetrouwbaar.</strong> De <code>SET</code> geldt voor de achterliggende serververbinding waarop die ene opdracht toevallig terechtkomt. De volgende losse opdracht kan op een andere achterliggende verbinding belanden waar de instelling nooit is gezet.</p>
+<p>b) <strong>Onbetrouwbaar/gevaarlijk.</strong> De <code>pg_advisory_lock</code> wordt genomen op een specifieke achterliggende verbinding; de latere <code>pg_advisory_unlock</code>-opdracht kan op een andere achterliggende verbinding terechtkomen en de lock dus nooit vrijgeven vanuit dat pad — de lock blijft hangen op een verbinding die teruggaat naar de pool voor andere clients.</p>
+<p>c) <strong>Betrouwbaar.</strong> Binnen één expliciete transactie blijft PgBouncer (in transaction-modus) dezelfde achterliggende verbinding vasthouden totdat de transactie sluit, en <code>pg_advisory_xact_lock</code> valt bovendien vanzelf vrij bij het einde van diezelfde transactie.</p>
+<p>d) De <code>PREPARE</code> in de ene “sessie” en de latere <code>EXECUTE</code> in een aparte opdracht mislukken doorgaans met een foutmelding dat het prepared statement niet bestaat — het was gemaakt op een achterliggende verbinding die na de eerste opdracht mogelijk alweer is vrijgegeven aan een andere client.</p>
+<p>e)</p>
+<table>
+<thead>
+<tr>
+<th>Constructie</th>
+<th>Werkt in transaction-pooling?</th>
+<th>Oorzaak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SET</code> (sessie)</td>
+<td>Nee</td>
+<td>Geen vaste onderliggende verbinding</td>
+</tr>
+<tr>
+<td><code>pg_advisory_lock</code> (sessie)</td>
+<td>Nee/gevaarlijk</td>
+<td>Idem</td>
+</tr>
+<tr>
+<td><code>pg_advisory_xact_lock</code></td>
+<td>Ja</td>
+<td>Gebonden aan de transactie, niet de sessie</td>
+</tr>
+<tr>
+<td><code>PREPARE</code> over transacties heen</td>
+<td>Nee</td>
+<td>Idem als SET</td>
+</tr>
+</tbody>
+</table>
+<p>De gemeenschappelijke oorzaak: <strong>transaction-pooling geeft de achterliggende verbinding vrij zodra de transactie sluit — alles wat aan “de sessie” is gebonden in plaats van aan “de transactie”, overleeft dat niet.</strong></p>
+<p>f) Modelantwoord: controleer de portaalcode (uit niveau 1) op sessie-gebonden <code>SET</code>-opdrachten buiten transacties, en op advisory locks buiten een expliciete transactie — precies de constructies die in deel 15, opdracht 15.6, werden gebouwd met de <code>_xact_</code>-variant. Die keuze uit deel 15 betaalt zich hier uit.</p>
+<hr>
+<h2>Uitwerking 19.9</h2>
+<p>d) Zonder een geautomatiseerde laag (alleen jouw handmatige script of herconfiguratie): pas nadat iemand het script opnieuw draait en PgBouncer herlaadt — in de praktijk minuten tot uren, ruim buiten wat een RTO-doelstelling van minuten zou toestaan.</p>
+<p>e) Een volwaardige HAProxy-laag <strong>controleert continu en automatisch</strong> (elke paar seconden) welke node <code>/primary</code> beantwoordt, en past de routering <strong>zonder menselijk ingrijpen</strong> aan zodra dat verandert — precies het verschil tussen een demonstratie en een productiewaardige oplossing.</p>
+<hr>
+<h2>Uitwerking 19.10</h2>
+<p>b) Klopt meestal: met drie etcd-nodes vormen de resterende twee nog een meerderheid, dus geen enkel merkbaar effect op het cluster.</p>
+<p>c) Schrijven op de huidige primary: <strong>blijft werken</strong> (zie uitwerking 19.6d). Lezen: blijft ook werken, want dat gaat niet via etcd. Failover-mogelijkheid: <strong>weg</strong> tot het quorum herstelt (uitwerking 19.6e).</p>
+<p>d) Het gemeten venster is typisch in dezelfde orde van grootte als de detectietijd uit scenario 1, maar met een extra onzekerheidsmarge omdat het afhangt van hóe de isolatie is opgezet (blokkeert het ook al het clientverkeer, of alleen het onderlinge Patroni/etcd-verkeer).</p>
+<p>e) Modelantwoord: scenario 4 is het meest verontrustend, omdat het het enige scenario is waarin er een reëel, meetbaar venster bestaat waarin het systeem zich <strong>niet</strong> gedraagt zoals de architectuurplaat belooft — de andere drie scenario’s gedragen zich precies zoals voorspeld.</p>
+<hr>
+<h2>Uitwerking 19.11</h2>
+<p>c) Het antwoord hangt af van de eigen meting. Bij een RTO-doelstelling van bijvoorbeeld 4 uur (deel 17, een redelijke aanname voor Meridiaans portaal) en een gemeten geautomatiseerde failovertijd van minder dan een minuut, is de vraag legitiem of een handmatige procedure van bijvoorbeeld 30-60 minuten (inclusief het wakker worden en het volgen van een draaiboek) ook al ruim binnen die 4 uur was gebleven.</p>
+<p>d) Modelantwoord (73 woorden): <em>“We hebben vandaag gemeten dat automatische failover binnen [x] seconden werkt, tegenover een geschatte 30 tot 60 minuten voor een handmatige procedure langs ons draaiboek uit deel 17. Bij onze RTO-doelstelling van enkele uren voldeed het handmatige traject waarschijnlijk ook al. De investering in Patroni is dus niet strikt noodzakelijk voor RTO alleen — wel waardevol als we vaker onderhoud willen doen zonder gepland downtime, via switchover.”</em></p>
+<hr>
+<h2>Uitwerking 19.12 — modelantwoord (verkort)</h2>
+<p><strong>HA-ontwerp Meridiaan</strong></p>
+<p><strong>1. Architectuur</strong></p>
+<p>Drie PostgreSQL/Patroni-nodes, verspreid over minimaal twee fysieke locaties of beschikbaarheidszones (niet alle drie op dezelfde stroomkring — zie paragraaf 8 van de reader). Drie etcd-nodes, eveneens gespreid, elk gekoppeld aan een andere PostgreSQL-node maar logisch onafhankelijk. PgBouncer op elke applicatieserver (transaction mode voor het portaal), met HAProxy ertussen die elke node op <code>/primary</code> en <code>/replica</code> bevraagt.</p>
+<p><strong>2. RTO-onderbouwing</strong></p>
+<p>Gemeten failovertijd in opdracht 19.11: [x] seconden. Doelstelling uit deel 17: enkele uren. <strong>De marge is ruim</strong> — dit rechtvaardigt de investering niet op RTO-gronden alleen, maar wel vanuit de tweede overweging: gepland onderhoud (patches, upgrades) kan voortaan via switchover zonder aangekondigde downtime, wat losstaat van het RTO-argument.</p>
+<p><strong>3. Poolconfiguratie</strong></p>
+<ul>
+<li>Portaal: <code>transaction</code>-modus, met alle sessie-gebonden constructies vervangen door hun <code>_xact_</code>/<code>LOCAL</code>-varianten (deel 15 betaalt zich hier uit).</li>
+<li>Rapportage: <code>session</code>-modus, omdat lange individuele query’s en volledige compatibiliteit zwaarder wegen dan de efficiëntiewinst van transaction-pooling bij een kleine, voorspelbare gebruikersgroep.</li>
+</ul>
+<p><strong>4. Testregime</strong></p>
+<p>Kwartaal: switchover als routinetest (laag risico, meet of de keten nog werkt). Halfjaarlijks: scenario 1 (harde stop) op een acceptatie-cluster. Jaarlijks: scenario 4 (netwerkpartitie) — het scherpste en minst voorspelbare scenario, dus met de langste voorbereiding en het kleinste risico als het misgaat (acceptatieomgeving, niet productie).</p>
+<p><strong>5. Wat dit niet oplost</strong></p>
+<p>Dit ontwerp beschermt tegen het uitvallen van een machine of een netwerksegment. <strong>Het beschermt niet tegen een verkeerde <code>DROP TABLE</code>, een foutieve migratie, of applicatieve datacorruptie</strong> — die repliceren mee naar elke node in het cluster. Back-up en PITR (deel 17) blijven het enige vangnet daarvoor, onveranderd door dit ontwerp.</p>
+<p><strong>6. Eén bewuste afweging</strong></p>
+<p><code>maximum_lag_on_failover</code> is ingesteld op [x] MB, wat overeenkomt met ongeveer [y] seconden normale schrijfbelasting bij Meridiaans huidige volume. Dat betekent dat een failover in het slechtste geval die hoeveelheid recente mutaties zou kunnen kosten — ruim binnen het RPO van vijf minuten uit deel 17, maar wel een expliciete, bewuste grens in plaats van een default die niemand heeft doorgerekend.</p>
+<p><strong>Beoordelingspunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>Faalgebieden, niet alleen aantallen.</strong> “Drie nodes” zonder spreiding over stroomkringen/locaties mist het kernpunt van paragraaf 8.</li>
+<li><strong>Een echt gemeten RTO</strong>, geen schatting — dit is het meest overgeslagen beoordelingspunt.</li>
+<li><strong>Punt 5 als expliciete erkenning.</strong> Groepen die dit weglaten, hebben de rode draad van deel 17-18-19 niet vastgehouden.</li>
+<li><strong>Punt 6 met een cijfer.</strong> “We hebben lag ingesteld op een redelijke waarde” is geen afweging; een berekening in seconden/MB wel.</li>
+</ul>
+<hr>
+<p><em>Einde werkboek deel 19.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">402 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-18-replicatie/reader.html">&larr; Deel 18 — Replicatie</a><a class="dbm-prevnext next" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">Deel 20 — Monitoring, logging en pgaudit &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

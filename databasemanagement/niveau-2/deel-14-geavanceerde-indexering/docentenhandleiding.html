@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Geavanceerde indexering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 14 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2, deel 14: Geavanceerde indexering</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>Deel 13 eindigde met een observatie: bij bijna elke maatregel was het antwoord een index, en steeds een B-tree. Vandaag komen de types erbij die dat niet zijn.</p>
+<p><strong>Het risico van dit dagdeel is enthousiasme.</strong> Deelnemers leren vier nieuwe gereedschappen en willen ze toepassen. Het materiaal is daarom zo opgebouwd dat elk nieuw type een <strong>strikte voorwaarde</strong> meekrijgt:</p>
+<ul>
+<li>GIN is duur bij schrijven — meet die kant ook.</li>
+<li>BRIN werkt alleen bij hoge correlatie, en is anders letterlijk waardeloos.</li>
+<li>Trigram-indexen zijn groot — alleen waar men werkelijk zo zoekt.</li>
+<li><code>-&gt;&gt;</code> gebruikt geen GIN — dat is een B-tree op een expressie.</li>
+</ul>
+<p><strong>En de tegenhanger:</strong> opdracht 14.8 gaat over vier meldingen waarbij een index níét het antwoord is. Dat is met opzet het slot van een dagdeel over indexen.</p>
+<p>Het inhoudelijk mooiste moment is BRIN, omdat daar de correlatie uit deel 12 zich uitbetaalt: een index van veertig kilobyte op een tabel van 600 megabyte — en op de verkeerde kolom volstrekt nutteloos.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> reader deel 14; de top vijf uit <code>pg_stat_statements</code> van deel 13.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li><strong>Laat de <code>koppelvlakbericht</code>-tabel vóór de sessie aanmaken.</strong> Het script staat in het werkboek en genereert 300.000 rijen met <code>jsonb</code>. Dat kost een paar minuten; doe het niet tijdens het dagdeel.</li>
+<li>Controleer dat <code>pg_trgm</code> beschikbaar is. Op een minimale installatie zit het niet in de contrib-set — zie Toolbijlage A.</li>
+<li><strong>Draai opdracht 14.6 zelf</strong> en noteer de omvang van de BRIN- en B-tree-index op jouw machine. Die verhouding is het cijfer waar het dagdeel om draait.</li>
+<li>⚠ <strong>Schijfruimte.</strong> GIN-indexen op 300.000 jsonb-rijen plus trigram-indexen op 340.000 namen plus experimenteerindexen: reken op 500 MB tot 1 GB extra. Opdracht 14.7 ruimt op; laat die niet vervallen.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Vier vragen die B-tree niet aankan (§2) + <strong>opdracht 14.1</strong></td>
+<td>Plenair + zelfstandig</td>
+</tr>
+<tr>
+<td>0:15-0:25</td>
+<td>De zes types in kaart (§3)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>0:25-0:50</td>
+<td>B-tree verdiept (§4) + <strong>opdracht 14.2</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>0:50-1:10</td>
+<td>Partiële indexen (§5) + <strong>opdracht 14.3</strong></td>
+<td>Presentatie + zelfstandig</td>
+</tr>
+<tr>
+<td>1:10-1:25</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:25-1:55</td>
+<td><strong>GIN (§7) + opdracht 14.4</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>1:55-2:20</td>
+<td><strong>pg_trgm (§8) + opdracht 14.5</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>2:20-2:30</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:30-2:40</td>
+<td>GiST (§9)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>2:40-3:05</td>
+<td><strong>BRIN (§10) + opdracht 14.6</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>3:05-3:20</td>
+<td>Indexhygiëne (§14) + <strong>opdracht 14.7</strong></td>
+<td>Tweetallen</td>
+</tr>
+<tr>
+<td>3:20-3:30</td>
+<td><strong>Wat een index niet oplost (§15) + opdracht 14.8</strong></td>
+<td>Drietallen + plenair</td>
+</tr>
+<tr>
+<td>3:30-4:00</td>
+<td><strong>Opdracht 14.9</strong> — het indexplan</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> kort GiST in tot vijf minuten (de exclusion constraint uit deel 6 is het enige dat er echt toe doet) en laat opdracht 14.2 vervallen als praktijkopdracht. Kort <strong>nooit</strong> opdracht 14.6, 14.8 of 14.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Begin met opdracht 14.1 vóór enige uitleg. Vier query’s, vier keer een sequentiële scan. Vraag dan:</p>
+<blockquote>
+<p><em>“Voor welke van deze vier kán een B-tree principieel niets betekenen?”</em></p>
+</blockquote>
+<p>Het antwoord — drie van de vier — opent het dagdeel. Vraag c) (het datumbereik) kán wel met een B-tree; die is de brug naar BRIN aan het eind van de dag.</p>
+<h3>4.2 De zes types (0:15)</h3>
+<p>Presenteer de tabel uit paragraaf 3 en maak twee dingen expliciet:</p>
+<p><strong>GIN en BRIN staan aan de uiteinden.</strong> Duur en krachtig tegenover bijna gratis en voorwaardelijk.</p>
+<p><strong>Deze types zijn specialisaties, geen upgrade.</strong> Verwijs terug naar deel 1, waar hetzelfde gold voor de datastore-categorieën. Deelnemers die net nieuwe gereedschappen krijgen, moeten dat kader vooraf hebben.</p>
+<h3>4.3 B-tree verdiept (0:25)</h3>
+<p>Kort houden; het meeste is bekend. Twee dingen die nieuw zijn en die je moet demonstreren:</p>
+<p><strong>Sorteervolgorde in de index.</strong> Opdracht 14.2c is het duidelijkst als je eerst de gewone index laat maken en de <code>Sort</code>-knoop aanwijst.</p>
+<p>Let op: PostgreSQL kan een index vaak achterstevoren aflopen, dus bij één <code>DESC</code>-kolom verdwijnt de sortering al zonder speciale index. Het verschil wordt pas hard bij <strong>gemengde</strong> richtingen. Zeg dat erbij, anders lijkt de opdracht geen effect te hebben.</p>
+<p><strong><code>INCLUDE</code> en de visibility map.</strong> Opdracht 14.2e en f zijn de betaling van deel 12: <code>Heap Fetches</code> is hoog tot je vacuümt. Laat het gebeuren.</p>
+<h3>4.4 Partiële indexen (0:50)</h3>
+<p>Het punt dat op productieschaal telt en dat in deel 8 nog niet kon: <strong>de index groeit niet mee met de historie.</strong> Reken voor: na vijf jaar is een volledige index op <code>aangemeld_op</code> 250 MB en de partiële nog steeds 6.</p>
+<p>Opdracht 14.3e is de belangrijkste: de partiële index wordt <strong>niet</strong> gebruikt voor een query die er logisch wel binnen zou kunnen vallen. De planner doet geen redeneerwerk over datumbereiken. Deelnemers die dit niet weten, bouwen partiële indexen die nooit worden aangeraakt.</p>
+<h3>4.5 GIN (1:25)</h3>
+<p>Het onderscheid dat je hard moet maken:</p>
+<blockquote>
+<p><strong>GIN voor “bevat deze structuur”. B-tree op een expressie voor “deze sleutel heeft deze waarde”.</strong></p>
+</blockquote>
+<p>Opdracht 14.4e demonstreert het: <code>-&gt;&gt;</code> gebruikt de GIN-index niet. Laat deelnemers eerst zelf verbaasd zijn.</p>
+<p><strong>Opdracht 14.4g is de opdracht die het vaakst wordt overgeslagen en het belangrijkste meet:</strong> de schrijfkosten. Loop rond en zorg dat groepen hem doen. Een factor twee tot vier op invoegen is een cijfer dat hun indexplan verandert.</p>
+<p>Bij onderdeel h): stuur op de terugkoppeling naar deel 5. Het beste antwoord eindigt niet bij een index maar bij de vraag of <code>soort</code> een kolom hoort te zijn. Als geen enkele groep dat noemt, breng het plenair in — het is de rode draad tussen niveau 1 en 2.</p>
+<h3>4.6 pg_trgm (1:55)</h3>
+<p><strong>Doe onderdeel d) plenair.</strong> Zoeken op <code>similarity(achternaam, 'Jansenn')</code> en zien dat Janssen bovenaan komt, is het leukste moment van het dagdeel — en het is functioneel, niet technisch.</p>
+<p>Maak dat onderscheid expliciet:</p>
+<blockquote>
+<p><em>“Alles wat we vandaag doen maakt query’s sneller. Dit maakt iets mogelijk dat eerst niet kon. Dat is een ander soort winst, en het is de winst die je aan Karin verkoopt.”</em></p>
+</blockquote>
+<p>Onderdeel h) (de risico’s van trigram op elke kolom) is de rem. Vraag de zaal wat er gebeurt als je dit op vier tekstkolommen zet.</p>
+<h3>4.7 BRIN (2:40)</h3>
+<p><strong>Het inhoudelijk mooiste blok.</strong> Bouw het in deze volgorde op:</p>
+<ol>
+<li>Toon de correlatietabel uit deel 12 opnieuw.</li>
+<li>Maak de BRIN-index op <code>aangemeld_op</code> en toon de omvang. Laat de zaal het getal hardop noemen.</li>
+<li>Maak de B-tree en toon de verhouding — ongeveer duizend tot één.</li>
+<li>Meet beide. <strong>De B-tree is sneller.</strong> Laat die teleurstelling landen.</li>
+<li>Maak de BRIN op <code>deelnemer_id</code> en laat zien dat hij nutteloos is.</li>
+</ol>
+<p>Stap 4 is essentieel. Deelnemers verwachten dat de kleinere index ook sneller is. De eerlijke afruil — BRIN wint op ruimte en schrijfkosten, niet op leessnelheid — is wat hen behoedt voor een verkeerde keuze.</p>
+<p>Stap 5 is de strikte voorwaarde. Zeg het scherp:</p>
+<blockquote>
+<p><em>“BRIN op een ongecorreleerde kolom is niet suboptimaal. Hij is waardeloos: je leest de hele tabel én je raadpleegt een index.”</em></p>
+</blockquote>
+<p>Onderdeel i) (bij welke omvang stap je over) is de opdracht waar je op stuurt. Het antwoord is een omslagpunt met een onderbouwing, niet een voorkeur.</p>
+<h3>4.8 Indexhygiëne (3:05)</h3>
+<p>Praktisch en snel. Laat opdracht 14.7d echt doen — een <code>CREATE INDEX CONCURRENTLY</code> afbreken en de ongeldige index terugvinden. Het is de enige fout uit dit dagdeel die <strong>stil</strong> blijft en alleen maar kost.</p>
+<p>De vierde voorbehoud bij <code>idx_scan = 0</code> — een index die alleen op een leesreplica wordt gebruikt — vooruitwijzen naar deel 18.</p>
+<h3>4.9 Wat een index niet oplost (3:20)</h3>
+<p><strong>Het slot van een dagdeel over indexen gaat over wanneer een index niet helpt.</strong> Dat contrast is opzettelijk; benoem het.</p>
+<p>Loop opdracht 14.8 plenair langs. Bij geen van de vier meldingen is een index het antwoord, en melding D is de scherpste: het probleem <em>is</em> de index.</p>
+<p>Verbind terug met opdracht 8.7 en met de vier oorzaken uit deel 13. Deelnemers die dit patroon hebben, stellen voortaan eerst de diagnose.</p>
+<h3>4.10 Opdracht 14.9 (3:30)</h3>
+<p>Stuur op vier dingen:</p>
+<ul>
+<li><strong>De schrijfkant gemeten</strong>, niet alleen de leeswinst.</li>
+<li><strong>Het niet-B-tree-type gekozen omdat het moet</strong>, niet omdat het nieuw is. Groepen die BRIN voorstellen op 600 MB, moeten de vraag krijgen wat het omslagpunt is.</li>
+<li><strong>Stap 6 van het invoerplan:</strong> <code>idx_scan</code> na een week. Vrijwel iedereen slaat dit over, en het is de enige stap die vaststelt of de index zijn kosten waard was.</li>
+<li><strong>Het afgewezen verzoek.</strong> Het sterkste antwoord verbindt terug naar het datamodel.</li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Waarom is GIN zo groot?”</strong>
+Omdat hij niet de waarde indexeert maar alle onderdelen ervan. Een <code>jsonb</code> met vijftig sleutels levert vijftig indexvermeldingen op. Dat is precies wat hem krachtig maakt en wat hem duur maakt — je kunt het één niet zonder het ander hebben.</p>
+<p><strong>“Kan ik <code>fastupdate</code> gewoon aanlaten?”</strong>
+Standaard staat hij aan en voor de meeste werklasten is dat prima. Het probleem ontstaat bij een tabel die veel wordt geschreven én bevraagd: de pending list groeit, en elke zoekopdracht moet die ongeïndexeerde lijst doorlopen. Dan worden zoektijden onvoorspelbaar. Zie je dat, zet hem uit.</p>
+<p><strong>“Wanneer gebruik ik GiST in plaats van GIN voor trigrammen?”</strong>
+Zelden. GiST is kleiner en sneller te bouwen, GIN is sneller bij zoeken. Op een tabel die vooral gelezen wordt — en dat is de klantenservicetabel — wint GIN. GiST overweeg je bij zeer veel schrijfverkeer.</p>
+<p><strong>“Is BRIN geschikt voor onze logtabel?”</strong>
+Waarschijnlijk ja, als hij chronologisch groeit en er niet willekeurig in wordt bijgewerkt. Controleer eerst de correlatie. En let op de omvang: onder tientallen gigabytes is een B-tree meestal gewoon betaalbaar.</p>
+<p><strong>“Hoeveel indexen mag een tabel hebben?”</strong>
+Geen getal, wel een toets: als de schrijfsnelheid meetbaar hindert én er staan indexen met <code>idx_scan = 0</code>, is het te veel. Op een OLTP-tabel is vijf tot acht gebruikelijk; op een rapportagetabel mogen er meer, want daar zijn schrijfkosten minder relevant (zie deel 18, leesreplica’s).</p>
+<p><strong>“Kan ik een index maken op een deel van een jsonb-veld?”</strong>
+Ja, met een expressie-index: <code>CREATE INDEX ON t ((inhoud -&gt;&gt; 'soort'))</code>. Dat is meestal wat je werkelijk nodig hebt. En de vervolgvraag hoort te zijn of dat veld geen kolom moet worden.</p>
+<p><strong>“Wat doet <code>CREATE INDEX CONCURRENTLY</code> als er een lange transactie loopt?”</strong>
+Hij wacht. <code>CONCURRENTLY</code> moet wachten tot alle transacties die vóór hem begonnen zijn, klaar zijn. Eén sessie in <code>idle in transaction</code> kan je indexbouw uren ophouden — opnieuw het probleem uit deel 7 en 12.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Meet bij 14.4g de schrijfkant</td>
+<td>Ziet de afruil; sterk</td>
+</tr>
+<tr>
+<td>Concludeert bij 14.6d dat B-tree sneller is</td>
+<td>Laat zich niet meeslepen door de omvang</td>
+</tr>
+<tr>
+<td>Noemt bij 14.4h het datamodel in plaats van een index</td>
+<td>Verbindt niveau 1 en 2</td>
+</tr>
+<tr>
+<td>Formuleert bij 14.6i een omslagpunt met cijfers</td>
+<td>Klaar voor de capstone</td>
+</tr>
+<tr>
+<td>Stelt BRIN voor op een tabel van 600 MB</td>
+<td>Kiest het type omdat het nieuw is</td>
+</tr>
+<tr>
+<td>Vergeet <code>indisvalid</code> te controleren</td>
+<td>Actief corrigeren; stille fout</td>
+</tr>
+<tr>
+<td>Wil trigram op elke tekstkolom</td>
+<td>Terugbrengen naar meetbaar gebruik</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 15</h2>
+<p>Brug: <em>“Jullie database is nu snel. Volgende keer — en dat zijn twee dagdelen — kijken we wat er gebeurt als honderdvijftig sessies tegelijk hetzelfde willen. En dan blijkt snelheid niet het probleem: de query’s zijn snel, ze staan alleen op elkaar te wachten.”</em></p>
+<p>Geef mee: <strong>iedereen bewaart zijn indexplan uit opdracht 14.9.</strong> In deel 15 komen de locks die <code>CREATE INDEX</code> en <code>REINDEX</code> nemen expliciet aan bod, en dan wordt het invoerplan uit dat document opnieuw beoordeeld.</p>
+<hr>
+<p><em>Einde docentenhandleiding deel 14.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">66 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">429 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">&larr; Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner</a><a class="dbm-prevnext next" href="../deel-15-concurrency-en-locking/reader.html">Deel 15 — Concurrency en locking &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

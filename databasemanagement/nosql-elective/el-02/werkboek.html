@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Wide-column en graaf in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; NoSQL-elective &rsaquo; Wide-column en graaf in de praktijk &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>NoSQL-elective, deel 2 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Elective, niveau 2</strong>
+Opdrachten met uitwerkingen</p>
+<hr>
+<h2>Zo gebruik je dit werkboek</h2>
+<p>Maak eerst alle opdrachten zelf. De uitwerkingen staan na de scheidingslijn.</p>
+<hr>
+<h2>Opdracht EL2.1 — Query-first tabelontwerp</h2>
+<p>Naast “laatste honderd paginaweergaven per deelnemer” (paragraaf 4) wil Meridiaan ook kunnen vragen: “hoeveel bezoeken aan de pagina /pensioenoverzicht waren er per dag, afgelopen maand, over alle deelnemers.”</p>
+<p>a. Kan de tabel <code>portaal_bezoeken_per_deelnemer</code> uit paragraaf 4 deze vraag efficiënt beantwoorden? Beargumenteer aan de hand van de partition key.
+b. Ontwerp een tweede Cassandra-tabel die specifiek op deze vraag is ingericht. Geef de <code>CREATE TABLE</code>-vorm met partition key en clustering key.
+c. Is het dupliceren van de bezoekgegevens over twee tabellen hier een ontwerpfout of een bewuste keuze? Beargumenteer.</p>
+<h2>Opdracht EL2.2 — Cypher lezen</h2>
+<p>Gegeven de query uit paragraaf 6:</p>
+<pre><code class="language-cypher">MATCH (d1:Deelnemer {id: 4821})-[:WERKT_BIJ]-&gt;(w:Werkgever)&lt;-[:WERKT_BIJ]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN DISTINCT d2.naam, w.naam AS gedeelde_werkgever;
+</code></pre>
+<p>a. Beschrijf in gewone taal wat deze query oplevert.
+b. Waarom staat <code>WHERE d1 &lt;&gt; d2</code> erin — wat zou er zonder gebeuren?
+c. Pas de query aan zodat die ook het aantal gedeelde werkgevers per collega telt (Cypher: <code>count()</code>).</p>
+<h2>Opdracht EL2.3 — Grenzen herkennen</h2>
+<p>Voor elk scenario: is Cassandra, Neo4j, of geen van beide de juiste keuze? Beargumenteer met één zin per scenario.</p>
+<p>a. Een dashboard dat het gemiddelde pensioensaldo per leeftijdscategorie toont, bijgewerkt eens per nacht.
+b. Een fraude-onderzoeksteam dat verdachte netwerken van vijf of meer schakels tussen partijen wil opsporen.
+c. Een audit-log die exact, zonder enige vertraging, moet weerspiegelen welke medewerker wanneer een deelnemersrecord heeft gewijzigd.</p>
+<h2>Opdracht EL2.4 — De elective afsluiten (hoofdopdracht)</h2>
+<p>Meridiaan overweegt, naast de vier scenario’s uit deze elective, een vijfde: een dashboard dat élke nacht een volledig herberekend risicoprofiel per deelnemer genereert op basis van tientallen bronnen (kernregistratie, portaalgedrag, externe marktdata), en dat overdag alleen leest, nooit schrijft.</p>
+<p>a. Past dit scenario bij één van de vier besproken systemen (Redis, MongoDB, Cassandra, Neo4j), of eerder bij een aanpak binnen PostgreSQL zelf? Beargumenteer met het toegangspatroon (schrijf-eenmaal-per-nacht, veel-lezen-overdag).
+b. Welke techniek uit eerdere delen van de hoofdcursus (denk aan partitionering, materialized views, of replicatie) zou hier een oplossing kunnen bieden zonder een vijfde systeem te introduceren?
+c. Formuleer in twee zinnen waarom “elk nieuw probleem vraagt om een nieuw gespecialiseerd systeem” een valkuil is, ook na twee delen waarin je vier van zulke systemen hebt leren toepassen.</p>
+<hr>
+<hr>
+<h2>Uitwerkingen</h2>
+<h3>EL2.1</h3>
+<p>a. Nee — <code>portaal_bezoeken_per_deelnemer</code> heeft <code>deelnemer_id</code> als partition key. Een vraag die over <em>alle</em> deelnemers aggregeert, zou elke partition in het cluster moeten doorzoeken: precies het traag-of-onmogelijk-scenario uit paragraaf 3.
+b.</p>
+<pre><code class="language-cql">CREATE TABLE portaal_bezoeken_per_pagina_per_dag (
+  pagina text,
+  dag date,
+  deelnemer_id bigint,
+  bezocht_op timestamp,
+  PRIMARY KEY ((pagina, dag), bezocht_op)
+);
+</code></pre>
+<p>Partition key is hier het paar <code>(pagina, dag)</code> — alle bezoeken aan één pagina op één dag staan bij elkaar, en <code>COUNT</code> of een aggregatie per dag wordt een efficiënte scan binnen een beperkt aantal partities.
+c. Een bewuste keuze — dit is het standaardpatroon in Cassandra (paragraaf 4), geen fout. Elke tabel is geoptimaliseerd voor precies één toegangspatroon; het alternatief (één tabel proberen te laten dienen voor beide vragen) zou voor minstens één van de twee vragen een trage of onmogelijke query opleveren.</p>
+<h3>EL2.2</h3>
+<p>a. De query zoekt, uitgaande van deelnemer 4821, alle andere deelnemers die bij dezelfde werkgever werken als 4821, en geeft per gevonden collega de naam en de gedeelde werkgever terug.
+b. Zonder <code>WHERE d1 &lt;&gt; d2</code> zou deelnemer 4821 zichzelf als “collega van zichzelf” in het resultaat krijgen, omdat het patroon <code>(d1)-[:WERKT_BIJ]-&gt;(w)&lt;-[:WERKT_BIJ]-(d2)</code> ook voldoet wanneer d1 en d2 dezelfde node zijn.
+c.</p>
+<pre><code class="language-cypher">MATCH (d1:Deelnemer {id: 4821})-[:WERKT_BIJ]-&gt;(w:Werkgever)&lt;-[:WERKT_BIJ]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN d2.naam, count(DISTINCT w) AS aantal_gedeelde_werkgevers;
+</code></pre>
+<h3>EL2.3</h3>
+<p>a. Geen van beide — dit is een klassieke relationele aggregatievraag over de kernregistratie, met een acceptabele nachtelijke verversing; PostgreSQL (eventueel met een materialized view, zie deel 22) is hier het juiste gereedschap, niet Cassandra of Neo4j (paragraaf 7: beperkte aggregatiekracht bij Neo4j, geen reden voor Cassandra’s schrijfschaal bij een dashboard dat eens per nacht bijwerkt).
+b. Neo4j — dit is precies het diepe-pad-scenario waarin een graafdatabase een relationele recursieve CTE overtreft (paragraaf 6).
+c. Geen van beide — een audit-log met harde consistentie-eisen (“zonder enige vertraging”) botst met Cassandra’s eventual consistency (paragraaf 7) en heeft niets aan Neo4j’s padvoordeel. Dit blijft een PostgreSQL-taak, mogelijk met een append-only-ontwerp binnen de kernregistratie zelf.</p>
+<h3>EL2.4</h3>
+<p>a. Eerder een aanpak binnen PostgreSQL zelf: het toegangspatroon (zeldzaam schrijven, veel lezen, met een dure herberekening) past bij geen van de vier scenario’s uit deze elective — er is geen sub-milliseconde-eis (Redis), geen variërend schema (MongoDB), geen schrijfschaal over machines (Cassandra) en geen padvraag (Neo4j). Het is een klassiek “bereken eenmaal, lees vaak”-patroon.
+b. Een <strong>materialized view</strong> (deel 22-gerelateerd materiaal, of eerder als concept genoemd) die nachtelijk wordt ververst, is hier de voor de hand liggende oplossing: de zware berekening gebeurt eenmaal per nacht, en overdag lezen gebruikers een voorberekende tabel zonder herhaalde herberekening — zonder dat er een vijfde systeem bij komt.
+c. Elk van de vier systemen in deze elective loste een specifiek, benoembaar toegangspatroon op dat PostgreSQL niet goed kon bedienen — maar de meeste toegangspatronen, ook onregelmatige of zware, passen wél binnen wat PostgreSQL kan (indexen, partitionering, materialized views, replicatie). “Nieuw probleem, dus nieuw systeem” slaat de stap over die deze hele cursus als discipline aanleert: eerst onderzoeken wat het bestaande systeem al kan, en pas daarna, met een gemeten knelpunt, naar een gespecialiseerd alternatief kijken.</p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">14 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">250 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../el-01/reader.html">&larr; Document en key-value in de praktijk</a><span></span></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

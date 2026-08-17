@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Query-optimalisatie: EXPLAIN ANALYZE en de planner — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 13 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 13 — Slidedeck</h1>
+<p><strong>Query-optimalisatie: EXPLAIN ANALYZE en de planner</strong>
+Niveau 2, dagdeel 3 (deel 13 van 30) | 42 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Query-optimalisatie</h1>
+<h2>EXPLAIN ANALYZE en de planner</h2>
+<h3>Niveau 2 — Deel 13</h3>
+<hr>
+<h2>Slide 2 — Twee telefoontjes</h2>
+<p><strong>Ruud:</strong> <em>“Het portaal is traag op dinsdagavond.”</em></p>
+<p><strong>Karin:</strong> <em>“Mijn maandrapport duurt vier minuten.”</em></p>
+<h1>Wie heeft het dringendste probleem?</h1>
+<p><strong>Notities:</strong> laat de zaal kiezen voordat je verder gaat.</p>
+<hr>
+<h2>Slide 3 — Reken mee</h2>
+<p><strong>Karins rapport:</strong> 4 minuten × 1 keer per maand
+= <strong>4 minuten per maand</strong></p>
+<p><strong>De portaalquery:</strong> 5 ms × 2.000.000 keer per maand
+= <strong>bijna 3 uur per maand</strong></p>
+<hr>
+<h2>Slide 4 — De formule van vandaag</h2>
+<h1>totale belasting =</h1>
+<h1>aantal aanroepen × gemiddelde tijd</h1>
+<p>De query waarover geklaagd wordt,
+is zelden de query die ertoe doet.</p>
+<hr>
+<h2>Slide 5 — Waarom dat zo is</h2>
+<p>Klachten gaan over wat mensen <strong>voelen</strong>.</p>
+<p>Een wachttijd van vier minuten valt op.
+Een query van 5 ms niet.</p>
+<h1>De server voelt het omgekeerde.</h1>
+<hr>
+<h2>Slide 6 — pg_stat_statements</h2>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+</code></pre>
+<p>Normaliseert query’s: <code>WHERE id = 42</code> en <code>WHERE id = 99</code>
+worden één regel met <code>WHERE id = $1</code>.</p>
+<p>⚠ Vereist <code>shared_preload_libraries</code> — en dus een herstart (deel 11).</p>
+<hr>
+<h2>Slide 7 — De query die je altijd eerst draait</h2>
+<pre><code class="language-sql">SELECT substr(query,1,80), calls,
+       round(total_exec_time::numeric,0) AS totaal_ms,
+       round(mean_exec_time::numeric,2)  AS gem_ms,
+       round(100*total_exec_time/sum(total_exec_time) OVER (),1) AS pct
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC LIMIT 20;
+</code></pre>
+<h1>Sorteer op <strong>totaal</strong>, niet op gemiddelde.</h1>
+<hr>
+<h2>Slide 8 — Vijf invalshoeken</h2>
+<table>
+<thead>
+<tr>
+<th>Sorteer op</th>
+<th>Vindt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>total_exec_time</code></td>
+<td>De grootste belasting — <strong>begin hier</strong></td>
+</tr>
+<tr>
+<td><code>calls</code></td>
+<td>Te vaak aangeroepen (applicatieprobleem)</td>
+</tr>
+<tr>
+<td><code>shared_blks_read</code></td>
+<td>Veel van schijf</td>
+</tr>
+<tr>
+<td><code>stddev_exec_time</code></td>
+<td><strong>Wisselvallig — vaak de planner</strong></td>
+</tr>
+<tr>
+<td><code>rows / calls</code></td>
+<td>Te veel rijen terug</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 9 — Opdracht 13.1 &amp; 13.2</h2>
+<p><strong>13.1</strong> Werklast opwekken — <em>10 min</em>
+<strong>13.2</strong> Wat doet er werkelijk toe — <em>25 min, tweetallen</em></p>
+<p>Reset eerst: <code>SELECT pg_stat_statements_reset();</code></p>
+<hr>
+<h2>Slide 10 — Hoe de planner beslist</h2>
+<p>Drie ingrediënten:</p>
+<ol>
+<li><strong>Kostenparameters</strong> — <code>random_page_cost</code> etc. (deel 11)</li>
+<li><strong>Statistieken</strong> — bijgehouden door <code>ANALYZE</code></li>
+<li><strong>Selectiviteit</strong> — welk deel voldoet aan de voorwaarde</li>
+</ol>
+<hr>
+<h2>Slide 11 — Waar het misgaat</h2>
+<p>Niet bij 1 of 2.</p>
+<h1>Bijna altijd bij 3.</h1>
+<p>De kosten zijn juist berekend.
+Het <strong>aantal rijen</strong> was verkeerd geschat.</p>
+<hr>
+<h2>Slide 12 — En dat plant zich voort</h2>
+<p>Denkt de planner dat een join 100 rijen oplevert
+en worden het er een miljoen —</p>
+<h1>dan is élke keuze daarboven ook fout.</h1>
+<hr>
+<h2>Slide 13 — EXPLAIN op productieschaal</h2>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS, SETTINGS, VERBOSE) SELECT …;
+</code></pre>
+<p><code>SETTINGS</code> toont welke planner-instellingen afwijken.</p>
+<h1>Dat is het antwoord op</h1>
+<h1>“waarom is het plan op acceptatie anders”.</h1>
+<hr>
+<h2>Slide 14 — De vier vragen</h2>
+<h1>1. Waar gaat de tijd heen?</h1>
+<h1>2. Waar klopt de schatting niet?</h1>
+<h1>3. Hoeveel wordt er weggegooid?</h1>
+<h1>4. Wat komt er van schijf?</h1>
+<p><strong>In deze volgorde.</strong></p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-13-1.png" alt="Figuur 13-1" loading="lazy"><figcaption>Figuur 13-1</figcaption></figure>
+<hr>
+<h2>Slide 15 — Twee valkuilen bij vraag 1</h2>
+<p><strong>De tijd van een knoop is inclusief zijn kinderen.</strong>
+4.800 ms − 4.700 ms kind = 100 ms eigen kosten</p>
+<p><strong><code>actual time</code> is per loop.</strong>
+<code>loops=8000</code> → vermenigvuldigen</p>
+<hr>
+<h2>Slide 16 — Signalen die je direct herkent</h2>
+<table>
+<thead>
+<tr>
+<th>In het plan</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>external merge Disk</code></td>
+<td><code>work_mem</code> te laag</td>
+</tr>
+<tr>
+<td><code>Batches: 8</code></td>
+<td>Hashtabel paste niet</td>
+</tr>
+<tr>
+<td><code>Heap Fetches: 987</code></td>
+<td>Visibility map oud → <code>VACUUM</code></td>
+</tr>
+<tr>
+<td><code>Rows Removed by Filter: 2000000</code></td>
+<td>Filter te laat</td>
+</tr>
+<tr>
+<td><code>loops=8000</code> bij Nested Loop</td>
+<td>Check de rijschatting erboven</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 17 — Opdracht 13.3</h2>
+<h1>Vier vragen aan een plan</h1>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 18 — Pauze</h2>
+<hr>
+<h2>Slide 19 — De rij-estimatiefout</h2>
+<pre><code>Nested Loop  (cost=0.42..8.47 rows=1 …)
+             (actual time=0.03..4821.55 rows=184302 loops=1)
+</code></pre>
+<p>Verwacht: <strong>1 rij.</strong> Gekregen: <strong>184.302.</strong></p>
+<p>Een Nested Loop is prima bij 1 rij.
+En een ramp bij 184.302.</p>
+<hr>
+<h2>Slide 20 — Repareer de schatting, niet de join</h2>
+<p>Vijf oorzaken, in volgorde van hoe vaak ze voorkomen:</p>
+<ol>
+<li><strong>Verouderde statistieken</strong> → <code>ANALYZE</code></li>
+<li><strong>Afhankelijke kolommen</strong> → uitgebreide statistieken</li>
+<li><strong>Te lage resolutie</strong> → <code>SET STATISTICS 1000</code></li>
+<li><strong>Functie of expressie</strong> → expressie-index</li>
+<li><strong>Correlatie tussen tabellen</strong> → herschrijven</li>
+</ol>
+<hr>
+<h2>Slide 21 — Waarom afhankelijke kolommen misgaan</h2>
+<pre><code class="language-sql">WHERE plaats = 'Utrecht' AND provincie = 'UT'
+</code></pre>
+<p>De planner neemt aan dat kolommen <strong>onafhankelijk</strong> zijn
+en vermenigvuldigt de selectiviteiten.</p>
+<p>⅓ × ⅓ = 1/9</p>
+<p>Maar de tweede voorwaarde sluit <strong>niets</strong> uit.</p>
+<hr>
+<h2>Slide 22 — Uitgebreide statistieken</h2>
+<pre><code class="language-sql">CREATE STATISTICS afh (dependencies, ndistinct, mcv)
+    ON plaats, provincie FROM tabel;
+ANALYZE tabel;
+</code></pre>
+<h1>Een van de weinige plaatsen waar je de planner</h1>
+<h1>écht iets nieuws vertelt.</h1>
+<hr>
+<h2>Slide 23 — Opdracht 13.4</h2>
+<h1>De rij-estimatiefout</h1>
+<p>Let op: in <code>meridiaan_prod</code> klopt de aanname wél.
+Dat vaststellen hoort erbij.</p>
+<p><em>35 min, drietallen</em></p>
+<hr>
+<h2>Slide 24 — Wat de planner weet</h2>
+<pre><code class="language-sql">SELECT attname, n_distinct, null_frac,
+       most_common_vals, most_common_freqs, correlation
+FROM pg_stats WHERE tablename = 'mutatie';
+</code></pre>
+<p><code>n_distinct</code> <strong>negatief</strong> = verhouding tot het aantal rijen
+<code>-1</code> = elke rij uniek</p>
+<hr>
+<h2>Slide 25 — n_distinct vastzetten</h2>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN kanaal SET (n_distinct = 5);
+</code></pre>
+<p><strong>Krachtig</strong> — je vertelt de planner een feit dat hij niet kende.</p>
+<p><strong>Gevaarlijk</strong> — je overschrijft de werkelijkheid met een bewering.</p>
+<p><em>Wanneer wordt die bewering onwaar, en wie merkt dat?</em></p>
+<hr>
+<h2>Slide 26 — Opdracht 13.5</h2>
+<h1>Statistieken bijstellen</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 27 — Pauze</h2>
+<hr>
+<h2>Slide 28 — De ontbrekende indexen</h2>
+<p>Het opschaalscript liet er bewust een paar weg.</p>
+<pre><code class="language-sql">-- foreign keys zonder index op de verwijzende kolom
+</code></pre>
+<p><strong>Zoek ze in de catalogus, niet in je geheugen.</strong></p>
+<hr>
+<h2>Slide 29 — Waar een FK-index écht telt</h2>
+<p>Niet bij joins over de hele tabel.</p>
+<h1>Bij een <code>DELETE</code> op de oudertabel.</h1>
+<p>Zonder index: een sequentiële scan over 466.000 rijen —
+<strong>per verwijderde rij.</strong></p>
+<hr>
+<h2>Slide 30 — Opdracht 13.6</h2>
+<h1>De ontbrekende indexen vinden</h1>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 31 — Herschrijven: keyset-paginering</h2>
+<pre><code class="language-sql">-- traag, en steeds trager
+… ORDER BY mutatie_id LIMIT 20 OFFSET 2000000;
+
+-- constant snel
+… WHERE mutatie_id &gt; 2000000 ORDER BY mutatie_id LIMIT 20;
+</code></pre>
+<h1>Met OFFSET wacht de gebruiker die het</h1>
+<h1>diepst zoekt het langst.</h1>
+<hr>
+<h2>Slide 32 — Vier andere herschrijfregels</h2>
+<ul>
+<li><strong>Filter zo vroeg mogelijk</strong></li>
+<li><strong>Aggregeer vóór je joint</strong> (deel 4)</li>
+<li><strong><code>EXISTS</code> boven <code>IN</code></strong> met een grote subquery</li>
+<li><strong><code>LATERAL</code></strong> voor “de top n per groep”</li>
+</ul>
+<hr>
+<h2>Slide 33 — Opdracht 13.7</h2>
+<h1>Herschrijven</h1>
+<p>Drie varianten van dezelfde vraag. Meet alle drie.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 34 — Prepared statements</h2>
+<p>Eerste 5 uitvoeringen: <strong>custom plan</strong> (per waarde gepland)
+Daarna mogelijk: <strong>generic plan</strong> (één plan voor alles)</p>
+<p>Bij een <strong>scheve verdeling</strong> is dat ene plan
+voor minstens één waarde verkeerd.</p>
+<hr>
+<h2>Slide 35 — Herken je dit?</h2>
+<p><em>“In psql is hij snel. In de applicatie traag.”</em></p>
+<pre><code class="language-sql">SET plan_cache_mode = 'force_custom_plan';
+</code></pre>
+<p>Veel ORM’s gebruiken prepared statements
+zonder dat de ontwikkelaar dat weet.</p>
+<hr>
+<h2>Slide 36 — En zo vind je het</h2>
+<h1>Een hoge <code>stddev_exec_time</code></h1>
+<h1>in <code>pg_stat_statements</code>.</h1>
+<p>Dezelfde query, soms snel en soms traag,
+zonder dat de gegevens veranderden.</p>
+<p><em>(De belofte van slide 8.)</em></p>
+<hr>
+<h2>Slide 37 — auto_explain</h2>
+<pre><code>auto_explain.log_min_duration = 3000
+auto_explain.log_analyze = on
+auto_explain.sample_rate = 0.1
+</code></pre>
+<p><code>pg_stat_statements</code> → <strong>welke</strong> query’s ertoe doen
+<code>auto_explain</code> → <strong>waarom</strong> die ene traag was</p>
+<p>⚠ <code>log_analyze</code> meet élke query. Gebruik <code>sample_rate</code>.</p>
+<hr>
+<h2>Slide 38 — De werkwijze</h2>
+<ol>
+<li>Reset en meet</li>
+<li>Kies <strong>één</strong> query — de bovenste, niet de gemelde</li>
+<li><code>EXPLAIN (ANALYZE, BUFFERS, SETTINGS)</code> — noteer de tijd</li>
+<li>Stel de vier vragen</li>
+<li>Zoek de <strong>eerste</strong> foute schatting</li>
+<li><strong>Verander één ding</strong></li>
+<li>Meet opnieuw</li>
+<li>Terug naar 1 — de rangorde is veranderd</li>
+</ol>
+<hr>
+<h2>Slide 39 — Waar het in de praktijk misgaat</h2>
+<p><strong>Stap 6:</strong> drie dingen tegelijk veranderen
+→ je weet niet wat werkte</p>
+<p><strong>Stap 8:</strong> blijven sleutelen aan dezelfde query
+→ terwijl er allang een andere bovenaan staat</p>
+<hr>
+<h2>Slide 40 — Wanneer stop je?</h2>
+<h1>Als de query snel genoeg is</h1>
+<h1>voor wat hij moet doen.</h1>
+<p>Niet als hij zo snel mogelijk is.</p>
+<p>Optimaliseren zonder doel is oneindig werk.</p>
+<hr>
+<h2>Slide 41 — Opdracht 13.9</h2>
+<h1>Het optimalisatierapport</h1>
+<p>Top vijf · diagnose en <strong>gemeten</strong> winst · één query die je
+bewust níét optimaliseert · en wat je Karin antwoordt</p>
+<p><em>35 min, drietallen</em></p>
+<hr>
+<h2>Slide 42 — Volgende keer</h2>
+<h1>Deel 14 — Geavanceerde indexering</h1>
+<p>Bij bijna elke maatregel van vandaag was het antwoord
+een index. En steeds een B-tree.</p>
+<p>Volgende keer de indexen die dat <strong>niet</strong> zijn — en dan blijkt
+correlatie uit deel 12 een index van een paar kilobyte
+mogelijk te maken op een tabel van 600 megabyte.</p>
+<p><strong>Bewaar je top vijf.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 13.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">73 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">466 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">&larr; Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat</a><a class="dbm-prevnext next" href="../deel-14-geavanceerde-indexering/reader.html">Deel 14 — Geavanceerde indexering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

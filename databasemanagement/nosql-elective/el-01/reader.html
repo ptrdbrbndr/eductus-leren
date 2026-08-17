@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Document en key-value in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; NoSQL-elective &rsaquo; Document en key-value in de praktijk &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>NoSQL-elective, deel 1 — Document en key-value in de praktijk</h1>
+<p><strong>Cursus Databasemanagement — Elective, niveau 2: DBA en consultant</strong>
+Deelnemersreader | Elective-deel 1 van 2 — buiten de dertig-delen-nummering
+Geen aparte certificeringslijn — verdiepend op deel 21</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Terugblik: waar deel 21 ophield</li>
+<li>Redis als cache-laag</li>
+<li>Praktijk: een sessieobject in Redis</li>
+<li>MongoDB als documentstore</li>
+<li>Praktijk: klantcorrespondentie in MongoDB</li>
+<li>Consistentie: PostgreSQL blijft de bron van waarheid</li>
+<li>Wanneer dit misgaat</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+<li>Verder lezen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de vier Redis-datastructuren benoemen die voor cachingdoeleinden relevant zijn, en een TTL-strategie toepassen;</li>
+<li>een sessieobject voor het Meridiaan-deelnemersportaal ontwerpen in Redis, inclusief een expliciete keuze over wat wél en niet in de cache mag staan;</li>
+<li>het documentmodel van MongoDB (collections, BSON, embedding versus referencing) toepassen op een concreet opslagprobleem;</li>
+<li>een aggregate-query in MongoDB lezen en de vertaling naar een vergelijkbare SQL-<code>GROUP BY</code> maken;</li>
+<li>uitleggen hoe PostgreSQL bron van waarheid blijft terwijl Redis en MongoDB als satellieten meedraaien, en welk consistentierisico daarbij hoort.</li>
+</ul>
+<hr>
+<h2>2. Terugblik: waar deel 21 ophield</h2>
+<p>Deel 21 eindigde met vier eerlijke gevallen waarin een aparte datastore de betere keuze is naast PostgreSQL: een cache-laag met sub-milliseconde eisen, relatieanalyse die inherent graafvormig is, grootschalig volledige-tekst-zoeken, en logging op zeer grote schaal. Dat deel bleef bewust conceptueel — er werd geen regel Redis- of MongoDB-code getoond.</p>
+<p>Deze elective werkt twee van de vier gevallen daadwerkelijk uit: de cache-laag (Redis, dit deel) en de documentopslag die in de praktijk vaak naast een cache-behoefte opduikt (MongoDB, dit deel). Deel 2 van de elective werkt de andere twee uit: wide-column (Cassandra) en graaf (Neo4j).</p>
+<p><strong>Herhaling van het uitgangspunt uit deel 21, want het blijft gelden:</strong> NoSQL komt er hier naast PostgreSQL, niet in plaats ervan. Meridiaans kernregistratie blijft relationeel. Wat in dit deel verandert is dat je nu ook kunt <em>bouwen</em> wat deel 21 alleen beargumenteerde.</p>
+<hr>
+<h2>3. Redis als cache-laag</h2>
+<p>Redis is een key-value store die vrijwel alles in het werkgeheugen houdt — dat is de bron van de snelheid, en meteen ook de reden dat je Redis nooit als enige opslagplaats van iets belangrijks gebruikt: een herstart zonder persistentie-configuratie is dataverlies.</p>
+<p>Vier datastructuren zijn relevant voor het gebruik in dit deel:</p>
+<table>
+<thead>
+<tr>
+<th>Structuur</th>
+<th>Vorm</th>
+<th>Typisch gebruik bij Meridiaan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>String</strong></td>
+<td>één waarde per sleutel</td>
+<td>een geserialiseerd sessie-object</td>
+</tr>
+<tr>
+<td><strong>Hash</strong></td>
+<td>veld-waardeparen onder één sleutel</td>
+<td>een sessie met losse velden (naam, laatst-actief, taalvoorkeur)</td>
+</tr>
+<tr>
+<td><strong>Set</strong></td>
+<td>ongeordende unieke waarden</td>
+<td>“welke werkgever-ID’s heeft deze medewerker vandaag bekeken”</td>
+</tr>
+<tr>
+<td><strong>Sorted set</strong></td>
+<td>waarden met een score, gesorteerd</td>
+<td>een rate-limiter (aantal aanvragen per minuut per gebruiker)</td>
+</tr>
+</tbody>
+</table>
+<p>Elke sleutel kan een <strong>TTL</strong> (time to live) krijgen: na het verstrijken verdwijnt de sleutel vanzelf. Dat is het mechanisme waarmee een cache zichzelf opruimt zonder dat een applicatie actief hoeft bij te houden wat verlopen is.</p>
+<p><strong>Cache-invalidatie is het echte ontwerpprobleem, niet de opslag zelf.</strong> Drie strategieën, oplopend in complexiteit:</p>
+<ol>
+<li><strong>TTL alleen</strong> — simpel, maar data kan tot de TTL verlopen stale blijven.</li>
+<li><strong>Actief invalideren bij wijziging</strong> — de applicatie verwijdert of overschrijft de cache-sleutel zodra de onderliggende PostgreSQL-rij wijzigt. Vraagt discipline: elke schrijfpad naar de bron moet ook het cache-invalidatiepad raken.</li>
+<li><strong>Write-through</strong> — de applicatie schrijft nooit rechtstreeks naar PostgreSQL zonder de cache in dezelfde stap bij te werken. Voorkomt het “ik vergat de cache” probleem van strategie 2, ten koste van meer code op elk schrijfpad.</li>
+</ol>
+<hr>
+<h2>4. Praktijk: een sessieobject in Redis</h2>
+<p>Het Meridiaan-deelnemersportaal (uit de casus van deel 1) heeft een sessiebehoefte: bij elke pagina-aanvraag moet binnen enkele milliseconden bekend zijn wie is ingelogd, zonder bij elke aanvraag de PostgreSQL-kernregistratie te bevragen.</p>
+<p>Een sessie als hash, met een TTL van dertig minuten inactiviteit:</p>
+<pre><code>HSET sessie:a1b2c3 deelnemer_id 4821 naam &quot;Karin de Wolff&quot; taal &quot;nl&quot; laatst_actief &quot;2026-08-17T10:15:00Z&quot;
+EXPIRE sessie:a1b2c3 1800
+</code></pre>
+<p>Bij elke volgende aanvraag: de TTL verlengen (<code>EXPIRE sessie:a1b2c3 1800</code> opnieuw) en de velden lezen (<code>HGETALL sessie:a1b2c3</code>) in plaats van een query naar PostgreSQL.</p>
+<p><strong>Wat wél en niet in deze hash hoort — de kern van het ontwerp:</strong> <code>deelnemer_id</code>, <code>naam</code> en <code>taal</code> zijn afgeleide, weinig-veranderende gegevens die het portaal duizenden keren per sessie leest. Het <code>saldo</code> van een pensioenaanspraak hoort <strong>niet</strong> in deze cache: het is te belangrijk om ook maar één seconde stale te zijn, en het wordt te weinig gelezen per sessie om de cachingkost te rechtvaardigen. Dat onderscheid — leesfrequentie versus foutkosten bij staleness — is de vuistregel die je bij elke cachingbeslissing terugbrengt naar deel 21’s grondvraag: is de winst groot genoeg om de kosten van een tweede systeem te rechtvaardigen?</p>
+<p><strong>Vergelijk met PostgreSQL:</strong> een sessietabel in PostgreSQL zou werken, maar elke pagina-aanvraag zou dan een schrijf- én leesbelasting op de kernregistratie leggen die niets met de pensioenlogica te maken heeft. Dat is precies het “toegangspatroon dat een gespecialiseerde structuur vraagt” uit deel 21, paragraaf 14.</p>
+<hr>
+<h2>5. MongoDB als documentstore</h2>
+<p>MongoDB slaat gegevens op als documenten (BSON, een binaire vorm van JSON) in <strong>collections</strong> — het informele equivalent van een tabel, zonder vastgelegd schema. Twee documenten in dezelfde collection kunnen verschillende velden hebben.</p>
+<p><strong>Embedding versus referencing</strong> is de centrale ontwerpvraag, met een parallel naar het relationele werk uit niveau 1:</p>
+<ul>
+<li><strong>Embedding</strong>: gerelateerde data staat genest in hetzelfde document. Snel te lezen in één keer, maar dupliceert data als dezelfde substructuur in meerdere documenten voorkomt — een spanning die je al kent van de normalisatie-discussie uit deel 5, nu in omgekeerde richting: MongoDB moedigt bewust een zekere mate van redundantie aan omdat lezen in één document goedkoper is dan een join.</li>
+<li><strong>Referencing</strong>: een document verwijst naar een ID in een andere collection, zoals een foreign key — maar zonder dat de database de verwijzing afdwingt. Integriteit is hier een applicatieverantwoordelijkheid, niet een databaseverantwoordelijkheid. Vergelijk met deel 6: een <code>REFERENCES</code>-constraint in PostgreSQL wordt door de database gecontroleerd; een referentie in MongoDB niet, tenzij de applicatie dat zelf afdwingt.</li>
+</ul>
+<hr>
+<h2>6. Praktijk: klantcorrespondentie in MongoDB</h2>
+<p>Meridiaan ontvangt klantcorrespondentie via meerdere kanalen (e-mail, portaalberichten, telefoonnotities) met sterk uiteenlopende metadata per kanaal. Een e-mail heeft een onderwerpregel en bijlagen; een telefoonnotitie heeft een gespreksduur en een callcenter-medewerker-ID; een portaalbericht heeft een sessie-referentie. Dit is het schemaflexibiliteits-scenario waar deel 21, paragraaf 12 <code>jsonb</code> als PostgreSQL-antwoord noemde — hier werk je de MongoDB-kant van diezelfde afweging uit.</p>
+<p>Een document (embedding voor het kanaal-specifieke deel, referencing naar de deelnemer):</p>
+<pre><code class="language-json">{
+  &quot;_id&quot;: ObjectId(&quot;...&quot;),
+  &quot;deelnemer_id&quot;: 4821,
+  &quot;kanaal&quot;: &quot;email&quot;,
+  &quot;ontvangen_op&quot;: ISODate(&quot;2026-08-14T09:03:00Z&quot;),
+  &quot;onderwerp&quot;: &quot;Vraag over indexatie 2026&quot;,
+  &quot;bijlagen&quot;: [{&quot;naam&quot;: &quot;vraag.pdf&quot;, &quot;grootte_kb&quot;: 340}],
+  &quot;afgehandeld&quot;: false
+}
+</code></pre>
+<p>Een query die aansluit bij een typisch klantenservice-scenario — alle onafgehandelde correspondentie voor één deelnemer, nieuwste eerst:</p>
+<pre><code>db.correspondentie.find(
+  { deelnemer_id: 4821, afgehandeld: false }
+).sort({ ontvangen_op: -1 })
+</code></pre>
+<p>En een aggregatie — aantal onafgehandelde items per kanaal, het MongoDB-equivalent van een <code>GROUP BY</code> met <code>COUNT</code>:</p>
+<pre><code>db.correspondentie.aggregate([
+  { $match: { afgehandeld: false } },
+  { $group: { _id: &quot;$kanaal&quot;, aantal: { $count: {} } } }
+])
+</code></pre>
+<p>Vergelijk met de SQL-vorm uit deel 3: <code>SELECT kanaal, COUNT(*) FROM correspondentie WHERE afgehandeld = false GROUP BY kanaal;</code> — dezelfde vraag, andere syntaxis, en in MongoDB zonder de vaste kolommenstructuur die de relationele vorm zou vereisen als elk kanaal andere metadata-velden heeft.</p>
+<p><strong>Waarom niet gewoon <code>jsonb</code> in PostgreSQL, zoals deel 21 aanraadt?</strong> Voor dit specifieke geval is dat vaak ook het juiste antwoord — de praktijkvraag “is er een gemeten knelpunt” blijft gelden. Deze paragraaf laat zien <em>hoe</em> het MongoDB-alternatief eruitziet zodat je die vergelijking zelf kunt maken, niet dat het per definitie de betere keuze is.</p>
+<hr>
+<h2>7. Consistentie: PostgreSQL blijft de bron van waarheid</h2>
+<p>Zodra Redis en MongoDB naast PostgreSQL meedraaien, ontstaat de vraag uit deel 21, paragraaf 14: hoe houd je de systemen consistent?</p>
+<p><strong>Voor de sessie-cache (Redis):</strong> eenrichtingsverkeer. PostgreSQL levert de gegevens bij het inloggen; de sessie in Redis is een afgeleide, wegwerp-kopie met een TTL. Er is nooit een schrijfpad van Redis terug naar PostgreSQL voor sessiegegevens — dat voorkomt het gevaarlijkste scenario: twee systemen die allebei denken de bron van waarheid te zijn.</p>
+<p><strong>Voor de correspondentie (MongoDB):</strong> hier ligt het genuanceerder, want <code>afgehandeld</code> wordt bijgewerkt door medewerkers en is zelf een stuk bedrijfsproces-status, niet alleen cache. Twee ontwerpen zijn denkbaar:</p>
+<ul>
+<li>MongoDB is hier de bron van waarheid voor correspondentie-status, en PostgreSQL raakt dit domein niet aan — geaccepteerd omdat correspondentie geen integriteitseisen heeft die het relationele model nodig hebben (geen foreign-key-afdwinging tussen bijlagen en deelnemer is hier acceptabel).</li>
+<li>Een periodieke of event-gedreven synchronisatie houdt een samenvattend beeld (“aantal openstaande items per deelnemer”) in PostgreSQL bij, vergelijkbaar met het logische-replicatiepatroon uit deel 18, zodat rapportages die de kernregistratie combineren met correspondentiestatus geen tweede systeem hoeven te bevragen.</li>
+</ul>
+<p><strong>Het patroon dat blijft gelden:</strong> hoe dichter data bij de integriteits- en transactie-eisen van de kernregistratie komt (saldo’s, aanspraken, mutaties), hoe sterker de reden om bij PostgreSQL te blijven. Hoe verder ervan af (sessies, ongestructureerde correspondentie), hoe eerder een aparte datastore verdedigbaar is.</p>
+<hr>
+<h2>8. Wanneer dit misgaat</h2>
+<p><strong>Wanneer NIET redenen om Redis of MongoDB te kiezen:</strong> “het is nieuwer”, “het staat goed op een CV”, of &quot;we hebben er al ervaring mee van een vorig project zonder dat het toegangspatroon hier vergelijkbaar is. Elk van de twee voorbeelden in dit deel had een concreet, benoembaar toegangspatroon (sub-milliseconde sessie-lookups; sterk variërend schema per kanaal) — zonder zo’n patroon is de operationele meerkost van een tweede systeem (nog een ding om te back-uppen, monitoren en beheersen) zelden de moeite waard.</p>
+<p>Twee concrete valkuilen om te vermijden:</p>
+<p><strong>Redis als bron van waarheid gebruiken.</strong> Zodra een applicatie iets in Redis schrijft dat nergens anders staat, is een serverherstart zonder persistentie-configuratie een dataverlies-incident. Behandel elke Redis-waarde als afleidbaar uit iets anders, of expliciet vervangbaar.</p>
+<p><strong>MongoDB’s schemaloosheid verwarren met “geen ontwerp nodig”.</strong> Documenten zonder afgesproken vorm leiden binnen een paar maanden tot een collection waar de helft van de documenten een veld <code>afgehandeld</code> heeft en de andere helft <code>is_afgehandeld</code> — een probleem dat het relationele model door zijn schema-afdwinging structureel voorkomt. Documentflexibiliteit is een ontwerpkeuze, geen vrijstelling van ontwerpdiscipline.</p>
+<hr>
+<h2>9. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Vermijd het door</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis gebruiken als enige opslag van belangrijke data</td>
+<td>Dataverlies bij herstart zonder persistentie</td>
+<td>Alles in Redis behandelen als afleidbaar/wegwerpbaar</td>
+</tr>
+<tr>
+<td>Cache-invalidatie vergeten bij een schrijfpad</td>
+<td>Stale data die het portaal blijft tonen</td>
+<td>Eén van de drie strategieën uit paragraaf 3 expliciet kiezen, niet impliciet laten ontstaan</td>
+</tr>
+<tr>
+<td>Documentschema laten verwilderen zonder afspraak</td>
+<td>Onvoorspelbare velden, moeilijke rapportage</td>
+<td>Een minimale veldafspraak documenteren, ook zonder databaseafdwinging</td>
+</tr>
+<tr>
+<td>NoSQL kiezen zonder gemeten toegangspatroon</td>
+<td>Twee systemen, extra complexiteit, geen aantoonbare winst</td>
+<td>Terug naar de grondvraag uit deel 21, paragraaf 14</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>10. Kernbegrippen</h2>
+<p><strong>TTL (time to live)</strong> — de tijd waarna een Redis-sleutel automatisch verdwijnt.
+<strong>Cache-invalidatie</strong> — het actief ongeldig maken van gecachte data bij een onderliggende wijziging.
+<strong>BSON</strong> — de binaire, JSON-achtige opslagvorm van MongoDB-documenten.
+<strong>Embedding</strong> — gerelateerde data genest in hetzelfde document opslaan.
+<strong>Referencing</strong> — een document verwijst naar een ID in een andere collection, zonder databaseafdwinging.
+<strong>Bron van waarheid</strong> — het systeem waarvan de waarde bepalend is bij een conflict tussen systemen.</p>
+<hr>
+<h2>11. Verder lezen</h2>
+<p>Redis-documentatie over datastructuren en expiry: <code>redis.io/docs/latest/develop/data-types/</code>.
+MongoDB-documentatie over schemaontwerp (embedding versus referencing): <code>www.mongodb.com/docs/manual/core/data-modeling-introduction/</code>.</p>
+<p><em>Volgend deel: de elective vervolgt met wide-column (Cassandra) en graaf (Neo4j) — de andere twee gevallen uit deel 21, paragraaf 13.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">14 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">241 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><span></span><a class="dbm-prevnext next" href="../el-02/reader.html">Wide-column en graaf in de praktijk &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

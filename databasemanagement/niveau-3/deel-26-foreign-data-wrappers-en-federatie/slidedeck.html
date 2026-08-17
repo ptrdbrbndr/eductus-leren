@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Foreign data wrappers en federatie — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 26 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 26 — Slidedeck</h1>
+<p><strong>Foreign data wrappers en federatie</strong>
+Niveau 3, deel 4 van 8 (deel 26 van 30) | 28 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Foreign data wrappers en federatie</h1>
+<h2>Niveau 3 — Deel 26</h2>
+<hr>
+<h2>Slide 2 — Het gat uit deel 23</h2>
+<p>Meridiaan + Kompas: schema per fonds.
+Baken: eigen database.</p>
+<h1>Hoe bouwt de federatie één</h1>
+<h1>gezamenlijk dashboard?</h1>
+<hr>
+<h2>Slide 3 — Twee bekende antwoorden</h2>
+<p><strong>Logische replicatie</strong> — een tweede, vertraagde kopie
+<strong>Citus</strong> — horizontale capaciteit binnen één geheel</p>
+<h1>Geen van beide is precies dit probleem.</h1>
+<hr>
+<h2>Slide 4 — Opdracht 26.1</h2>
+<h1>Het gat herkennen</h1>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 5 — Foreign data wrapper</h2>
+<pre><code>Federatie-database
+        │
+   postgres_fdw
+   ┌────┼────┐
+Meridiaan Kompas Baken
+</code></pre>
+<p>Live, query-tijd-toegang. <strong>Geen duplicatie.</strong></p>
+<hr>
+<h2>Slide 6 — Opzetten</h2>
+<pre><code class="language-sql">CREATE SERVER meridiaan_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host '...', dbname 'meridiaan');
+
+CREATE USER MAPPING FOR federatie_rapportage
+    SERVER meridiaan_server OPTIONS (user '...', password '...');
+</code></pre>
+<hr>
+<h2>Slide 7 — Foreign tables</h2>
+<pre><code class="language-sql">IMPORT FOREIGN SCHEMA meridiaan_prod
+    LIMIT TO (deelnemer, dienstverband)
+    FROM SERVER meridiaan_server
+    INTO federatie_meridiaan;
+</code></pre>
+<p>Gedraagt zich daarna als een gewone tabel.</p>
+<hr>
+<h2>Slide 8 — Opdracht 26.2</h2>
+<h1>postgres_fdw opzetten</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 9 — Pauze</h2>
+<hr>
+<h2>Slide 10 — Pushdown</h2>
+<pre><code class="language-sql">SELECT * FROM federatie_meridiaan.deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<p>De <code>WHERE</code> wordt <strong>meegestuurd</strong> naar de bron.
+Alleen de relevante rij komt terug.</p>
+<hr>
+<h2>Slide 11 — Voorspel</h2>
+<pre><code class="language-sql">-- join tussen TWEE VERSCHILLENDE bronnen
+SELECT m.achternaam, k.achternaam
+FROM federatie_meridiaan.deelnemer m,
+     federatie_kompas.deelnemer k
+WHERE m.achternaam = k.achternaam;
+</code></pre>
+<h1>Wordt deze join doorgeschoven?</h1>
+<p><strong>Notities:</strong> laat de zaal gokken vóór het experiment.</p>
+<hr>
+<h2>Slide 12 — Nee.</h2>
+<pre><code>Nested Loop
+  -&gt;  Foreign Scan on deelnemer m   -- hele tabel opgehaald
+  -&gt;  Foreign Scan on deelnemer k   -- hele tabel opgehaald
+      (join lokaal, na ophalen)
+</code></pre>
+<h1>Het federatieve equivalent van</h1>
+<h1>een cross-shard-join (deel 24-25).</h1>
+<hr>
+<h2>Slide 13 — Remote SQL</h2>
+<pre><code>Foreign Scan on deelnemer
+  Remote SQL: SELECT ... WHERE (deelnemer_id = 42)
+</code></pre>
+<p>Hetzelfde controleerbare signaal als
+<code>Task Count</code> (Citus) en pruning (partities).</p>
+<hr>
+<h2>Slide 14 — Opdracht 26.3</h2>
+<h1>Pushdown zien werken</h1>
+<p>Voorspel steeds vóór elke EXPLAIN.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 15 — De federatieve rapportagelaag</h2>
+<pre><code class="language-sql">CREATE VIEW deelnemers_per_fonds AS
+SELECT 'Meridiaan', count(*) FROM federatie_meridiaan.deelnemer
+UNION ALL
+SELECT 'Kompas', count(*) FROM federatie_kompas.deelnemer
+UNION ALL
+SELECT 'Baken', count(*) FROM federatie_baken.deelnemer;
+</code></pre>
+<p>Elke tak: doorgeschoven naar zijn eigen bron.</p>
+<hr>
+<h2>Slide 16 — Het probleem met live federatie</h2>
+<p>Tientallen gebruikers, elke ochtend om 8 uur,
+allemaal een dure cross-server-query.</p>
+<h1>Belast drie bronservers tegelijk —</h1>
+<h1>op hun eigen drukste moment.</h1>
+<hr>
+<h2>Slide 17 — Materialized view, opnieuw</h2>
+<pre><code class="language-sql">CREATE MATERIALIZED VIEW kwartaaloverzicht AS ...;
+REFRESH MATERIALIZED VIEW kwartaaloverzicht;
+</code></pre>
+<p>Precies deel 8 — nu over federatieve in plaats
+van lokale gegevens.</p>
+<hr>
+<h2>Slide 18 — Opdracht 26.4</h2>
+<h1>Een federatieve rapportagelaag bouwen</h1>
+<p>Live vs. materialized — meet het verschil.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 19 — Drie manieren, drie profielen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FDW</th>
+<th>Replicatie</th>
+<th>Citus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicatie</td>
+<td>Nee</td>
+<td>Ja</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td>Actualiteit</td>
+<td>Live</td>
+<td>Vertraging</td>
+<td>Live (in cluster)</td>
+</tr>
+<tr>
+<td>Beheerlast</td>
+<td>Laag</td>
+<td>Middel</td>
+<td>Hoog</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 20 — Geen universeel beste</h2>
+<p>Ad-hoc, incidenteel → <strong>FDW</strong>
+Continu, snel → <strong>Replicatie</strong>
+Eén logisch, horizontaal geheel → <strong>Citus</strong></p>
+<hr>
+<h2>Slide 21 — Opdracht 26.5 &amp; 26.6</h2>
+<p><strong>26.5</strong> Rechten controleren — <em>10 min</em></p>
+<p><strong>26.6</strong> FDW, replicatie of Citus — vier scenario’s — <em>15 min</em></p>
+<hr>
+<h2>Slide 22 — Pauze</h2>
+<hr>
+<h2>Slide 23 — Rechten over de grens</h2>
+<pre><code class="language-sql">REVOKE ALL ON FOREIGN SERVER meridiaan_server FROM PUBLIC;
+GRANT USAGE ON FOREIGN SERVER meridiaan_server TO federatie_rapportage;
+</code></pre>
+<p>Minimale leesrol op de bron. Geen BSN in de import.
+SSL verplicht — net als elke andere verbinding (deel 21).</p>
+<hr>
+<h2>Slide 24 — Schrijven via FDW</h2>
+<pre><code class="language-sql">INSERT INTO federatie_meridiaan.deelnemer (...) VALUES (...);
+</code></pre>
+<p>Technisch mogelijk.</p>
+<h1>Geen transactionele garantie</h1>
+<h1>over de databasegrens heen.</h1>
+<p>Hetzelfde probleem als cross-shard-transacties (deel 24).</p>
+<hr>
+<h2>Slide 25 — Opdracht 26.7</h2>
+<h1>Schrijven via FDW afwegen</h1>
+<p><em>10 min, tweetallen</em></p>
+<hr>
+<h2>Slide 26 — De vraag die je stelt</h2>
+<h1>Incidenteel, leesgericht? → FDW</h1>
+<h1>Continu, snel? → Replicatie</h1>
+<h1>Eén horizontaal geheel? → Citus</h1>
+<p>Niet: welke is het beste. Welke past bij déze behoefte.</p>
+<hr>
+<h2>Slide 27 — Opdracht 26.8</h2>
+<h1>Het federatieontwerp</h1>
+<p>Rapportagebehoeften met live/materialized-keuze ·
+dataminimalisatie concreet · scherp onderscheid met
+replicatie · een specifiek risico</p>
+<p><em>45 min, drietallen</em></p>
+<hr>
+<h2>Slide 28 — Volgende keer</h2>
+<h1>Deel 27 — Event sourcing-fundamenten</h1>
+<p>Vandaag: wáár gegevens staan (drieluik compleet).</p>
+<p>Volgende keer: <strong>wát</strong> je eigenlijk vastlegt.</p>
+<p>Elke deel tot nu toe nam aan: een database bewaart
+de huidige stand, en overschrijft de rest.</p>
+<p><strong>Die aanname staat volgende keer ter discussie.</strong></p>
+<hr>
+<p><em>Einde slidedeck deel 26.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">282 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-25-citus-in-de-praktijk/reader.html">&larr; Deel 25 — Citus in de praktijk</a><a class="dbm-prevnext next" href="../deel-27-event-sourcing-fundamenten/reader.html">Deel 27 — Event sourcing: fundamenten &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

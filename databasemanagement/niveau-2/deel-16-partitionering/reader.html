@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Partitionering — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 16 — Partitionering</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 7 van 12 (deel 16 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Partitioning”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>Waarom mutatie de kandidaat is</li>
+<li>Wat partitionering wel en niet oplost</li>
+<li>Declaratieve partitionering: het basispatroon</li>
+<li>Range-partitionering</li>
+<li>List-partitionering</li>
+<li>Hash-partitionering</li>
+<li>Partition pruning</li>
+<li>Indexen op een gepartitioneerde tabel</li>
+<li>Constraints en foreign keys</li>
+<li>De default-partitie</li>
+<li>Nieuwe partities aanmaken en oude verwijderen</li>
+<li>Een bestaande tabel migreren naar partities</li>
+<li>Subpartitionering</li>
+<li>pg_partman: onderhoud automatiseren</li>
+<li>Wanneer partitioneren de verkeerde keuze is</li>
+<li>Partitionering en de rest van de cursus</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>beargumenteren of een tabel een partitioneringskandidaat is;</li>
+<li>een gepartitioneerde tabel opzetten met range-, list- of hash-partitionering;</li>
+<li>partition pruning herkennen in een queryplan en een query zo schrijven dat hij ervan profiteert;</li>
+<li>indexen, constraints en foreign keys op een gepartitioneerde tabel correct toepassen;</li>
+<li>een default-partitie inzetten en de risico’s ervan benoemen;</li>
+<li>partities toevoegen, loskoppelen en verwijderen zonder de tabel te blokkeren;</li>
+<li>een bestaande grote tabel migreren naar een gepartitioneerde structuur;</li>
+<li>onderhoud automatiseren met <code>pg_partman</code>;</li>
+<li>uitleggen wanneer partitionering de verkeerde oplossing is voor het probleem dat je hebt.</li>
+</ul>
+<hr>
+<h2>2. Waarom mutatie de kandidaat is</h2>
+<p>Vier dagdelen lang is <code>mutatie</code> de tabel geweest waar de problemen zich verzamelden:</p>
+<table>
+<thead>
+<tr>
+<th>Deel</th>
+<th>Wat er misging</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td>Autovacuum haalt de drempel pas na 24 dagen</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Na het laden bijna twee keer zo groot als de gegevens erin</td>
+</tr>
+<tr>
+<td>13</td>
+<td>De query naar onverwerkte mutaties staat bovenaan de belasting</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Een B-tree op <code>aangemeld_op</code> kost 50 MB; BRIN is duizend keer kleiner maar trager</td>
+</tr>
+<tr>
+<td>15</td>
+<td>De verwerking met vier workers vraagt om zorgvuldige pakketgrootte</td>
+</tr>
+</tbody>
+</table>
+<p>Geen van die problemen was fout ontwerp. Ze zijn het voorspelbare gevolg van één ding: <code>mutatie</code> groeit <strong>onbegrensd</strong> en wordt vrijwel uitsluitend bevraagd op een tijdgebonden manier — recente mutaties, dit kwartaal, dit jaar.</p>
+<p><strong>Dat is precies het profiel waarvoor partitionering bestaat.</strong> Vandaag knip je de tabel in stukken langs de as waarop hij al leeft: de tijd.</p>
+<p>Wat er dan verandert, in één zin per eerder probleem:</p>
+<ul>
+<li>Autovacuum werkt per partitie, dus een partitie van één maand haalt zijn drempel in dagen in plaats van weken.</li>
+<li>Een oude partitie <strong>weggooien</strong> kost geen <code>DELETE</code> en geen bloat — het is <code>DROP TABLE</code>, milliseconden.</li>
+<li>Query’s die alleen de laatste maand raken, doorzoeken alleen die partitie.</li>
+<li>Een BRIN-index per partitie is nog kleiner en heeft een nog hogere correlatie, omdat elke partitie zelf al chronologisch is.</li>
+</ul>
+<hr>
+<h2>3. Wat partitionering wel en niet oplost</h2>
+<p><strong>Wel:</strong></p>
+<ul>
+<li>Onderhoud (vacuum, reindex, backup) wordt per partitie behapbaar.</li>
+<li>Oude gegevens verwijderen wordt <code>DROP TABLE</code> in plaats van <code>DELETE</code> — geen bloat, geen WAL-explosie, milliseconden in plaats van uren.</li>
+<li>Query’s die van nature binnen één partitie vallen, worden sneller door pruning (paragraaf 8).</li>
+<li>Je kunt oude partities naar goedkopere opslag verplaatsen (tablespaces, deel 11).</li>
+</ul>
+<p><strong>Niet:</strong></p>
+<ul>
+<li>Partitionering maakt een enkele query die de hele tabel nodig heeft, niet sneller — eerder iets trager door de overhead van planning over meerdere partities.</li>
+<li>Het lost geen slecht datamodel op.</li>
+<li>Het lost geen ontbrekende index op — elke partitie heeft zijn eigen indexen nodig.</li>
+<li>Het is geen vervanging voor archivering: de gegevens staan er nog, alleen anders ingedeeld.</li>
+</ul>
+<p><strong>De vraag die je stelt vóór je partitioneert:</strong></p>
+<blockquote>
+<p>Bevraag ik deze tabel structureel langs een as die ook zijn natuurlijke groei bepaalt, en wil ik oude delen periodiek in bulk kunnen verwijderen of verplaatsen?</p>
+</blockquote>
+<p>Bij <code>mutatie</code>: ja op beide. Bij <code>deelnemer</code>: nee op beide — er is geen natuurlijke as waarlangs je deelnemers zou willen opdelen, en je verwijdert nooit een blok deelnemers in bulk.</p>
+<hr>
+<h2>4. Declaratieve partitionering: het basispatroon</h2>
+<p>Sinds PostgreSQL 10 is partitionering <strong>declaratief</strong>: je definieert de indeling en de server regelt de rest. (Het oudere patroon met overerving en triggers bestaat nog in oude code — ken het als geschiedenis, gebruik het niet meer.)</p>
+<pre><code class="language-sql">CREATE TABLE mutatie (
+    mutatie_id   bigint GENERATED ALWAYS AS IDENTITY,
+    deelnemer_id integer NOT NULL,
+    soort        text NOT NULL,
+    kanaal       text NOT NULL,
+    aangemeld_op timestamptz NOT NULL,
+    verwerkt_op  timestamptz,
+    PRIMARY KEY (mutatie_id, aangemeld_op)
+) PARTITION BY RANGE (aangemeld_op);
+</code></pre>
+<p><strong>De eerste verrassing:</strong> de primaire sleutel moet de partitiesleutel bevatten. Dat voelt onnatuurlijk — <code>mutatie_id</code> was al uniek — maar PostgreSQL kan uniciteit alleen per partitie afdwingen, niet over partities heen zonder de partitiesleutel mee te nemen. Dit is de belangrijkste ontwerpbeperking van het hele deel en komt in paragraaf 10 terug.</p>
+<p>Zonder minstens één partitie is de tabel onbruikbaar — hij accepteert geen rijen:</p>
+<pre><code class="language-sql">CREATE TABLE mutatie_2026_01 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+</code></pre>
+<figure class="dbm-figure"><img src="../../figuren/figuur-16-1.png" alt="De gepartitioneerde tabel als een lege &quot;koepel&quot; met partities eronder die elk hun eigen fysieke opslag hebben" loading="lazy"><figcaption>Figuur 16-1 — De gepartitioneerde tabel als een lege &quot;koepel&quot; met partities eronder die elk hun eigen fysieke opslag hebben</figcaption></figure>
+<hr>
+<h2>5. Range-partitionering</h2>
+<p>De vorm die bij <code>mutatie</code> past: elke partitie een aaneengesloten bereik.</p>
+<pre><code class="language-sql">CREATE TABLE mutatie_2025_11 PARTITION OF mutatie
+    FOR VALUES FROM ('2025-11-01') TO ('2025-12-01');
+CREATE TABLE mutatie_2025_12 PARTITION OF mutatie
+    FOR VALUES FROM ('2025-12-01') TO ('2026-01-01');
+CREATE TABLE mutatie_2026_01 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+</code></pre>
+<p><strong>De grens is inclusief onderaan en exclusief bovenaan</strong> — hetzelfde veilige patroon als bij datumfilters in deel 3 en bij rangetypen in deel 6. Een rij met <code>aangemeld_op = '2026-02-01 00:00:00'</code> valt in de februaripartitie, niet in januari.</p>
+<p><strong>Kiezen van de partitiegrootte</strong> is een afweging:</p>
+<table>
+<thead>
+<tr>
+<th>Grootte</th>
+<th>Voordeel</th>
+<th>Nadeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Per dag</td>
+<td>Zeer fijne pruning, snel verwijderen</td>
+<td>Veel partities; plannerkosten</td>
+</tr>
+<tr>
+<td>Per maand</td>
+<td>Goede balans</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Per kwartaal</td>
+<td>Weinig partities</td>
+<td>Grovere pruning</td>
+</tr>
+</tbody>
+</table>
+<p>Voor <code>mutatie</code> met 2,4 miljoen rijen over vier jaar is <strong>per maand</strong> een goede keuze: 48 partities, elk rond de 50.000 rijen. Bij een tabel die honderd keer groter is, zou per dag beter passen.</p>
+<p><strong>Andere kandidaten voor range-partitionering:</strong> een logtabel op tijdstip, een facturentabel op factuurdatum, een sensortabel op meetmoment — alles met een natuurlijke, oplopende as.</p>
+<hr>
+<h2>6. List-partitionering</h2>
+<p>Partities op basis van een expliciete lijst waarden, geen bereik.</p>
+<pre><code class="language-sql">CREATE TABLE werkgever_partitioned (
+    werkgever_id integer GENERATED ALWAYS AS IDENTITY,
+    sector       text NOT NULL,
+    naam         text NOT NULL,
+    PRIMARY KEY (werkgever_id, sector)
+) PARTITION BY LIST (sector);
+
+CREATE TABLE werkgever_bouw    PARTITION OF werkgever_partitioned FOR VALUES IN ('Bouw');
+CREATE TABLE werkgever_zorg    PARTITION OF werkgever_partitioned FOR VALUES IN ('Zorg');
+CREATE TABLE werkgever_overig  PARTITION OF werkgever_partitioned DEFAULT;
+</code></pre>
+<p><strong>Wanneer dit past:</strong> een klein aantal duidelijk onderscheiden categorieën, waarbij je vaak op precies één categorie filtert en de categorieën ongeveer gelijk blijven.</p>
+<p><strong>Waarom dit bij Meridiaan minder voor de hand ligt dan range:</strong> <code>werkgever</code> heeft 4.100 rijen — te klein om baat te hebben bij partitionering (paragraaf 16). List-partitionering wordt relevanter in een multi-tenant-scenario, waar je per klant of per fonds partitioneert. Dat komt terug in niveau 3 bij de Pensioenfederatie-casus.</p>
+<hr>
+<h2>7. Hash-partitionering</h2>
+<p>Partities op basis van een hash van de sleutel, voor gelijkmatige verdeling zonder natuurlijke categorieën.</p>
+<pre><code class="language-sql">CREATE TABLE deelnemer_partitioned (
+    deelnemer_id integer GENERATED ALWAYS AS IDENTITY,
+    achternaam   text NOT NULL,
+    PRIMARY KEY (deelnemer_id)
+) PARTITION BY HASH (deelnemer_id);
+
+CREATE TABLE deelnemer_p0 PARTITION OF deelnemer_partitioned
+    FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+CREATE TABLE deelnemer_p1 PARTITION OF deelnemer_partitioned
+    FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+-- enzovoort tot REMAINDER 3
+</code></pre>
+<p><strong>Wanneer dit past:</strong> je wilt schrijfbelasting spreiden over meerdere fysieke locaties, en er is geen natuurlijke range of lijst. Nuttig bij zeer hoge invoegsnelheden waar één tabel (en zijn indexen) een knelpunt wordt.</p>
+<p><strong>De prijs:</strong> je verliest pruning voor de meeste query’s. Een <code>WHERE deelnemer_id = 42</code> weet in welke partitie hij moet zoeken (de hash is deterministisch), maar <code>WHERE achternaam = 'Jansen'</code> moet <strong>alle</strong> partities doorzoeken — er is geen enkel verband tussen achternaam en hash-partitie.</p>
+<p><strong>Bij Meridiaan:</strong> geen directe kandidaat. Hash-partitionering lost een schrijfdoorvoerprobleem op dat Meridiaan (nog) niet heeft. Noemenswaardig voor het examen; zelden de eerste keuze in de praktijk.</p>
+<hr>
+<h2>8. Partition pruning</h2>
+<p>De reden dat dit alles de moeite waard is.</p>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS)
+SELECT count(*) FROM mutatie
+WHERE aangemeld_op &gt;= '2026-01-01' AND aangemeld_op &lt; '2026-02-01';
+</code></pre>
+<pre><code>Aggregate
+  -&gt;  Seq Scan on mutatie_2026_01 mutatie
+        (actual rows=51204 loops=1)
+</code></pre>
+<p><strong>Er staat maar één partitie in het plan.</strong> De planner heeft op basis van de <code>WHERE</code>-voorwaarde vastgesteld dat de andere 47 partities onmogelijk rijen kunnen bevatten die aan de voorwaarde voldoen, en heeft ze niet eens overwogen. Dat heet <strong>pruning</strong>, en het gebeurt zowel tijdens het plannen als — sinds versie 11 — tijdens het uitvoeren, voor parameters die pas bij uitvoering bekend zijn.</p>
+<p><strong>Wanneer pruning werkt:</strong></p>
+<ul>
+<li>de <code>WHERE</code>-voorwaarde staat op de partitiesleutel;</li>
+<li>de voorwaarde is een vergelijking die de planner kan herleiden tot een bereik (<code>=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>BETWEEN</code>).</li>
+</ul>
+<p><strong>Wanneer pruning niet werkt:</strong></p>
+<pre><code class="language-sql">-- Geen pruning: functie om de partitiesleutel
+WHERE extract(year FROM aangemeld_op) = 2026
+
+-- Wel pruning: bereik op de kolom zelf
+WHERE aangemeld_op &gt;= '2026-01-01' AND aangemeld_op &lt; '2027-01-01'
+</code></pre>
+<p><strong>Dit is exact dezelfde fout als de expressie-op-de-kolom-valkuil uit deel 8 en 13</strong> — alleen met veel grotere gevolgen. Zonder pruning doorzoekt de query alle 48 partities in plaats van 12, met alle plannerkosten van dien.</p>
+<p>Controleer altijd met <code>EXPLAIN</code> of pruning optreedt. Het staat er expliciet: bij pruning zie je alleen de betrokken partities in het plan; zonder pruning zie je een <code>Append</code> met alle 48 eronder.</p>
+<hr>
+<h2>9. Indexen op een gepartitioneerde tabel</h2>
+<pre><code class="language-sql">CREATE INDEX ON mutatie (deelnemer_id);
+</code></pre>
+<p>Op een gepartitioneerde tabel maakt dit één opdracht een index aan <strong>op elke bestaande partitie</strong>, en — belangrijk — op elke partitie die je daarna toevoegt. De ouder-index is een verzamelnaam; de werkelijke indexen bestaan per partitie.</p>
+<p><strong>Concurrently op een gepartitioneerde tabel:</strong> vóór versie 11 kon <code>CREATE INDEX CONCURRENTLY</code> niet direct op de ouder. Sindsdien kan het, maar het proces is intern nog steeds: per partitie een index bouwen. Bij veel partities kan dat een reeks korte locks betekenen in plaats van één lange — vaak beter, maar meet het.</p>
+<p><strong>Partiële en expressie-indexen (deel 8, 14) werken ook per partitie</strong>, en kunnen zelfs per partitie verschillen als je dat zou willen — al is consistentie meestal wenselijker dan flexibiliteit hier.</p>
+<p><strong>Onderhoud:</strong></p>
+<pre><code class="language-sql">SELECT indexrelid::regclass, indisvalid
+FROM pg_index WHERE indrelid = 'mutatie'::regclass;
+</code></pre>
+<p>Controleer na een indexbouw of alle partitie-indexen geldig zijn, net als bij een gewone <code>CONCURRENTLY</code>-bouw (deel 14) — nu vermenigvuldigd met het aantal partities.</p>
+<hr>
+<h2>10. Constraints en foreign keys</h2>
+<p><strong><code>NOT NULL</code> en <code>CHECK</code></strong> werken zoals verwacht en gelden voor de hele gepartitioneerde tabel.</p>
+<p><strong><code>UNIQUE</code> en <code>PRIMARY KEY</code></strong> moeten de partitiesleutel bevatten — de beperking uit paragraaf 4. Voor <code>mutatie</code> betekent dat: <code>(mutatie_id, aangemeld_op)</code> in plaats van alleen <code>mutatie_id</code>. Praktisch gevolg: een query die op <code>mutatie_id</code> alleen zoekt zonder de partitiesleutel te weten, kan geen enkele index gebruiken die alleen op die kolom staat — tenzij je een aparte, niet-unieke index toevoegt.</p>
+<p><strong>Foreign keys ván een gepartitioneerde tabel</strong> (mutatie verwijst naar deelnemer) werken normaal.</p>
+<p><strong>Foreign keys náár een gepartitioneerde tabel</strong> (een andere tabel verwijst naar mutatie) zijn sinds PostgreSQL 12 mogelijk, maar zeldzaam nodig — meestal is de gepartitioneerde tabel juist de kant met de vele rijen, niet de kant waarnaar verwezen wordt.</p>
+<p><strong>Het praktische gevolg voor het model uit deel 5 en 6:</strong> een gepartitioneerde tabel is geen vrije herstructurering van je schema. De partitiekeuze raakt je sleutels, en dat moet je vroeg in het ontwerp meenemen, niet achteraf toevoegen.</p>
+<hr>
+<h2>11. De default-partitie</h2>
+<pre><code class="language-sql">CREATE TABLE mutatie_default PARTITION OF mutatie DEFAULT;
+</code></pre>
+<p>Vangt rijen op die in geen enkele gedefinieerde partitie passen. Nuttig als vangnet tegen dataverlies bij een fout in de applicatie of een vergeten nieuwe partitie.</p>
+<p><strong>De valkuil:</strong> zodra er een default-partitie bestaat en je wilt een nieuwe range-partitie toevoegen die overlapt met wat al in de default zit, moet PostgreSQL die default-partitie <strong>scannen</strong> om te controleren of er conflicterende rijen in staan. Op een default die stilletjes is gegroeid, kan dat een onverwacht lange, blokkerende operatie worden.</p>
+<p><strong>Praktisch advies:</strong> gebruik een default-partitie als vangnet, maar monitor hem actief en houd hem leeg.</p>
+<pre><code class="language-sql">SELECT count(*) FROM mutatie_default;   -- hoort structureel 0 te zijn
+</code></pre>
+<p>Een default die groeit, is een signaal dat je partitiebeheer (paragraaf 12, 15) niet op tijd nieuwe partities aanmaakt.</p>
+<hr>
+<h2>12. Nieuwe partities aanmaken en oude verwijderen</h2>
+<p><strong>Een nieuwe partitie toevoegen</strong> is een lichte operatie:</p>
+<pre><code class="language-sql">CREATE TABLE mutatie_2026_02 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+</code></pre>
+<p>Dit moet <strong>vóór</strong> de eerste rij van die maand binnenkomt gebeuren. Zonder default-partitie faalt de invoeging anders met een foutmelding; met een default belandt de rij daar en moet later worden verplaatst.</p>
+<p><strong>Een oude partitie verwijderen</strong> is de kernbelofte van dit deel:</p>
+<pre><code class="language-sql">DROP TABLE mutatie_2022_01;
+</code></pre>
+<p>Milliseconden. Geen <code>DELETE</code> over honderdduizenden rijen, geen bloat, geen WAL-golf, geen vacuum nodig achteraf. Vergelijk dat met het alternatief zonder partitionering — een <code>DELETE</code> die zelf weer bloat achterlaat die pas na <code>VACUUM</code> (of <code>pg_repack</code>, deel 12) verdwijnt.</p>
+<p><strong>Voorzichtiger: eerst loskoppelen, dan verwijderen.</strong></p>
+<pre><code class="language-sql">ALTER TABLE mutatie DETACH PARTITION mutatie_2022_01 CONCURRENTLY;
+-- de tabel bestaat nu zelfstandig, niet meer gekoppeld
+-- controleer, archiveer indien nodig
+DROP TABLE mutatie_2022_01;
+</code></pre>
+<p><code>DETACH ... CONCURRENTLY</code> (sinds versie 14) doet dit zonder de gepartitioneerde tabel te blokkeren. Dit is de aanbevolen route op productie: loskoppelen is omkeerbaar (je kunt de partitie opnieuw aankoppelen), verwijderen niet.</p>
+<p><strong>Het onderhoudspatroon dat je hieruit bouwt:</strong></p>
+<ol>
+<li>Elke maand: een nieuwe partitie voor over twee maanden aanmaken (ruim vóór nodig).</li>
+<li>Elke maand: de oudste partitie die buiten de bewaartermijn valt, loskoppelen.</li>
+<li>Na controle: de losgekoppelde partitie verwijderen of archiveren.</li>
+</ol>
+<p>Handmatig is dit foutgevoelig — precies waarom paragraaf 15 bestaat.</p>
+<hr>
+<h2>13. Een bestaande tabel migreren naar partities</h2>
+<p><code>mutatie</code> bestaat al, gevuld, in productie. Hem in-place partitioneren kan niet — een gewone tabel omzetten naar gepartitioneerd is geen ondersteunde operatie. Het patroon:</p>
+<pre><code class="language-sql">BEGIN;
+
+-- 1. Nieuwe gepartitioneerde structuur, lege naam
+CREATE TABLE mutatie_new (
+    mutatie_id   bigint GENERATED ALWAYS AS IDENTITY,
+    deelnemer_id integer NOT NULL,
+    soort        text NOT NULL,
+    kanaal       text NOT NULL,
+    aangemeld_op timestamptz NOT NULL,
+    verwerkt_op  timestamptz,
+    PRIMARY KEY (mutatie_id, aangemeld_op)
+) PARTITION BY RANGE (aangemeld_op);
+
+-- 2. Partities voor de volledige historie plus de toekomst
+CREATE TABLE mutatie_2022_01 PARTITION OF mutatie_new
+    FOR VALUES FROM ('2022-01-01') TO ('2022-02-01');
+-- ... enzovoort voor elke maand ...
+
+-- 3. Data kopiëren
+INSERT INTO mutatie_new (mutatie_id, deelnemer_id, soort, kanaal, aangemeld_op, verwerkt_op)
+OVERRIDING SYSTEM VALUE
+SELECT mutatie_id, deelnemer_id, soort, kanaal, aangemeld_op, verwerkt_op FROM mutatie;
+
+-- 4. Indexen en constraints op mutatie_new toevoegen, controleren
+
+-- 5. Omwisselen
+ALTER TABLE mutatie RENAME TO mutatie_old;
+ALTER TABLE mutatie_new RENAME TO mutatie;
+
+COMMIT;
+</code></pre>
+<p><strong>Dit is een zware operatie</strong> — stap 3 kopieert 2,4 miljoen rijen en houdt gedurende de transactie een groeiende hoeveelheid werk vast. Op productie doe je dit <strong>niet</strong> in één transactie van deze omvang; zie de nuance hieronder.</p>
+<p><strong>Voor kleine tot middelgrote tabellen</strong> (tot enkele honderdduizenden rijen, buiten de piek): het patroon hierboven, in één venster.</p>
+<p><strong>Voor grote tabellen zoals <code>mutatie</code> op ware productieschaal:</strong> een gefaseerde migratie —</p>
+<ol>
+<li>Bouw <code>mutatie_new</code> leeg op, met alleen partities voor <strong>nieuwe</strong> gegevens vanaf nu.</li>
+<li>Zet een trigger of applicatielogica die nieuwe rijen naar <strong>beide</strong> tabellen schrijft (of gebruik logische replicatie, deel 18).</li>
+<li>Kopieer de historische gegevens in kleine batches, buiten de piek, over meerdere dagen.</li>
+<li>Wissel om zodra beide synchroon zijn.</li>
+</ol>
+<p>Dat is aanzienlijk meer werk, en het is precies waarom deze migratie in de praktijk een project is en geen avondklus. Noem dit patroon voor het examen; de volledige uitwerking van zero-downtime-migraties met dubbel schrijven hoort in deel 22.</p>
+<p><strong>Verificatie na de omwisseling, altijd:</strong></p>
+<pre><code class="language-sql">SELECT count(*) FROM mutatie;                    -- moet gelijk zijn aan mutatie_old
+SELECT count(*) FROM mutatie_old
+WHERE mutatie_id NOT IN (SELECT mutatie_id FROM mutatie);   -- moet 0 zijn
+</code></pre>
+<p>Bewaar <code>mutatie_old</code> een periode als terugvaloptie voordat je hem verwijdert.</p>
+<hr>
+<h2>14. Subpartitionering</h2>
+<p>Een partitie kan zelf weer gepartitioneerd zijn.</p>
+<pre><code class="language-sql">CREATE TABLE mutatie_2026_01 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01')
+    PARTITION BY LIST (kanaal);
+
+CREATE TABLE mutatie_2026_01_portaal PARTITION OF mutatie_2026_01
+    FOR VALUES IN ('portaal');
+CREATE TABLE mutatie_2026_01_overig PARTITION OF mutatie_2026_01
+    FOR VALUES IN ('telefoon', 'post', 'werkgever', 'basisregistratie');
+</code></pre>
+<p><strong>Wanneer dit de moeite waard is:</strong> bij zeer grote tabellen waar één as niet genoeg onderscheid geeft, of waar twee query-patronen elk hun eigen as hebben (tijd én categorie).</p>
+<p><strong>Bij Meridiaan:</strong> niet nodig op de huidige schaal. Genoemd voor volledigheid en voor het examen; ken het patroon, wees terughoudend met toepassen. Elke laag voegt plannercomplexiteit toe, en de winst moet die kosten overtreffen — dezelfde afweging als bij <code>INCLUDE</code> en expressie-indexen eerder in dit niveau.</p>
+<hr>
+<h2>15. pg_partman: onderhoud automatiseren</h2>
+<p>Het handmatige patroon uit paragraaf 12 — nieuwe partities op tijd aanmaken, oude op tijd loskoppelen — is exact het soort taak dat je wilt automatiseren in plaats van te onthouden.</p>
+<pre><code class="language-sql">CREATE EXTENSION pg_partman;
+
+SELECT partman.create_parent(
+    p_parent_table =&gt; 'meridiaan_prod.mutatie',
+    p_control      =&gt; 'aangemeld_op',
+    p_type         =&gt; 'range',
+    p_interval     =&gt; 'monthly',
+    p_premake      =&gt; 3          -- 3 maanden vooruit aanmaken
+);
+
+UPDATE partman.part_config
+   SET retention = '4 years',
+       retention_keep_table = false   -- true = loskoppelen, false = ook verwijderen
+ WHERE parent_table = 'meridiaan_prod.mutatie';
+</code></pre>
+<p>Een achtergrondtaak (via <code>pg_cron</code>, of een externe scheduler) roept periodiek <code>partman.run_maintenance()</code> aan, die nieuwe partities aanmaakt en oude volgens de bewaartermijn opruimt.</p>
+<p><strong>Wat dit oplost:</strong> het menselijke risico dat iemand vergeet een partitie aan te maken, waarna nieuwe rijen in de default-partitie belanden of — zonder default — de invoeging faalt.</p>
+<p><strong>Wat het niet oplost:</strong> de beslissing over de bewaartermijn zelf. Dat is een bedrijfsvraag (deel 9, AVG-beginselen: opslagbeperking) en geen technische instelling. Bij Meridiaan is de bewaartermijn van mutatiegegevens een vraag voor de privacyfunctionaris en de compliance-afdeling, niet voor jou alleen.</p>
+<hr>
+<h2>16. Wanneer partitioneren de verkeerde keuze is</h2>
+<p>De eerlijke tegenkant, in dezelfde geest als deel 14, paragraaf 15.</p>
+<p><strong>Te kleine tabel.</strong> <code>werkgever</code> met 4.100 rijen: partitionering voegt alleen plannercomplexiteit toe. Een vuistregel: onder enkele miljoenen rijen of enkele gigabytes weegt het zelden op.</p>
+<p><strong>Geen natuurlijke as.</strong> Als er geen kolom is waarlangs zowel de groei als de bevraging natuurlijk verloopt, is een partitiesleutel een gekunstelde keuze die overal in je queries en constraints terugkomt zonder ergens winst op te leveren.</p>
+<p><strong>Query’s die structureel alle partities raken.</strong> Een rapportage die altijd over de volledige historie sommeert, profiteert niet van pruning en betaalt wel de overhead van een plan over 48 partities.</p>
+<p><strong>Veel kleine, verspreide <code>UPDATE</code>s die de partitiesleutel niet raken.</strong> Partitionering optimaliseert voor bulk-toegang langs de sleutel. Bij verspreide toegang levert het weinig op en kost het onderhoud.</p>
+<p><strong>Als het probleem eigenlijk bloat is.</strong> Een tabel met veel <code>UPDATE</code>-verkeer die traag is door bloat, is gebaat bij fill factor en autovacuum-afstelling (deel 12), niet noodzakelijk bij partitionering. Partitionering helpt daar alleen indirect, via kleinere vacuum-eenheden.</p>
+<blockquote>
+<p><strong>De vraag uit paragraaf 3 blijft de toets: bevraag ik dit langs een as die ook de groei bepaalt, en wil ik in bulk kunnen verwijderen? Twee keer nee is een reden om het niet te doen.</strong></p>
+</blockquote>
+<hr>
+<h2>17. Partitionering en de rest van de cursus</h2>
+<p>Drie verbanden die de samenhang van dit niveau laten zien.</p>
+<p><strong>Met deel 12 (bloat):</strong> een <code>DROP TABLE</code> op een partitie laat geen bloat achter — er is niets op te ruimen, de hele structuur verdwijnt. Dit is de meest directe manier waarop partitionering het probleem van deel 12 vermijdt in plaats van oplost.</p>
+<p><strong>Met deel 14 (BRIN):</strong> een BRIN-index op een enkele partitie heeft een hogere correlatie dan op de hele tabel, want elke partitie is zelf al een aaneengesloten tijdsblok. De combinatie — range-partitionering plus BRIN per partitie — is voor tijdreeksdata op grote schaal een veelgebruikt patroon.</p>
+<p><strong>Met deel 15 (de hotspot):</strong> de oplossing daar was gebeurtenissen invoegen in plaats van een teller bij te werken. Een gepartitioneerde gebeurtenistabel is de natuurlijke vervolgstap: de invoegingen verspreiden zich over de tijd vanzelf al over partities, en oude gebeurtenissen verdwijnen met <code>DROP TABLE</code> zodra ze niet meer nodig zijn.</p>
+<hr>
+<h2>18. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Functie op de partitiesleutel in <code>WHERE</code></td>
+<td>Geen pruning; alle partities gescand</td>
+<td>Bereik op de kolom zelf</td>
+</tr>
+<tr>
+<td>Primaire sleutel zonder partitiesleutel</td>
+<td>Kan niet — PostgreSQL weigert het</td>
+<td><code>(id, partitiesleutel)</code></td>
+</tr>
+<tr>
+<td>Default-partitie ongemonitord</td>
+<td>Groeit stilletjes; blokkeert nieuwe partities</td>
+<td><code>count(*)</code> bewaken</td>
+</tr>
+<tr>
+<td>Partitionering op een tabel van 4.000 rijen</td>
+<td>Overhead zonder baat</td>
+<td>Alleen bij substantiële omvang</td>
+</tr>
+<tr>
+<td>In-place “converteren” proberen</td>
+<td>Bestaat niet</td>
+<td>Nieuwe structuur, kopiëren, omwisselen</td>
+</tr>
+<tr>
+<td>Eén grote transactie voor de hele migratie op productieschaal</td>
+<td>Lange lock, groot risico</td>
+<td>Gefaseerd, met dubbel schrijven</td>
+</tr>
+<tr>
+<td>Nieuwe partitie te laat aanmaken</td>
+<td>Invoegingen falen of belanden in default</td>
+<td><code>pg_partman</code> met <code>premake</code></td>
+</tr>
+<tr>
+<td>Partitiegrootte “voor de zekerheid” heel klein</td>
+<td>Duizenden partities, plannerkosten</td>
+<td>Maat kiezen op basis van volume</td>
+</tr>
+<tr>
+<td>Vergeten indexen opnieuw te controleren na migratie</td>
+<td>Ontbrekende index per partitie onopgemerkt</td>
+<td><code>pg_index</code> controleren, per partitie</td>
+</tr>
+<tr>
+<td>Partitioneren om een bloatprobleem op te lossen</td>
+<td>Symptoom bestreden, oorzaak niet</td>
+<td>Eerst fill factor en autovacuum (deel 12)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>19. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>declaratieve partitionering: <code>PARTITION BY RANGE/LIST/HASH</code>;</li>
+<li>de eis dat unieke sleutels de partitiesleutel bevatten;</li>
+<li>partition pruning: wanneer het optreedt en wanneer niet;</li>
+<li>indexen op gepartitioneerde tabellen, inclusief <code>CONCURRENTLY</code>-gedrag;</li>
+<li>de default-partitie en de scan-valkuil bij nieuwe partities;</li>
+<li><code>ATTACH</code>/<code>DETACH PARTITION</code>, inclusief <code>CONCURRENTLY</code>;</li>
+<li>het migratiepatroon voor een bestaande tabel;</li>
+<li>subpartitionering als concept;</li>
+<li>de rol van <code>pg_partman</code>.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>20. Kernbegrippen</h2>
+<p><strong>Declaratieve partitionering</strong> — ingebouwde partitionering sinds PostgreSQL 10, zonder overerving of triggers.
+<strong>Partitiesleutel</strong> — de kolom(men) waarlangs wordt opgedeeld.
+<strong>Range/list/hash-partitionering</strong> — partitioneren op bereik, expliciete lijst, of hash.
+<strong>Partition pruning</strong> — het overslaan van partities die een voorwaarde onmogelijk kunnen bevatten.
+<strong>Default-partitie</strong> — vangnet voor rijen buiten alle gedefinieerde partities.
+<strong><code>ATTACH</code>/<code>DETACH PARTITION</code></strong> — een partitie koppelen aan of loskoppelen van de ouder.
+<strong>Subpartitionering</strong> — een partitie die zelf weer gepartitioneerd is.
+<strong><code>pg_partman</code></strong> — extensie voor geautomatiseerd partitiebeheer.
+<strong>Bewaartermijn (retention)</strong> — hoe lang partities bewaard blijven voordat ze verdwijnen.</p>
+<hr>
+<p><em>Volgende deel: back-up en herstel. Je kunt nu een tabel van vier jaar mutaties in behapbare stukken knippen. Volgende keer zorg je dat je die stukken ooit kunt terughalen — en leer je het verschil tussen een back-up die klaarstaat en een back-up die werkt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">55 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">397 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-15-concurrency-en-locking/reader.html">&larr; Deel 15 — Concurrency en locking</a><a class="dbm-prevnext next" href="../deel-17-back-up-en-herstel/reader.html">Deel 17 — Back-up en herstel &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

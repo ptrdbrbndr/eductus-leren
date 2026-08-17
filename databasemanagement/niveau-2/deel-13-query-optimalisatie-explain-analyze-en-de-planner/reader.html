@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Query-optimalisatie: EXPLAIN ANALYZE en de planner — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 13 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdeel 3 van 12 (deel 13 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “Performance tuning”</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>De query waarover geklaagd wordt</li>
+<li>pg_stat_statements: wat er werkelijk toe doet</li>
+<li>Hoe de planner beslist</li>
+<li>EXPLAIN op productieschaal</li>
+<li>Een plan lezen: de vier vragen</li>
+<li>De rij-estimatiefout</li>
+<li>Statistieken: wat de planner weet</li>
+<li>Uitgebreide statistieken</li>
+<li>Joinalgoritmen op schaal</li>
+<li>Parallelle query’s</li>
+<li>Zeven plan-antipatronen</li>
+<li>Query’s herschrijven</li>
+<li>Prepared statements en generieke plannen</li>
+<li>auto_explain</li>
+<li>De werkwijze</li>
+<li>Veelgemaakte fouten</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>met <code>pg_stat_statements</code> vaststellen welke query’s werkelijk de meeste tijd kosten;</li>
+<li>uitleggen hoe de planner tot een plan komt en welke informatie hij daarvoor gebruikt;</li>
+<li>een plan lezen op productieschaal en de duurste knoop aanwijzen;</li>
+<li>de rij-estimatiefout herkennen en terugvoeren op de oorzaak;</li>
+<li>de statistieken in <code>pg_stats</code> interpreteren en <code>n_distinct</code> corrigeren waar nodig;</li>
+<li>uitgebreide statistieken aanmaken voor kolommen die van elkaar afhangen;</li>
+<li>de zeven meest voorkomende plan-antipatronen herkennen en aanpakken;</li>
+<li>een query herschrijven zodat de planner beter werk kan doen;</li>
+<li>uitleggen wanneer een prepared statement een slecht plan oplevert;</li>
+<li><code>auto_explain</code> inzetten om trage query’s in productie vast te leggen.</li>
+</ul>
+<hr>
+<h2>2. De query waarover geklaagd wordt</h2>
+<p>Ruud belt: <em>“het portaal is traag op dinsdagavond.”</em> Karin belt: <em>“mijn maandrapport duurt vier minuten.”</em></p>
+<p>Wie van de twee heeft het dringendste probleem?</p>
+<p>Karins rapport duurt vier minuten en draait één keer per maand. Totale belasting: vier minuten per maand.</p>
+<p>De portaalquery die de deelnemersgegevens ophaalt, duurt 5 milliseconden en draait twee miljoen keer per maand. Totale belasting: bijna drie uur.</p>
+<p><strong>De query waarover geklaagd wordt, is zelden de query die ertoe doet.</strong> Klachten gaan over wat mensen <em>voelen</em> — een lange wachttijd valt op, een query van 5 ms niet. Maar de server voelt het omgekeerde.</p>
+<p>De formule die dit dagdeel draagt:</p>
+<blockquote>
+<p><strong>totale belasting = aantal aanroepen × gemiddelde tijd</strong></p>
+</blockquote>
+<p>Beide factoren tellen. Een query van 5 ms die twee miljoen keer draait, is een groter probleem dan een query van vier minuten die één keer draait — en hem tien procent sneller maken levert meer op dan Karins rapport halveren.</p>
+<p>Dat betekent niet dat je Karin negeert. Het betekent dat je begint met meten in plaats van met de telefoon.</p>
+<hr>
+<h2>3. pg_stat_statements: wat er werkelijk toe doet</h2>
+<p>De extensie die deze vraag beantwoordt. Uit deel 11: hij moet in <code>shared_preload_libraries</code> staan, en dat vereist een herstart.</p>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+</code></pre>
+<p>Hij normaliseert query’s: <code>WHERE id = 42</code> en <code>WHERE id = 99</code> worden dezelfde regel met <code>WHERE id = $1</code>. Zo zie je patronen in plaats van losse aanroepen.</p>
+<p>De query die je vanaf nu altijd als eerste draait:</p>
+<pre><code class="language-sql">SELECT
+    substr(query, 1, 80) AS query,
+    calls,
+    round(total_exec_time::numeric, 0)               AS totaal_ms,
+    round(mean_exec_time::numeric, 2)                AS gem_ms,
+    round(100 * total_exec_time / sum(total_exec_time) OVER (), 1) AS pct,
+    rows
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;
+</code></pre>
+<p><strong>Sorteer op <code>total_exec_time</code>, niet op <code>mean_exec_time</code>.</strong> Dat is precies het punt uit paragraaf 2: het gemiddelde toont de query waarover geklaagd wordt, het totaal toont de query die de server belast.</p>
+<p>Andere invalshoeken die de moeite waard zijn:</p>
+<table>
+<thead>
+<tr>
+<th>Sorteren op</th>
+<th>Vindt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>total_exec_time</code></td>
+<td>De grootste belasting — begin hier</td>
+</tr>
+<tr>
+<td><code>calls</code></td>
+<td>Query’s die te vaak worden aangeroepen (vaak een applicatieprobleem)</td>
+</tr>
+<tr>
+<td><code>shared_blks_read</code></td>
+<td>Query’s die veel van schijf lezen</td>
+</tr>
+<tr>
+<td><code>stddev_exec_time</code></td>
+<td>Query’s met wisselvallige prestaties — vaak een plannerprobleem</td>
+</tr>
+<tr>
+<td><code>rows / calls</code></td>
+<td>Query’s die te veel rijen teruggeven</td>
+</tr>
+</tbody>
+</table>
+<p>Die laatste twee worden zelden gebruikt en zijn juist waardevol. Een hoge standaardafwijking betekent dat dezelfde query soms snel en soms traag is — dat wijst op een plan dat omslaat, op vergrendeling, of op sterk wisselende parameterwaarden.</p>
+<p><strong>Reset voordat je meet:</strong></p>
+<pre><code class="language-sql">SELECT pg_stat_statements_reset();
+</code></pre>
+<p>Anders kijk je naar maanden geschiedenis inclusief de eenmalige migratie van vorig jaar.</p>
+<p><strong>Instellingen die ertoe doen:</strong> <code>pg_stat_statements.max</code> (hoeveel query’s bijgehouden worden, standaard 5000) en <code>pg_stat_statements.track = 'top'</code> of <code>'all'</code>. Bij veel verschillende query’s kan de lijst overlopen; dan verlies je juist de zeldzame trage exemplaren.</p>
+<hr>
+<h2>4. Hoe de planner beslist</h2>
+<p>Uit deel 8, nu volledig.</p>
+<p>Voor elke query genereert de planner mogelijke uitvoeringsplannen en kiest hij het plan met de laagste geschatte kosten. Die kosten komen uit drie ingrediënten:</p>
+<p><strong>1. Kostenparameters.</strong> <code>seq_page_cost</code> (1.0), <code>random_page_cost</code> (4.0, of 1.1 op SSD — deel 11), <code>cpu_tuple_cost</code> (0.01), <code>cpu_operator_cost</code> (0.0025).</p>
+<p><strong>2. Statistieken over de gegevens.</strong> Hoeveel rijen, hoeveel verschillende waarden, hoe zijn ze verdeeld. Bijgehouden door <code>ANALYZE</code> en autovacuum.</p>
+<p><strong>3. Selectiviteit.</strong> Welk deel van de rijen voldoet naar schatting aan de voorwaarde. Dit is de kern: uit de statistieken schat de planner dat <code>WHERE kanaal = 'portaal'</code> 20% oplevert en <code>WHERE deelnemer_id = 12345</code> 0,0003%. Op basis daarvan kiest hij sequentieel of index.</p>
+<p><strong>Waar het misgaat is bijna altijd bij stap 3.</strong> De kosten zijn juist berekend; de schatting van het aantal rijen was verkeerd. En een verkeerde rijschatting plant zich voort: als de planner denkt dat een join 100 rijen oplevert en het worden er een miljoen, dan is elke keuze daarboven ook fout.</p>
+<blockquote>
+<p><strong>De belangrijkste vaardigheid van dit deel: in een plan de plek vinden waar de schatting voor het eerst uit de bocht vliegt.</strong></p>
+</blockquote>
+<hr>
+<h2>5. EXPLAIN op productieschaal</h2>
+<p>De opties die je gebruikt:</p>
+<pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS, SETTINGS, VERBOSE) SELECT …;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Optie</th>
+<th>Toont</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANALYZE</code></td>
+<td>Voert uit; toont werkelijke tijden en rijen</td>
+</tr>
+<tr>
+<td><code>BUFFERS</code></td>
+<td>Pagina’s uit cache (<code>hit</code>), van schijf (<code>read</code>), geschreven (<code>written</code>)</td>
+</tr>
+<tr>
+<td><code>SETTINGS</code></td>
+<td>Welke planner-instellingen afwijken van de standaard</td>
+</tr>
+<tr>
+<td><code>VERBOSE</code></td>
+<td>Kolommen per knoop, schemanamen</td>
+</tr>
+<tr>
+<td><code>WAL</code></td>
+<td>WAL-gebruik bij schrijvende query’s</td>
+</tr>
+<tr>
+<td><code>FORMAT JSON</code></td>
+<td>Machineleesbaar, voor visualisatiehulpmiddelen</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>SETTINGS</code> is onderschat.</strong> Het toont in het plan zelf welke instellingen afwijken. Dat is het antwoord op “waarom is dit plan op acceptatie anders” — en het bespaart een half uur zoeken.</p>
+<p><strong>Herinnering uit deel 8:</strong> <code>EXPLAIN ANALYZE</code> voert de query werkelijk uit. Bij een <code>UPDATE</code> of <code>DELETE</code> altijd:</p>
+<pre><code class="language-sql">BEGIN;
+EXPLAIN (ANALYZE, BUFFERS) UPDATE …;
+ROLLBACK;
+</code></pre>
+<p>Een praktisch punt op productieschaal: <code>EXPLAIN ANALYZE</code> op een query van vier minuten duurt vier minuten. Gebruik voor een eerste indruk <code>EXPLAIN</code> zonder <code>ANALYZE</code> — dat kost niets en toont al of de planner iets geks van plan is.</p>
+<hr>
+<h2>6. Een plan lezen: de vier vragen</h2>
+<p>Een plan van dertig regels is overweldigend. Stel deze vier vragen, in deze volgorde:</p>
+<h3>Vraag 1 — Waar gaat de tijd heen?</h3>
+<p>Zoek de knoop met de grootste <code>actual time</code>. Let op: de tijd van een knoop is <strong>inclusief</strong> zijn kinderen. De echte kosten van een knoop zijn zijn eigen tijd min die van zijn kinderen.</p>
+<p>En vergeet <code>loops</code> niet: <code>actual time</code> is <strong>per loop</strong>. Staat er <code>loops=8000</code>, vermenigvuldig dan.</p>
+<h3>Vraag 2 — Waar klopt de schatting niet?</h3>
+<p>Vergelijk <code>rows=</code> (geschat) met <code>actual rows=</code>. Zoek de knoop waar het verschil voor het eerst een factor tien of meer wordt. Dat is je startpunt, niet de duurste knoop.</p>
+<h3>Vraag 3 — Hoeveel wordt er weggegooid?</h3>
+<p><code>Rows Removed by Filter</code> — hoeveel rijen zijn gelezen en niet gebruikt. Een hoog getal betekent dat het filter te laat wordt toegepast: een index of een andere joinvolgorde had dat voorkomen.</p>
+<h3>Vraag 4 — Wat komt er van schijf?</h3>
+<p><code>Buffers: shared hit=1000 read=50000</code> — <code>read</code> is van schijf. Veel <code>read</code> betekent dat de werkset niet in de bufferpool past, en dat is een ander probleem dan een verkeerd plan.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-13-1.png" alt="Een plan van vijftien regels met de vier vragen als aanwijzingen erbij" loading="lazy"><figcaption>Figuur 13-1 — Een plan van vijftien regels met de vier vragen als aanwijzingen erbij</figcaption></figure>
+<p><strong>Signalen die je direct herkent:</strong></p>
+<table>
+<thead>
+<tr>
+<th>In het plan</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Sort Method: external merge Disk: 24680kB</code></td>
+<td><code>work_mem</code> te laag (deel 11)</td>
+</tr>
+<tr>
+<td><code>Batches: 8</code> bij een Hash Join</td>
+<td>Hashtabel paste niet in <code>work_mem</code></td>
+</tr>
+<tr>
+<td><code>Heap Fetches: 987</code> bij een Index Only Scan</td>
+<td>Visibility map verouderd — <code>VACUUM</code> (deel 12)</td>
+</tr>
+<tr>
+<td><code>Rows Removed by Filter: 2000000</code></td>
+<td>Filter te laat; index of andere volgorde nodig</td>
+</tr>
+<tr>
+<td><code>loops=8000</code> bij een Nested Loop</td>
+<td>Vaak de oorzaak; controleer de rijschatting erboven</td>
+</tr>
+<tr>
+<td><code>never executed</code></td>
+<td>Deze tak is niet gebruikt — vaak prima</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. De rij-estimatiefout</h2>
+<p>Het belangrijkste diagnosepatroon van dit deel.</p>
+<pre><code>Nested Loop  (cost=0.42..8.47 rows=1 width=45)
+             (actual time=0.03..4821.55 rows=184302 loops=1)
+</code></pre>
+<p>De planner verwachtte <strong>1 rij</strong> en kreeg er <strong>184.302</strong>. Op basis van die ene rij koos hij een Nested Loop — een prima keuze bij één rij, een ramp bij 184.302.</p>
+<p><strong>De reparatie zit niet in de join maar in de schatting.</strong> Vijf mogelijke oorzaken, in volgorde van hoe vaak ze voorkomen:</p>
+<p><strong>1. Verouderde statistieken.</strong> Draai <code>ANALYZE</code> op de betrokken tabellen en meet opnieuw. Dit lost het merendeel op.</p>
+<p><strong>2. Afhankelijke kolommen.</strong> De planner gaat ervan uit dat kolommen onafhankelijk zijn. <code>WHERE plaats = 'Utrecht' AND provincie = 'Utrecht'</code> — hij vermenigvuldigt de selectiviteiten en komt op een veel te laag getal, terwijl de tweede voorwaarde niets toevoegt. Oplossing: uitgebreide statistieken (paragraaf 9).</p>
+<p><strong>3. Te lage statistiekresolutie.</strong> Bij een kolom met veel verschillende waarden is het standaardhistogram van 100 buckets te grof. Oplossing:</p>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN aangemeld_op SET STATISTICS 1000;
+ANALYZE mutatie;
+</code></pre>
+<p><strong>4. Een functie of expressie in de voorwaarde.</strong> De planner heeft geen statistieken over <code>lower(achternaam)</code> of over de uitkomst van een eigen functie. Bij eigen functies helpt het instellen van <code>ROWS</code> in de functiedefinitie; bij expressies een expressie-index, die meteen statistieken oplevert.</p>
+<p><strong>5. Correlatie tussen tabellen.</strong> De planner schat joins op basis van de kolomstatistieken en kent geen verbanden tussen tabellen. Hier houdt het op — dan herschrijf je de query (paragraaf 13).</p>
+<hr>
+<h2>8. Statistieken: wat de planner weet</h2>
+<p>Alles staat in <code>pg_stats</code>:</p>
+<pre><code class="language-sql">SELECT attname, n_distinct, null_frac, avg_width, correlation,
+       most_common_vals, most_common_freqs
+FROM pg_stats
+WHERE schemaname = 'meridiaan_prod' AND tablename = 'mutatie';
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kolom</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>n_distinct</code></td>
+<td>Aantal verschillende waarden. <strong>Negatief = verhouding tot het aantal rijen</strong></td>
+</tr>
+<tr>
+<td><code>null_frac</code></td>
+<td>Aandeel NULL</td>
+</tr>
+<tr>
+<td><code>avg_width</code></td>
+<td>Gemiddelde breedte in bytes</td>
+</tr>
+<tr>
+<td><code>most_common_vals</code></td>
+<td>De meest voorkomende waarden</td>
+</tr>
+<tr>
+<td><code>most_common_freqs</code></td>
+<td>Hun frequenties</td>
+</tr>
+<tr>
+<td><code>histogram_bounds</code></td>
+<td>De verdeling van de rest</td>
+</tr>
+<tr>
+<td><code>correlation</code></td>
+<td>Fysieke volgorde tegenover waardevolgorde (deel 12)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Over <code>n_distinct</code>:</strong> een waarde van −1 betekent “elke rij een unieke waarde”; −0,5 betekent “half zoveel verschillende waarden als rijen”. Positief is een absoluut aantal.</p>
+<p>Dit is de statistiek die het vaakst verkeerd wordt geschat, omdat <code>ANALYZE</code> met een steekproef werkt. Bij een kolom waarvan je het werkelijke aantal kent, kun je hem vastzetten:</p>
+<pre><code class="language-sql">ALTER TABLE mutatie ALTER COLUMN kanaal SET (n_distinct = 5);
+ANALYZE mutatie;
+</code></pre>
+<p>Dat is een krachtig middel en een gevaarlijk middel: je overschrijft de werkelijkheid met een bewering. Doe het alleen als je zeker weet dat het aantal stabiel is, en documenteer het.</p>
+<p><strong>De MCV-lijst is waar scheve verdelingen zichtbaar worden.</strong> Bij Meridiaan is <code>kanaal</code> gelijk verdeeld over vijf waarden. Zou 80% van de mutaties via het portaal binnenkomen en 1% via de post, dan is <code>WHERE kanaal = 'post'</code> een heel andere query dan <code>WHERE kanaal = 'portaal'</code> — en dankzij de MCV-lijst weet de planner dat.</p>
+<p>Bij zeer scheve verdelingen is een grotere MCV-lijst zinvol: <code>SET STATISTICS</code> verhoogt zowel het histogram als de MCV-lijst.</p>
+<hr>
+<h2>9. Uitgebreide statistieken</h2>
+<p>Voor het probleem uit paragraaf 7, oorzaak 2: kolommen die van elkaar afhangen.</p>
+<pre><code class="language-sql">CREATE STATISTICS mutatie_soort_kanaal (dependencies, ndistinct, mcv)
+    ON soort, kanaal FROM mutatie;
+ANALYZE mutatie;
+</code></pre>
+<p>De drie soorten:</p>
+<table>
+<thead>
+<tr>
+<th>Soort</th>
+<th>Lost op</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dependencies</code></td>
+<td>Functionele afhankelijkheid: kolom A bepaalt kolom B</td>
+</tr>
+<tr>
+<td><code>ndistinct</code></td>
+<td>Aantal verschillende combinaties van kolommen</td>
+</tr>
+<tr>
+<td><code>mcv</code></td>
+<td>Meest voorkomende <em>combinaties</em> van waarden</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer je dit nodig hebt:</strong> bij een <code>WHERE</code> met meerdere voorwaarden op kolommen die samenhangen — postcode en plaats, sector en cao, werkgever en regio. De planner vermenigvuldigt anders de selectiviteiten en schat structureel te laag.</p>
+<p><strong>Hoe je weet dat je het nodig hebt:</strong> de rijschatting in een plan is systematisch veel te laag bij een <code>WHERE</code> met meerdere voorwaarden op dezelfde tabel.</p>
+<p>Controleren wat er is:</p>
+<pre><code class="language-sql">SELECT * FROM pg_stats_ext WHERE schemaname = 'meridiaan_prod';
+</code></pre>
+<p>Dit is een van de weinige plaatsen waar je de planner werkelijk iets nieuws vertelt in plaats van hem alleen bij te werken.</p>
+<hr>
+<h2>10. Joinalgoritmen op schaal</h2>
+<p>Uit deel 8, nu met de praktische signalen erbij.</p>
+<p><strong>Nested Loop.</strong> Voor elke rij links, zoek rechts. Goed bij weinig rijen links plus een index rechts. <strong>Het signaal dat het misgaat:</strong> een hoge <code>loops</code> in combinatie met een rijschatting die veel te laag was. Dit is verreweg de meest voorkomende oorzaak van een query die van seconden naar minuten gaat.</p>
+<p><strong>Hash Join.</strong> Bouwt een hashtabel van de kleinste kant. Goed bij grote verzamelingen. <strong>Het signaal:</strong> <code>Batches: 8</code> betekent dat de hashtabel niet in <code>work_mem</code> paste en in porties naar schijf ging. Meer <code>work_mem</code> (deel 11) lost dat op — bij voorkeur per rol.</p>
+<p><strong>Merge Join.</strong> Beide kanten gesorteerd doorlopen. Goed als beide al gesorteerd zijn. <strong>Het signaal:</strong> een <code>Sort</code>-knoop eronder met <code>external merge Disk</code> — dan betaal je de sortering én de schijf.</p>
+<p>De planner kiest. Je kunt hem tijdelijk sturen om te <em>onderzoeken</em>:</p>
+<pre><code class="language-sql">SET enable_nestloop = off;
+EXPLAIN ANALYZE SELECT …;
+RESET enable_nestloop;
+</code></pre>
+<p><strong>Dit is een diagnosemiddel, geen oplossing</strong> — dezelfde waarschuwing als in deel 8. Als het uitzetten van een joinsoort de query tien keer sneller maakt, weet je dat de planner een verkeerde keuze maakte. De vervolgvraag is <em>waarom</em>, en het antwoord is vrijwel altijd de rijschatting.</p>
+<hr>
+<h2>11. Parallelle query’s</h2>
+<p>PostgreSQL kan een query over meerdere processen verdelen. In het plan:</p>
+<pre><code>Gather  (workers planned: 4, workers launched: 4)
+  -&gt;  Parallel Seq Scan on mutatie
+</code></pre>
+<p>De instellingen:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Doet</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max_parallel_workers_per_gather</code></td>
+<td>Werkers per query (standaard 2)</td>
+</tr>
+<tr>
+<td><code>max_parallel_workers</code></td>
+<td>Totaal beschikbaar</td>
+</tr>
+<tr>
+<td><code>max_worker_processes</code></td>
+<td>Bovengrens, vereist herstart</td>
+</tr>
+<tr>
+<td><code>parallel_setup_cost</code></td>
+<td>Drempel: hoeveel een query moet kosten om het te overwegen</td>
+</tr>
+<tr>
+<td><code>min_parallel_table_scan_size</code></td>
+<td>Minimale tabelgrootte</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer parallellisme helpt:</strong> grote sequentiële scans, grote aggregaties, grote joins — het rapportagewerk van Karin.</p>
+<p><strong>Wanneer het niet helpt en zelfs schaadt:</strong> korte OLTP-query’s. Het opstarten van werkers kost tijd, en op een server met 150 gelijktijdige portaalsessies concurreren die werkers om dezelfde cores.</p>
+<p><strong>Het patroon voor Meridiaan</strong> is opnieuw de rolgebonden instelling uit deel 11:</p>
+<pre><code class="language-sql">ALTER ROLE rapportage  SET max_parallel_workers_per_gather = 4;
+ALTER ROLE portaal_app SET max_parallel_workers_per_gather = 0;
+</code></pre>
+<p>Let op <code>workers launched</code> in het plan. Staat daar minder dan <code>workers planned</code>, dan waren er geen werkers beschikbaar — de query draaide met minder parallellisme dan gepland, en je meting is niet representatief.</p>
+<hr>
+<h2>12. Zeven plan-antipatronen</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>In het plan</th>
+<th>Oorzaak</th>
+<th>Aanpak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>Rows Removed by Filter</code> zeer hoog</td>
+<td>Filter te laat toegepast</td>
+<td>Index, of filter naar voren</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Nested Loop met hoge <code>loops</code> en foute schatting</td>
+<td>Rijschatting</td>
+<td><code>ANALYZE</code>, uitgebreide statistieken</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>Sort Method: external merge Disk</code></td>
+<td><code>work_mem</code> te laag</td>
+<td>Verhogen, per rol</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>Batches: n</code> (n&gt;1) bij Hash Join</td>
+<td><code>work_mem</code> te laag</td>
+<td>Idem</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>Heap Fetches</code> hoog bij Index Only Scan</td>
+<td>Visibility map verouderd</td>
+<td><code>VACUUM</code> (deel 12)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Seq Scan waar een index bestaat</td>
+<td>Index onbruikbaar of te weinig selectief</td>
+<td>Functie om de kolom? Typemismatch? Correct gedrag?</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Subplan dat per rij draait</td>
+<td>Gecorreleerde subquery die niet herschreven kon worden</td>
+<td>Herschrijven naar join of CTE</td>
+</tr>
+</tbody>
+</table>
+<p>Antipatroon 6 verdient herhaling uit deel 8: <strong>een Seq Scan is vaak correct.</strong> Controleer eerst of de query werkelijk een klein deel van de tabel raakt. Pas als dat zo is en de index toch niet gebruikt wordt, ga je zoeken naar een functie om de kolom, een typemismatch, of verouderde statistieken.</p>
+<hr>
+<h2>13. Query’s herschrijven</h2>
+<p>Soms is het plan het beste dat de planner kan maken met de query die hij kreeg. Dan is de query zelf aan de beurt.</p>
+<p><strong>Filter zo vroeg mogelijk.</strong> Hoe minder rijen er de joins in gaan, hoe beter alles erboven wordt. Dit is de regel uit deel 3 (<code>WHERE</code> boven <code>HAVING</code>), nu met een prestatiereden.</p>
+<p><strong>Aggregeer voordat je joint.</strong> Het patroon uit deel 4: eerst per bron aggregeren in een CTE, dan joinen. Voorkomt fan-out én houdt de tussenresultaten klein.</p>
+<p><strong><code>EXISTS</code> in plaats van <code>IN</code> met een grote subquery.</strong> <code>EXISTS</code> kan stoppen bij de eerste treffer; <code>IN</code> moet de hele lijst materialiseren. En het is bovendien NULL-veilig (deel 4).</p>
+<p><strong><code>UNION ALL</code> in plaats van <code>UNION</code></strong> waar duplicaten niet voorkomen of niet erg zijn. <code>UNION</code> moet sorteren of hashen.</p>
+<p><strong><code>LATERAL</code> voor “de top n per groep”.</strong> In plaats van een vensterfunctie over de hele tabel:</p>
+<pre><code class="language-sql">SELECT w.naam, laatste.*
+FROM werkgever w
+CROSS JOIN LATERAL (
+    SELECT periode_jaar, periode_maand, bedrag
+    FROM premienota p
+    WHERE p.werkgever_id = w.werkgever_id
+    ORDER BY periode_jaar DESC, periode_maand DESC
+    LIMIT 1
+) AS laatste;
+</code></pre>
+<p>Met een index op <code>(werkgever_id, periode_jaar DESC, periode_maand DESC)</code> haalt dit per werkgever precies één rij op, in plaats van alle nota’s te sorteren.</p>
+<p><strong>Keyset-paginering in plaats van <code>OFFSET</code>.</strong> De belofte uit deel 3:</p>
+<pre><code class="language-sql">-- Traag bij een grote offset
+SELECT * FROM mutatie ORDER BY mutatie_id LIMIT 20 OFFSET 100000;
+
+-- Snel, ongeacht hoe ver je bent
+SELECT * FROM mutatie WHERE mutatie_id &gt; 100000 ORDER BY mutatie_id LIMIT 20;
+</code></pre>
+<p>De tweede vorm gebruikt de index om meteen op de juiste plek te beginnen. De eerste produceert 100.020 rijen om er 20 te tonen. Het verschil groeit met de paginanummers — dus de gebruiker die het diepst zoekt, wacht het langst.</p>
+<hr>
+<h2>14. Prepared statements en generieke plannen</h2>
+<p>Een prepared statement wordt gepland en hergebruikt. PostgreSQL doet de eerste vijf uitvoeringen met een <strong>custom plan</strong> (opnieuw gepland met de werkelijke parameterwaarden), en schakelt daarna over op een <strong>generic plan</strong> als dat gemiddeld niet duurder lijkt.</p>
+<p><strong>Waarom dat misgaat:</strong> bij een scheve verdeling. Stel dat 80% van de mutaties via het portaal binnenkomt en 1% via de post. Een generiek plan moet één keuze maken voor beide gevallen, en die keuze is voor minstens één van de twee verkeerd.</p>
+<p>Herkenbaar aan: een query die soms snel en soms traag is, zonder aanwijsbare reden. Precies waar <code>stddev_exec_time</code> in <code>pg_stat_statements</code> op wijst.</p>
+<p>Sturen kan:</p>
+<pre><code class="language-sql">SET plan_cache_mode = 'force_custom_plan';   -- altijd opnieuw plannen
+SET plan_cache_mode = 'auto';                -- standaard
+</code></pre>
+<p>Meestal per rol, zoals eerder. De kosten van opnieuw plannen zijn klein vergeleken met een verkeerd plan op een grote tabel.</p>
+<p><strong>Let op:</strong> veel applicatiekaders en ORM’s gebruiken prepared statements zonder dat de ontwikkelaar het weet. Als een query in <code>psql</code> snel is en in de applicatie traag, is dit een van de eerste dingen om te controleren.</p>
+<hr>
+<h2>15. auto_explain</h2>
+<p>Het probleem met trage query’s in productie: als je erbij bent, zijn ze al voorbij.</p>
+<p><code>auto_explain</code> legt het plan van elke trage query vast in de log:</p>
+<pre><code>shared_preload_libraries = 'pg_stat_statements,auto_explain'
+auto_explain.log_min_duration = 3000
+auto_explain.log_analyze = on
+auto_explain.log_buffers = on
+auto_explain.log_nested_statements = on
+auto_explain.sample_rate = 0.1
+</code></pre>
+<p><strong>Waarschuwing over <code>log_analyze</code>:</strong> dit meet elke query, ook de snelle, en dat kost overhead. Gebruik <code>sample_rate</code> om maar een deel te meten — 10% geeft doorgaans een representatief beeld tegen een fractie van de kosten.</p>
+<p>Dit is de combinatie die je in productie wilt: <code>pg_stat_statements</code> vertelt <strong>welke</strong> query’s ertoe doen, <code>auto_explain</code> vertelt <strong>waarom</strong> een specifieke uitvoering traag was.</p>
+<hr>
+<h2>16. De werkwijze</h2>
+<p>De stappen, en de discipline om ze in deze volgorde te doen:</p>
+<ol>
+<li><strong>Reset en meet.</strong> <code>pg_stat_statements_reset()</code>, wacht een representatieve periode, en kijk naar <code>total_exec_time</code>.</li>
+<li><strong>Kies één query.</strong> Niet degene waarover geklaagd wordt — degene die bovenaan staat.</li>
+<li><strong>Draai <code>EXPLAIN (ANALYZE, BUFFERS, SETTINGS)</code>.</strong> Noteer de tijd.</li>
+<li><strong>Stel de vier vragen</strong> uit paragraaf 6.</li>
+<li><strong>Zoek de eerste rij-estimatiefout.</strong> Niet de duurste knoop — de eerste foute schatting.</li>
+<li><strong>Verander één ding.</strong> Statistieken, index, instelling of query.</li>
+<li><strong>Meet opnieuw</strong> en vergelijk met stap 3.</li>
+<li><strong>Ga terug naar stap 1.</strong> De rangorde is veranderd; de nieuwe nummer één is misschien een andere query.</li>
+</ol>
+<p>Stap 6 en 8 zijn waar het in de praktijk misgaat. Mensen veranderen drie dingen tegelijk en weten daarna niet wat werkte — en ze blijven aan dezelfde query sleutelen terwijl er inmiddels een andere bovenaan staat.</p>
+<p><strong>Wanneer je stopt:</strong> als de query snel genoeg is voor wat hij moet doen. Niet als hij zo snel mogelijk is. Optimaliseren zonder doel is oneindig werk.</p>
+<hr>
+<h2>17. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sorteren op <code>mean_exec_time</code></td>
+<td>De verkeerde query optimaliseren</td>
+<td><code>total_exec_time</code></td>
+</tr>
+<tr>
+<td>Beginnen bij de duurste knoop</td>
+<td>De symptoomknoop repareren</td>
+<td>De eerste foute rijschatting</td>
+</tr>
+<tr>
+<td><code>loops</code> negeren</td>
+<td>Tijd met factor 1000 onderschatten</td>
+<td><code>actual time</code> × <code>loops</code></td>
+</tr>
+<tr>
+<td>Drie dingen tegelijk veranderen</td>
+<td>Je weet niet wat werkte</td>
+<td>Eén per keer, met meting</td>
+</tr>
+<tr>
+<td><code>enable_*</code> uitzetten als oplossing</td>
+<td>Slechte plannen elders</td>
+<td>Diagnosemiddel; zoek de oorzaak</td>
+</tr>
+<tr>
+<td><code>n_distinct</code> vastzetten zonder zekerheid</td>
+<td>Structureel foute plannen</td>
+<td>Alleen bij een stabiel aantal, gedocumenteerd</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code> op een <code>UPDATE</code> in productie</td>
+<td>De wijziging vindt plaats</td>
+<td><code>BEGIN</code> … <code>ROLLBACK</code></td>
+</tr>
+<tr>
+<td><code>auto_explain.log_analyze</code> zonder <code>sample_rate</code></td>
+<td>Overhead op elke query</td>
+<td>10% steekproef</td>
+</tr>
+<tr>
+<td>Blijven optimaliseren zonder doel</td>
+<td>Oneindig werk</td>
+<td>Stoppen bij “snel genoeg”</td>
+</tr>
+<tr>
+<td>Parallellisme globaal verhogen</td>
+<td>Portaalsessies concurreren om cores</td>
+<td>Per rol</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>18. Aansluiting op de certificering</h2>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li><code>pg_stat_statements</code>: installatie, kolommen, en het onderscheid tussen totaal en gemiddelde;</li>
+<li>de opties van <code>EXPLAIN</code> en wat elk toont;</li>
+<li>plannen lezen, inclusief <code>loops</code>, <code>Rows Removed by Filter</code>, <code>Buffers</code> en <code>Heap Fetches</code>;</li>
+<li>de rij-estimatiefout en de vijf oorzaken;</li>
+<li><code>pg_stats</code>, in het bijzonder <code>n_distinct</code> en de MCV-lijst;</li>
+<li><code>CREATE STATISTICS</code> en de drie soorten;</li>
+<li>de drie joinalgoritmen en hun signalen;</li>
+<li>parallelle query’s en hun instellingen;</li>
+<li>custom versus generic plans en <code>plan_cache_mode</code>;</li>
+<li><code>auto_explain</code>.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<hr>
+<h2>19. Kernbegrippen</h2>
+<p><strong><code>pg_stat_statements</code></strong> — extensie die genormaliseerde querystatistieken bijhoudt.
+<strong>Selectiviteit</strong> — geschat aandeel rijen dat aan een voorwaarde voldoet.
+<strong>Rij-estimatiefout</strong> — verschil tussen geschat en werkelijk aantal rijen.
+<strong><code>n_distinct</code></strong> — aantal verschillende waarden; negatief is een verhouding.
+<strong>MCV</strong> — most common values; de lijst met meest voorkomende waarden en frequenties.
+<strong>Uitgebreide statistieken</strong> — <code>CREATE STATISTICS</code> voor kolommen die van elkaar afhangen.
+<strong><code>loops</code></strong> — hoe vaak een planknoop is uitgevoerd; tijden zijn per loop.
+<strong>Batches</strong> — het opdelen van een hashtabel omdat hij niet in <code>work_mem</code> past.
+<strong>Custom plan / generic plan</strong> — per uitvoering gepland, of eenmalig gepland en hergebruikt.
+<strong>Keyset-paginering</strong> — pagineren op sleutelwaarde in plaats van met <code>OFFSET</code>.
+<strong><code>auto_explain</code></strong> — extensie die plannen van trage query’s in de log vastlegt.</p>
+<hr>
+<p><em>Volgende deel: geavanceerde indexering. Je weet nu welke query’s ertoe doen en waarom hun plannen zijn zoals ze zijn. Volgende keer bouw je de indexen die die plannen veranderen — inclusief de types die geen B-tree zijn.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">73 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">25 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">466 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">&larr; Deel 12 — Fysiek ontwerp: pagina&#39;s, TOAST en bloat</a><a class="dbm-prevnext next" href="../deel-14-geavanceerde-indexering/reader.html">Deel 14 — Geavanceerde indexering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

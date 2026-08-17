@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Event sourcing in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 28 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 28 — Slidedeck</h1>
+<p><strong>Event sourcing in de praktijk</strong>
+Niveau 3, deel 6 van 8 (deel 28 van 30) | 32 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Event sourcing in de praktijk</h1>
+<h2>Niveau 3 — Deel 28</h2>
+<p><em>Vandaag: een werkend antwoord op vergetelheid in een onveranderlijke geschiedenis.</em></p>
+<hr>
+<h2>Slide 2 — Van concept naar productie</h2>
+<p>Deel 27: de concepten, en de geruststelling dat je de
+bouwstenen al kende.</p>
+<p>Vandaag: command handlers, snapshotting, projecties,
+en het AVG-vraagstuk.</p>
+<hr>
+<h2>Slide 3 — Command handlers</h2>
+<pre><code class="language-sql">CREATE FUNCTION verwerk_salariswijziging(...) AS $$
+BEGIN
+    -- 1. huidige stand bepalen
+    -- 2. bedrijfsregel controleren
+    -- 3. event vastleggen
+END; $$;
+</code></pre>
+<p>Het commando kan falen. Het event, eenmaal vastgelegd, nooit meer.</p>
+<hr>
+<h2>Slide 4 — Opdracht 28.1</h2>
+<h1>Een command handler bouwen</h1>
+<p>Waarom valideren vóór de INSERT, niet erna?</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 5 — Het conflict</h2>
+<p>Twee sessies, hetzelfde aggregaat, hetzelfde volgnummer.</p>
+<h1>Een botst. Wie wint?</h1>
+<hr>
+<h2>Slide 6 — Precies deel 15</h2>
+<pre><code>lees volgnummer
+probeer met volgnummer + 1
+bij unique_violation: opnieuw, met spreiding
+bovengrens aan pogingen
+</code></pre>
+<p>Dezelfde retry-logica als een serialisatiefout. Nieuwe context.</p>
+<hr>
+<h2>Slide 7 — Opdracht 28.2</h2>
+<h1>Optimistic concurrency botsen</h1>
+<p>Laat het zelf gebeuren. Bouw de retry-lus.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 8 — Pauze</h2>
+<hr>
+<h2>Slide 9 — Een dienstverband van 30 jaar</h2>
+<p>Honderden events. Elke keer alles herberekenen?</p>
+<h1>Meet het zelf.</h1>
+<hr>
+<h2>Slide 10 — Snapshotting</h2>
+<pre><code class="language-sql">CREATE TABLE snapshots (
+    aggregate_id uuid, volgnummer integer, state jsonb,
+    PRIMARY KEY (aggregate_id, volgnummer)
+);
+</code></pre>
+<p>Snapshot + events erna. Niet meer bij event 1 beginnen.</p>
+<hr>
+<h2>Slide 11 — Opdracht 28.3</h2>
+<h1>Snapshotting meten</h1>
+<p>500+ events. Meet vóór en na.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 12 — Projecties automatiseren</h2>
+<p><strong>Periodiek</strong> (pg_cron, REFRESH CONCURRENTLY) —
+eenvoudig, met vertragingsvenster.</p>
+<p><strong>Trigger-gebaseerd</strong> — bijna synchroon, meer overhead
+per schrijfactie.</p>
+<hr>
+<h2>Slide 13 — LISTEN/NOTIFY</h2>
+<p>Een tussenweg. Publish-subscribe, ingebouwd.</p>
+<h1>Let op: vereist een permanente,</h1>
+<h1>niet-gepoolde verbinding.</h1>
+<p>Dezelfde valkuil als deel 19 — nieuwe context.</p>
+<hr>
+<h2>Slide 14 — Opdracht 28.4</h2>
+<h1>Projecties automatiseren</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 15 — Pauze</h2>
+<hr>
+<h2>Slide 16 — Het spanningsveld</h2>
+<p>Onze events zijn onveranderlijk. <strong>Voor altijd.</strong></p>
+<p>Een deelnemer heeft recht op vergetelheid. <strong>Wettelijk.</strong></p>
+<h1>Hoe kan dat allebei waar zijn?</h1>
+<p><strong>Notities:</strong> laat de zaal even worstelen vóór het antwoord.</p>
+<hr>
+<h2>Slide 17 — Herformuleer de vraag</h2>
+<p>Je hoeft het event niet te verwijderen.</p>
+<h1>Je moet het onleesbaar maken.</h1>
+<hr>
+<h2>Slide 18 — Crypto-shredding</h2>
+<pre><code class="language-sql">CREATE TABLE deelnemer_sleutels (
+    deelnemer_id integer PRIMARY KEY, sleutel bytea
+);
+
+-- payload versleuteld met de sleutel van déze deelnemer
+</code></pre>
+<hr>
+<h2>Slide 19 — Het recht op vergetelheid, in code</h2>
+<pre><code class="language-sql">-- NIET: events verwijderen
+-- WEL:
+DELETE FROM deelnemer_sleutels WHERE deelnemer_id = 42;
+</code></pre>
+<p>Alle historische events: <strong>onherstelbaar onleesbaar.</strong>
+De structuur van de geschiedenis: <strong>intact.</strong></p>
+<hr>
+<h2>Slide 20 — Opdracht 28.5</h2>
+<h1>Het AVG-vraagstuk</h1>
+<p>Versleutel. Ontsleutel. Vernietig de sleutel.
+Probeer opnieuw te ontsleutelen.</p>
+<p><em>25 min, drietallen — het hart van dit dagdeel</em></p>
+<hr>
+<h2>Slide 21 — Wat je net zag</h2>
+<p>Het event bestaat nog. De payload niet meer leesbaar.</p>
+<h1>Toepassing van pgcrypto (deel 21)</h1>
+<h1>op een nieuw probleem.</h1>
+<hr>
+<h2>Slide 22 — De valkuil die het vaakst wordt vergeten</h2>
+<p>Een oude back-up van <code>deelnemer_sleutels</code>?</p>
+<h1>De sleutel overleeft daar mogelijk nog.</h1>
+<p>Bewaarbeleid voor back-ups (deel 17) moet
+consistent zijn met crypto-shredding.</p>
+<hr>
+<h2>Slide 23 — Event-schema-evolutie</h2>
+<pre><code class="language-json">{&quot;_version&quot;: 1, &quot;nieuw_salaris&quot;: 42000}
+{&quot;_version&quot;: 2, &quot;nieuw_salaris&quot;: 45000, &quot;reden&quot;: &quot;...&quot;}
+</code></pre>
+<p>Oude events blijven oud. <strong>Voor altijd.</strong>
+Geen “contract”-fase zoals deel 22.</p>
+<hr>
+<h2>Slide 24 — Upcasting</h2>
+<pre><code class="language-sql">CREATE FUNCTION upcast_salariswijziging(payload jsonb)
+    RETURNS jsonb AS $$ ... $$;
+</code></pre>
+<p>Vertaalt oude formaten naar het nieuwste vóór verwerking.</p>
+<hr>
+<h2>Slide 25 — Opdracht 28.6</h2>
+<h1>Schema-evolutie toepassen</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 26 — Testen: het goede nieuws</h2>
+<pre><code>Gegeven: [DienstverbandGestart, SalarisGewijzigd(40000)]
+Wanneer: verwerk_salariswijziging(70000)
+Dan: foutmelding, geen nieuw event
+</code></pre>
+<p>Event-sourced systemen zijn vaak <strong>makkelijker</strong> te testen.</p>
+<hr>
+<h2>Slide 27 — Monitoring: wat erbij komt</h2>
+<ul>
+<li>Groei van de event store (DELETE is geen optie)</li>
+<li><strong>Projectie-lag</strong></li>
+<li>unique_violation-conflicten per aggregaat</li>
+<li>Snapshot-leeftijd vs. streamlengte</li>
+</ul>
+<hr>
+<h2>Slide 28 — Opdracht 28.7</h2>
+<h1>Monitoring-signalen herkennen</h1>
+<p><em>10 min, individueel</em></p>
+<hr>
+<h2>Slide 29 — Meridiaan end-to-end</h2>
+<p>Commando → command handler → event → verwerking →
+projectie → (versleutelde) persoonsgegevens → partitionering</p>
+<p><strong>Geen ander systeem. Dezelfde mutatieverwerking,
+nu expliciet.</strong></p>
+<hr>
+<h2>Slide 30 — Opdracht 28.8</h2>
+<h1>Het implementatieplan</h1>
+<p>Command handlers met écht specifieke regels ·
+onderbouwde snapshotstrategie ·
+<strong>AVG-ontwerp gekoppeld aan deel 17</strong> ·
+een specifiek monitoringalarm</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 31 — Wat vandaag samenkwam</h2>
+<p>Deel 7 (concurrency) · 11 (checkpoint-ritme) · 15 (retry) ·
+19 (LISTEN/NOTIFY) · 21 (pgcrypto) · 17 (back-upbeleid)</p>
+<p><strong>Alles hergebruikt. Niets nieuw uitgevonden.</strong></p>
+<hr>
+<h2>Slide 32 — Volgende keer</h2>
+<h1>Deel 29 — Geo-distributie</h1>
+<p>Vandaag: wát je vastlegt, ook onder AVG-druk.</p>
+<p>Volgende keer: terug naar waar — nu op de schaal
+van meerdere regio’s en landsgrenzen.</p>
+<hr>
+<p><em>Einde slidedeck deel 28.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">22 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">279 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-27-event-sourcing-fundamenten/reader.html">&larr; Deel 27 — Event sourcing: fundamenten</a><a class="dbm-prevnext next" href="../deel-29-geo-distributie/reader.html">Deel 29 — Geo-distributie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

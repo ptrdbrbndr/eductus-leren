@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Fysiek ontwerp: pagina&#39;s, TOAST en bloat — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 12 — Slidedeck</h1>
+<p><strong>Fysiek ontwerp: pagina’s, TOAST en bloat</strong>
+Niveau 2, dagdeel 2 (deel 12 van 30) | 38 slides</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Fysiek ontwerp</h1>
+<h2>Pagina’s, TOAST en bloat</h2>
+<h3>Niveau 2 — Deel 12</h3>
+<hr>
+<h2>Slide 2 — Vorige keer</h2>
+<p><code>mutatie</code> was bijna <strong>twee keer zo groot</strong>
+als de gegevens erin.</p>
+<p>We vonden één oorzaak.</p>
+<h1>Wie kan er nog een noemen?</h1>
+<hr>
+<h2>Slide 3 — Vijf redenen</h2>
+<ol>
+<li><strong>Overhead per rij</strong> — 24 bytes administratie</li>
+<li><strong>Uitlijning</strong> — kolomvolgorde kost bytes</li>
+<li><strong>Bloat</strong> — dode rijversies</li>
+<li><strong>Fill factor</strong> — bewust vrijgelaten ruimte</li>
+<li><strong>Indexen</strong> — met hun eigen bloat</li>
+</ol>
+<p><strong>Notities:</strong> op het bord, laat staan. Elke opdracht vult er één in.</p>
+<hr>
+<h2>Slide 4 — Waarom dit ertoe doet</h2>
+<h1>Een tabel die 30% kleiner is,</h1>
+<h1>past 30% vaker in je bufferpool.</h1>
+<p>Dit gaat niet over schijfruimte.
+Het gaat over hoe vaak je van schijf moet lezen.</p>
+<hr>
+<h2>Slide 5 — De pagina van 8 kB</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Page header</td>
+<td>24 bytes</td>
+</tr>
+<tr>
+<td>Item pointers</td>
+<td>4 bytes per rij</td>
+</tr>
+<tr>
+<td><em>Vrije ruimte</em></td>
+<td>variabel</td>
+</tr>
+<tr>
+<td>Rijversies</td>
+<td>van achter naar voren</td>
+</tr>
+</tbody>
+</table>
+<p>Rijen en pointers groeien naar elkaar toe.
+Raken ze elkaar: pagina vol.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-12-1.png" alt="Figuur 12-1" loading="lazy"><figcaption>Figuur 12-1</figcaption></figure>
+<hr>
+<h2>Slide 6 — De rijheader</h2>
+<p><strong>24 bytes per rijversie</strong>, plus 4 voor de pointer.</p>
+<p><code>t_xmin</code> · <code>t_xmax</code> — de MVCC-velden uit deel 7
+<code>t_ctid</code> — waar de volgende versie staat
+NULL-bitmap — alleen als er NULL’s zijn</p>
+<hr>
+<h2>Slide 7 — Reken even mee</h2>
+<p>Tabel met twee <code>integer</code>-kolommen:</p>
+<ul>
+<li>gegevens: <strong>8 bytes</strong></li>
+<li>werkelijk verbruik: <strong>~36 bytes</strong></li>
+</ul>
+<h1>78% overhead.</h1>
+<hr>
+<h2>Slide 8 — Opdracht 12.1</h2>
+<h1>De overhead per rij</h1>
+<p>Wat betekent dit voor een tabel die je wilt
+opsplitsen “voor de netheid”?</p>
+<p><em>15 min</em></p>
+<hr>
+<h2>Slide 9 — Voorspel</h2>
+<pre><code class="language-sql">SELECT pg_column_size(ROW(1::smallint, 1::bigint, 1::smallint,
+                          1::bigint, 1::integer)) AS a,
+       pg_column_size(ROW(1::bigint, 1::bigint, 1::integer,
+                          1::smallint, 1::smallint)) AS b;
+</code></pre>
+<p>Zelfde kolommen. Andere volgorde.</p>
+<h1>Welke is groter, en met hoeveel?</h1>
+<hr>
+<h2>Slide 10 — Uitlijning</h2>
+<p>Waarden beginnen op hun natuurlijke grens.
+Wat daarvoor wordt overgeslagen, is <strong>verloren</strong>.</p>
+<pre><code>smallint (2) → 6 bytes opvulling → bigint (8)
+</code></pre>
+<p><strong>36 tegen 24 bytes.</strong> Op 2,4 miljoen rijen: 29 MB.</p>
+<hr>
+<h2>Slide 11 — De vuistregel</h2>
+<h1>Kolommen op aflopende grootte.</h1>
+<p>8 bytes (<code>bigint</code>, <code>timestamptz</code>)
+→ 4 bytes (<code>integer</code>, <code>date</code>)
+→ 2 bytes (<code>smallint</code>)
+→ <code>boolean</code>
+→ variabel (<code>text</code>, <code>numeric</code>, <code>jsonb</code>)</p>
+<hr>
+<h2>Slide 12 — Maar</h2>
+<p>Bij <code>werkgever</code> met 4.100 rijen: <strong>49 kB winst.</strong></p>
+<h1>Alleen waar het meetbaar is.</h1>
+<p>En: documenteer waarom de volgorde zo is —
+anders zet de volgende ontwikkelaar hem “netjes” terug.</p>
+<hr>
+<h2>Slide 13 — Opdracht 12.2</h2>
+<h1>Uitlijning meten</h1>
+<p><em>20 min, tweetallen</em></p>
+<hr>
+<h2>Slide 14 — TOAST</h2>
+<p>Een rij past nooit in meer dan één pagina.
+Wat doet PostgreSQL met een <code>text</code>-veld van 50 kB?</p>
+<p><strong>Boven ~2 kB:</strong> comprimeren, en zo nodig verplaatsen
+naar een aparte TOAST-tabel. In de rij blijft een
+verwijzing van 18 bytes.</p>
+<hr>
+<h2>Slide 15 — Twee dingen die je moet weten</h2>
+<p><strong>1.</strong> <code>pg_relation_size</code> telt TOAST <strong>niet</strong> mee.
+→ gebruik <code>pg_total_relation_size</code></p>
+<p><strong>2.</strong> Een TOAST-waarde ophalen kost een <strong>extra leesbewerking</strong>.</p>
+<hr>
+<h2>Slide 16 — Dus</h2>
+<pre><code class="language-sql">SELECT * FROM koppelvlakbericht;
+</code></pre>
+<h1>Het argument tegen <code>SELECT *</code> uit deel 3 —</h1>
+<h1>nu met een mechanisme erbij.</h1>
+<hr>
+<h2>Slide 17 — Opdracht 12.3</h2>
+<h1>TOAST zichtbaar maken</h1>
+<p>⚠ Let op: <code>repeat('c', 100000)</code> comprimeert tot vrijwel niets.
+Gebruik de willekeurige tekst uit het werkboek.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 18 — Pauze</h2>
+<hr>
+<h2>Slide 19 — Wat kost een UPDATE aan indexen?</h2>
+<p>Normaal: <strong>elke index</strong> die naar die rij wijst,
+krijgt een nieuwe verwijzing.</p>
+<p>Tien indexen = tien indexbijwerkingen. Voor één <code>UPDATE</code>.</p>
+<hr>
+<h2>Slide 20 — HOT: Heap-Only Tuple</h2>
+<p>Geen enkele index hoeft bij, als:</p>
+<h1>1. geen <strong>geïndexeerde kolom</strong> wijzigt</h1>
+<h1>2. de nieuwe versie past op <strong>dezelfde pagina</strong></h1>
+<hr>
+<h2>Slide 21 — Voorwaarde 2 = fill factor</h2>
+<pre><code class="language-sql">ALTER TABLE mutatie SET (fillfactor = 85);
+</code></pre>
+<p>Standaard is 100: pagina’s helemaal vol.
+Dan is er bij een <code>UPDATE</code> <strong>geen ruimte</strong> — geen HOT.</p>
+<hr>
+<h2>Slide 22 — De afruil</h2>
+<table>
+<thead>
+<tr>
+<th>Fill factor</th>
+<th>Voordeel</th>
+<th>Nadeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100</td>
+<td>Compact</td>
+<td>Geen HOT</td>
+</tr>
+<tr>
+<td>85-90</td>
+<td>HOT mogelijk</td>
+<td>10-15% meer pagina’s</td>
+</tr>
+<tr>
+<td>≤70</td>
+<td>—</td>
+<td>Verspilling</td>
+</tr>
+</tbody>
+</table>
+<p>⚠ Werkt alleen voor <strong>nieuwe</strong> pagina’s.</p>
+<hr>
+<h2>Slide 23 — Meten of het werkt</h2>
+<pre><code class="language-sql">SELECT relname, n_tup_upd, n_tup_hot_upd,
+       round(100.0*n_tup_hot_upd/nullif(n_tup_upd,0),1) AS pct_hot
+FROM pg_stat_user_tables ORDER BY n_tup_upd DESC;
+</code></pre>
+<p>Laag percentage bij veel updates = concrete verbeterkans.</p>
+<hr>
+<h2>Slide 24 — Opdracht 12.4</h2>
+<h1>HOT-updates en fill factor</h1>
+<p>Drie experimenten. Voorspel eerst.</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 25 — Bloat: drie bronnen</h2>
+<ol>
+<li><strong>Updates en deletes</strong> — MVCC (deel 7)</li>
+<li><strong>Lang lopende transacties</strong></li>
+<li><strong>Autovacuum die het niet bijhoudt</strong> (deel 11)</li>
+</ol>
+<p>Het doel is <strong>niet nul</strong>. Onder 20% is prima.
+De <strong>trend</strong> zegt meer dan het getal.</p>
+<hr>
+<h2>Slide 26 — Meten</h2>
+<p><strong>Schatting</strong> — goedkoop, ruw:</p>
+<pre><code class="language-sql">SELECT relname, n_dead_tup, … FROM pg_stat_user_tables;
+</code></pre>
+<p><strong>Exact</strong> — duur, scant de hele tabel:</p>
+<pre><code class="language-sql">SELECT * FROM pgstattuple('mutatie');
+SELECT * FROM pgstattuple_approx('mutatie');  -- steekproef
+</code></pre>
+<hr>
+<h2>Slide 27 — Opruimen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Ruimte terug naar OS</th>
+<th>Lock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>VACUUM</code></td>
+<td>Nee</td>
+<td>Licht</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code></td>
+<td>Ja</td>
+<td><strong>Alles wacht</strong></td>
+</tr>
+<tr>
+<td><code>pg_repack</code></td>
+<td>Ja</td>
+<td>Kort, begin en eind</td>
+</tr>
+</tbody>
+</table>
+<p>Voor productie die niet uit mag: <strong>pg_repack</strong>.</p>
+<hr>
+<h2>Slide 28 — De volgorde</h2>
+<h1>1. Zoek de oorzaak</h1>
+<h1>2. Los de oorzaak op</h1>
+<h1>3. Ruim dan pas op</h1>
+<p>Wie 1 en 2 overslaat, herschrijft elk kwartaal dezelfde tabel.</p>
+<hr>
+<h2>Slide 29 — Even meekijken</h2>
+<p><strong>Sessie 2:</strong> <code>BEGIN; SELECT count(*) FROM mutatie;</code> — verder niets</p>
+<p><strong>Sessie 1:</strong> rijen bijwerken, dan <code>VACUUM (VERBOSE)</code></p>
+<p><strong>Notities:</strong> plenair in twee vensters. Toon dat er rijen niet verwijderd kunnen worden.</p>
+<hr>
+<h2>Slide 30 — De vraag</h2>
+<p>Sessie 2 heeft <strong>één</strong> tabel aangeraakt.</p>
+<h1>In welke tabellen kan vacuum</h1>
+<h1>nu niets opruimen?</h1>
+<p><strong>Alle.</strong></p>
+<hr>
+<h2>Slide 31 — Dus</h2>
+<h1><code>idle in transaction</code> is geen</h1>
+<h1>netheidskwestie.</h1>
+<p>Het is de meest onderschatte oorzaak van een volle schijf.</p>
+<p><em>(En daarom stond <code>idle_in_transaction_session_timeout</code> in je configuratievoorstel van deel 11.)</em></p>
+<hr>
+<h2>Slide 32 — Opdracht 12.5</h2>
+<h1>Bloat meten en opruimen</h1>
+<p>Inclusief de openstaande transactie.</p>
+<p><em>25 min, tweetallen</em></p>
+<hr>
+<h2>Slide 33 — Freeze en wraparound</h2>
+<p>De transactieteller is <strong>32 bits</strong> en loopt rond.
+Vacuum <strong>bevriest</strong> oude rijen om dat op te vangen.</p>
+<pre><code class="language-sql">SELECT relname, age(relfrozenxid) FROM pg_class …;
+</code></pre>
+<hr>
+<h2>Slide 34 — Vier fasen als je dit negeert</h2>
+<ol>
+<li>Agressieve freeze-run — I/O op een ongelegen moment</li>
+<li>Waarschuwingen in de log</li>
+<li>Waarschuwing bij <strong>elke commit</strong></li>
+<li><strong>De database weigert nieuwe transacties</strong></li>
+</ol>
+<p>Herstel: single-user mode. Met downtime.</p>
+<hr>
+<h2>Slide 35 — Waarom juist dit monitoren</h2>
+<h1>De enige waarde uit dit dagdeel</h1>
+<h1>waarbij falen catastrofaal is</h1>
+<h1>in plaats van geleidelijk.</h1>
+<p>En de enige die je <strong>maanden van tevoren</strong> ziet aankomen.</p>
+<hr>
+<h2>Slide 36 — Index Only Scan met Heap Fetches</h2>
+<pre><code>Index Only Scan using … (actual rows=1000)
+  Heap Fetches: 987
+</code></pre>
+<p>De index is prima. Wat ontbreekt is de <strong>zichtbaarheidsinformatie</strong>.</p>
+<h1>De oplossing is <code>VACUUM</code>.</h1>
+<h1>Niet een andere index.</h1>
+<hr>
+<h2>Slide 37 — Tel eens mee</h2>
+<p>Vacuum is nu <strong>drie keer</strong> een prestatievraag gebleken:</p>
+<ol>
+<li>Statistieken → queryplannen (deel 8)</li>
+<li>Bloat → tabelomvang (vandaag)</li>
+<li>Visibility map → index-only scans (vandaag)</li>
+</ol>
+<p><strong>Notities:</strong> als de zaal dit patroon zelf benoemt, is het dagdeel geslaagd.</p>
+<hr>
+<h2>Slide 38 — Opdracht 12.9 &amp; volgende keer</h2>
+<p><strong>12.9</strong> Het opslagadvies voor Ruud — <em>30 min, drietallen</em>
+Onderscheid <strong>nu opruimen</strong> van <strong>voorkomen dat het terugkomt</strong>.</p>
+<p><strong>Deel 13 — Query-optimalisatie</strong>
+Welke query’s doen er werkelijk toe? Zelden die waarover geklaagd wordt.</p>
+<p>⚠ <strong>Controleer dat <code>pg_stat_statements</code> in <code>shared_preload_libraries</code> staat.</strong>
+Zo niet: plan een herstart vóór volgende keer.</p>
+<hr>
+<p><em>Einde slidedeck deel 12.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">58 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">24 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">384 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-11-installatie-configuratie-en-tablespaces/reader.html">&larr; Deel 11 — Installatie, configuratie en tablespaces</a><a class="dbm-prevnext next" href="../deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

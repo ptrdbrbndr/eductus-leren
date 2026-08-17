@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Concurrency en locking — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 15 — Slidedeck</h1>
+<p><strong>Concurrency en locking</strong>
+Niveau 2, dagdelen 5 en 6 (deel 15 van 30) | 52 slides — twee dagdelen</p>
+<blockquote>
+<p><code>---</code> scheidt slides. <strong>Notities:</strong> = spreektekst.
+Slides 1-26: dagdeel A. Slides 27-52: dagdeel B.</p>
+</blockquote>
+<hr>
+<hr>
+<h1>DAGDEEL A</h1>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>Concurrency en locking</h1>
+<h2>Dagdeel A — Locks</h2>
+<h3>Niveau 2 — Deel 15</h3>
+<hr>
+<h2>Slide 2 — Vier dagdelen sneller</h2>
+<p>Jullie hebben query’s sneller gemaakt.</p>
+<h1>Dinsdagavond gaat het portaal alsnog onderuit.</h1>
+<p>De query’s zijn niet trager. <strong>Ze wachten.</strong></p>
+<hr>
+<h2>Slide 3 — Twee verschijnselen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>CPU</th>
+<th>I/O</th>
+<th><code>pg_stat_activity</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trage query</td>
+<td>Hoog</td>
+<td>Hoog</td>
+<td><code>active</code></td>
+</tr>
+<tr>
+<td><strong>Vergrendeling</strong></td>
+<td><strong>Laag</strong></td>
+<td><strong>Laag</strong></td>
+<td><code>wait_event_type='Lock'</code></td>
+</tr>
+</tbody>
+</table>
+<p>Alle vertrouwde signalen blijven normaal.
+En toch reageert niets.</p>
+<hr>
+<h2>Slide 4 — Open drie sessies</h2>
+<p><strong>Dit dagdeel werkt met S1, S2 en S3 naast elkaar.</strong></p>
+<pre><code class="language-sql">\set PROMPT1 'S1 %/%R%# '
+</code></pre>
+<p><strong>Notities:</strong> controleer nu dat het bij iedereen lukt.</p>
+<hr>
+<h2>Slide 5 — Acht locktypen</h2>
+<table>
+<thead>
+<tr>
+<th>Lock</th>
+<th>Genomen door</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ACCESS SHARE</code></td>
+<td><code>SELECT</code></td>
+</tr>
+<tr>
+<td><code>ROW EXCLUSIVE</code></td>
+<td><code>INSERT/UPDATE/DELETE</code></td>
+</tr>
+<tr>
+<td><code>SHARE UPDATE EXCLUSIVE</code></td>
+<td><code>VACUUM</code>, <code>CREATE INDEX CONCURRENTLY</code></td>
+</tr>
+<tr>
+<td><code>SHARE</code></td>
+<td><code>CREATE INDEX</code></td>
+</tr>
+<tr>
+<td><strong><code>ACCESS EXCLUSIVE</code></strong></td>
+<td><code>ALTER TABLE</code>, <code>DROP</code>, <code>TRUNCATE</code></td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-15-1.png" alt="Figuur 15-1" loading="lazy"><figcaption>Figuur 15-1</figcaption></figure>
+<hr>
+<h2>Slide 6 — Twee regels om te onthouden</h2>
+<h1><code>ACCESS SHARE</code> conflicteert met bijna niets.</h1>
+<h1><code>ACCESS EXCLUSIVE</code> conflicteert met alles.</h1>
+<p>Elkaars tegenpolen.</p>
+<p>En: <code>SHARE UPDATE EXCLUSIVE</code> conflicteert met <strong>zichzelf</strong> —
+twee VACUUM-runs wachten op elkaar.</p>
+<hr>
+<h2>Slide 7 — Opdracht 15.1</h2>
+<h1>De conflictmatrix ervaren</h1>
+<p>Zeven combinaties. Voorspel, test, vergelijk.</p>
+<p><em>20 min, drietallen</em></p>
+<hr>
+<h2>Slide 8 — Nu de grote</h2>
+<p><strong>Notities:</strong> langzaam, met de zaal, op het grote scherm.</p>
+<pre><code>S1:  BEGIN; SELECT count(*) FROM deelnemer;
+     -- laat openstaan
+</code></pre>
+<hr>
+<h2>Slide 9 — En dan</h2>
+<pre><code>S2:  ALTER TABLE deelnemer ADD COLUMN e_mailadres text;
+</code></pre>
+<h1>Wacht S2? Waarom wel of niet?</h1>
+<hr>
+<h2>Slide 10 — En dan de vraag</h2>
+<pre><code>S3:  SELECT achternaam FROM deelnemer WHERE deelnemer_id = 42;
+</code></pre>
+<p>Normaal: 0,3 ms. <code>ACCESS SHARE</code> — conflicteert <strong>niet</strong> met S1.</p>
+<h1>Gaat hij snel zijn?</h1>
+<p><strong>Notities:</strong> meerderheid zegt ja. Voer uit.</p>
+<hr>
+<h2>Slide 11 — Hij hangt.</h2>
+<p><strong>Notities:</strong> stilte laten vallen.</p>
+<h1>Niet de duur van de opdracht</h1>
+<h1>bepaalt de schade.</h1>
+<h1>De duur van het wachten.</h1>
+<hr>
+<h2>Slide 12 — De wachtrij is ordelijk</h2>
+<p>S3 conflicteert niet met S1.
+Maar S3 staat <strong>achter S2</strong> in de rij.</p>
+<h1>Niemand gaat voorbij een wachtende</h1>
+<h1>conflicterende lock.</h1>
+<hr>
+<h2>Slide 13 — Wat er echt gebeurde</h2>
+<p>De <code>ALTER TABLE</code> duurde 2 ms.</p>
+<p>Hij stond er alleen <strong>twintig minuten voor in de rij</strong> —
+en alles daarachter stond mee stil.</p>
+<hr>
+<h2>Slide 14 — Opdracht 15.2</h2>
+<h1>De lockwachtrij</h1>
+<p>Reproduceer het zelf. Los het op met <code>lock_timeout</code>.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 15 — Pauze</h2>
+<hr>
+<h2>Slide 16 — Wie blokkeert wie</h2>
+<pre><code class="language-sql">SELECT pid, wait_event_type, wait_event,
+       pg_blocking_pids(pid), left(query,80)
+FROM pg_stat_activity WHERE state &lt;&gt; 'idle';
+</code></pre>
+<h1>Zoek de sessie zonder blokkeerder</h1>
+<h1>die zelf wél blokkeert.</h1>
+<p>Dat is de wortel.</p>
+<hr>
+<h2>Slide 17 — Ingrijpen</h2>
+<pre><code class="language-sql">SELECT pg_cancel_backend(12345);     -- annuleert de query
+SELECT pg_terminate_backend(12345);  -- beëindigt de sessie
+</code></pre>
+<p>Probeer eerst <code>cancel</code>. Bij <code>idle in transaction</code>
+doet dat <strong>niets</strong> — er draait geen query.</p>
+<hr>
+<h2>Slide 18 — Zonder dit zie je niets terug</h2>
+<pre><code>log_lock_waits = on
+deadlock_timeout = 1s
+</code></pre>
+<p>Zonder deze regel is een vergrendelingsincident
+achteraf niet te reconstrueren.</p>
+<hr>
+<h2>Slide 19 — Opdracht 15.3</h2>
+<h1>Diagnose</h1>
+<p><em>15 min, tweetallen</em></p>
+<hr>
+<h2>Slide 20 — Vier timeouts, vier doelen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Beëindigt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>statement_timeout</code></td>
+<td>Een query die te lang <strong>draait</strong></td>
+</tr>
+<tr>
+<td><strong><code>lock_timeout</code></strong></td>
+<td>Een query die te lang <strong>wacht</strong></td>
+</tr>
+<tr>
+<td><code>idle_in_transaction_session_timeout</code></td>
+<td>Een vergeten open transactie</td>
+</tr>
+<tr>
+<td><code>transaction_timeout</code></td>
+<td>Een harde bovengrens</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 21 — De vuistregel</h2>
+<h1><code>lock_timeout</code> begrenst het wachten.</h1>
+<h1><code>statement_timeout</code> begrenst het werken.</h1>
+<p>Elke DDL op productie: <code>lock_timeout</code>. <strong>Zonder uitzondering.</strong></p>
+<hr>
+<h2>Slide 22 — Opdracht 15.4</h2>
+<h1>De vier timeouts</h1>
+<p><em>20 min</em></p>
+<hr>
+<h2>Slide 23 — Deadlocks: het contra-intuïtieve geval</h2>
+<p>Twee sessies. <strong>Geen van beide wijzigt de ouderrij.</strong>
+Ze voegen alleen kindrijen in.</p>
+<h1>En toch een deadlock.</h1>
+<p><strong>Notities:</strong> laat de zaal raden waarom, voordat je <code>FOR KEY SHARE</code> noemt.</p>
+<hr>
+<h2>Slide 24 — Advisory locks</h2>
+<pre><code class="language-sql">SELECT pg_try_advisory_xact_lock(90210);
+</code></pre>
+<p>Voor coördinatie <strong>buiten de gegevens om</strong>:
+<em>“deze batch mag maar één keer tegelijk draaien”</em></p>
+<p>⚠ Sessieversie overleeft een <code>ROLLBACK</code> NIET —
+en blijft hangen in een connection pool.</p>
+<hr>
+<h2>Slide 25 — Opdracht 15.5, 15.6 &amp; 15.7</h2>
+<p><strong>15.5</strong> Deadlocks op schaal — <em>20 min</em>
+<strong>15.6</strong> Advisory locks — <em>15 min</em>
+<strong>15.7</strong> DDL en locks — <em>20 min</em></p>
+<hr>
+<h2>Slide 26 — Opdracht 15.8</h2>
+<h1>Het veilige migratiepatroon</h1>
+<pre><code class="language-sql">-- Stap 1: kort, ACCESS EXCLUSIVE
+ALTER TABLE … ADD CONSTRAINT … NOT VALID;
+-- Stap 2: lang, SHARE UPDATE EXCLUSIVE — schrijvers gaan door
+ALTER TABLE … VALIDATE CONSTRAINT …;
+</code></pre>
+<p>Simuleer productie. <strong>Bewijs</strong> dat het portaal doorliep.</p>
+<p><em>45 min, drietallen</em></p>
+<hr>
+<hr>
+<h1>DAGDEEL B</h1>
+<hr>
+<h2>Slide 27 — Titel</h2>
+<h1>Concurrency en locking</h1>
+<h2>Dagdeel B — Isolatie en gelijktijdige werklast</h2>
+<h3>Niveau 2 — Deel 15</h3>
+<hr>
+<h2>Slide 28 — Vorige keer</h2>
+<p>We zorgden dat query’s elkaar niet <strong>onnodig blokkeren</strong>.</p>
+<h1>Vandaag: hoe zorg je dat gelijktijdige</h1>
+<h1>transacties elkaar niet stiekem</h1>
+<h1>tegenspreken?</h1>
+<hr>
+<h2>Slide 29 — De vraag die het niveau bepaalt</h2>
+<p>Niet: <em>“hoe belangrijk is dit?”</em></p>
+<h1>Leest deze transactie iets waarop hij</h1>
+<h1>een besluit baseert dat door een</h1>
+<h1>gelijktijdige transactie ongeldig</h1>
+<h1>kan worden?</h1>
+<hr>
+<h2>Slide 30 — Zes handelingen, zes keuzes</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Niveau</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Portaal: gegevens tonen</td>
+<td>Read committed</td>
+</tr>
+<tr>
+<td>Adreswijziging</td>
+<td>Read committed + versiekolom</td>
+</tr>
+<tr>
+<td>Kwartaalrapportage</td>
+<td><strong>Repeatable read</strong></td>
+</tr>
+<tr>
+<td>Waardeoverdracht</td>
+<td><strong>Serializable</strong></td>
+</tr>
+<tr>
+<td>Premienotarun</td>
+<td>Read committed, per partij</td>
+</tr>
+<tr>
+<td>Max. 3 dienstverbanden?</td>
+<td><strong>???</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 31 — Opdracht 15.9</h2>
+<h1>Isolatieniveau kiezen</h1>
+<p>Bewaar de laatste voor de bespreking.</p>
+<p><em>15 min, drietallen</em></p>
+<hr>
+<h2>Slide 32 — Welke rij vergrendel je?</h2>
+<p><em>“Controleer of een deelnemer minder dan drie
+lopende dienstverbanden heeft, en voeg er dan één toe.”</em></p>
+<h1>Er is geen rij.</h1>
+<p>Je vergrendelt een <strong>afwezigheid</strong>.</p>
+<hr>
+<h2>Slide 33 — Onder read committed</h2>
+<p>Twee sessies tellen allebei 2. Beide voegen toe.</p>
+<h1>Resultaat: 4.</h1>
+<p>Geen foutmelding. De regel is geschonden.</p>
+<hr>
+<h2>Slide 34 — SSI</h2>
+<p>PostgreSQL implementeert <code>SERIALIZABLE</code>
+<strong>zonder extra locks.</strong></p>
+<p>Hij houdt bij welke afhankelijkheden ontstaan,
+en breekt af zodra geen seriële volgorde meer klopt.</p>
+<pre><code>ERROR: could not serialize access due to
+       read/write dependencies among transactions
+</code></pre>
+<hr>
+<h2>Slide 35 — Het onderscheid</h2>
+<h1>Repeatable read voorkomt een</h1>
+<h1><strong>inconsistent beeld</strong>.</h1>
+<h1>Serializable voorkomt een besluit</h1>
+<h1>dat door een gelijktijdige transactie</h1>
+<h1><strong>ongeldig wordt</strong>.</h1>
+<hr>
+<h2>Slide 36 — Wat het kost</h2>
+<ol>
+<li><strong>Retry-logica is verplicht</strong></li>
+<li>Overhead — predicate locks per transactie</li>
+<li><strong>Valse afbrekingen</strong> — soms zonder écht conflict</li>
+</ol>
+<p>Houd serializable-transacties <strong>kort en smal</strong>.</p>
+<hr>
+<h2>Slide 37 — Opdracht 15.10</h2>
+<h1>Serializable in de praktijk</h1>
+<p>Eerst read committed (fout resultaat).
+Dan serializable (foutmelding — en dat is goed nieuws).</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 38 — Pauze</h2>
+<hr>
+<h2>Slide 39 — Retry: het patroon</h2>
+<pre><code>zolang poging &lt; 5:
+    BEGIN
+    probeer de HELE transactie
+    bij 40001 of 40P01:
+        ROLLBACK, wacht (oplopend + willekeurig)
+    anders: door naar de aanroeper
+geef op met een begrijpelijke melding
+</code></pre>
+<hr>
+<h2>Slide 40 — Drie details die ertoe doen</h2>
+<h1>De <strong>hele</strong> transactie opnieuw.</h1>
+<h1><strong>Spreiding</strong> in de wachttijd.</h1>
+<h1>Een <strong>bovengrens</strong>.</h1>
+<p>Zonder spreiding: alle afgebroken transacties
+botsen op hetzelfde moment opnieuw.</p>
+<hr>
+<h2>Slide 41 — Wat je nooit doet</h2>
+<h1>De fout loggen en doorgaan.</h1>
+<p>Een genegeerde serialisatiefout betekent:
+de handeling is niet uitgevoerd,
+en de gebruiker denkt van wel.</p>
+<hr>
+<h2>Slide 42 — Opdracht 15.11</h2>
+<h1>Retry-logica</h1>
+<p>Bouw hem. Test hem: laat twee sessies elkaar
+herhaaldelijk afbreken tot beide slagen.</p>
+<p><em>20-30 min, drietallen</em></p>
+<hr>
+<h2>Slide 43 — Wachtrij op schaal</h2>
+<pre><code class="language-sql">WITH pakket AS (
+  SELECT mutatie_id FROM mutatie
+  WHERE verwerkt_op IS NULL
+  ORDER BY aangemeld_op LIMIT 50
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE mutatie … RETURNING …;
+</code></pre>
+<hr>
+<h2>Slide 44 — Externe aanroep: binnen of buiten?</h2>
+<p><strong>Binnen de transactie:</strong> locks blijven vast tijdens het wachten
+→ doorvoer stort in</p>
+<p><strong>Buiten:</strong> rijen vergrendeld, opgehaald, transactie sluit,
+dán de aanroep, dán een korte update</p>
+<p>→ verwerking moet <strong>idempotent</strong> zijn</p>
+<hr>
+<h2>Slide 45 — Opdracht 15.12</h2>
+<h1>Wachtrij op schaal</h1>
+<p>Inclusief: een gifpakket dat altijd faalt.</p>
+<p><em>25 min, drietallen</em></p>
+<hr>
+<h2>Slide 46 — De hotspot</h2>
+<p>Eén tellerrij. Drie sessies die hem bijwerken.</p>
+<h1>Is dat drie keer zo snel?</h1>
+<p><strong>Notities:</strong> laat de zaal echt meten voordat je antwoord geeft.</p>
+<hr>
+<h2>Slide 47 — Nee.</h2>
+<p>Vaak nauwelijks sneller dan <strong>één</strong> sessie.</p>
+<h1>Niet op te lossen met een index,</h1>
+<h1>meer geheugen, of snellere schijven.</h1>
+<p>Iedereen wil dezelfde rij.</p>
+<hr>
+<h2>Slide 48 — Drie oplossingen</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Doorvoer</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Opdelen (100 rijen)</td>
+<td>Goed</td>
+<td>Lezen iets duurder</td>
+</tr>
+<tr>
+<td><strong>Invoegen i.p.v. bijwerken</strong></td>
+<td><strong>Best</strong></td>
+<td>Opslag; opruimen nodig</td>
+</tr>
+<tr>
+<td>Buiten de database</td>
+<td>Snel</td>
+<td>Verlies bij crash</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 49 — Opdracht 15.13</h2>
+<h1>De hotspot</h1>
+<p>Meet alle drie de oplossingen. Zelf.</p>
+<p><em>30 min, drietallen</em></p>
+<hr>
+<h2>Slide 50 — Pooling: een herhaling met opzet</h2>
+<p><code>SET</code> → gebruik <code>SET LOCAL</code>
+<code>pg_advisory_lock</code> → gebruik <code>pg_advisory_xact_lock</code></p>
+<h1>Anders lekt jouw instelling</h1>
+<h1>naar de volgende gebruiker</h1>
+<h1>van die verbinding.</h1>
+<p><em>(Deel 19.)</em></p>
+<hr>
+<h2>Slide 51 — Monitoring</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Drempel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sessies wachtend op een lock</td>
+<td>&gt;5, of &gt;30s</td>
+</tr>
+<tr>
+<td>Langste transactie</td>
+<td>&gt;5 min</td>
+</tr>
+<tr>
+<td><code>idle in transaction</code></td>
+<td>&gt;2, of &gt;1 min</td>
+</tr>
+<tr>
+<td>Deadlocks per dag</td>
+<td>&gt;5</td>
+</tr>
+<tr>
+<td>Actief / verbonden</td>
+<td>&gt;50%</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 52 — Opdracht 15.14 &amp; volgende keer</h2>
+<h1>Het gelijktijdigheidsplan</h1>
+<p>Per handeling: niveau + reden · migratieprotocol ·
+teamafspraken · <strong>één onderbouwde ontwerpwijziging</strong></p>
+<p><em>35-40 min, drietallen</em></p>
+<p><strong>Deel 16 — Partitionering</strong>
+De hotspot-oplossing van vandaag — invoegen, niet bijwerken —
+is precies waar partitionering op aansluit. Oude perioden
+gooi je straks niet rij voor rij weg, maar in één keer.</p>
+<hr>
+<p><em>Einde slidedeck deel 15.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">69 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">32 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">540 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-14-geavanceerde-indexering/reader.html">&larr; Deel 14 — Geavanceerde indexering</a><a class="dbm-prevnext next" href="../deel-16-partitionering/reader.html">Deel 16 — Partitionering &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

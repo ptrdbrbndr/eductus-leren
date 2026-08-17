@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slidedeck — Wide-column en graaf in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; NoSQL-elective &rsaquo; Wide-column en graaf in de praktijk &rsaquo; Slidedeck</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html" class="active">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>NoSQL-elective, deel 2 — Slidedeck</h1>
+<p><strong>Wide-column en graaf in de praktijk</strong>
+Elective-deel 2 van 2 | buiten de dertig-delen-nummering</p>
+<blockquote>
+<p>Notatie: <code>---</code> scheidt slides. Tekst onder <strong>Notities:</strong> is spreektekst voor de docent en staat niet op de slide.</p>
+</blockquote>
+<hr>
+<h2>Slide 1 — Titel</h2>
+<h1>NoSQL-elective</h1>
+<h2>Deel 2 — Wide-column en graaf in de praktijk</h2>
+<p><em>Cursus Databasemanagement | Ductus — elective, geen aparte certificeringslijn</em></p>
+<hr>
+<h2>Slide 2 — Terugblik</h2>
+<p><strong>Deel 1: Redis (cache) en MongoDB (documenten)</strong></p>
+<p><strong>Vandaag: Cassandra (wide-column) en Neo4j (graaf)</strong></p>
+<p><em>De laatste twee scenario’s uit deel 21, paragraaf 13.</em></p>
+<hr>
+<h2>Slide 3 — Cassandra: wat het is</h2>
+<p><strong>Wide-column store</strong></p>
+<ul>
+<li>Tabellen, maar het ontwerp draait om twee sleuteltypen</li>
+<li>Partition key → welke machine</li>
+<li>Clustering key → sorteervolgorde binnen die partition</li>
+</ul>
+<hr>
+<h2>Slide 4 — De denk-omkering</h2>
+<p><strong>Niveau 1: ontwerp rond de entiteit, query’s volgen daarna</strong></p>
+<p><strong>Cassandra: ontwerp rond de query, entiteit volgt daarna</strong></p>
+<p><em>Vaak meerdere tabellen, dezelfde data, elk voor één toegangspatroon.</em></p>
+<hr>
+<h2>Slide 5 — Waarom dit zo goed schaalt</h2>
+<p>Partition key bepaalt vooraf waar een rij naartoe gaat →</p>
+<p><strong>schrijven over honderden machines zonder coördinatie</strong></p>
+<p>Prijs: ad-hoc query’s zonder filter op de partition key zijn traag of onmogelijk.</p>
+<hr>
+<h2>Slide 6 — Praktijk: portaal-telemetrie</h2>
+<p><strong>“Laatste honderd paginaweergaven van deelnemer X, nieuwste eerst”</strong></p>
+<pre><code>CREATE TABLE portaal_bezoeken_per_deelnemer (
+  deelnemer_id bigint,
+  bezocht_op timestamp,
+  pagina text,
+  PRIMARY KEY (deelnemer_id, bezocht_op)
+) WITH CLUSTERING ORDER BY (bezocht_op DESC);
+</code></pre>
+<p><strong>Notities:</strong> deelnemer_id = partition key, bezocht_op = clustering key.</p>
+<hr>
+<h2>Slide 7 — Een tweede vraag, een tweede tabel</h2>
+<p><strong>“Hoeveel bezoeken per dag, over alle deelnemers?”</strong></p>
+<p>De eerste tabel kan dit niet efficiënt beantwoorden.</p>
+<p><em>Bewuste duplicatie — het normale patroon in Cassandra, geen ontwerpfout.</em></p>
+<hr>
+<h2>Slide 8 — Opdracht EL2.1</h2>
+<p><strong>Ontwerp de tweede tabel</strong></p>
+<p>Partition key, clustering key, en de vraag of duplicatie hier een fout of een keuze is.</p>
+<p><em>15 minuten</em></p>
+<hr>
+<h2>Slide 9 — Neo4j: wat het is</h2>
+<p><strong>Graafdatabase</strong></p>
+<ul>
+<li>Nodes (knopen)</li>
+<li>Relationships (relaties, met richting en type)</li>
+<li>Properties (attributen op beide)</li>
+</ul>
+<hr>
+<h2>Slide 10 — Het echte verschil met relationeel</h2>
+<p><strong>SQL-join: berekent het verband tijdens de query, elke keer opnieuw</strong></p>
+<p><strong>Graafrelatie: fysiek opgeslagen verbinding</strong></p>
+<p><em>Constante tijd per stap, ongeacht de rest van de database.</em></p>
+<hr>
+<h2>Slide 11 — De vraag uit deel 21</h2>
+<p><strong>“Welke deelnemers delen een werkgever binnen twee schakels, via welke tussenliggende relaties”</strong></p>
+<p>Toen: onhandelbaar in SQL bij grote, diepe netwerken.
+Nu: uitgewerkt in Cypher.</p>
+<hr>
+<h2>Slide 12 — Directe collega’s in Cypher</h2>
+<pre><code>MATCH (d1:Deelnemer {id: 4821})-[:WERKT_BIJ]-&gt;(w:Werkgever)&lt;-[:WERKT_BIJ]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN DISTINCT d2.naam, w.naam AS gedeelde_werkgever;
+</code></pre>
+<p><strong>Notities:</strong> leg uit waarom <code>WHERE d1 &lt;&gt; d2</code> nodig is.</p>
+<hr>
+<h2>Slide 13 — Binnen twee schakels</h2>
+<pre><code>MATCH path = (d1:Deelnemer {id: 4821})-[:WERKT_BIJ|DEELNEEMT_AAN*1..2]-(d2:Deelnemer)
+WHERE d1 &lt;&gt; d2
+RETURN DISTINCT d2.naam, [r IN relationships(path) | type(r)] AS via;
+</code></pre>
+<p>Het pad is een eersteklas concept in de query — geen herhaalde join.</p>
+<hr>
+<h2>Slide 14 — Vergelijk met de recursieve CTE</h2>
+<p><strong>Bij twee schakels: recursieve CTE (deel 4/8) prima werkbaar</strong></p>
+<p><strong>Bij vier, vijf, onbekend veel schakels: het verschil wordt beslissend</strong></p>
+<p><em>Zelfde vraag, andere schaal — dan pas telt het verschil.</em></p>
+<hr>
+<h2>Slide 15 — Opdracht EL2.2</h2>
+<p><strong>Cypher lezen en uitbreiden met <code>count()</code></strong></p>
+<p><em>15 minuten</em></p>
+<hr>
+<h2>Slide 16 — Grenzen: Cassandra</h2>
+<p><strong>Eventual consistency</strong> — geen garantie dat een schrijving overal direct zichtbaar is</p>
+<p>Acceptabel voor telemetrie. Onacceptabel voor een pensioensaldo.</p>
+<hr>
+<h2>Slide 17 — Grenzen: Neo4j</h2>
+<p><strong>Beperkte aggregatiekracht</strong></p>
+<p>“Gemiddeld saldo per leeftijdscategorie, over 340.000 deelnemers” — blijft het domein van het relationele model.</p>
+<hr>
+<h2>Slide 18 — Opdracht EL2.3</h2>
+<p><strong>Drie scenario’s — Cassandra, Neo4j, of geen van beide?</strong></p>
+<p><em>15 minuten</em></p>
+<hr>
+<h2>Slide 19 — De vier systemen op een rij</h2>
+<table>
+<thead>
+<tr>
+<th>Systeem</th>
+<th>Scenario</th>
+<th>Uniek goed in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis</td>
+<td>Sessie-cache</td>
+<td>Sub-ms sleutel-opzoeking</td>
+</tr>
+<tr>
+<td>MongoDB</td>
+<td>Documenten</td>
+<td>Variërend schema</td>
+</tr>
+<tr>
+<td>Cassandra</td>
+<td>Telemetrie</td>
+<td>Schrijfschaal</td>
+</tr>
+<tr>
+<td>Neo4j</td>
+<td>Relaties</td>
+<td>Constante tijd per pad-stap</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>Slide 20 — Wat niet verandert</h2>
+<p><strong>Meridiaans kernregistratie blijft relationeel, in PostgreSQL.</strong></p>
+<p>Integriteit, transactionele garanties, generieke query-flexibiliteit — waar het relationele model sterk in is.</p>
+<hr>
+<h2>Slide 21 — Opdracht EL2.4 (hoofdopdracht)</h2>
+<p><strong>Een vijfde scenario: nachtelijk herberekend risicoprofiel</strong></p>
+<p>Past dit bij één van de vier systemen, of bij een techniek binnen PostgreSQL zelf?</p>
+<p><em>25 minuten, individueel</em></p>
+<hr>
+<h2>Slide 22 — Pauze</h2>
+<hr>
+<h2>Slide 23 — Bespreking hoofdopdracht</h2>
+<p><strong>Materialized view — geen vijfde systeem nodig</strong></p>
+<p>Zeldzaam schrijven, veel lezen: precies het patroon waar een materialized view voor bedoeld is.</p>
+<hr>
+<h2>Slide 24 — De valkuil die deze hele elective test</h2>
+<p><strong>“Nieuw probleem, dus nieuw systeem” slaat een stap over.</strong></p>
+<p>Eerst onderzoeken wat PostgreSQL al kan — pas dan, met een gemeten knelpunt, een gespecialiseerd alternatief.</p>
+<p><strong>Notities:</strong> dit is de kernboodschap van beide elective-dagdelen samen — laat hem staan als afsluiter.</p>
+<hr>
+<h2>Slide 25 — Terug naar de hoofdlijn</h2>
+<p><strong>Deel 22 vervolgt: zero-downtime migraties en de niveau-2-capstone.</strong></p>
+<p><em>Einde van de NoSQL-elective.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">14 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">250 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../el-01/reader.html">&larr; Document en key-value in de praktijk</a><span></span></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

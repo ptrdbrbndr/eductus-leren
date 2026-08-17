@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docentenhandleiding — Citus in de praktijk — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 25 &rsaquo; Docentenhandleiding</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html" class="active">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 25 — Docentenhandleiding</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3, deel 25: Citus in de praktijk</strong>
+Dagdeel van 4 klokuren, inclusief twee pauzes</p>
+<hr>
+<h2>1. Doel van dit dagdeel</h2>
+<p>De implementatie van alles wat deel 24 conceptueel opbouwde. Waar deel 24 bewust geen enkele regel code bevatte, is dit dagdeel bijna uitsluitend praktijk — elke term uit deel 24 (shardsleutel, co-locatie, referentietabel, rebalancing) krijgt hier een concrete <code>CREATE</code>-of <code>SELECT</code>-opdracht.</p>
+<p><strong>De centrale demonstratie van de dag</strong> is opdracht 25.4: twee tabellen met dezelfde shardsleutel die <strong>niet</strong> automatisch co-located zijn, tenzij <code>colocate_with</code> expliciet wordt gebruikt. Dit weerlegt een aanname die bijna elke deelnemer zal maken, en het “aha”-moment daar is sterker als het zelf wordt ontdekt dan verteld.</p>
+<p><strong>De tweede boodschap:</strong> Citus is een extensie, geen ander databasesysteem. Alles wat deelnemers in niveau 1 en 2 leerden — SQL, <code>EXPLAIN</code>, indexen, monitoring — blijft grotendeels van toepassing, vermenigvuldigd over nodes. Dat maakt Citus toegankelijker dan het klinkt, en dat geruststellende punt is net zo belangrijk als de nieuwe syntax.</p>
+<p><strong>De derde boodschap, aan het eind herhaald:</strong> ook vandaag, na een dagdeel vol krachtige nieuwe mogelijkheden, blijft de conclusie voor de Pensioenfederatie op dit moment “nog niet nodig”. Dat mag geen anticlimax voelen — het is de correcte toepassing van de discipline die door de hele cursus loopt.</p>
+<hr>
+<h2>2. Voorbereiding</h2>
+<p><strong>Door de deelnemer vooraf:</strong> deel 24 afgerond — de conceptuele kennis is een vereiste, niet een herhaling.</p>
+<p><strong>Door de docent:</strong></p>
+<ul>
+<li>⚠ <strong>De zwaarste technische opzet van niveau 3 tot nu toe.</strong> Zorg voor een geteste, bij voorkeur gedeelde Docker Compose-omgeving met minstens één coördinator en twee workers, Citus vooraf geïnstalleerd. Test dit ruim van tevoren.</li>
+<li><strong>Draai opdracht 25.3 en 25.4 zelf vooraf</strong> en bekijk de exacte <code>EXPLAIN</code>-uitvoer op jouw versie — de precieze notatie van <code>Task Count</code> en de plan-structuur kan tussen Citus-versies licht verschillen.</li>
+<li>Bereid het architectuurschema uit paragraaf 3 (coördinator/workers) als permanent zichtbaar referentiepunt voor.</li>
+<li>Overweeg voor groepen zonder werkende multi-node-omgeving een duidelijke “volg mee”-modus: laat hen de query’s typen en de uitkomst van jouw scherm overnemen in plaats van helemaal niets uit te voeren.</li>
+</ul>
+<hr>
+<h2>3. Tijdschema</h2>
+<table>
+<thead>
+<tr>
+<th>Tijd</th>
+<th>Onderdeel</th>
+<th>Werkvorm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00-0:15</td>
+<td>Wat Citus is en niet is (§2), architectuur (§3) + <strong>opdracht 25.1</strong></td>
+<td>Presentatie + tweetallen</td>
+</tr>
+<tr>
+<td>0:15-0:20</td>
+<td>Een cluster opzetten (§4)</td>
+<td>Demo</td>
+</tr>
+<tr>
+<td>0:20-0:50</td>
+<td><strong>Distributed tables en reference tables (§5-6) + opdracht 25.2</strong></td>
+<td>Demo + drietallen</td>
+</tr>
+<tr>
+<td>0:50-1:05</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>1:05-1:15</td>
+<td>Co-locatie expliciet maken (§7)</td>
+<td>Presentatie</td>
+</tr>
+<tr>
+<td>1:15-1:45</td>
+<td><strong>Task Count en EXPLAIN (§8-10) + opdracht 25.3</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>1:45-2:05</td>
+<td><strong>De co-locatie-valkuil (§7 herzien) + opdracht 25.4</strong></td>
+<td>Demo + tweetallen</td>
+</tr>
+<tr>
+<td>2:05-2:20</td>
+<td><em>Pauze</em></td>
+<td></td>
+</tr>
+<tr>
+<td>2:20-2:30</td>
+<td>Reference tables herzien + <strong>opdracht 25.5</strong></td>
+<td>Individueel</td>
+</tr>
+<tr>
+<td>2:30-2:55</td>
+<td>Rebalancing (§11) + <strong>opdracht 25.6</strong></td>
+<td>Demo/conceptueel + drietallen</td>
+</tr>
+<tr>
+<td>2:55-3:15</td>
+<td>Migreren van gepartitioneerd naar Citus (§14) + <strong>opdracht 25.7</strong></td>
+<td>Presentatie + drietallen</td>
+</tr>
+<tr>
+<td>3:15-3:30</td>
+<td>Wanneer Citus, wanneer niet (§15) + <strong>opdracht 25.8</strong></td>
+<td>Presentatie + individueel</td>
+</tr>
+<tr>
+<td>3:30-4:00</td>
+<td><strong>Opdracht 25.9</strong> — het implementatievoorstel</td>
+<td>Drietallen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Bij tijdgebrek:</strong> laat opdracht 25.6 (rebalancing) volledig conceptueel behandelen zonder uitvoering, ook als een derde worker beschikbaar zou zijn — het kost tijd en de conceptuele kennis uit deel 24 dekt het grootste deel van het leerdoel al. Kort <strong>nooit</strong> opdracht 25.4 (de co-locatie-valkuil) of 25.9 in.</p>
+<hr>
+<h2>4. Didactische aanwijzingen per onderdeel</h2>
+<h3>4.1 Opening (0:00)</h3>
+<p>Zeg meteen de geruststellende boodschap: <em>“Citus is een extensie. Alles wat jullie kennen — SQL, EXPLAIN, indexen — blijft werken. Vandaag voegen we er sharding-functionaliteit aan toe, we beginnen niet opnieuw.”</em> Dit voorkomt dat deelnemers het dagdeel ingaan met de verwachting van een compleet nieuw systeem.</p>
+<h3>4.2 Distributed en reference tables (0:20)</h3>
+<p>Praktisch en opbouwend. Laat opdracht 25.2 stap voor stap volgen, en wijs bij elke stap terug naar het concept uit deel 24 waar de opdracht een implementatie van is.</p>
+<h3>4.3 Task Count (1:15)</h3>
+<p><strong>Laat deelnemers vóór elke <code>EXPLAIN</code> voorspellen</strong> wat de <code>Task Count</code> zal zijn, gebaseerd op wat ze in deel 24 leerden over shardsleutels en voorwaarden. Dit maakt <code>EXPLAIN</code> een bevestigingsmoment in plaats van een presentatiemoment.</p>
+<h3>4.4 De co-locatie-valkuil (1:45)</h3>
+<p><strong>Het belangrijkste kwartier van het dagdeel.</strong> Laat opdracht 25.4 zonder waarschuwing vooraf uitvoeren — de meeste deelnemers zullen bij onderdeel b) verwachten dat twee tabellen met dezelfde shardsleutel automatisch co-located zijn. Laat het tegendeel eerst zien voordat je het uitlegt.</p>
+<p>Zeg de kernzin met nadruk:</p>
+<blockquote>
+<p><em>“Co-locatie is nooit impliciet. Dezelfde sleutel is niet genoeg — het moet expliciet met colocate_with.”</em></p>
+</blockquote>
+<p>Dit is een van de meest voorkomende fouten in echte Citus-implementaties, en het verdient de aandacht die het hier krijgt.</p>
+<h3>4.5 Reference tables (2:20)</h3>
+<p>Kort. Onderdeel c) van opdracht 25.5 (wat als <code>fonds</code> per ongeluk gedistribueerd was) is een goede korte controlevraag om te checken of het onderscheid tussen distributed en reference table echt is geland.</p>
+<h3>4.6 Rebalancing (2:30)</h3>
+<p>Als er geen derde worker beschikbaar is, laat de conceptuele route (onderdeel d) van opdracht 25.6) niet als een tweederangs alternatief aanvoelen — het conceptuele begrip is het leerdoel, de uitvoering is een bonus als de infrastructuur het toelaat.</p>
+<h3>4.7 Migreren van gepartitioneerd naar Citus (2:55)</h3>
+<p>Dit is een synthese-oefening: deel 16 (partitionering), deel 18 (logische replicatie), deel 22 (expand-contract) en vandaag (Citus-syntax) komen hier samen. Laat de zaal zelf de verbanden leggen bij opdracht 25.7 vóór je de uitwerking bespreekt.</p>
+<h3>4.8 Wanneer niet (3:15)</h3>
+<p>Herhaal de discipline uit deel 24 nog één keer, nu met concrete Citus-kennis erbij: het is niet alleen “shardenen kan onnodig zijn” maar specifiek “Citus met zijn coördinatiekosten kan de verkeerde keuze zijn voor een datamodel zonder natuurlijke co-locatie-sleutel”. Dat is scherper dan de algemene waarschuwing uit deel 24.</p>
+<h3>4.9 Opdracht 25.9 (3:30)</h3>
+<p>Stuur op:</p>
+<ul>
+<li><strong>Consistentie met deel 24.</strong> Een shardsleutelkeuze die daar afweek zonder verklaring, is een teken dat de twee delen niet als één geheel zijn opgevat.</li>
+<li><strong>Een concreet migratiepad met de juiste techniek.</strong></li>
+<li><strong>Alle vier de niveau-2-onderwerpen in punt 4</strong> — groepen die alleen monitoring of alleen back-up noemen, hebben de vermenigvuldigingsimpact van sharding niet volledig doordacht.</li>
+<li><strong>Een specifieke, herkenbare query in punt 5.</strong></li>
+</ul>
+<hr>
+<h2>5. Veelgestelde vragen uit de zaal</h2>
+<p><strong>“Moet elke tabel in het systeem gedistribueerd of reference zijn?”</strong>
+Nee — Citus staat ook <strong>lokale tabellen</strong> toe (gewone PostgreSQL-tabellen op de coördinator, niet gesherd, niet gerepliceerd). Voor kleine, coördinator-specifieke metadata die nooit vanuit een worker bevraagd hoeft te worden, is dat soms de eenvoudigste keuze.</p>
+<p><strong>“Wat gebeurt er met UNIQUE-constraints die niet de shardsleutel zijn?”</strong>
+Net als bij partitionering (deel 16): Citus kan uniciteit niet over shards heen afdwingen tenzij de constraint de shardsleutel bevat. Dit moet bewust in het datamodel worden opgenomen.</p>
+<p><strong>“Kan de coördinator zelf ook shard-data bevatten?”</strong>
+In de klassieke opzet niet; in nieuwere Citus-versies bestaat een model zonder aparte coördinator waarin elke node zowel coördinator- als workertaken kan vervullen. Voor het leren van de concepten is het klassieke model met een aparte coördinator het duidelijkst.</p>
+<p><strong>“Hoe kies je het aantal shards (<code>citus.shard_count</code>)?”</strong>
+Een veelgebruikte vuistregel: aanzienlijk meer shards dan het verwachte maximale aantal workers, zodat toekomstige rebalancing fijnmazig kan gebeuren (elke worker draagt meerdere shards, en een rebalancing hoeft maar een deel daarvan te verplaatsen). Te veel shards heeft ook overhead; dit is een afweging, geen absolute regel.</p>
+<p><strong>“Werkt pg_stat_statements nog met Citus?”</strong>
+Ja, per node — plus een Citus-specifieke <code>citus_stat_statements</code> die het clusterbrede beeld samenbrengt, zoals genoemd in paragraaf 13.</p>
+<hr>
+<h2>6. Beoordeling</h2>
+<table>
+<thead>
+<tr>
+<th>Signaal</th>
+<th>Betekenis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voorspelt correct de Task Count vóór elke EXPLAIN</td>
+<td>De kern van deel 24 is doorgedrongen in de praktijk</td>
+</tr>
+<tr>
+<td>Ontdekt zelf bij 25.4 dat colocate_with nodig is</td>
+<td>De belangrijkste valkuil van het dagdeel is geland</td>
+</tr>
+<tr>
+<td>Legt bij 25.5c uit waarom fonds geen distributed table moet zijn</td>
+<td>Verbindt met deel 24’s referentietabel-vuistregel</td>
+</tr>
+<tr>
+<td>Herkent bij 25.7 de synthese van deel 16/18/22</td>
+<td>Ziet de cursus als samenhangend geheel</td>
+</tr>
+<tr>
+<td>Concludeert in 25.9 consistent met het principebesluit van deel 24</td>
+<td>Behandelt niveau 3 als doorlopend verhaal</td>
+</tr>
+<tr>
+<td>Neemt aan dat gelijke shardsleutel automatisch co-locatie betekent</td>
+<td>Herhalen: nooit impliciet</td>
+</tr>
+<tr>
+<td>Vergeet in 25.9 punt 4 een of meer niveau-2-onderwerpen</td>
+<td>Terugbrengen naar de volledige vermenigvuldigingsimpact</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>7. Aansluiting op deel 26</h2>
+<p>Brug: <em>“Vandaag hebben jullie horizontale capaciteit gebouwd — een concreet, werkend antwoord op de vraag die deel 24 stelde. Dat sluit het sharding-tweeluik af. Volgende keer verlaat de architectuur een andere as: niet meer ‘hoeveel data kan één systeem aan’, maar ‘hoe bewaar je niet alleen de huidige stand van zaken, maar de volledige geschiedenis van hoe die stand is ontstaan’ — en dat opent de deur naar event sourcing.”</em></p>
+<hr>
+<p><em>Einde docentenhandleiding deel 25.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">297 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-24-sharding-fundamenten/reader.html">&larr; Deel 24 — Sharding-fundamenten</a><a class="dbm-prevnext next" href="../deel-26-foreign-data-wrappers-en-federatie/reader.html">Deel 26 — Foreign data wrappers en federatie &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

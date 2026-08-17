@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Architectuur voor meerdere fondsen — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 23 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 23 — Architectuur voor meerdere fondsen</h1>
+<p><strong>Cursus Databasemanagement — Niveau 3: Architect</strong>
+Deelnemersreader | Deel 1 van 8 (deel 23 van 30)
+Aansluiting: EDB-architectuurdomein / voorbereiding clustercertificering</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>De nieuwe casus: Pensioenfederatie</li>
+<li>Waarom één server niet meer het hele verhaal is</li>
+<li>Drie multi-tenant-patronen op een rij</li>
+<li>Patroon 1: gedeelde database, gedeeld schema, RLS</li>
+<li>Patroon 2: gedeelde database, schema per fonds</li>
+<li>Patroon 3: database per fonds</li>
+<li>Een vergelijkingskader, geen rangorde</li>
+<li>Wat elk patroon doet met de kennis van niveau 2</li>
+<li>Federatief versus gecentraliseerd: waar ligt de bron van waarheid</li>
+<li>Een migratiepad tussen patronen</li>
+<li>De architectuurkeuze voor de Pensioenfederatie</li>
+<li>Veelgemaakte fouten</li>
+<li>Kernbegrippen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>de Pensioenfederatie-casus plaatsen ten opzichte van de Meridiaan-casus uit niveau 1 en 2;</li>
+<li>drie multi-tenant-architectuurpatronen voor meerdere fondsen op één technisch platform beschrijven;</li>
+<li>per patroon de gevolgen voor isolatie, onderhoud, kosten en compliance benoemen;</li>
+<li>beoordelen welk patroon bij welke combinatie van eisen past;</li>
+<li>een migratiepad tussen patronen schetsen zonder alles van voren af aan te bouwen;</li>
+<li>een architectuuradvies motiveren dat teruggrijpt op concrete lessen uit niveau 2.</li>
+</ul>
+<hr>
+<h2>2. De nieuwe casus: Pensioenfederatie</h2>
+<p>Meridiaan Pensioen, de uitvoerder uit niveau 1 en 2, is een van drie fondsen die zijn aangesloten bij een gezamenlijk administratieplatform: de <strong>Pensioenfederatie</strong>. De twee andere fondsen:</p>
+<ul>
+<li><strong>Kompas Pensioenfonds</strong> — vergelijkbare omvang als Meridiaan, andere sector (transport en logistiek).</li>
+<li><strong>Baken Pensioenfonds</strong> — aanzienlijk kleiner, een sector met veel deeltijdwerk en hoog personeelsverloop, wat leidt tot een veel hoger mutatievolume per deelnemer dan bij de andere twee.</li>
+</ul>
+<p>De Pensioenfederatie biedt de drie fondsen een <strong>gezamenlijk technisch platform</strong>: dezelfde applicatie, dezelfde database-technologie, gedeeld beheer. Elk fonds blijft juridisch en bestuurlijk zelfstandig — eigen bestuur, eigen jaarverslag, eigen toezichthouder-rapportage — maar de onderliggende infrastructuur wordt gedeeld om schaalvoordelen te behalen.</p>
+<p><strong>De nieuwe rol in deze casus:</strong> Femke, architect bij de Pensioenfederatie, verantwoordelijk voor het gezamenlijke platform. Tarik (architect bij Meridiaan zelf) blijft in beeld als vertegenwoordiger van één aangesloten fonds met eigen belangen — niet altijd dezelfde belangen als de federatie als geheel.</p>
+<p><strong>De spanning die de casus drijft:</strong> de federatie wil kosten delen en gezamenlijk beheer; elk fonds wil garanties dat zijn gegevens strikt gescheiden blijven van de andere twee, met eigen prestatie-garanties en een eigen auditspoor. Dat spanningsveld — delen waar het kan, scheiden waar het moet — is het onderwerp van dit hele deel.</p>
+<hr>
+<h2>3. Waarom één server niet meer het hele verhaal is</h2>
+<p>Niveau 2 ging over één PostgreSQL-cluster (met replica’s en een Patroni-opzet) voor één fonds. Dat volstaat prima voor Meridiaan alleen. Zodra er drie fondsen op hetzelfde platform komen, ontstaan vragen die niveau 2 niet beantwoordde:</p>
+<ul>
+<li>Deelt een query van Kompas ooit resources met een query van Meridiaan, en is dat aanvaardbaar?</li>
+<li>Wat gebeurt er met Bakens vacuum- en autovacuumbelasting (hoog mutatievolume, deel 12) als die op dezelfde server draait als Meridiaans rustigere werklast?</li>
+<li>Als Kompas een datalek meldt, is dat dan automatisch ook een incident voor Meridiaan en Baken?</li>
+<li>Kan één fonds groeien zonder de andere twee te raken?</li>
+</ul>
+<p><strong>Dit deel beantwoordt die vragen niet met een schaaltechnologie</strong> (dat komt in deel 24-25) maar met een <strong>architectuurkeuze</strong>: hoe deel je één technisch platform tussen meerdere, onafhankelijke klanten. Dat heet <strong>multi-tenancy</strong>, en de drie klassieke patronen daarvoor zijn het onderwerp van dit deel.</p>
+<hr>
+<h2>4. Drie multi-tenant-patronen op een rij</h2>
+<table>
+<thead>
+<tr>
+<th>Patroon</th>
+<th>Isolatieniveau</th>
+<th>Beheerlast</th>
+<th>Resource-deling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Gedeeld schema + RLS</strong></td>
+<td>Laag (logisch)</td>
+<td>Laagst</td>
+<td>Volledig gedeeld</td>
+</tr>
+<tr>
+<td><strong>Schema per fonds</strong></td>
+<td>Middel</td>
+<td>Middel</td>
+<td>Gedeeld cluster, aparte namespace</td>
+</tr>
+<tr>
+<td><strong>Database per fonds</strong></td>
+<td>Hoog</td>
+<td>Hoogst</td>
+<td>Aparte database, mogelijk aparte server</td>
+</tr>
+</tbody>
+</table>
+<p>Dit is dezelfde afruil-structuur die door de hele niveau-2-cursus terugkwam — meer isolatie kost meer beheer en meer resources, minder isolatie is goedkoper maar risicovoller. Vandaag pas je die afweging toe op het niveau van hele klanten in plaats van op rijen, kolommen of tabellen.</p>
+<hr>
+<h2>5. Patroon 1: gedeelde database, gedeeld schema, RLS</h2>
+<p>Eén database, één set tabellen, elke rij getagd met een <code>fonds_id</code>. Precies de RLS-aanpak uit deel 21, nu toegepast op fondsniveau in plaats van werkgeverniveau.</p>
+<pre><code class="language-sql">ALTER TABLE deelnemer ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY fonds_isolatie ON deelnemer
+    USING (fonds_id = current_setting('app.fonds_id')::integer);
+</code></pre>
+<p><strong>Voordelen:</strong></p>
+<ul>
+<li>Eén schema om te onderhouden — een structuurwijziging (deel 22) gebeurt één keer voor alle drie de fondsen.</li>
+<li>Maximale resource-deling: bufferpool, connectiepool, indexen worden door alle fondsen benut.</li>
+<li>Eenvoudige cross-fonds-rapportage voor de federatie zelf (één <code>GROUP BY fonds_id</code> in plaats van drie aparte databases bevragen).</li>
+</ul>
+<p><strong>Nadelen:</strong></p>
+<ul>
+<li><strong>Isolatie hangt volledig af van correcte RLS-configuratie.</strong> De datalek-valkuil uit deel 22’s capstone (gebeurtenis 6: een sessie-instelling die via connection pooling kan lekken) is hier het kernrisico, nu vermenigvuldigd naar drie complete fondsen in plaats van tenants binnen één fonds.</li>
+<li>Eén trage of foutieve query van Baken (hoog mutatievolume) kan resources opeisen die Meridiaan en Kompas ook nodig hebben — geen harde resourcegrens.</li>
+<li>Een auditor van Kompas die aantoonbaarheid wil dat Kompas’ gegevens nooit vermengd zijn geweest met die van andere fondsen, moet genoegen nemen met “de RLS-policy garandeert dat” in plaats van fysieke scheiding.</li>
+<li>Een <code>DROP TABLE</code>-fout (deel 17) raakt in het ergste geval alle drie de fondsen tegelijk.</li>
+</ul>
+<hr>
+<h2>6. Patroon 2: gedeelde database, schema per fonds</h2>
+<pre><code class="language-sql">CREATE SCHEMA meridiaan AUTHORIZATION meridiaan_beheer;
+CREATE SCHEMA kompas AUTHORIZATION kompas_beheer;
+CREATE SCHEMA baken AUTHORIZATION baken_beheer;
+</code></pre>
+<p>Elk fonds krijgt zijn eigen kopie van dezelfde tabelstructuur, in een eigen schema, binnen dezelfde database (en dus hetzelfde cluster, dezelfde Patroni-opzet uit deel 19).</p>
+<p><strong>Voordelen ten opzichte van patroon 1:</strong></p>
+<ul>
+<li><strong>Geen RLS nodig voor isolatie</strong> — een rol met rechten op alleen <code>kompas.*</code> kan fysiek niet bij <code>meridiaan.*</code> komen, zonder een policy die “correct” moet zijn. Dit is een sterkere garantie dan een <code>USING</code>-clausule.</li>
+<li>Eenvoudiger te auditen: rechten zijn per schema te tonen, geen impliciete logica in een policy-expressie.</li>
+<li>Een <code>DROP SCHEMA</code> (bewust, gecontroleerd) raakt maar één fonds.</li>
+</ul>
+<p><strong>Nadelen ten opzichte van patroon 1:</strong></p>
+<ul>
+<li><strong>Drie keer zoveel schema-objecten</strong> om te onderhouden bij elke structuurwijziging — de expand-contract-migratie uit deel 22 moet drie keer worden uitgevoerd (of geautomatiseerd over drie schema’s heen).</li>
+<li>Nog steeds gedeelde resources op clusterniveau: bufferpool, WAL, checkpoint-cyclus (deel 11) worden nog steeds door alle drie beconcurreerd — Bakens vacuumdruk (deel 12) raakt nog steeds de andere twee indirect via gedeelde achtergrondprocessen.</li>
+<li>Cross-fonds-rapportage vraagt nu expliciete <code>UNION ALL</code>-constructies over schema’s heen, in plaats van één <code>GROUP BY</code>.</li>
+</ul>
+<hr>
+<h2>7. Patroon 3: database per fonds</h2>
+<pre><code>Cluster (of zelfs aparte clusters)
+├── database: meridiaan
+├── database: kompas
+└── database: baken
+</code></pre>
+<p>Elk fonds krijgt een volledig eigen PostgreSQL-database — mogelijk op hetzelfde cluster (dezelfde Patroni-groep), mogelijk op volledig gescheiden infrastructuur.</p>
+<p><strong>Voordelen ten opzichte van patroon 2:</strong></p>
+<ul>
+<li><strong>Volledige resource-isolatie mogelijk</strong> als je ook de servers scheidt: Bakens hoge mutatiedruk (deel 12) raakt Meridiaan en Kompas dan helemaal niet meer.</li>
+<li>Eigen back-up- en hersteltijdlijnen (deel 17) per fonds — Kompas kan zijn eigen RPO/RTO-eisen hebben, onafhankelijk van Baken.</li>
+<li>Eigen replicatietopologie (deel 18) en eigen HA-configuratie (deel 19) per fonds mogelijk, indien de eisen verschillen.</li>
+<li>De sterkste garantie richting een auditor of toezichthouder: fysiek gescheiden gegevens.</li>
+</ul>
+<p><strong>Nadelen ten opzichte van patroon 2:</strong></p>
+<ul>
+<li><strong>Drie keer de operationele last</strong> — drie keer monitoring (deel 20), drie keer beveiligingsbeleid (deel 21), drie keer migratieprojecten (deel 22), tenzij dat sterk wordt geautomatiseerd.</li>
+<li>Geen gedeelde resource-efficiëntie: elke database heeft zijn eigen bufferpool-overhead, ook als de gecombineerde belasting op één goed gedimensioneerde server had gepast.</li>
+<li>Cross-fonds-rapportage voor de federatie zelf wordt het lastigst van de drie patronen — een query over de grenzen van afzonderlijke databases heen vereist <code>postgres_fdw</code> (foreign data wrapper) of een aparte data-integratielaag.</li>
+</ul>
+<hr>
+<h2>8. Een vergelijkingskader, geen rangorde</h2>
+<p>Er is geen “beste” patroon — de juiste keuze hangt af van welke eisen het zwaarst wegen.</p>
+<table>
+<thead>
+<tr>
+<th>Eis</th>
+<th>Wint patroon</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lage beheerlast, snelle nieuwe-fonds-onboarding</td>
+<td>1 (gedeeld schema)</td>
+</tr>
+<tr>
+<td>Sterke logische isolatie zonder de kosten van patroon 3</td>
+<td>2 (schema per fonds)</td>
+</tr>
+<tr>
+<td>Harde resource-garanties, aparte compliance-trajecten</td>
+<td>3 (database per fonds)</td>
+</tr>
+<tr>
+<td>Eenvoudige cross-fonds-rapportage voor de federatie</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Een fonds met sterk afwijkend prestatieprofiel (Baken)</td>
+<td>3, of op zijn minst 2 met eigen resourcelimieten</td>
+</tr>
+<tr>
+<td>Beperkt aantal fondsen dat traag groeit</td>
+<td>1 of 2</td>
+</tr>
+<tr>
+<td>Verwachte groei naar tientallen fondsen</td>
+<td>2, met het oog op patroon 3 voor de grootste uitschieters</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dit is dezelfde discipline als bij BRIN versus B-tree (deel 14) en partitionering versus niet (deel 16): kies op basis van gemeten of expliciet benoemde eisen, niet op basis van welk patroon het meest geavanceerd klinkt.</strong></p>
+<hr>
+<h2>9. Wat elk patroon doet met de kennis van niveau 2</h2>
+<p><strong>RLS (deel 21)</strong> is essentieel bij patroon 1, optioneel-aanvullend bij patroon 2 (bijvoorbeeld voor afdelingen binnen één fonds), en meestal overbodig bij patroon 3 (de databasegrens doet het isolatiewerk al).</p>
+<p><strong>Partitionering (deel 16)</strong> blijft binnen elk patroon relevant — <code>mutatie</code> bij Baken heeft nog steeds baat bij maandelijkse partities, ongeacht welk multi-tenant-patroon je kiest. Multi-tenancy en partitionering zijn orthogonale beslissingen.</p>
+<p><strong>Replicatie en HA (deel 18-19)</strong> worden bij patroon 3 het meest interessant: elk fonds kán zijn eigen replicatietopologie krijgen, afgestemd op zijn eigen RPO/RTO (deel 17). Bij patroon 1 en 2 delen alle fondsen noodgedwongen dezelfde HA-configuratie.</p>
+<p><strong>Monitoring (deel 20)</strong> moet bij patroon 1 en 2 per fonds kunnen <strong>filteren</strong> (welke rijen/schema’s horen bij wie) om zinvolle rapportages te leveren; bij patroon 3 is die scheiding al gratis, ten koste van drie keer zoveel te monitoren systemen.</p>
+<p><strong>Zero-downtime migraties (deel 22)</strong> zijn bij patroon 1 het eenvoudigst (één plek om te wijzigen) en bij patroon 3 het meest werk (drie keer uitvoeren, met drie keer het risico op een foutieve stap) — tenzij het geautomatiseerd wordt, wat zelf weer engineering-capaciteit kost.</p>
+<hr>
+<h2>10. Federatief versus gecentraliseerd: waar ligt de bron van waarheid</h2>
+<p>Een vraag die aan alle drie de patronen voorafgaat: <strong>is er één centrale waarheid over een deelnemer, of hoort elke deelnemer bij precies één fonds zonder overlap?</strong></p>
+<p>Bij pensioenfondsen is het antwoord meestal het laatste: een deelnemer heeft een dienstverband bij een werkgever die is aangesloten bij precies één fonds. Er is dus <strong>geen</strong> noodzaak om gegevens tussen fondsen te delen op het niveau van individuele deelnemers — in tegenstelling tot bijvoorbeeld een bankconcern waar één klant bij meerdere onderdelen tegelijk actief kan zijn.</p>
+<p><strong>Dat vereenvoudigt de keuze aanzienlijk.</strong> Omdat er geen inherente behoefte is aan gegevensdeling tussen fondsen op deelnemerniveau, is de doorslaggevende vraag niet “hoe delen we data efficiënt” maar “hoe delen we <strong>infrastructuur</strong> efficiënt terwijl we data strikt gescheiden houden” — wat het argument voor patroon 2 of 3 versterkt ten opzichte van patroon 1, tenzij de beheerlast van patroon 1 zwaarder weegt dan de isolatiezorgen.</p>
+<p><strong>Wat de federatie wél nodig heeft:</strong> geaggregeerde, fonds-overstijgende rapportages (totale beleggingen, gezamenlijke benchmarking) — die het bij elk patroon vragen om een aparte rapportagelaag die welbewust gegevens van de fondsen samenvoegt, met expliciete toestemming en een eigen governance, in plaats van dat de onderliggende architectuur dat “toevallig” mogelijk maakt.</p>
+<hr>
+<h2>11. Een migratiepad tussen patronen</h2>
+<p>Een architectuurkeuze is niet voor altijd. Het expand-contract-patroon uit deel 22 is ook hier toepasbaar, nu op architectuurniveau.</p>
+<p><strong>Van patroon 1 naar patroon 2</strong> (fonds groeit uit gedeeld schema): voor het uitgroeiende fonds een eigen schema aanmaken, de relevante rijen (gefilterd op <code>fonds_id</code>) daarheen kopiëren met een backfill-achtige aanpak (deel 22, paragraaf 9), de RLS-policy vervangen door schema-gebonden rechten voor dat fonds, en pas na een bewezen stabiele periode de oude rijen uit het gedeelde schema verwijderen.</p>
+<p><strong>Van patroon 2 naar patroon 3</strong> (een fonds heeft eigen infrastructuur nodig): logische replicatie (deel 18, 22) vanuit het bestaande schema naar een nieuwe, zelfstandige database — hetzelfde patroon als de gepartitioneerde-tabel-migratie uit deel 16/18, nu toegepast op een heel schema in plaats van één tabel.</p>
+<p><strong>De les:</strong> je hoeft niet vooraf het “perfecte” patroon voor de komende tien jaar te kiezen. Een architectuur die begint bij patroon 1 of 2, met een doordacht migratiepad naar meer isolatie, is vaak verstandiger dan meteen voor de zwaarste (patroon 3) te kiezen “voor de zekerheid” — dezelfde les als “kies het gespecialiseerde gereedschap op basis van een gemeten behoefte” uit deel 14, 16 en 21.</p>
+<hr>
+<h2>12. De architectuurkeuze voor de Pensioenfederatie</h2>
+<p>Toegepast op de drie fondsen:</p>
+<ul>
+<li><strong>Meridiaan en Kompas</strong>: vergelijkbare omvang, vergelijkbaar profiel. Patroon 2 (schema per fonds) is een goede uitgangspositie — sterke logische isolatie, gedeeld cluster, beheersbare kosten.</li>
+<li><strong>Baken</strong>: aanzienlijk hoger mutatievolume per deelnemer (deel 12: meer bloatdruk, meer autovacuum-werk). Als dat profiel de andere twee fondsen merkbaar raakt via gedeelde achtergrondprocessen, is patroon 3 voor Baken specifiek te overwegen — zelfs als Meridiaan en Kompas bij patroon 2 blijven. <strong>Niets verplicht een federatie om voor alle aangesloten fondsen hetzelfde patroon te kiezen.</strong></li>
+</ul>
+<p>Dit is de kern van de opdracht in het werkboek: geen uniforme keuze opleggen, maar per fonds beoordelen wat past — en dat advies onderbouwen met concrete, meetbare argumenten in plaats van een voorkeur.</p>
+<hr>
+<h2>13. Veelgemaakte fouten</h2>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voor alle fondsen hetzelfde patroon kiezen “voor de eenvoud”</td>
+<td>Baken’s afwijkende profiel raakt de andere twee</td>
+<td>Per fonds beoordelen</td>
+</tr>
+<tr>
+<td>RLS als enige isolatiemaatregel zonder de pooling-valkuil te kennen (deel 15, 19)</td>
+<td>Het datalek-scenario uit deel 22’s capstone, nu tussen fondsen</td>
+<td>Schema- of database-scheiding overwegen bij hoge gevoeligheid</td>
+</tr>
+<tr>
+<td>Meteen patroon 3 kiezen “voor de zekerheid”</td>
+<td>Onnodige operationele last voor drie kleine, gelijkaardige fondsen</td>
+<td>Beginnen bij het lichtste patroon dat voldoet, met een migratiepad</td>
+</tr>
+<tr>
+<td>Geen migratiepad tussen patronen doordenken</td>
+<td>Een groeiend fonds dwingt tot een noodgreep in plaats van een geplande overgang</td>
+<td>Expand-contract op architectuurniveau vooraf schetsen</td>
+</tr>
+<tr>
+<td>Cross-fonds-rapportage laten “meeliften” op de architectuur in plaats van expliciet in te richten</td>
+<td>Ongewenste datavermenging zonder governance</td>
+<td>Een aparte, bewust ingerichte rapportagelaag</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>14. Kernbegrippen</h2>
+<p><strong>Multi-tenancy</strong> — meerdere, onafhankelijke klanten op één gedeeld technisch platform.
+<strong>Tenant</strong> — hier: een aangesloten fonds.
+<strong>Gedeeld schema met RLS</strong> — patroon 1; logische isolatie via policies.
+<strong>Schema per tenant</strong> — patroon 2; fysieke scheiding binnen één database.
+<strong>Database per tenant</strong> — patroon 3; volledige scheiding, mogelijk tot op serverniveau.
+<strong>Resource-isolatie</strong> — de mate waarin de belasting van de ene tenant de andere niet raakt.
+<strong>Bron van waarheid</strong> — waar de gezaghebbende versie van een gegeven staat, relevant bij het bepalen of tenants gegevens moeten delen.</p>
+<hr>
+<p><em>Volgende deel: sharding-fundamenten. Vandaag ging het over het scheiden van fondsen. Volgende keer gaat het over het probleem dat ontstaat als één fonds — of de federatie als geheel — te groot wordt voor één server, ongeacht welk multi-tenant-patroon je koos.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">290 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../../niveau-2/deel-22-zero-downtime-migraties-en-capstone/reader.html">&larr; Deel 22 — Zero-downtime migraties en capstone</a><a class="dbm-prevnext next" href="../deel-24-sharding-fundamenten/reader.html">Deel 24 — Sharding-fundamenten &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

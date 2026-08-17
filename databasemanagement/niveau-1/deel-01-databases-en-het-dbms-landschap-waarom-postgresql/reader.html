@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Databases en het DBMS-landschap: waarom PostgreSQL — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 1 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 1 — Databases en het DBMS-landschap: waarom PostgreSQL</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1: Fundament</strong>
+Deelnemersreader | Dagdeel 1 van 10
+Aansluiting: EDB PostgreSQL Associate (domein “PostgreSQL overview &amp; architecture”, instapniveau)</p>
+<hr>
+<h2>Inhoud</h2>
+<ol>
+<li>Leerdoelen</li>
+<li>De casus: Meridiaan Pensioen en Programma Open Pensioen</li>
+<li>Van bestanden naar databases</li>
+<li>Wat een DBMS precies doet</li>
+<li>Het DBMS-landschap in kaart</li>
+<li>ACID en BASE: twee beloften</li>
+<li>PostgreSQL gepositioneerd</li>
+<li>Versiebeleid, support en het ecosysteem</li>
+<li>Wanneer PostgreSQL wél, en wanneer niet</li>
+<li>De keuze in een organisatie: hoe die werkelijk verloopt</li>
+<li>Rollen rond de database</li>
+<li>Aansluiting op de certificering</li>
+<li>Kernbegrippen</li>
+<li>Verder lezen</li>
+</ol>
+<hr>
+<h2>1. Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ul>
+<li>uitleggen welke problemen een DBMS oplost die een verzameling bestanden niet oplost;</li>
+<li>de hoofdcategorieën van datastores benoemen en per categorie het typische gebruiksscenario aangeven;</li>
+<li>ACID en BASE tegenover elkaar zetten en uitleggen waarom die keuze een businesskeuze is en geen technische smaakkwestie;</li>
+<li>PostgreSQL positioneren ten opzichte van commerciële en open-source alternatieven, inclusief licentie- en supportmodel;</li>
+<li>het versie- en supportbeleid van PostgreSQL toepassen op een concrete upgradevraag;</li>
+<li>een onderbouwd advies geven over de vraag “is PostgreSQL hier de juiste keuze?” en dat advies verdedigen tegenover een opdrachtgever.</li>
+</ul>
+<blockquote>
+<p><strong>Let op de laatste twee leerdoelen.</strong> In deze cursus tellen ze even zwaar als de technische. Een DBA die niet kan uitleggen waaróm iets zo staat, wordt overruled door iemand die harder praat.</p>
+</blockquote>
+<hr>
+<h2>2. De casus: Meridiaan Pensioen en Programma Open Pensioen</h2>
+<p>Alle opdrachten in niveau 1 spelen zich af bij <strong>Meridiaan Pensioen</strong>, een middelgrote Nederlandse pensioenuitvoerder. Meridiaan voert de regelingen uit voor circa 340.000 deelnemers en 4.100 aangesloten werkgevers.</p>
+<p>De situatie bij aanvang:</p>
+<ul>
+<li>De kernadministratie draait op een pakket van een externe leverancier, met een gesloten database eronder. Meridiaan kan die alleen benaderen via nachtelijke exports.</li>
+<li>Om die exports heen is in de loop van vijftien jaar een schil gegroeid: Access-databases, Excel-bestanden op netwerkschijven, een SharePoint-lijst met werkgevermutaties, en twee kleine applicaties die een collega ooit “even” heeft gebouwd.</li>
+<li>Niemand weet precies wie welk bestand bijhoudt. Bij de laatste kwartaalrapportage bleken drie afdelingen drie verschillende deelnemersaantallen te hanteren, alle drie verdedigbaar.</li>
+</ul>
+<p><strong>Programma Open Pensioen</strong> is de meerjarige verandering waarin Meridiaan die schil vervangt door een eigen, beheerste datalaag. Jij bent in dit programma aangetrokken als beginnend databasespecialist. Je eerste opdracht in deel 1 is niet bouwen, maar oordelen: het programmateam moet vastleggen op welk databaseplatform de nieuwe datalaag komt te staan, en de stuurgroep wil daar een onderbouwing bij.</p>
+<p>Drie stemmen die je in de casus steeds terug zult horen:</p>
+<table>
+<thead>
+<tr>
+<th>Rol</th>
+<th>Naam</th>
+<th>Wat die persoon wil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Programmamanager</td>
+<td>Karin de Wolff</td>
+<td>Voorspelbaarheid, geen verrassingen in de begroting</td>
+</tr>
+<tr>
+<td>Enterprise-architect</td>
+<td>Tarik Bousaid</td>
+<td>Aansluiting op de doelarchitectuur, geen nieuwe lock-in</td>
+</tr>
+<tr>
+<td>Beheerhoofd IT</td>
+<td>Ruud Slager</td>
+<td>Iets waar zijn team van vier man 's nachts niet wakker van ligt</td>
+</tr>
+</tbody>
+</table>
+<figure class="dbm-figure"><img src="../../figuren/figuur-1-1.png" alt="Contextplaat Meridiaan — kernadministratie, exportschil, en de beoogde nieuwe datalaag" loading="lazy"><figcaption>Figuur 1-1 — Contextplaat Meridiaan — kernadministratie, exportschil, en de beoogde nieuwe datalaag</figcaption></figure>
+<hr>
+<h2>3. Van bestanden naar databases</h2>
+<p>De schil bij Meridiaan is een tekstboekvoorbeeld van wat er misgaat zonder DBMS. Zes klassieke problemen, elk terug te vinden in de casus:</p>
+<p><strong>Redundantie.</strong> Hetzelfde deelnemersadres staat in vier bestanden. Elke kopie is een kans op afwijking.</p>
+<p><strong>Inconsistentie.</strong> Als een adres in één bestand wordt gewijzigd en in de andere drie niet, is er geen instantie die dat merkt. De data spreekt zichzelf tegen zonder dat iemand het ziet.</p>
+<p><strong>Gebrek aan gelijktijdigheid.</strong> Twee medewerkers openen hetzelfde Excel-bestand. De laatste die opslaat, wint. Het werk van de eerste is weg, zonder foutmelding.</p>
+<p><strong>Geen integriteitsbewaking.</strong> Niets belet iemand om een mutatie vast te leggen op een werkgeversnummer dat niet bestaat, of een geboortedatum in 2087 in te typen.</p>
+<p><strong>Geen herstelbaarheid.</strong> Valt de netwerkschijf uit tijdens het opslaan, dan is de toestand van het bestand onbepaald. De back-up is van vannacht; het werk van vandaag is verdwenen.</p>
+<p><strong>Geen toegangsbeheer op gegevensniveau.</strong> Wie bij het bestand kan, kan bij álles in het bestand. Een medewerker die alleen werkgeverdata mag zien, ziet ook burgerservicenummers.</p>
+<p>Een DBMS bestaat om precies deze zes problemen te adresseren. Alles wat je in de rest van deze cursus leert — transacties, constraints, WAL, rollen, MVCC — is uiteindelijk een antwoord op één of meer punten uit dit lijstje. Houd de lijst bij de hand; we komen er in elk deel op terug.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-1-2.png" alt="De zes problemen van bestandsopslag, gekoppeld aan de cursusdelen waar de oplossing behandeld wordt" loading="lazy"><figcaption>Figuur 1-2 — De zes problemen van bestandsopslag, gekoppeld aan de cursusdelen waar de oplossing behandeld wordt</figcaption></figure>
+<hr>
+<h2>4. Wat een DBMS precies doet</h2>
+<p>Een <strong>databasemanagementsysteem</strong> is de software tussen de gebruiker of applicatie en de opgeslagen gegevens. De database zelf is de verzameling gegevens; het DBMS is het programma dat die beheert. Dat onderscheid lijkt pedanterig, maar je hebt het nodig zodra je in PostgreSQL het verschil tussen een <em>cluster</em>, een <em>database</em> en een <em>schema</em> leert (deel 2).</p>
+<p>De kernfuncties:</p>
+<ol>
+<li><strong>Definitie</strong> — vastleggen welke gegevens er zijn en welke vorm ze hebben (DDL, deel 6).</li>
+<li><strong>Manipulatie</strong> — toevoegen, wijzigen, verwijderen, opvragen (DML en query’s, deel 3 en 4).</li>
+<li><strong>Transactiebeheer</strong> — groepen bewerkingen die volledig slagen of volledig mislukken (deel 7).</li>
+<li><strong>Gelijktijdigheidsbeheer</strong> — meerdere gebruikers tegelijk, zonder elkaars werk te vernietigen (deel 7, verdiept in niveau 2 deel 15).</li>
+<li><strong>Herstel</strong> — na een crash terug naar een consistente toestand (deel 7, uitgewerkt in niveau 2 deel 17).</li>
+<li><strong>Beveiliging en autorisatie</strong> — wie mag wat (deel 9, verdiept in niveau 2 deel 21).</li>
+<li><strong>Optimalisatie</strong> — dezelfde vraag zo goedkoop mogelijk beantwoorden (deel 8, verdiept in niveau 2 deel 13).</li>
+</ol>
+<p>Een principe dat je hier al moet internaliseren: <strong>data-onafhankelijkheid</strong>. De manier waarop gegevens fysiek zijn opgeslagen, mag geen invloed hebben op de manier waarop applicaties ze bevragen. Voeg je in deel 8 een index toe, dan verandert er niets aan de query’s — alleen aan de snelheid. Dat is geen toevallige eigenschap; het is de belangrijkste reden dat relationele databases veertig jaar hebben overleefd terwijl de hardware eronder volledig is vervangen.</p>
+<hr>
+<h2>5. Het DBMS-landschap in kaart</h2>
+<p>“Database” is geen enkelvoudige categorie meer. Voor je advies aan de stuurgroep moet je het landschap kunnen schetsen.</p>
+<h3>5.1 Relationeel (RDBMS)</h3>
+<p>Gegevens in tabellen met rijen en kolommen, bevraagd met SQL, met sterke integriteitsbewaking en transacties. Voorbeelden: PostgreSQL, Oracle Database, Microsoft SQL Server, MySQL/MariaDB, IBM Db2.</p>
+<p>Typisch gebruik: administratieve systemen waarin correctheid zwaarder weegt dan absolute schaal — precies het Meridiaan-profiel.</p>
+<h3>5.2 Documentstores</h3>
+<p>Gegevens als zelfbeschrijvende documenten (meestal JSON), zonder vooraf afgedwongen schema. Voorbeeld: MongoDB.</p>
+<p>Typisch gebruik: gegevens waarvan de vorm per exemplaar verschilt en snel evolueert — productcatalogi, contentbeheer, logging van gebeurtenissen met wisselende attributen.</p>
+<h3>5.3 Key-value stores</h3>
+<p>Een sleutel, een waarde, extreem snel opvragen. Voorbeelden: Redis, Amazon DynamoDB.</p>
+<p>Typisch gebruik: caching, sessiebeheer, wachtrijen. Zelden de bron van waarheid.</p>
+<h3>5.4 Column-family stores</h3>
+<p>Gegevens per kolomfamilie opgeslagen, ontworpen voor schrijfvolume over veel machines. Voorbeelden: Apache Cassandra, HBase.</p>
+<p>Typisch gebruik: telemetrie, klikstromen, IoT-metingen op miljardenschaal.</p>
+<h3>5.5 Graph databases</h3>
+<p>Knopen en relaties als eersteklas burgers. Voorbeeld: Neo4j.</p>
+<p>Typisch gebruik: netwerkanalyse, fraudedetectie, aanbevelingen — vragen waarin het pad tussen entiteiten belangrijker is dan de entiteiten zelf.</p>
+<h3>5.6 Time-series databases</h3>
+<p>Geoptimaliseerd voor metingen met een tijdstempel. Voorbeelden: InfluxDB, TimescaleDB (een PostgreSQL-extensie).</p>
+<h3>5.7 Analytische/kolomgeoriënteerde platformen</h3>
+<p>Geoptimaliseerd voor het lezen van enorme hoeveelheden rijen over weinig kolommen. Voorbeelden: Snowflake, Google BigQuery, ClickHouse. Dit is het OLAP-domein tegenover het OLTP-domein van de klassieke RDBMS — een onderscheid dat we in niveau 2 uitwerken.</p>
+<figure class="dbm-figure"><img src="../../figuren/figuur-1-3.png" alt="Landschapskaart datastores, geplaatst op de assen &quot;schemastrengheid&quot; en &quot;schaalmodel&quot;" loading="lazy"><figcaption>Figuur 1-3 — Landschapskaart datastores, geplaatst op de assen &quot;schemastrengheid&quot; en &quot;schaalmodel&quot;</figcaption></figure>
+<blockquote>
+<p><strong>Waarschuwing tegen het modelvoorbeeld.</strong> Elke categorie hierboven wordt in verkoopmateriaal gepresenteerd als de opvolger van de vorige. Dat is onjuist. Ze zijn <em>specialisaties</em>. De vraag is nooit “wat is het beste type database”, maar “welk type past bij deze werklast”. In de NoSQL-elective werken we die afweging volledig uit; in niveau 2, deel 21, krijg je het overzichtsdeel.</p>
+</blockquote>
+<hr>
+<h2>6. ACID en BASE: twee beloften</h2>
+<h3>6.1 ACID</h3>
+<p>Klassieke transactiegarantie, in deel 7 volledig uitgewerkt. Kort:</p>
+<ul>
+<li><strong>Atomicity</strong> — een transactie gebeurt geheel of helemaal niet.</li>
+<li><strong>Consistency</strong> — een transactie brengt de database van de ene geldige toestand naar de andere; alle regels blijven gelden.</li>
+<li><strong>Isolation</strong> — gelijktijdige transacties beïnvloeden elkaar niet op een manier die zichtbaar is.</li>
+<li><strong>Durability</strong> — wat bevestigd is, is bevestigd, ook als de stroom een seconde later uitvalt.</li>
+</ul>
+<h3>6.2 BASE</h3>
+<p>Het alternatief uit de gedistribueerde wereld:</p>
+<ul>
+<li><strong>Basically Available</strong> — het systeem antwoordt altijd, desnoods met verouderde gegevens.</li>
+<li><strong>Soft state</strong> — de toestand mag tijdelijk afwijken tussen knooppunten.</li>
+<li><strong>Eventual consistency</strong> — gegeven genoeg tijd zonder nieuwe wijzigingen convergeren alle kopieën.</li>
+</ul>
+<h3>6.3 Waarom dit een businesskeuze is</h3>
+<p>Stel: Meridiaan verwerkt een waardeoverdracht. Bedrag af bij fonds A, bedrag bij bij fonds B. Onder BASE is er een venster waarin het geld nergens staat, of overal. Voor een tijdlijn op een website is dat acceptabel. Voor een pensioenaanspraak is het dat niet — niet technisch, maar juridisch en reputationeel.</p>
+<p>Formuleer het daarom nooit als “ACID is veiliger”. Formuleer het als: <strong>hoe lang mag deze gegevenssoort onjuist zijn, en wie draagt de schade als dat gebeurt?</strong> Dat is een vraag die de business kan beantwoorden en jij niet.</p>
+<hr>
+<h2>7. PostgreSQL gepositioneerd</h2>
+<p>PostgreSQL is een open-source objectrelationeel DBMS met wortels in het POSTGRES-project aan de University of California, Berkeley (jaren tachtig), onder leiding van Michael Stonebraker. Sinds 1996 draagt het project de huidige naam en wordt het ontwikkeld door een wereldwijde community, niet door één bedrijf.</p>
+<p>Wat het onderscheidt:</p>
+<p><strong>Licentie.</strong> De PostgreSQL License is een permissieve licentie in de familie van BSD/MIT. Geen licentiekosten, geen gebruiksbeperkingen, geen verplichting om afgeleid werk vrij te geven. Voor Meridiaan betekent dat: geen core-gebaseerde afrekening, geen audit-risico, geen onderhandeling bij groei van het aantal cores.</p>
+<p><strong>Governance.</strong> Geen bedrijf dat de licentie eenzijdig kan wijzigen. Dat is relevant sinds meerdere open-source projecten hun licentie hebben aangescherpt zodra de commerciële belangen wijzigden. Voor Tarik (enterprise-architect) is dit vaak het doorslaggevende argument tegen lock-in.</p>
+<p><strong>Uitbreidbaarheid.</strong> PostgreSQL is ontworpen om uitgebreid te worden: eigen datatypen, eigen operatoren, eigen indextypen, eigen procedurele talen. Daaruit is een ecosysteem van extensies gegroeid: PostGIS (geodata), TimescaleDB (tijdreeksen), pgvector (vectoren voor AI-toepassingen), Citus (sharding), pg_stat_statements (querystatistieken). Deze uitbreidbaarheid is de reden dat PostgreSQL zoveel gespecialiseerde databases gedeeltelijk kan vervangen.</p>
+<p><strong>Standaardconformiteit.</strong> PostgreSQL volgt de SQL-standaard nauwer dan de meeste concurrenten. Dat maakt kennis overdraagbaar en migratie minder pijnlijk.</p>
+<p><strong>Rijk typesysteem.</strong> Naast de gebruikelijke typen: arrays, <code>jsonb</code> (geïndexeerd, doorzoekbaar JSON), ranges, <code>uuid</code>, geometrische typen, en eigen enum- en samengestelde typen. <code>jsonb</code> verdient bijzondere vermelding: het maakt documentopslag mogelijk <em>binnen</em> een transactionele relationele database. In veel projecten is dat de reden dat er géén aparte documentstore nodig blijkt.</p>
+<h3>7.1 Tegenover de alternatieven</h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>PostgreSQL</th>
+<th>Oracle / SQL Server</th>
+<th>MySQL / MariaDB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Licentiekosten</td>
+<td>Geen</td>
+<td>Substantieel, per core</td>
+<td>Geen (community)</td>
+</tr>
+<tr>
+<td>Lock-in</td>
+<td>Laag</td>
+<td>Hoog</td>
+<td>Middel (afhankelijk van eigenaar)</td>
+</tr>
+<tr>
+<td>Standaardconformiteit</td>
+<td>Hoog</td>
+<td>Middel (eigen dialect)</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td>Uitbreidbaarheid</td>
+<td>Zeer hoog</td>
+<td>Beperkt</td>
+<td>Beperkt</td>
+</tr>
+<tr>
+<td>Support</td>
+<td>Via commerciële partijen</td>
+<td>Van de leverancier</td>
+<td>Via commerciële partijen</td>
+</tr>
+<tr>
+<td>Beschikbaarheid van beheerders in NL</td>
+<td>Goed en groeiend</td>
+<td>Goed</td>
+<td>Goed</td>
+</tr>
+</tbody>
+</table>
+<p>De eerlijkheid gebiedt de tegenkant te noemen: bij Oracle en SQL Server koop je één telefoonnummer voor als het misgaat, inclusief contractuele aansprakelijkheid. Dat is voor Ruud (beheerhoofd) een reëel argument. Het antwoord is niet “dat heb je niet nodig”, maar “dat kun je apart inkopen bij een supportpartij” — waarmee het een kostenvergelijking wordt in plaats van een geloofskwestie.</p>
+<hr>
+<h2>8. Versiebeleid, support en het ecosysteem</h2>
+<h3>8.1 Versienummering</h3>
+<p>Sinds versie 10 gebruikt PostgreSQL een tweedelig schema: een hoofdversie (17, 18, …) en een subversie (17.1, 17.2, …). Hoofdversies verschijnen ongeveer jaarlijks en kunnen gedragswijzigingen bevatten; subversies zijn uitsluitend correcties en beveiligingsherstel.</p>
+<h3>8.2 Ondersteuningsvenster</h3>
+<p>Elke hoofdversie wordt vijf jaar ondersteund na verschijnen. Daarna verschijnen er geen beveiligingsherstellingen meer. Dat betekent voor Meridiaan een concrete beheerverplichting: <strong>plan de hoofdversie-upgrade als terugkerende gebeurtenis, niet als project.</strong> Een organisatie die dat nalaat, staat over vijf jaar op een niet-ondersteunde versie en heeft dan een migratie in plaats van een upgrade.</p>
+<p>Voor de exacte versienummers, einddata en de bijbehorende upgradepaden: zie de <strong>Toolbijlage</strong>. Die verwijzing zul je in de hele cursus tegenkomen — alles wat versiegebonden of klikpadafhankelijk is, staat daar en niet in de reader, zodat de reader bruikbaar blijft als de versies opschuiven.</p>
+<h3>8.3 Het ecosysteem waar je in de praktijk mee werkt</h3>
+<ul>
+<li><strong>psql</strong> — de opdrachtregelclient; de gemeenschappelijke taal van alle PostgreSQL-beheerders. We gebruiken die vanaf deel 3.</li>
+<li><strong>pgAdmin</strong> en <strong>DBeaver</strong> — grafische clients.</li>
+<li><strong>pg_dump / pg_restore</strong> — logische back-up (deel 7 introductie, niveau 2 deel 17 volledig).</li>
+<li><strong>Barman</strong>, <strong>pgBackRest</strong> — back-upbeheer op productieschaal (niveau 2 deel 17).</li>
+<li><strong>Patroni</strong>, <strong>PgBouncer</strong> — hoge beschikbaarheid en connection pooling (niveau 2 deel 19).</li>
+<li><strong>pgaudit</strong>, <strong>pg_stat_statements</strong> — auditing en querystatistieken (niveau 2 deel 20).</li>
+</ul>
+<hr>
+<h2>9. Wanneer PostgreSQL wél, en wanneer niet</h2>
+<p>Een advies dat alleen voordelen noemt, wordt niet geloofd. Leer daarom het tegengeluid uit je hoofd.</p>
+<p><strong>PostgreSQL past goed bij:</strong></p>
+<ul>
+<li>transactionele administraties met integriteitseisen (Meridiaan);</li>
+<li>gemengde werklasten waarin relationele en documentachtige gegevens naast elkaar bestaan (<code>jsonb</code>);</li>
+<li>organisaties die lock-in willen vermijden of licentiekosten willen drukken;</li>
+<li>gespecialiseerde behoeften die een extensie afdekt (geodata, tijdreeksen, vectoren).</li>
+</ul>
+<p><strong>PostgreSQL past minder goed bij:</strong></p>
+<ul>
+<li><strong>analytische werklasten op petabyteschaal.</strong> Voor scans over miljarden rijen zijn kolomgeoriënteerde platformen fundamenteel efficiënter. PostgreSQL kan het, maar je vecht tegen het ontwerp.</li>
+<li><strong>wereldwijd verspreide schrijfbelasting met lage latentie op elk continent.</strong> Dat is Cassandra-terrein. (Niveau 3, deel 23, behandelt waarom dit een consequentie is van CAP en niet van implementatiekwaliteit.)</li>
+<li><strong>extreme sleutel-waarde-doorvoer</strong>, waar Redis ordes van grootte sneller is.</li>
+<li><strong>organisaties zonder enige interne kennis en zonder bereidheid support in te kopen.</strong> Dit is het eerlijkste tegenargument: gratis software is niet gratis in beheer.</li>
+<li><strong>applicaties die uitsluitend gecertificeerd zijn voor een ander platform.</strong> Bij pakketsoftware bepaalt de leverancier de database, niet jij.</li>
+</ul>
+<figure class="dbm-figure"><img src="../../figuren/figuur-1-4.png" alt="Beslisboom &quot;is PostgreSQL hier passend?&quot;" loading="lazy"><figcaption>Figuur 1-4 — Beslisboom &quot;is PostgreSQL hier passend?&quot;</figcaption></figure>
+<hr>
+<h2>10. De keuze in een organisatie: hoe die werkelijk verloopt</h2>
+<p>In de theorie kiest een organisatie op basis van eisen. In de praktijk spelen vijf factoren mee die je moet benoemen omdat ze anders ongezien de doorslag geven:</p>
+<ol>
+<li><strong>Bestaande kennis.</strong> Een beheerteam dat twintig jaar SQL Server doet, is een reëel activum. Dat weggooien kost meer dan een licentie.</li>
+<li><strong>Bestaande contracten.</strong> Een lopende enterprise-overeenkomst kan de marginale kosten van “nog een database” bijna nul maken.</li>
+<li><strong>Inkoop- en beveiligingsbeleid.</strong> Sommige organisaties eisen een leverancier met contractuele aansprakelijkheid. Dan wordt het PostgreSQL <em>met</em> een supportcontract, niet PostgreSQL zonder.</li>
+<li><strong>Cloudstrategie.</strong> Staat de organisatie op Azure, dan is een managed PostgreSQL-dienst iets anders dan zelf beheren — met eigen beperkingen (niveau 3, deel 25).</li>
+<li><strong>Wie het hardst praat.</strong> Niet zelden beslissend, en de reden dat je onderbouwing schriftelijk moet zijn.</li>
+</ol>
+<p>Een bruikbare structuur voor je advies, die je in het werkboek gaat toepassen:</p>
+<blockquote>
+<p><strong>Eis → wegingsfactor → score per platform → conclusie → expliciet benoemde risico’s van de aanbevolen optie.</strong></p>
+</blockquote>
+<p>Die laatste stap slaan beginners over. Juist die maakt het advies geloofwaardig: je laat zien dat je de nadelen kent en er een antwoord op hebt.</p>
+<hr>
+<h2>11. Rollen rond de database</h2>
+<table>
+<thead>
+<tr>
+<th>Rol</th>
+<th>Kernvraag</th>
+<th>In deze cursus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Applicatieontwikkelaar</td>
+<td>Hoe kom ik bij mijn gegevens?</td>
+<td>Delen 3-8</td>
+</tr>
+<tr>
+<td>Databaseontwerper / datamodelleur</td>
+<td>Hoe leg ik de werkelijkheid vast?</td>
+<td>Deel 5, 6</td>
+</tr>
+<tr>
+<td>DBA (beheer)</td>
+<td>Blijft dit draaien en herstelbaar?</td>
+<td>Niveau 2</td>
+</tr>
+<tr>
+<td>Data-architect</td>
+<td>Hoe past dit in het geheel?</td>
+<td>Niveau 3</td>
+</tr>
+<tr>
+<td>Security officer / privacyfunctionaris</td>
+<td>Wie ziet wat, en kunnen we dat aantonen?</td>
+<td>Deel 9, niveau 2 deel 21</td>
+</tr>
+</tbody>
+</table>
+<p>In kleinere organisaties — en Meridiaan is er zo een — draagt één persoon meerdere van deze petten. Dat maakt het belangrijker, niet minder belangrijk, om te weten wélke pet je op hebt als je een beslissing neemt. Veel productie-incidenten ontstaan doordat iemand als ontwikkelaar een beheerbeslissing nam.</p>
+<hr>
+<h2>12. Aansluiting op de certificering</h2>
+<p>Deze cursus bereidt voor op de EDB-certificeringslijn voor PostgreSQL: de Associate-certificering na niveau 1, de Professional-certificering na niveau 2, en de architectgerichte clustercertificering na niveau 3.</p>
+<p>Twee dingen moet je daarover weten:</p>
+<ol>
+<li><strong>Deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</strong> Bij aanschaf van een EDB-examen krijg je uitsluitend het examen, geen lesmateriaal — dat gat vult deze cursus. Raadpleeg altijd de actuele examenblauwdruk van EDB voor de definitieve onderwerplijst; die kan per versie wijzigen.</li>
+<li><strong>De examens zijn versiegebonden.</strong> Welke PostgreSQL-versie het examen op dit moment toetst, staat in de Toolbijlage, niet hier.</li>
+</ol>
+<p>De relevante examenonderwerpen voor dit deel zijn beperkt: de positionering en architectuurschets van PostgreSQL. Het echte examenwerk begint in deel 2.</p>
+<hr>
+<h2>13. Kernbegrippen</h2>
+<p><strong>Database</strong> — een geordende verzameling gerelateerde gegevens.
+<strong>DBMS</strong> — de software die databases beheert.
+<strong>Data-onafhankelijkheid</strong> — wijzigingen in fysieke opslag raken de logische bevraging niet.
+<strong>RDBMS</strong> — relationeel DBMS: gegevens in tabellen, bevraagd met SQL.
+<strong>ACID</strong> — atomiciteit, consistentie, isolatie, duurzaamheid.
+<strong>BASE</strong> — basically available, soft state, eventual consistency.
+<strong>OLTP</strong> — transactieverwerking: veel kleine bewerkingen.
+<strong>OLAP</strong> — analyse: weinig, grote leesbewerkingen.
+<strong>Extensie</strong> — uitbreidingsmodule die PostgreSQL functionaliteit toevoegt.
+<strong>Lock-in</strong> — afhankelijkheid van één leverancier waardoor wisselen onevenredig duur wordt.</p>
+<hr>
+<h2>14. Verder lezen</h2>
+<ul>
+<li>De officiële PostgreSQL-documentatie, hoofdstuk “Preface” en “Tutorial” — de beste startdocumentatie in het vakgebied.</li>
+<li>Het PostgreSQL-versiebeleid en de ondersteuningskalender op de projectwebsite (actuele data: zie Toolbijlage).</li>
+<li>C.J. Date, <em>An Introduction to Database Systems</em> — voor wie het relationele model bij de bron wil lezen. We gebruiken dit in deel 2.</li>
+</ul>
+<hr>
+<p><em>Volgende deel: het relationele model en de PostgreSQL-architectuur. Je leert dan wat er werkelijk gebeurt tussen het moment dat je op Enter drukt en het moment dat er een antwoord terugkomt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">194 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">541 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><span></span><a class="dbm-prevnext next" href="../deel-02-het-relationele-model-en-de-postgresql-architectuur/reader.html">Deel 2 — Het relationele model en de PostgreSQL-architectuur &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

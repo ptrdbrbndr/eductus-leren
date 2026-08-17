@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — SQL basis: SELECT, filteren, sorteren, aggregeren — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 3 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 3 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 3: SQL basis</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<p>Alle opdrachten draaien tegen de casusdatabase. Start met:</p>
+<pre><code class="language-bash">psql -d meridiaan
+</code></pre>
+<pre><code class="language-sql">SET search_path TO meridiaan, public;
+SELECT count(*) FROM deelnemer;   -- verwacht: 8000
+</code></pre>
+<p>Krijg je een ander aantal, laad de casus dan opnieuw (zie README bij de casusscripts). De uitwerkingen hieronder noemen <strong>orden van grootte</strong>, geen exacte getallen: kleine afwijkingen door een andere laadvolgorde zijn normaal. Beoordeel je antwoord op de query, niet op het getal.</p>
+<p>Zet <code>\timing</code> aan. Vanaf nu let je op uitvoeringstijd.</p>
+<p>Tijdsindicatie: circa 120 minuten.</p>
+<hr>
+<h2>Opdracht 3.1 — Verkennen (10 min)</h2>
+<p>Beantwoord met psql-meta-commando’s, niet met SQL waar dat kan.</p>
+<p>a) Welke tabellen bestaan er in het schema <code>meridiaan</code>?
+b) Welke kolommen, typen en constraints heeft <code>premienota</code>?
+c) Welke indexen staan er op <code>dienstverband</code>?
+d) Hoeveel rijen heeft elke tabel? (Nu wél SQL.)
+e) Zet de uitgebreide weergave aan en bekijk één rij uit <code>deelnemer</code>. Waarom is dat handig bij deze tabel?</p>
+<hr>
+<h2>Opdracht 3.2 — Kolommen en berekeningen (15 min)</h2>
+<p>a) Toon voorletters, tussenvoegsel en achternaam van de eerste 10 deelnemers, gesorteerd op achternaam.
+b) Maak één kolom <code>volledige_naam</code> waarin de drie delen netjes zijn samengevoegd, ook als het tussenvoegsel ontbreekt. Gebruik géén <code>coalesce</code>.
+c) Toon per dienstverband het jaarsalaris, de deeltijdfactor en het salaris naar rato, afgerond op hele euro’s.
+d) Voeg een kolom toe met het maandsalaris naar rato. Waarom levert <code>jaarsalaris / 12 * deeltijdfactor</code> hier geen probleem op, terwijl <code>count(*) / 12</code> dat wel zou doen?</p>
+<hr>
+<h2>Opdracht 3.3 — Filteren (20 min)</h2>
+<p>a) Hoeveel deelnemers wonen niet in Nederland?
+b) Hoeveel deelnemers hebben geen BSN?
+c) Toon alle deelnemers geboren in 1960, gesorteerd op geboortedatum.
+d) Hoeveel deelnemers hebben een achternaam die met “Van” begint? Let op hoofdlettergevoeligheid.
+e) Hoeveel deelnemers wonen <strong>niet</strong> in Utrecht? Geef twee antwoorden — één naïef en één correct — en verklaar het verschil.
+f) Toon alle premienota’s uit 2025 die op de vervaldatum nog niet betaald waren. (Denk aan nota’s die nooit betaald zijn én aan nota’s die te laat betaald zijn.)
+g) Hoeveel mutaties zijn er in 2025 via het portaal aangemeld? Gebruik de veilige datumgrenzen uit paragraaf 5 van de reader.</p>
+<hr>
+<h2>Opdracht 3.4 — Sorteren en beperken (10 min)</h2>
+<p>a) Toon de 10 hoogste jaarsalarissen met de bijbehorende <code>dienstverband_id</code>.
+b) Toon de 10 deelnemers wier deelname het langst geleden is beëindigd. Zorg dat actieve deelnemers niet bovenaan komen.
+c) Iemand schrijft <code>SELECT achternaam FROM deelnemer LIMIT 5;</code> en gebruikt dat resultaat in een rapport. Wat is daar mis mee?
+d) Toon de deelnemers 51 tot en met 60 op alfabet. Waarom is dit patroon ongeschikt voor een portaal met 8.000 deelnemers en tientallen pagina’s?</p>
+<hr>
+<h2>Opdracht 3.5 — Rommelige data opruimen in een query (15 min)</h2>
+<p>a) Toon het aantal deelnemers per woonplaats, ruw (zonder opschonen), aflopend op aantal. Wat valt op in de staart van het resultaat?
+b) Herhaal dit met genormaliseerde woonplaatsen (spaties weg, consistente hoofdlettering).
+c) Hoeveel verschillende woonplaatsen zijn er vóór en na normalisatie?
+d) Karin wil deze schoonmaakactie als vaste query in het rapportagepakket zetten. Formuleer in twee zinnen waarom dat de verkeerde oplossing is en wat wél de oplossing is.</p>
+<hr>
+<h2>Opdracht 3.6 — Datums (20 min)</h2>
+<p>a) Toon per deelnemer de achternaam en de leeftijd in hele jaren. Beperk tot deelnemers van 65 jaar of ouder.
+b) Hoeveel deelnemers zijn er per geboortedecennium?
+c) Toon per maand van 2025 het aantal aangemelde mutaties en het aantal daarvan dat is verwerkt.
+d) Wat is de gemiddelde doorlooptijd in dagen van verwerkte mutaties, per kanaal? Rond af op één decimaal.
+e) Welk kanaal heeft het hoogste percentage onverwerkte mutaties? Let op de integerdeling.</p>
+<hr>
+<h2>Opdracht 3.7 — Aggregeren en groeperen (20 min)</h2>
+<p>a) Hoeveel werkgevers zijn er per sector? Sorteer aflopend.
+b) Geef per sector het aantal werkgevers, het aantal nog aangesloten werkgevers en het aantal opgezegde — in één query, met één scan.
+c) Geef per werkgever het totaal gefactureerde bedrag over 2025 en het aantal nota’s. Toon alleen werkgevers met meer dan €200.000 aan nota’s.
+d) Geef per soort aanspraak het aantal, het gemiddelde en het hoogste bedrag.
+e) Welke werkgevers hebben meer dan drie onbetaalde nota’s? Sorteer aflopend op aantal.
+f) Waarom levert de volgende query een foutmelding op, en wat zijn twee manieren om hem te repareren?</p>
+<pre><code class="language-sql">SELECT sector, naam, count(*) FROM werkgever GROUP BY sector;
+</code></pre>
+<hr>
+<h2>Opdracht 3.8 — De uitvoeringsvolgorde toepassen (10 min)</h2>
+<p>Verklaar per geval wat er gebeurt, zonder de query uit te voeren. Voer daarna uit om te controleren.</p>
+<p>a)</p>
+<pre><code class="language-sql">SELECT jaarsalaris * deeltijdfactor AS naar_rato
+FROM dienstverband
+WHERE naar_rato &gt; 50000;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT jaarsalaris * deeltijdfactor AS naar_rato
+FROM dienstverband
+ORDER BY naar_rato DESC;
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT sector, count(*) AS aantal
+FROM werkgever
+WHERE count(*) &gt; 10
+GROUP BY sector;
+</code></pre>
+<p>d)</p>
+<pre><code class="language-sql">SELECT sector, count(*) AS aantal
+FROM werkgever
+GROUP BY sector
+HAVING sector &lt;&gt; 'Zorg';
+</code></pre>
+<p>Dit werkt — maar waarom is het toch slecht geschreven?</p>
+<hr>
+<h2>Opdracht 3.9 — Stuurinformatie voor Karin (20 min, drietallen)</h2>
+<p>Karin vraagt om één overzicht dat ze maandelijks wil ontvangen: <strong>de betaalprestatie per sector over 2025.</strong></p>
+<p>Lever één query die per sector toont:</p>
+<ul>
+<li>het aantal nota’s;</li>
+<li>het totaal gefactureerde bedrag;</li>
+<li>het aantal onbetaalde nota’s;</li>
+<li>het aantal te laat betaalde nota’s (betaald ná de vervaldatum);</li>
+<li>het percentage nota’s dat op tijd betaald is, op één decimaal;</li>
+<li>alleen sectoren met minstens 100 nota’s, aflopend op dat percentage.</li>
+</ul>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Eén query, één scan waar mogelijk (<code>FILTER</code>).</li>
+<li>Correcte behandeling van NULL in <code>bedrag</code> en <code>betaaldatum</code>.</li>
+<li>Geen integerdeling.</li>
+<li>Kolomnamen die Karin begrijpt zonder toelichting.</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 3.1</h2>
+<p>a) <code>\dt</code> (met <code>search_path</code> op <code>meridiaan</code>) of <code>\dt meridiaan.*</code>
+b) <code>\d premienota</code> — toont kolommen, typen, de <code>UNIQUE</code>-constraint op (werkgever_id, jaar, maand), de <code>CHECK</code>-constraints en de foreign key.
+c) <code>\d dienstverband</code> toont ze onderaan; <code>\di</code> toont alle indexen.
+d)</p>
+<pre><code class="language-sql">SELECT 'deelnemer' AS tabel, count(*) FROM deelnemer
+UNION ALL SELECT 'werkgever', count(*) FROM werkgever
+UNION ALL SELECT 'dienstverband', count(*) FROM dienstverband
+UNION ALL SELECT 'aanspraak', count(*) FROM aanspraak
+UNION ALL SELECT 'premienota', count(*) FROM premienota
+UNION ALL SELECT 'mutatie', count(*) FROM mutatie
+ORDER BY 1;
+</code></pre>
+<p>e) <code>\x</code> gevolgd door <code>SELECT * FROM deelnemer LIMIT 1;</code>. Handig omdat <code>deelnemer</code> elf kolommen heeft en de rij anders over de schermbreedte omklapt. Zet <code>\x</code> weer uit voor de volgende opdrachten.</p>
+<hr>
+<h2>Uitwerking 3.2</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT voorletters, tussenvoegsel, achternaam
+FROM deelnemer
+ORDER BY achternaam
+LIMIT 10;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT concat_ws(' ', voorletters, tussenvoegsel, achternaam) AS volledige_naam
+FROM deelnemer
+LIMIT 10;
+</code></pre>
+<p><code>concat_ws</code> negeert NULL-argumenten. Dat is precies waarom het hier gevraagd werd zonder <code>coalesce</code>: de nette oplossing is korter dan de omweg.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT dienstverband_id,
+       jaarsalaris,
+       deeltijdfactor,
+       round(jaarsalaris * deeltijdfactor) AS naar_rato
+FROM dienstverband
+LIMIT 20;
+</code></pre>
+<p>Rijen zonder jaarsalaris leveren NULL in <code>naar_rato</code> — correct: onbekend maal een getal blijft onbekend.</p>
+<p>d)</p>
+<pre><code class="language-sql">       round(jaarsalaris * deeltijdfactor / 12, 2) AS maand_naar_rato
+</code></pre>
+<p>Geen probleem, omdat <code>jaarsalaris</code> van het type <code>numeric</code> is; de deling is dus numeriek en niet integer. <code>count(*)</code> levert daarentegen <code>bigint</code>, en <code>bigint / 12</code> is integerdeling.</p>
+<hr>
+<h2>Uitwerking 3.3</h2>
+<p>a) <code>SELECT count(*) FROM deelnemer WHERE land &lt;&gt; 'NL';</code> — orde van grootte: ruim 150 (2% van 8.000). <code>land</code> is <code>NOT NULL</code>, dus <code>&lt;&gt;</code> is hier veilig — een goed moment om te vragen waarom <code>IS DISTINCT FROM</code> hier níét nodig is.</p>
+<p>b) <code>SELECT count(*) FROM deelnemer WHERE bsn IS NULL;</code> — circa 4% van 8.000, dus rond de 300.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT * FROM deelnemer
+WHERE geboortedatum &gt;= DATE '1960-01-01'
+  AND geboortedatum &lt;  DATE '1961-01-01'
+ORDER BY geboortedatum;
+</code></pre>
+<p><code>extract(year FROM geboortedatum) = 1960</code> geeft hetzelfde antwoord maar kan geen index gebruiken (deel 8).</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT count(*) FROM deelnemer WHERE achternaam LIKE 'Van %';
+SELECT count(*) FROM deelnemer WHERE achternaam ILIKE 'van %';
+</code></pre>
+<p>In de casus zit “van” in <code>tussenvoegsel</code>, niet in <code>achternaam</code> — het antwoord is dus laag of nul. Dat is de les: controleer waar het gegeven werkelijk staat voordat je filtert.</p>
+<p>e)</p>
+<pre><code class="language-sql">-- Naief
+SELECT count(*) FROM deelnemer WHERE woonplaats &lt;&gt; 'Utrecht';
+-- Correct
+SELECT count(*) FROM deelnemer WHERE woonplaats IS DISTINCT FROM 'Utrecht';
+</code></pre>
+<p>Verschil: circa 240 deelnemers met <code>woonplaats IS NULL</code>. De naïeve variant sluit die stil uit, want <code>NULL &lt;&gt; 'Utrecht'</code> is onbekend en <code>WHERE</code> laat alleen <code>true</code> door.</p>
+<p>f)</p>
+<pre><code class="language-sql">SELECT *
+FROM premienota
+WHERE periode_jaar = 2025
+  AND (betaaldatum IS NULL OR betaaldatum &gt; vervaldatum);
+</code></pre>
+<p>Beide gevallen moeten expliciet: <code>betaaldatum &gt; vervaldatum</code> alleen laat de nooit-betaalde nota’s weg.</p>
+<p>g)</p>
+<pre><code class="language-sql">SELECT count(*)
+FROM mutatie
+WHERE kanaal = 'portaal'
+  AND aangemeld_op &gt;= TIMESTAMPTZ '2025-01-01 00:00+01'
+  AND aangemeld_op &lt;  TIMESTAMPTZ '2026-01-01 00:00+01';
+</code></pre>
+<hr>
+<h2>Uitwerking 3.4</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT dienstverband_id, jaarsalaris
+FROM dienstverband
+ORDER BY jaarsalaris DESC NULLS LAST
+LIMIT 10;
+</code></pre>
+<p><code>NULLS LAST</code> is hier essentieel: bij <code>DESC</code> komt NULL standaard eerst, en dan tonen de eerste rijen dienstverbanden zónder salaris.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT deelnemer_id, achternaam, einddatum_deelname
+FROM deelnemer
+WHERE einddatum_deelname IS NOT NULL
+ORDER BY einddatum_deelname ASC
+LIMIT 10;
+</code></pre>
+<p>c) Zonder <code>ORDER BY</code> is de volgorde niet gedefinieerd. Het lijkt vaak stabiel, maar na een update, een vacuum of een gewijzigd queryplan komen er andere rijen uit — en een rapport dat elke maand andere “eerste vijf” toont zonder dat iemand iets veranderde, kost veel tijd om uit te zoeken.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT achternaam FROM deelnemer ORDER BY achternaam, deelnemer_id LIMIT 10 OFFSET 50;
+</code></pre>
+<p>Merk op dat <code>deelnemer_id</code> als tweede sorteersleutel nodig is: bij gelijke achternamen is de volgorde anders niet stabiel, en dan verschijnen bij paginering rijen dubbel of helemaal niet.</p>
+<p>Ongeschikt voor grote aantallen omdat de database bij <code>OFFSET 7000</code> alsnog alle 7.000 overgeslagen rijen moet produceren en sorteren. Keyset-paginering (<code>WHERE achternaam &gt; 'laatst getoonde'</code>) is het alternatief; niveau 2.</p>
+<hr>
+<h2>Uitwerking 3.5</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT woonplaats, count(*) AS aantal
+FROM deelnemer
+GROUP BY woonplaats
+ORDER BY aantal DESC;
+</code></pre>
+<p>In de staart verschijnen <code>den haag</code>, <code>DEN HAAG</code>, <code> Den Haag</code>, <code>Den  Bosch</code> en <code>s-Hertogenbosch</code> als aparte groepen, plus één groep met NULL. Vijf schrijfwijzen van twee steden.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT initcap(trim(woonplaats)) AS woonplaats, count(*) AS aantal
+FROM deelnemer
+GROUP BY 1
+ORDER BY aantal DESC;
+</code></pre>
+<p><code>initcap(trim(...))</code> haalt de spaties weg en maakt de hoofdlettering gelijk. <code>Den Haag</code> valt nu samen; <code>s-Hertogenbosch</code> en <code>Den Bosch</code> blijven verschillend, want dat zijn verschillende namen voor dezelfde stad — geen opmaakprobleem maar een betekenisprobleem.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT count(DISTINCT woonplaats)                  AS ruw,
+       count(DISTINCT initcap(trim(woonplaats)))   AS genormaliseerd
+FROM deelnemer;
+</code></pre>
+<p>Let op: <code>count(DISTINCT ...)</code> telt NULL niet mee. Het aantal <em>groepen</em> in a) is dus één hoger dan dit getal.</p>
+<p>d) Modelantwoord: <em>“Een schoonmaakquery repareert het symptoom bij elke bevraging opnieuw, en werkt alleen voor de varianten die we vandaag kennen — morgen typt iemand ‘Dan Haag’ en dan klopt het rapport weer niet. De echte oplossing is het domein afdwingen: een aparte plaatsentabel met een foreign key, zodat een onbekende plaats bij invoer wordt geweigerd in plaats van bij rapportage opgeruimd.”</em></p>
+<p>Dit is de brug naar deel 5 en 6.</p>
+<hr>
+<h2>Uitwerking 3.6</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT achternaam, extract(year FROM age(geboortedatum))::int AS leeftijd
+FROM deelnemer
+WHERE geboortedatum &lt;= current_date - INTERVAL '65 years'
+ORDER BY leeftijd DESC;
+</code></pre>
+<p>Filteren op de kolom zelf (niet op <code>age(...)</code>) is bewust: het is index-vriendelijk. In deel 8 zie je waarom dat verschil maakt.</p>
+<p>b)</p>
+<pre><code class="language-sql">SELECT (extract(year FROM geboortedatum)::int / 10) * 10 AS decennium, count(*)
+FROM deelnemer
+GROUP BY 1
+ORDER BY 1;
+</code></pre>
+<p>Hier is integerdeling juist precies wat je wilt: 1967 / 10 = 196, maal 10 = 1960.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT date_trunc('month', aangemeld_op) AS maand,
+       count(*)           AS aangemeld,
+       count(verwerkt_op) AS verwerkt
+FROM mutatie
+WHERE aangemeld_op &gt;= TIMESTAMPTZ '2025-01-01 00:00+01'
+  AND aangemeld_op &lt;  TIMESTAMPTZ '2026-01-01 00:00+01'
+GROUP BY 1
+ORDER BY 1;
+</code></pre>
+<p>d)</p>
+<pre><code class="language-sql">SELECT kanaal,
+       round(avg(extract(epoch FROM verwerkt_op - aangemeld_op) / 86400)::numeric, 1)
+           AS gem_dagen
+FROM mutatie
+WHERE verwerkt_op IS NOT NULL
+GROUP BY kanaal
+ORDER BY gem_dagen;
+</code></pre>
+<p>De <code>WHERE</code> is strikt genomen overbodig — <code>avg</code> negeert NULL — maar maakt de bedoeling expliciet en beperkt het aantal rijen dat verwerkt wordt.</p>
+<p>e)</p>
+<pre><code class="language-sql">SELECT kanaal,
+       count(*)                                   AS totaal,
+       count(*) FILTER (WHERE verwerkt_op IS NULL) AS open,
+       round(100.0 * count(*) FILTER (WHERE verwerkt_op IS NULL) / count(*), 1)
+           AS pct_open
+FROM mutatie
+GROUP BY kanaal
+ORDER BY pct_open DESC;
+</code></pre>
+<p><code>100.0</code> (numeric) in plaats van <code>100</code> (integer) is het verschil tussen een bruikbaar percentage en een kolom vol nullen. In de casus zijn de kanalen gelijk verdeeld, dus de percentages liggen dicht bij elkaar — bespreek met de groep of een verschil van 0,3 procentpunt betekenisvol is. Meestal niet.</p>
+<hr>
+<h2>Uitwerking 3.7</h2>
+<p>a)</p>
+<pre><code class="language-sql">SELECT sector, count(*) AS aantal FROM werkgever GROUP BY sector ORDER BY aantal DESC;
+</code></pre>
+<p>b)</p>
+<pre><code class="language-sql">SELECT sector,
+       count(*)                                       AS totaal,
+       count(*) FILTER (WHERE opzegdatum IS NULL)     AS aangesloten,
+       count(*) FILTER (WHERE opzegdatum IS NOT NULL) AS opgezegd
+FROM werkgever
+GROUP BY sector
+ORDER BY totaal DESC;
+</code></pre>
+<p>c)</p>
+<pre><code class="language-sql">SELECT werkgever_id,
+       count(*)      AS aantal_notas,
+       sum(bedrag)   AS totaal
+FROM premienota
+WHERE periode_jaar = 2025
+GROUP BY werkgever_id
+HAVING sum(bedrag) &gt; 200000
+ORDER BY totaal DESC;
+</code></pre>
+<p>Merk op: <code>sum</code> negeert de nota’s zonder bedrag. Het totaal is dus “de som van wat vastgesteld is”, niet “wat er gefactureerd had moeten worden”. Dat onderscheid hoort in de kolomnaam of in de toelichting terug te komen.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT soort, count(*) AS aantal,
+       round(avg(bedrag_jaarlijks), 2) AS gemiddeld,
+       max(bedrag_jaarlijks)           AS hoogste
+FROM aanspraak
+GROUP BY soort
+ORDER BY aantal DESC;
+</code></pre>
+<p>e)</p>
+<pre><code class="language-sql">SELECT werkgever_id, count(*) AS onbetaald
+FROM premienota
+WHERE betaaldatum IS NULL
+GROUP BY werkgever_id
+HAVING count(*) &gt; 3
+ORDER BY onbetaald DESC;
+</code></pre>
+<p>f) <code>naam</code> staat niet in <code>GROUP BY</code> en zit niet in een aggregatie. Per sector zijn er meerdere namen; welke zou getoond moeten worden? De vraag is onbeantwoordbaar en wordt daarom geweigerd.</p>
+<p>Twee reparaties, met verschillende betekenis:</p>
+<pre><code class="language-sql">-- 1: fijner groeperen (één rij per sector-naam-combinatie)
+SELECT sector, naam, count(*) FROM werkgever GROUP BY sector, naam;
+-- 2: aggregeren (één rij per sector, namen samengevoegd)
+SELECT sector, string_agg(naam, ', ' ORDER BY naam), count(*)
+FROM werkgever GROUP BY sector;
+</code></pre>
+<hr>
+<h2>Uitwerking 3.8</h2>
+<p>a) <strong>Foutmelding:</strong> <code>column &quot;naar_rato&quot; does not exist</code>. <code>WHERE</code> draait vóór <code>SELECT</code>, dus de alias bestaat nog niet. Herhaal de uitdrukking in <code>WHERE</code>.</p>
+<p>b) <strong>Werkt.</strong> <code>ORDER BY</code> draait ná <code>SELECT</code> en kent de alias wel.</p>
+<p>c) <strong>Foutmelding:</strong> <code>aggregate functions are not allowed in WHERE</code>. In de <code>WHERE</code>-fase bestaan er nog geen groepen. Dit hoort in <code>HAVING</code>.</p>
+<p>d) Werkt, maar <code>sector &lt;&gt; 'Zorg'</code> is een <strong>rijfilter dat in <code>HAVING</code> staat</strong>. Gevolg: de database groepeert eerst álle werkgevers inclusief de zorgsector en gooit die groep daarna weg. In <code>WHERE</code> valt de zorgsector eruit vóór het groeperen, wat minder werk is. Bovendien misleidt het de lezer: <code>HAVING</code> suggereert een uitspraak over de groep.</p>
+<p><strong>Regel:</strong> filter zo vroeg mogelijk. Alles wat per rij te beoordelen is, hoort in <code>WHERE</code>.</p>
+<hr>
+<h2>Uitwerking 3.9 — modelantwoord</h2>
+<pre><code class="language-sql">SELECT
+    w.sector,
+    count(*)                                                      AS aantal_notas,
+    sum(p.bedrag)                                                 AS totaal_gefactureerd,
+    count(*) FILTER (WHERE p.betaaldatum IS NULL)                 AS onbetaald,
+    count(*) FILTER (WHERE p.betaaldatum &gt; p.vervaldatum)         AS te_laat_betaald,
+    round(100.0 * count(*) FILTER (WHERE p.betaaldatum IS NOT NULL
+                                     AND p.betaaldatum &lt;= p.vervaldatum)
+          / count(*), 1)                                          AS pct_op_tijd
+FROM premienota p
+JOIN werkgever w USING (werkgever_id)
+WHERE p.periode_jaar = 2025
+GROUP BY w.sector
+HAVING count(*) &gt;= 100
+ORDER BY pct_op_tijd DESC;
+</code></pre>
+<p><strong>Bespreekpunten bij het nakijken:</strong></p>
+<ul>
+<li><strong>De join.</strong> Formeel komt die pas in deel 4. Groepen die hem zelf vinden, verdienen een compliment; groepen die vastlopen, mag je hem geven — de opdracht gaat over aggregatie, niet over joins.</li>
+<li><strong><code>pct_op_tijd</code>.</strong> Wie <code>100 - pct_te_laat</code> rekent, vergeet de onbetaalde nota’s, want die zijn niet te laat betaald maar ook niet op tijd. De drie categorieën (op tijd / te laat / onbetaald) moeten samen 100% zijn; laat groepen dat zelf controleren.</li>
+<li><strong><code>sum(p.bedrag)</code>.</strong> Negeert de nota’s zonder bedrag. De kolomnaam <code>totaal_gefactureerd</code> is daarmee strikt genomen misleidend. Beter: <code>totaal_vastgesteld</code>, met een voetnoot over het aantal nog niet vastgestelde nota’s. Dit is precies het soort nuance dat het verschil maakt tussen een analist en iemand die query’s schrijft.</li>
+<li><strong><code>100.0</code>.</strong> Wie <code>100</code> schrijft, krijgt overal nullen. Dat valt meteen op — dit is een van de weinige fouten die zichzelf verraadt.</li>
+<li><strong>Kolomnamen.</strong> Karin is geen technicus. <code>pct_op_tijd</code> is goed; <code>cnt_filter_1</code> niet.</li>
+</ul>
+<p><strong>Uitbreiding voor snelle groepen:</strong> voeg een kolom toe met het aantal nota’s waarvan het bedrag nog niet is vastgesteld, zodat Karin ziet hoe volledig het beeld is.</p>
+<hr>
+<p><em>Einde werkboek deel 3.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">70 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">442 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-02-het-relationele-model-en-de-postgresql-architectuur/reader.html">&larr; Deel 2 — Het relationele model en de PostgreSQL-architectuur</a><a class="dbm-prevnext next" href="../deel-04-sql-verdieping-joins-subquery-s-en-cte-s/reader.html">Deel 4 — SQL verdieping: joins, subquery&#39;s en CTE&#39;s &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

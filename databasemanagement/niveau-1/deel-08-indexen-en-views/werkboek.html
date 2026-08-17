@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkboek — Indexen en views — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Werkboek</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html">Reader</a><a href="werkboek.html" class="active">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 8 — Werkboek</h1>
+<p><strong>Cursus Databasemanagement — Niveau 1, deel 8: Indexen en views</strong>
+Werkboek met opdrachten en volledige uitwerkingen</p>
+<hr>
+<h2>Vooraf</h2>
+<pre><code class="language-sql">SET search_path TO oefening, meridiaan, public;
+\timing on
+</code></pre>
+<p><strong>Belangrijk over de omvang van de casus.</strong> Met 8.000 deelnemers is de database klein. Veel query’s zijn ook zónder index in milliseconden klaar, en de planner kiest dan terecht een sequentiële scan. Dat is geen tekortkoming van je index maar een correcte afweging — en het is zelf een van de dingen die je vandaag leert.</p>
+<p>Voor de opdrachten waar volume nodig is, maak je eerst een grotere werktabel:</p>
+<pre><code class="language-sql">CREATE TABLE mutatie_groot AS
+SELECT
+    row_number() OVER ()                       AS mutatie_id,
+    m.deelnemer_id,
+    m.soort,
+    m.kanaal,
+    m.aangemeld_op + (g || ' days')::interval  AS aangemeld_op,
+    CASE WHEN random() &lt; 0.88
+         THEN m.aangemeld_op + (g || ' days')::interval + INTERVAL '3 days'
+         ELSE NULL END                          AS verwerkt_op
+FROM meridiaan.mutatie m
+CROSS JOIN generate_series(1, 40) AS g;
+
+ANALYZE mutatie_groot;
+SELECT count(*) FROM mutatie_groot;   -- orde van grootte: bijna 300.000
+</code></pre>
+<p>Tijdsindicatie: circa 130 minuten.</p>
+<hr>
+<h2>Opdracht 8.1 — Je eerste plan lezen (15 min, individueel)</h2>
+<p>a) Draai <code>EXPLAIN</code> op een eenvoudige <code>SELECT</code> met een <code>WHERE</code> op <code>achternaam</code> in <code>meridiaan.deelnemer</code>. Benoem elk onderdeel van de uitvoer.
+b) Draai nu <code>EXPLAIN (ANALYZE, BUFFERS)</code>. Welke velden zijn erbij gekomen?
+c) Hoeveel rijen zijn er gelezen en weer weggegooid?
+d) Wijkt de schatting (<code>rows=</code>) af van de werkelijkheid (<code>actual rows=</code>)? Met welke factor?
+e) Waarom is <code>cost</code> niet in seconden, en waar kun je hem dan voor gebruiken?
+f) Je collega wil <code>EXPLAIN ANALYZE</code> draaien op een <code>UPDATE</code> in productie. Wat waarschuw je?</p>
+<hr>
+<h2>Opdracht 8.2 — Sequentieel of index (20 min, tweetallen)</h2>
+<p>Werk op <code>mutatie_groot</code>.</p>
+<p>a) Draai <code>EXPLAIN ANALYZE</code> op een query die filtert op één <code>deelnemer_id</code>. Welk scantype, en hoe lang duurt het?
+b) Maak een index op <code>deelnemer_id</code>. Draai dezelfde query opnieuw. Wat is er veranderd — scantype én tijd?
+c) Draai nu een query die filtert op <code>kanaal = 'portaal'</code> (circa 20% van de rijen). Maak een index op <code>kanaal</code> en meet opnieuw. Wordt de index gebruikt?
+d) Verklaar het verschil tussen b) en c).
+e) Doe hetzelfde op <code>meridiaan.werkgever</code> (250 rijen): index op <code>sector</code>, dan filteren. Wordt hij gebruikt? Waarom (niet)?
+f) Formuleer in één zin wanneer een sequentiële scan de juiste keuze is.</p>
+<hr>
+<h2>Opdracht 8.3 — De klassieke fout (15 min, individueel)</h2>
+<p>a) Maak een index op <code>meridiaan.deelnemer (geboortedatum)</code>.
+b) Draai <code>EXPLAIN ANALYZE</code> op:</p>
+<pre><code class="language-sql">SELECT * FROM meridiaan.deelnemer WHERE extract(year FROM geboortedatum) = 1960;
+</code></pre>
+<p>Wordt de index gebruikt?
+c) Herschrijf de query zodat hij wél de index kan gebruiken. Meet opnieuw.
+d) Maak een expressie-index die de oorspronkelijke query alsnog laat werken. Meet.
+e) Welke van de twee oplossingen verdient de voorkeur, en waarom?
+f) Doe hetzelfde experiment met <code>lower(achternaam) = 'jansen'</code>.</p>
+<hr>
+<h2>Opdracht 8.4 — Samengestelde index en kolomvolgorde (20 min, tweetallen)</h2>
+<p>Werk op <code>meridiaan.premienota</code>.</p>
+<p>a) Maak een index op <code>(werkgever_id, periode_jaar, periode_maand)</code>.
+b) Test met <code>EXPLAIN</code> welke van deze query’s de index gebruiken:</p>
+<ol>
+<li><code>WHERE werkgever_id = 42</code></li>
+<li><code>WHERE werkgever_id = 42 AND periode_jaar = 2025</code></li>
+<li><code>WHERE periode_jaar = 2025</code></li>
+<li><code>WHERE periode_jaar = 2025 AND periode_maand = 3</code>
+c) Verklaar het resultaat met de voorvoegselregel.
+d) Welke index zou je toevoegen als query 3 vaak voorkomt? En is dat verstandig?
+e) Maak nu een index op <code>(periode_jaar, werkgever_id)</code> en vergelijk met de eerste voor de query <code>WHERE werkgever_id = 42 AND periode_jaar &gt;= 2024</code>. Welke is beter en waarom?
+f) Ruim je testindexen op.</li>
+</ol>
+<hr>
+<h2>Opdracht 8.5 — Partiële index (15 min, individueel)</h2>
+<p>a) Meet op <code>mutatie_groot</code> de query die onverwerkte mutaties ophaalt, gesorteerd op aanmelddatum, met <code>LIMIT 10</code> — de verwerkingsquery uit deel 7.
+b) Maak een volledige index op <code>aangemeld_op</code> en meet opnieuw.
+c) Maak in plaats daarvan een partiële index met <code>WHERE verwerkt_op IS NULL</code> en meet.
+d) Vergelijk de omvang van beide indexen met <code>pg_size_pretty(pg_relation_size(…))</code>.
+e) Wijzig je query naar <code>WHERE verwerkt_op IS NULL AND kanaal = 'portaal'</code>. Wordt de partiële index nog gebruikt?
+f) Waarom is een partiële index hier bijzonder geschikt, afgezien van de omvang?</p>
+<hr>
+<h2>Opdracht 8.6 — De kosten van indexen (15 min, tweetallen)</h2>
+<p>a) Meet hoe lang het duurt om 50.000 rijen in te voegen in een kopie van <code>mutatie_groot</code> <strong>zonder</strong> indexen.
+b) Maak vijf indexen op die tabel (verschillende kolommen) en herhaal de meting.
+c) Wat is het verschil? Reken het om naar een percentage.
+d) Zoek met <code>pg_stat_user_indexes</code> op welke van jouw indexen daadwerkelijk gebruikt zijn.
+e) Noem drie redenen waarom je een index met <code>idx_scan = 0</code> tóch niet zomaar mag verwijderen.
+f) Formuleer de afweging in één zin die je aan Ruud zou geven.</p>
+<hr>
+<h2>Opdracht 8.7 — Diagnose (15 min, drietallen)</h2>
+<p>Je krijgt drie meldingen binnen. Bepaal per melding: wat is je eerste vraag, welk gereedschap gebruik je, en wat is de meest waarschijnlijke oorzaak?</p>
+<p><strong>A.</strong> <em>“Het deelnemersportaal is sinds vanochtend traag. Alles duurt lang, ook het inloggen.”</em></p>
+<p><strong>B.</strong> <em>“Dit rapport draaide vorige week in twee seconden en nu in vier minuten. De query is niet veranderd.”</em></p>
+<p><strong>C.</strong> <em>“Deze ene query is altijd al traag geweest, maar nu klaagt de business erover.”</em></p>
+<p>d) Voor welke van de drie is een nieuwe index waarschijnlijk het antwoord?</p>
+<hr>
+<h2>Opdracht 8.8 — Views (15 min, individueel)</h2>
+<p>a) Maak een view <code>actieve_deelnemer</code> die alleen deelnemers zonder einddatum toont.
+b) Draai <code>EXPLAIN</code> op een <code>SELECT count(*)</code> van die view. Zie je de view terug in het plan?
+c) Maak een view <code>werkgever_dossier</code> op basis van je query uit opdracht 4.9.
+d) Probeer een rij bij te werken via <code>actieve_deelnemer</code>. Lukt dat? En via <code>werkgever_dossier</code>?
+e) Waarom is een view een goede plek om vast te leggen wat “actieve deelnemer” betekent? Verbind je antwoord met deel 1.</p>
+<hr>
+<h2>Opdracht 8.9 — Materialized view voor Karin (25 min, drietallen)</h2>
+<p>Hoofdopdracht. Karin wil haar maandrapport (opdracht 3.9) niet elke keer live berekenen.</p>
+<p>a) Maak een materialized view met de betaalprestatie per sector.
+b) Maak er een unieke index op en ververs hem met <code>CONCURRENTLY</code>.
+c) Meet het verschil tussen de live query en de materialized view.
+d) Voeg een premienota toe aan de brontabel. Wat toont de view? Wat toont de live query?
+e) Voeg een kolom toe met het tijdstip van de laatste verversing, zodat Karin ziet hoe oud de cijfers zijn.
+f) Beschrijf in maximaal 150 woorden aan Karin: wat ze krijgt, hoe oud de gegevens zijn, wanneer ze ververst worden, en wat er gebeurt als de verversing faalt.</p>
+<p>Beoordelingspunten:</p>
+<ul>
+<li>Is er nagedacht over wat er misgaat als de verversing stilletjes stopt?</li>
+<li>Staat de ouderdom van de gegevens in de view zelf, of alleen in de documentatie?</li>
+<li>Is <code>CONCURRENTLY</code> gebruikt, en is uitgelegd waarom de unieke index daarvoor nodig is?</li>
+<li>Is de afweging live-versus-materialized onderbouwd met een meting?</li>
+</ul>
+<hr>
+<hr>
+<h1>Uitwerkingen</h1>
+<h2>Uitwerking 8.1</h2>
+<p>a) <code>Seq Scan on deelnemer (cost=0.00..X rows=Y width=Z)</code> met daaronder <code>Filter:</code>.</p>
+<ul>
+<li><code>cost</code> = geschatte opstart…totaal, in willekeurige eenheden</li>
+<li><code>rows</code> = geschat aantal resultaatrijen</li>
+<li><code>width</code> = geschatte gemiddelde rijbreedte in bytes</li>
+<li><code>Filter</code> = de per-rij toegepaste voorwaarde</li>
+</ul>
+<p>b) Erbij: <code>actual time=…</code>, <code>rows=</code> (werkelijk), <code>loops=</code>, <code>Rows Removed by Filter</code>, <code>Buffers</code>, <code>Planning Time</code>, <code>Execution Time</code>.</p>
+<p>c) <code>Rows Removed by Filter</code> toont het. Op 8.000 deelnemers met één achternaam is dat ongeveer 7.700 — dus 96% van het leeswerk was voor niets. Dat is het duidelijkste signaal van een ontbrekende index.</p>
+<p>d) Meestal dicht bij elkaar, want de statistieken zijn vers (het vulscript eindigt met <code>ANALYZE</code>). Een factor tien of meer verschil is het signaal om <code>ANALYZE</code> te draaien.</p>
+<p>e) De eenheid is relatief aan het lezen van één tabelpagina; het is een rekenmodel, geen tijdsvoorspelling. Je gebruikt hem om <strong>plannen onderling te vergelijken</strong> — de planner kiest het plan met de laagste kosten, en jij kunt zien waarom.</p>
+<p>f) <strong><code>EXPLAIN ANALYZE</code> voert de query werkelijk uit.</strong> Op een <code>UPDATE</code> betekent dat: de wijziging vindt plaats. Waarschuw dat het in een transactie moet met <code>ROLLBACK</code> erachter, of gebruik gewoon <code>EXPLAIN</code> zonder <code>ANALYZE</code>.</p>
+<hr>
+<h2>Uitwerking 8.2</h2>
+<p>a) <code>Seq Scan</code> op bijna 300.000 rijen; orde van grootte enkele tientallen milliseconden.</p>
+<p>b) Na <code>CREATE INDEX mutatie_groot_deelnemer_idx ON mutatie_groot (deelnemer_id);</code> verandert het naar <code>Index Scan</code> of <code>Bitmap Heap Scan</code>, en de tijd zakt naar een fractie. Eén deelnemer heeft hier ongeveer 40 mutaties op 300.000 rijen — hoge selectiviteit, dus de index wint ruim.</p>
+<p>c) Op <code>kanaal</code> wordt de index waarschijnlijk <strong>niet</strong> gebruikt, of alleen via een bitmap. Circa 20% van de tabel voldoet aan de voorwaarde; de planner rekent uit dat sequentieel lezen goedkoper is dan 60.000 keer in de tabel springen.</p>
+<p>d) <strong>Selectiviteit.</strong> Een index loont bij weinig treffers. Boven ruwweg 5-10% van de tabel wordt sequentieel lezen sneller, omdat achter elkaar lezen efficiënter is dan willekeurig springen. Dat is geen tekortkoming van de index maar een correcte afweging.</p>
+<p>e) Op 250 werkgevers wordt de index vrijwel zeker <strong>niet</strong> gebruikt. De hele tabel past in een handvol pagina’s; die lezen kost minder dan de index raadplegen én daarna alsnog de tabel bezoeken.</p>
+<p>f) Modelantwoord: <em>“Een sequentiële scan is de juiste keuze wanneer de tabel klein is of wanneer de query een groot deel van de rijen nodig heeft — want dan is achter elkaar lezen goedkoper dan per treffer springen.”</em></p>
+<hr>
+<h2>Uitwerking 8.3</h2>
+<p>b) De index wordt <strong>niet</strong> gebruikt: er staat een functie om de kolom, dus de index op de ruwe waarde is onbruikbaar. Je ziet een <code>Seq Scan</code> met <code>Filter: (EXTRACT(year FROM geboortedatum) = 1960)</code>.</p>
+<p>c)</p>
+<pre><code class="language-sql">SELECT * FROM meridiaan.deelnemer
+WHERE geboortedatum &gt;= DATE '1960-01-01'
+  AND geboortedatum &lt;  DATE '1961-01-01';
+</code></pre>
+<p>Nu een index- of bitmapscan. Dit is precies de opmerking uit de uitwerking van opdracht 3.3c — nu weet je waarom die er stond.</p>
+<p>d)</p>
+<pre><code class="language-sql">CREATE INDEX deelnemer_geboortejaar_idx
+    ON meridiaan.deelnemer ((extract(year FROM geboortedatum)));
+</code></pre>
+<p>Let op de dubbele haakjes: een expressie-index vereist die.</p>
+<p>e) <strong>De herschrijving verdient de voorkeur.</strong> Hij is gratis: geen extra schijfruimte, geen extra onderhoud bij elke schrijfbewerking, en de bestaande index doet het werk. Een expressie-index maak je pas als herschrijven niet kan — bijvoorbeeld als de query uit een pakket komt dat je niet kunt aanpassen.</p>
+<p>f) Zelfde patroon. <code>lower(achternaam) = 'jansen'</code> gebruikt geen index op <code>achternaam</code>. Hier is herschrijven lastiger (je zoekt bewust hoofdletterongevoelig), dus is een expressie-index op <code>lower(achternaam)</code> wél de juiste oplossing. Alternatief: <code>ILIKE</code> met een geschikte index, of het <code>citext</code>-type.</p>
+<hr>
+<h2>Uitwerking 8.4</h2>
+<p>b) en c):</p>
+<ol>
+<li><strong>Gebruikt de index</strong> — <code>werkgever_id</code> is de eerste kolom.</li>
+<li><strong>Gebruikt de index volledig</strong> — de eerste twee kolommen.</li>
+<li><strong>Gebruikt de index niet</strong> (of hoogstens als volledige indexscan, wat zelden loont) — <code>periode_jaar</code> is de tweede kolom, en zonder de eerste kan de boom niet gericht doorzocht worden.</li>
+<li><strong>Idem</strong> — begint ook niet bij <code>werkgever_id</code>.</li>
+</ol>
+<p>De <strong>voorvoegselregel</strong>: een samengestelde index is bruikbaar voor een aaneengesloten voorvoegsel van zijn kolommen, beginnend bij de eerste.</p>
+<p>d) Een aparte index op <code>(periode_jaar, periode_maand)</code>. Verstandig? Alleen als die query’s er echt zijn en vaak genoeg draaien om de schrijfkosten te rechtvaardigen. Op <code>premienota</code> in de casus (5.500 rijen) levert het niets op — de tabel is te klein.</p>
+<p>e) Voor <code>WHERE werkgever_id = 42 AND periode_jaar &gt;= 2024</code> is <code>(werkgever_id, periode_jaar)</code> beter. Reden: <strong>gelijkheid vóór bereik.</strong> De index kan direct naar werkgever 42 springen en daarbinnen het bereik aflopen. Bij <code>(periode_jaar, werkgever_id)</code> moet hij eerst een heel bereik aan jaren in, en binnen elk jaar naar werkgever 42 zoeken.</p>
+<p>f) <code>DROP INDEX …;</code> voor elke gemaakte index.</p>
+<hr>
+<h2>Uitwerking 8.5</h2>
+<p>a) <code>Seq Scan</code> plus een sortering over bijna 300.000 rijen om er tien te tonen — relatief duur.</p>
+<p>b) Met een index op <code>aangemeld_op</code> kan de sortering vervallen: de index is al gesorteerd, dus de database loopt hem af en stopt na tien rijen die aan de filter voldoen. Al veel sneller.</p>
+<p>c) Met de partiële index gaat het nog sneller, omdat de index alleen de circa 12% onverwerkte mutaties bevat: geen enkele gelezen indexregel wordt weggegooid.</p>
+<p>d) De partiële index is ongeveer een achtste van de volledige. Meet met:</p>
+<pre><code class="language-sql">SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes WHERE relname = 'mutatie_groot';
+</code></pre>
+<p>e) <strong>Ja, hij wordt nog gebruikt</strong> — de voorwaarde <code>verwerkt_op IS NULL</code> staat nog steeds in de query, dus de planner mag de index inzetten en filtert daarna op <code>kanaal</code>. Zou je <code>verwerkt_op IS NULL</code> weglaten, dan is de index onbruikbaar: de planner kan dan niet garanderen dat alle benodigde rijen erin zitten.</p>
+<p>f) Behalve de omvang: <strong>de index wordt alleen bijgewerkt voor rijen die aan de voorwaarde voldoen.</strong> Zodra een mutatie verwerkt is, verdwijnt hij uit de index. In een tabel waar rijen doorlopend van “open” naar “verwerkt” gaan, blijft de index dus klein terwijl de tabel groeit — een index die niet meegroeit met de historie.</p>
+<hr>
+<h2>Uitwerking 8.6</h2>
+<p>a) en b) Meet met <code>\timing</code>. De exacte getallen verschillen per machine; de verhouding is het punt.</p>
+<p>c) Vijf indexen maken het invoegen doorgaans twee tot vier keer trager. Elke index moet immers voor elke rij bijgewerkt worden.</p>
+<p>d)</p>
+<pre><code class="language-sql">SELECT indexrelname, idx_scan, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes
+WHERE relname = 'mutatie_groot'
+ORDER BY idx_scan;
+</code></pre>
+<p>e) Drie redenen:</p>
+<ol>
+<li>De teller loopt sinds de laatste herstart of statistiekreset; een korte meetperiode zegt weinig.</li>
+<li>Sommige indexen zijn seizoensgebonden — de index voor de jaarafsluiting wordt elf maanden niet gebruikt.</li>
+<li>Een index die een <code>UNIQUE</code>- of <code>PRIMARY KEY</code>-constraint afdwingt, is nodig ook als er nooit op gezocht wordt.</li>
+</ol>
+<p>f) Modelantwoord: <em>“Een index die één rapport per dag versnelt maar duizend schrijfbewerkingen per uur vertraagt, kost meer dan hij oplevert — dus we meten beide kanten voordat we hem toevoegen.”</em></p>
+<hr>
+<h2>Uitwerking 8.7</h2>
+<p><strong>A — “alles is traag, ook inloggen”</strong>
+Eerste vraag: <em>is het alles, of alleen dit portaal?</em> Gereedschap: <code>pg_stat_activity</code> (deel 7) — kijk naar <code>wait_event_type = 'Lock'</code> en naar <code>idle in transaction</code>. Meest waarschijnlijke oorzaak: <strong>vergrendeling</strong>, of een resourceprobleem (schijf vol, geheugen op). Als álles traag is inclusief eenvoudige handelingen, is het vrijwel nooit een ontbrekende index — die zou maar één soort query raken.</p>
+<p><strong>B — “vorige week twee seconden, nu vier minuten, query onveranderd”</strong>
+Eerste vraag: <em>is er data bijgekomen, of is er iets veranderd aan de tabel?</em> Gereedschap: <code>EXPLAIN ANALYZE</code>, en vergelijk <code>rows=</code> met <code>actual rows=</code>. Meest waarschijnlijke oorzaak: <strong>verouderde statistieken</strong> waardoor de planner is omgeslagen naar een ander plan (deel 2, deel 7). Draai <code>ANALYZE</code> en meet opnieuw. Tweede kandidaat: de tabel is over het omslagpunt gegroeid waarop de index niet meer gekozen wordt.</p>
+<p><strong>C — “altijd al traag, nu klaagt men erover”</strong>
+Eerste vraag: <em>wat is er veranderd — de query niet, dus het gebruik?</em> Gereedschap: <code>EXPLAIN ANALYZE</code>. Meest waarschijnlijke oorzaak: <strong>een structureel ontbrekende index of een te brede query.</strong> Dit is het geval waarin optimalisatie echt loont.</p>
+<p>d) Alleen bij <strong>C</strong> is een nieuwe index waarschijnlijk het antwoord. Bij A helpt hij niets (de query rekent niet, hij wacht) en bij B is de index er vermoedelijk al maar wordt hij niet gekozen.</p>
+<p>Dit is het punt van de opdracht: mensen voegen indexen toe bij melding A, waar die het minste kans van slagen hebben.</p>
+<hr>
+<h2>Uitwerking 8.8</h2>
+<p>a)</p>
+<pre><code class="language-sql">CREATE VIEW actieve_deelnemer AS
+SELECT deelnemer_id, voorletters, tussenvoegsel, achternaam, geboortedatum
+FROM meridiaan.deelnemer
+WHERE einddatum_deelname IS NULL;
+</code></pre>
+<p>b) De view komt <strong>niet</strong> als aparte knoop in het plan voor. De rewriter (deel 2) heeft hem vervangen door de onderliggende query; je ziet gewoon een scan op <code>deelnemer</code> met de filter erin. Dat is een goed moment om terug te verwijzen naar de query-pijplijn.</p>
+<p>c) Zie opdracht 4.9; de query eromheen zetten met <code>CREATE VIEW werkgever_dossier AS …</code>.</p>
+<p>d) <code>actieve_deelnemer</code> is bijwerkbaar: één tabel, geen aggregatie, geen <code>DISTINCT</code>. <code>werkgever_dossier</code> niet — die bevat aggregaties en joins, dus PostgreSQL kan niet bepalen welke onderliggende rij je bedoelt. Een <code>INSTEAD OF</code>-trigger zou het kunnen (niveau 2).</p>
+<p>e) Modelantwoord: <em>“Omdat de definitie dan op één plek staat in plaats van in elk rapport opnieuw. Bij Meridiaan kwamen drie afdelingen op drie verschillende deelnemersaantallen omdat elk zijn eigen definitie hanteerde — en niemand kon achteraf zien welke. Met een view is er één definitie, hij is zichtbaar, en een wijziging werkt overal tegelijk door.”</em></p>
+<hr>
+<h2>Uitwerking 8.9 — modelantwoord</h2>
+<p>a) en b):</p>
+<pre><code class="language-sql">CREATE MATERIALIZED VIEW betaalprestatie_per_sector AS
+SELECT
+    w.sector,
+    count(*)                                                  AS aantal_notas,
+    sum(p.bedrag)                                             AS totaal_vastgesteld,
+    count(*) FILTER (WHERE p.betaaldatum IS NULL)             AS onbetaald,
+    count(*) FILTER (WHERE p.betaaldatum &gt; p.vervaldatum)     AS te_laat,
+    round(100.0 * count(*) FILTER (WHERE p.betaaldatum IS NOT NULL
+                                     AND p.betaaldatum &lt;= p.vervaldatum)
+          / count(*), 1)                                      AS pct_op_tijd,
+    now()                                                     AS bijgewerkt_op
+FROM meridiaan.premienota p
+JOIN meridiaan.werkgever w USING (werkgever_id)
+WHERE p.periode_jaar = 2025
+GROUP BY w.sector;
+
+CREATE UNIQUE INDEX betaalprestatie_sector_idx
+    ON betaalprestatie_per_sector (sector);
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY betaalprestatie_per_sector;
+</code></pre>
+<p>c) Op de casusomvang is het verschil klein — enkele milliseconden tegen enkele milliseconden. <strong>Dat is zelf een bevinding:</strong> op deze schaal is een materialized view niet nodig. Groepen die dat opmerken en het benoemen, hebben de belangrijkste les van het dagdeel te pakken. Op productieomvang (miljoenen nota’s) kantelt het.</p>
+<p>d) De materialized view toont de <strong>oude</strong> cijfers tot je hem ververst; de live query toont de nieuwe. Laat deelnemers dit echt uitvoeren — het maakt het begrip tastbaar.</p>
+<p>e) <code>now()</code> in de definitie levert het verversmoment op, omdat het bij het verversen opnieuw wordt berekend. Dat is precies het gebruik dat je wilt: de ouderdom staat <strong>in de gegevens</strong>, niet alleen in een handleiding die niemand leest.</p>
+<p>f) Modelantwoord (141 woorden):</p>
+<blockquote>
+<p>Karin,</p>
+<p>Je maandoverzicht staat nu klaar als vaste tabel in plaats van dat het bij elke opvraging opnieuw wordt uitgerekend. Voor jou verandert er niets aan de inhoud — wel dat het altijd binnen een seconde opent, ook als er straks tien keer zoveel nota’s zijn.</p>
+<p>De cijfers zijn niet live. Ze worden elke nacht om 03:00 bijgewerkt, dus wat je 's ochtends ziet, is de stand van gisteravond. In het overzicht staat een kolom met het exacte moment van bijwerken, zodat je dat altijd kunt controleren.</p>
+<p>Gaat de nachtelijke verversing mis, dan blijft het overzicht gewoon staan met de oudere cijfers — het valt dus niet vanzelf op. Daarom bewaken we de verversing en krijgt beheer een melding als hij twee keer achter elkaar niet is gelukt. Zie je een datum van meer dan twee dagen oud, meld het dan.</p>
+</blockquote>
+<p><strong>Beoordelingspunten:</strong> de laatste alinea is waar het om gaat. Een materialized view die stilletjes stopt met verversen, ziet er precies hetzelfde uit als een actuele — dat risico moet benoemd én belegd zijn. Groepen die alleen de snelheidswinst beschrijven, missen de kern.</p>
+<hr>
+<p><em>Einde werkboek deel 8.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">88 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">432 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-07-transacties-acid-en-mvcc/reader.html">&larr; Deel 7 — Transacties, ACID en MVCC</a><a class="dbm-prevnext next" href="../deel-09-rollen-rechten-en-security/reader.html">Deel 9 — Rollen, rechten en security &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

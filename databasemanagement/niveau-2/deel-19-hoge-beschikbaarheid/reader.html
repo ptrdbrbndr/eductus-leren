@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Hoge beschikbaarheid — Databasemanagement — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../databasemanagement.css">
+</head>
+<body>
+<header class="dbm-header">
+  <div class="dbm-header-inner">
+    <a class="dbm-brand" href="../../index.html">Databasemanagement</a>
+    <nav class="dbm-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 19 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="dbm-main">
+<div class="dbm-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="dbm-article">
+<h1>Deel 19 — Hoge beschikbaarheid</h1>
+<p><strong>Cursus Databasemanagement — Niveau 2: DBA en consultant</strong>
+Deelnemersreader | Dagdelen 10 en 11 van 14 (deel 19 van 30)
+Aansluiting: EDB PostgreSQL Professional — domein “High availability”</p>
+<blockquote>
+<p><strong>Dit deel beslaat twee dagdelen.</strong>
+<strong>Dagdeel A</strong> (paragraaf 1-11) gaat over automatische failover met Patroni.
+<strong>Dagdeel B</strong> (paragraaf 12-21) gaat over connection pooling met PgBouncer en het geheel testen.</p>
+</blockquote>
+<hr>
+<h2>Inhoud</h2>
+<p><strong>Dagdeel A — Automatische failover</strong></p>
+<ol>
+<li>Leerdoelen</li>
+<li>Wat er nog ontbrak</li>
+<li>Het probleem dat elke oplossing moet aanpakken</li>
+<li>Consensus: waarom je een derde partij nodig hebt</li>
+<li>Patroni: de architectuur</li>
+<li>Een Patroni-cluster opzetten</li>
+<li>Failover meemaken</li>
+<li>Fencing: de oude primary onschadelijk maken</li>
+<li>Switchover: gepland, niet gedwongen</li>
+<li>Wat Patroni niet oplost</li>
+<li>Samenvatting dagdeel A</li>
+</ol>
+<p><strong>Dagdeel B — Connection pooling en het geheel testen</strong>
+12. Leerdoelen dagdeel B
+13. Waarom pooling een HA-onderwerp is
+14. PgBouncer: de drie poolmodi
+15. Wat er breekt in transaction-pooling
+16. PgBouncer en Patroni samen
+17. Belastingverdeling en leesroutering
+18. Chaos: het systeem express breken
+19. RTO in de praktijk meten
+20. Het geheel: van RPO/RTO naar architectuur
+21. Veelgemaakte fouten, aansluiting op de certificering, kernbegrippen</p>
+<hr>
+<hr>
+<h1>DAGDEEL A — Automatische failover</h1>
+<h2>1. Leerdoelen</h2>
+<p>Na dagdeel A kun je:</p>
+<ul>
+<li>het split-brain-probleem uit deel 18 vertalen naar de eis van consensus;</li>
+<li>de architectuur van Patroni beschrijven en de rol van elk onderdeel benoemen;</li>
+<li>een Patroni-cluster opzetten met een klein aantal knooppunten;</li>
+<li>een failover meemaken en volgen wat er op elk niveau gebeurt;</li>
+<li>fencing toepassen om te voorkomen dat een oude primary weer meedoet;</li>
+<li>een geplande switchover uitvoeren zonder downtime;</li>
+<li>de grenzen van geautomatiseerde failover benoemen.</li>
+</ul>
+<hr>
+<h2>2. Wat er nog ontbrak</h2>
+<p>Aan het eind van deel 18 stond het expliciet in je eigen ontwerp: promotie is mogelijk, failover niet geregeld. Vier vragen bleven open:</p>
+<ol>
+<li><strong>Wie merkt dat de primary is uitgevallen?</strong></li>
+<li><strong>Wie beslist welke replica gepromoveerd wordt?</strong></li>
+<li><strong>Wie voorkomt dat de oude primary blijft meedoen (split-brain)?</strong></li>
+<li><strong>Wie vertelt de applicatie waar de nieuwe primary is?</strong></li>
+</ol>
+<p>Handmatig beantwoorden kost tijd — en tijd is precies wat je RTO opeet. Bij Meridiaan met een RTO-doelstelling van enkele uren (deel 17, opdracht 17.1) kan een mens die om drie uur 's nachts wordt gewekt, dat misschien net halen. Bij een RTO van minuten kan dat niet.</p>
+<p><strong>Vandaag automatiseer je die vier beslissingen.</strong></p>
+<hr>
+<h2>3. Het probleem dat elke oplossing moet aanpakken</h2>
+<p>Stel je een simpele “automatische” aanpak voor: elke server controleert zelf of de primary nog leeft, en promoveert zichzelf als dat niet zo lijkt.</p>
+<p><strong>Waarom dat faalt:</strong> een netwerkstoring die de replica van de primary afsnijdt, ziet er voor de replica <em>precies hetzelfde uit</em> als een primary die is uitgevallen. De replica kan het onderscheid niet maken. Promoveert hij zichzelf, terwijl de primary in werkelijkheid prima draait maar alleen tijdelijk onbereikbaar was — dan heb je split-brain, met <strong>twee</strong> actieve primaries die allebei schrijfopdrachten aannemen.</p>
+<p>Dit heet het probleem van <strong>gedeeltelijke netwerkstoringen</strong> (partial network partitions), en het is de reden dat naïeve “elke node beslist zelf”-oplossingen in de praktijk gevaarlijker zijn dan geen automatisering.</p>
+<p><strong>De oplossing vereist consensus: een meerderheid van onafhankelijke waarnemers moet het eens zijn</strong> voordat er een beslissing wordt genomen. Eén node mag nooit alleen beslissen dat hij de nieuwe primary is.</p>
+<hr>
+<h2>4. Consensus: waarom je een derde partij nodig hebt</h2>
+<p>Met twee servers (primary en replica) is er geen manier om een meerderheid te vormen — bij een netwerkstoring tussen hen zijn het altijd 1-tegen-1, en niemand kan zeggen wie er “gelijk” heeft.</p>
+<p><strong>Met een oneven aantal onafhankelijke waarnemers</strong> (drie is het minimum in de praktijk) kan een meerderheid ontstaan, ook als een deel onbereikbaar is. Dit heet een <strong>quorum</strong>, en het principe erachter (Raft, of het oudere Paxos) is: een beslissing geldt pas als een meerderheid van de waarnemers hem bevestigt.</p>
+<pre><code>   [Waarnemer 1]   [Waarnemer 2]   [Waarnemer 3]
+        │                │               │
+        └────────────────┼───────────────┘
+                    Meerderheid?
+</code></pre>
+<p><strong>Deze waarnemers hoeven geen PostgreSQL-servers te zijn</strong> — sterker, ze horen dat meestal niet te zijn. Ze vormen een apart, lichtgewicht consensussysteem dat de status van de database-cluster bijhoudt en waarop de database-servers vertrouwen. <strong>etcd</strong> (of Consul, of ZooKeeper) is de gangbare keuze: een gedistribueerde sleutel-waardeopslag die zelf al consensus (Raft) implementeert.</p>
+<hr>
+<h2>5. Patroni: de architectuur</h2>
+<p><strong>Patroni</strong> is geen consensussysteem zelf — het is een beheerlaag die op elke PostgreSQL-server draait en die het onderliggende consensussysteem (meestal etcd) gebruikt om te bepalen wie de primary mag zijn.</p>
+<pre><code>┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│  Patroni +  │   │  Patroni +  │   │  Patroni +  │
+│  PostgreSQL │   │  PostgreSQL │   │  PostgreSQL │
+│  (primary)  │   │  (replica)  │   │  (replica)  │
+└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+       │                 │                 │
+       └────────┬────────┴────────┬────────┘
+                 │      etcd       │
+                 │  (3 knooppunten,│
+                 │   apart cluster)│
+                 └──────────────────┘
+</code></pre>
+<p><strong>Wat Patroni op elke node doet:</strong></p>
+<ol>
+<li>Controleert continu of zijn eigen PostgreSQL-instantie gezond is.</li>
+<li>Probeert periodiek een “leiderschapsslot” (leader lock) in etcd te vernieuwen — alleen de huidige primary mag dat.</li>
+<li>Als de primary dat slot niet op tijd vernieuwt (omdat hij is uitgevallen, of geen consensus meer kan bereiken), <strong>verloopt</strong> het slot vanzelf in etcd.</li>
+<li>De replica’s zien het slot vrijkomen en <strong>strijden</strong> — via etcd, dus met consensus — om wie het nieuwe slot mag claimen.</li>
+<li>De winnaar promoveert zichzelf, geholpen door Patroni.</li>
+</ol>
+<p><strong>Waarom dit het gedeeltelijke-netwerkstoring-probleem oplost:</strong> een primary die is afgesneden van etcd kan zijn slot niet vernieuwen — ook al draait PostgreSQL zelf nog perfect. Patroni op die node ziet dat hij het slot kwijt is, en <strong>degradeert zichzelf actief</strong> (paragraaf 8) in plaats van te blijven doen alsof hij primary is. Dat actieve zelf-degraderen, niet alleen het detecteren door anderen, is de kern van hoe split-brain wordt voorkomen.</p>
+<hr>
+<h2>6. Een Patroni-cluster opzetten</h2>
+<p>Een minimale configuratie per node (<code>patroni.yml</code>):</p>
+<pre><code class="language-yaml">scope: meridiaan-cluster
+name: node1
+
+restapi:
+  listen: 0.0.0.0:8008
+
+etcd3:
+  hosts: etcd1:2379,etcd2:2379,etcd3:2379
+
+postgresql:
+  listen: 0.0.0.0:5432
+  data_dir: /var/lib/postgresql/data
+  authentication:
+    replication:
+      username: repl_rol
+      password: ...
+    superuser:
+      username: postgres
+      password: ...
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+</code></pre>
+<p><strong>De sleutelparameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Betekent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ttl</code></td>
+<td>Hoe lang een leiderschapsslot geldig blijft zonder vernieuwing</td>
+</tr>
+<tr>
+<td><code>loop_wait</code></td>
+<td>Hoe vaak Patroni de status controleert</td>
+</tr>
+<tr>
+<td><code>maximum_lag_on_failover</code></td>
+<td>Een replica met meer achterstand dan dit (in bytes) komt niet in aanmerking om te promoveren</td>
+</tr>
+</tbody>
+</table>
+<p>Die laatste is direct verbonden met deel 18: een replica die te ver achterloopt, mag Patroni niet promoveren, ook al is hij de enige beschikbare — beter een langere uitval dan een promotie die meer gegevens kost dan het RPO toestaat. Dit is een <strong>expliciete afweging tussen RTO en RPO</strong> die je in de configuratie vastlegt.</p>
+<p>Starten: elke node start zijn eigen Patroni-proces, dat op zijn beurt PostgreSQL initialiseert of aansluit bij een bestaand cluster, afhankelijk van wat etcd al weet.</p>
+<pre><code class="language-bash">patronictl -c patroni.yml list
+</code></pre>
+<p>toont de clusterstatus: welke node primary is, welke replica’s er zijn, en hun vertraging (rechtstreeks de <code>replay_lag</code> uit deel 18, nu door Patroni bewaakt).</p>
+<hr>
+<h2>7. Failover meemaken</h2>
+<p>Simuleer een uitval van de primary (bijvoorbeeld het proces hard stoppen, niet netjes afsluiten):</p>
+<pre><code class="language-bash">patronictl -c patroni.yml list   # noteer wie primary is
+# op de primary-node:
+pkill -9 -f postgres
+</code></pre>
+<p><strong>Wat er gebeurt, in volgorde:</strong></p>
+<ol>
+<li>Patroni op de primary-node merkt dat zijn PostgreSQL niet meer reageert.</li>
+<li>Binnen <code>ttl</code>-seconden vernieuwt hij het leiderschapsslot niet meer.</li>
+<li>Het slot verloopt in etcd.</li>
+<li>De replica’s zien dat, en de gezondste (met de minste <code>replay_lag</code>, binnen <code>maximum_lag_on_failover</code>) claimt het slot.</li>
+<li>Patroni op die node roept <code>pg_promote()</code> aan.</li>
+<li><code>patronictl list</code> toont een nieuwe primary.</li>
+</ol>
+<pre><code class="language-bash">patronictl -c patroni.yml list
+</code></pre>
+<p>Meet: hoeveel tijd zat er tussen het stoppen van de oude primary en het moment waarop de nieuwe primary schrijfopdrachten accepteerde? <strong>Dat is je gemeten RTO voor dit scenario</strong> — vergelijk het met het handmatige traject dat je in deel 17 en 18 hebt doorlopen.</p>
+<hr>
+<h2>8. Fencing: de oude primary onschadelijk maken</h2>
+<p>Wat gebeurt er als de oude primary weer online komt, nietsvermoedend?</p>
+<p><strong>Patroni’s antwoord:</strong> wanneer die node weer met etcd kan praten en ontdekt dat een ander het leiderschapsslot heeft, <strong>degradeert hij zichzelf actief</strong> tot replica van de nieuwe primary — hij herconfigureert zichzelf, niet de nieuwe primary hoeft iets te doen. Dit heet <strong>fencing</strong>: het onschadelijk maken van een node die mogelijk nog denkt dat hij primary is.</p>
+<p><strong>Het scenario waar dit echt op de proef wordt gesteld:</strong> de oude primary was niet gecrasht maar alleen tijdelijk <strong>netwerkmatig geïsoleerd</strong> — hij draaide door en accepteerde misschien zelfs nog schrijfopdrachten van clients die hem nog wisten te bereiken via een ander pad. Dit is precies de gedeeltelijke-netwerkstoring uit paragraaf 3.</p>
+<p><strong>Hoe Patroni dat afdekt:</strong> de primary-rol vereist een geldig, <strong>vernieuwd</strong> leiderschapsslot. Kan een node niet met een meerderheid van etcd-knooppunten praten, dan kan hij het slot niet vernieuwen, ongeacht wat zijn eigen PostgreSQL-proces denkt te zijn. Patroni op die node ziet dat en trekt zelf de noodrem — hij zet zijn eigen PostgreSQL in een niet-schrijvende toestand, ook al lijkt er lokaal niets mis.</p>
+<p><strong>Dit is de reden dat een oneven aantal etcd-knooppunten, verspreid over onafhankelijke faalgebieden (andere stroomkring, ander netwerksegment, idealiter andere fysieke locatie), essentieel is.</strong> Staan alle drie de etcd-knooppunten op dezelfde stroomkring, dan valt bij een stroomstoring de hele consensuslaag tegelijk weg, en heb je het probleem dat je probeerde op te lossen weer terug.</p>
+<hr>
+<h2>9. Switchover: gepland, niet gedwongen</h2>
+<p>Niet elke rolwisseling is een noodgeval. Een geplande servermigratie, een OS-patch die een herstart vereist — daarvoor bestaat een <strong>switchover</strong>: een gecontroleerde, geplande rolwisseling zonder dataverlies.</p>
+<pre><code class="language-bash">patronictl -c patroni.yml switchover
+</code></pre>
+<p>Patroni vraagt welke node de nieuwe primary moet worden, wacht tot die volledig is bijgewerkt (geen <code>replay_lag</code>), laat de huidige primary netjes stoppen met schrijven, en promoveert dan pas de nieuwe. <strong>Geen gegevensverlies, geen split-brain-risico</strong> — omdat het geen race is tussen replica’s maar een geregisseerde overdracht.</p>
+<p><strong>Het verschil met failover, samengevat:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Failover</th>
+<th>Switchover</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Aanleiding</td>
+<td>Onverwachte uitval</td>
+<td>Geplande wijziging</td>
+</tr>
+<tr>
+<td>Snelheid</td>
+<td>Zo snel mogelijk</td>
+<td>Zo veilig mogelijk</td>
+</tr>
+<tr>
+<td>Gegevensverlies-risico</td>
+<td>Klein, begrensd door <code>maximum_lag_on_failover</code></td>
+<td>Nul</td>
+</tr>
+<tr>
+<td>Wie beslist</td>
+<td>Consensus, automatisch</td>
+<td>Een beheerder, expliciet</td>
+</tr>
+</tbody>
+</table>
+<p>Gebruik switchover voor onderhoud. Bewaar failover voor het onverwachte.</p>
+<hr>
+<h2>10. Wat Patroni niet oplost</h2>
+<p>De eerlijke tegenkant, zoals bij elk krachtig gereedschap in deze cursus.</p>
+<p><strong>Het lost geen applicatieprobleem op.</strong> De applicatie moet nog steeds weten waar de huidige primary is. Patroni regelt de databasekant; de verbindingskant is dagdeel B van dit deel (PgBouncer) en het onderwerp van paragraaf 13.</p>
+<p><strong>Het beschermt niet tegen dataverlies binnen <code>maximum_lag_on_failover</code>.</strong> Bij asynchrone replicatie (deel 18) kan een failover altijd een klein aantal laatste transacties kosten — dat is een RPO-beslissing, geen bug.</p>
+<p><strong>Het lost geen etcd-probleem op.</strong> Als de consensuslaag zelf een meerderheid verliest (bijvoorbeeld twee van de drie etcd-knooppunten vallen tegelijk uit), kan <strong>niemand</strong> meer een geldig leiderschapsslot claimen, en het hele cluster gaat naar read-only totdat het quorum hersteld is. Dit is een bewuste, veilige keuze — liever tijdelijk niet beschikbaar dan een ongecontroleerde split-brain — maar het betekent dat de etcd-laag zelf net zo zorgvuldig ontworpen moet worden als de database-laag.</p>
+<p><strong>Het vervangt geen back-up.</strong> Precies de les uit deel 17 en 18: Patroni beschermt tegen het uitvallen van een machine, niet tegen een verkeerde <code>DROP TABLE</code> — die repliceert vrolijk mee naar elke node in het cluster, ongeacht wie primary is.</p>
+<hr>
+<h2>11. Samenvatting dagdeel A</h2>
+<p>De vijf dingen die blijven hangen:</p>
+<ol>
+<li><strong>Eén node mag nooit alleen beslissen dat hij primary is.</strong> Dat vereist consensus van een onafhankelijke meerderheid.</li>
+<li><strong>Patroni is geen consensussysteem — hij gebruikt er een</strong> (meestal etcd) om leiderschap te bepalen.</li>
+<li><strong>Fencing (actieve zelfdegradatie) is net zo belangrijk als promotie.</strong> Een node die zijn leiderschapsslot niet kan vernieuwen, moet zichzelf terugtrekken, ongeacht wat hij lokaal denkt te zijn.</li>
+<li><strong>Switchover voor gepland onderhoud, failover voor het onverwachte</strong> — met heel verschillende risicoprofielen.</li>
+<li><strong>Patroni lost de databasekant op. De verbindingskant is dagdeel B.</strong></li>
+</ol>
+<hr>
+<hr>
+<h1>DAGDEEL B — Connection pooling en het geheel testen</h1>
+<h2>12. Leerdoelen dagdeel B</h2>
+<p>Na dagdeel B kun je:</p>
+<ul>
+<li>uitleggen waarom connection pooling een HA-onderwerp is en niet alleen een prestatiemaatregel;</li>
+<li>de drie poolmodi van PgBouncer toepassen en hun beperkingen benoemen;</li>
+<li>PgBouncer configureren om automatisch de huidige Patroni-primary te volgen;</li>
+<li>leesverkeer routeren naar replica’s zonder de applicatie te compliceren;</li>
+<li>een cluster express laten falen om te controleren of het systeem zich herstelt zoals verwacht;</li>
+<li>een RTO in de praktijk meten voor een volledig, gerealiseerd scenario;</li>
+<li>een compleet HA-ontwerp presenteren dat RPO, RTO, replicatie, consensus en pooling samenbrengt.</li>
+</ul>
+<hr>
+<h2>13. Waarom pooling een HA-onderwerp is</h2>
+<p>Patroni lost op <em>welke server</em> de primary is. Maar de applicatie van Meridiaan heeft een connection string — een vast adres. Na een failover is de primary een andere machine. <strong>Wie vertelt de applicatie dat?</strong></p>
+<p>Drie routes, met sterk verschillende kosten:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Hoe</th>
+<th>Snelheid</th>
+<th>Complexiteit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Applicatie kent alle nodes</td>
+<td>Retry-logica die zelf de nieuwe primary vindt</td>
+<td>Snel, mits goed gebouwd</td>
+<td>Hoog — elke applicatie moet dit implementeren</td>
+</tr>
+<tr>
+<td>DNS/VIP-omleiding</td>
+<td>Een naam of IP-adres wijst na failover naar de nieuwe primary</td>
+<td>Afhankelijk van DNS-TTL of netwerkconfiguratie</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td><strong>Eén vast adres, met een tussenlaag die weet wie primary is</strong></td>
+<td>De applicatie verbindt altijd met hetzelfde adres; die tussenlaag routeert door</td>
+<td>Snel en transparant</td>
+<td>Laag voor de applicatie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>PgBouncer met Patroni-integratie is de derde route</strong>, en het is waarom pooling in dit deel staat in plaats van als losstaand onderwerp: het lost tegelijk het verbindingsprobleem uit deel 11 (te veel verbindingen) én het HA-verbindingsprobleem op.</p>
+<hr>
+<h2>14. PgBouncer: de drie poolmodi</h2>
+<p>Uit deel 11 en 15 kwam pooling al terloops langs. Nu de volledige behandeling.</p>
+<pre><code class="language-ini">[databases]
+meridiaan = host=127.0.0.1 port=5432 dbname=meridiaan
+
+[pgbouncer]
+listen_port = 6432
+pool_mode = transaction
+max_client_conn = 1000
+default_pool_size = 25
+</code></pre>
+<p>De applicatie verbindt met PgBouncer (poort 6432), niet rechtstreeks met PostgreSQL. PgBouncer houdt een klein aantal echte databaseverbindingen open en deelt ze.</p>
+<p><strong>Drie poolmodi, met toenemende efficiëntie en afnemende compatibiliteit:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Modus</th>
+<th>Een databaseverbinding wordt vrijgegeven</th>
+<th>Efficiëntie</th>
+<th>Compatibiliteit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session</code></td>
+<td>Bij het sluiten van de clientverbinding</td>
+<td>Laag</td>
+<td>Volledig</td>
+</tr>
+<tr>
+<td><code>transaction</code></td>
+<td>Na elke transactie</td>
+<td><strong>Hoog</strong></td>
+<td>Beperkt (paragraaf 15)</td>
+</tr>
+<tr>
+<td><code>statement</code></td>
+<td>Na elke losse opdracht</td>
+<td>Zeer hoog</td>
+<td>Zeer beperkt</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>transaction</code>-modus is de gangbare keuze voor een OLTP-werklast als het portaal van Meridiaan:</strong> honderden clients, korte transacties, veel verbindingen die het merendeel van de tijd niets doen. Met session-pooling zou je alsnog honderden echte databaseverbindingen nodig hebben (deel 11’s probleem blijft bestaan); met transaction-pooling volstaan er 25.</p>
+<hr>
+<h2>15. Wat er breekt in transaction-pooling</h2>
+<p>De prijs voor die efficiëntie: <strong>een “sessie” bestaat niet meer tussen transacties.</strong> Elke transactie kan op een andere onderliggende databaseverbinding terechtkomen.</p>
+<p>Dit is exact de lijst uit deel 15, paragraaf 19 — nu met de volledige context waarom:</p>
+<table>
+<thead>
+<tr>
+<th>Werkt niet (of onbetrouwbaar) in transaction-pooling</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SET</code> op sessieniveau (buiten een transactie)</td>
+<td>De volgende transactie kan een andere achterliggende verbinding treffen</td>
+</tr>
+<tr>
+<td>Prepared statements over transacties heen</td>
+<td>Ze bestaan op de achterliggende verbinding, niet op de clientverbinding</td>
+</tr>
+<tr>
+<td><code>LISTEN</code>/<code>NOTIFY</code></td>
+<td>Vereist een blijvende sessie</td>
+</tr>
+<tr>
+<td>Sessie-advisory locks (<code>pg_advisory_lock</code>)</td>
+<td>Kunnen op een verbinding blijven hangen die teruggaat naar de pool</td>
+</tr>
+<tr>
+<td>Tijdelijke tabellen die over transacties heen moeten blijven bestaan</td>
+<td>Verbonden aan de sessie, niet aan de client</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De regel, herhaald vanuit deel 15 en nu met het mechanisme erachter:</strong> gebruik <code>SET LOCAL</code> in plaats van <code>SET</code>, <code>pg_advisory_xact_lock</code> in plaats van de sessievariant, en vermijd prepared statements die over transacties heen moeten blijven bestaan (of zet PgBouncer’s <code>server_reset_query</code> en oude-statement-afhandeling correct in).</p>
+<p><strong>Voor Meridiaan’s rapportagewerklast</strong> (lange, individuele query’s, weinig gelijktijdigheid) is <code>session</code>-modus vaak beter passend — de efficiëntiewinst van transaction-pooling is daar minder relevant, en de volledige compatibiliteit weegt zwaarder. <strong>Dit is opnieuw een rolgebonden keuze</strong>, net als <code>work_mem</code> in deel 11: verschillende databases of poolinstanties voor portaal (transaction) en rapportage (session).</p>
+<hr>
+<h2>16. PgBouncer en Patroni samen</h2>
+<p>De vraag uit paragraaf 13: hoe weet PgBouncer wie de huidige primary is?</p>
+<p><strong>Optie 1 — Patroni’s REST API bevragen.</strong> Elke Patroni-node biedt een eindpunt dat aangeeft of hij primary is:</p>
+<pre><code class="language-bash">curl http://node1:8008/primary   # 200 OK als primary, 503 anders
+</code></pre>
+<p>Een load balancer (HAProxy, of een cloud-load-balancer) gebruikt dit als gezondheidscontrole en stuurt verkeer alleen naar de node die op dit moment <code>200</code> teruggeeft.</p>
+<pre><code>Applicatie → PgBouncer → HAProxy (checkt /primary) → huidige primary-node
+</code></pre>
+<p><strong>Optie 2 — PgBouncer’s <code>databases</code>-sectie automatisch laten bijwerken</strong> via een script dat Patroni’s status uitleest en de configuratie herlaadt bij een wijziging. Minder gangbaar dan optie 1 met HAProxy ertussen, maar eenvoudiger op te zetten voor een klein cluster.</p>
+<p><strong>Het samengestelde beeld voor Meridiaan:</strong></p>
+<pre><code>Portaal-applicatie
+       │
+   PgBouncer (transaction mode, poort 6432)
+       │
+   HAProxy (checkt elke node op /primary via Patroni)
+       │
+   ┌───┴───┬───────┐
+ Node 1  Node 2  Node 3     ← Patroni + PostgreSQL, met etcd als consensuslaag
+  (primary op dit moment)
+</code></pre>
+<p>Na een failover (dagdeel A) verandert welke node <code>200</code> teruggeeft op <code>/primary</code>. HAProxy merkt dat binnen zijn controle-interval en routeert nieuw verkeer naar de nieuwe primary. <strong>De applicatie hoeft niets te weten</strong> — hij verbindt altijd met hetzelfde PgBouncer-adres.</p>
+<hr>
+<h2>17. Belastingverdeling en leesroutering</h2>
+<p>Uit deel 18: replica’s kunnen leesverkeer bedienen. HAProxy kan dat faciliteren met een tweede controle-eindpunt:</p>
+<pre><code class="language-bash">curl http://node2:8008/replica   # 200 OK als gezonde replica
+</code></pre>
+<p>Twee HAProxy-frontends: één die naar de primary routeert (schrijfverkeer, en lezen dat actueel moet zijn), één die naar een willekeurige gezonde replica routeert (Karins rapportage, deel 18 paragraaf 8).</p>
+<p><strong>De applicatiekant moet dit onderscheid wél kennen</strong> — niet welke server, maar welk <em>soort</em> verkeer dit is. Dat is een ontwerpbeslissing die vroeg in de applicatie-architectuur hoort, niet iets dat je achteraf transparant kunt toevoegen: elke query moet gemarkeerd zijn als “moet naar de primary” of “mag naar een replica”.</p>
+<hr>
+<h2>18. Chaos: het systeem express breken</h2>
+<p>De enige manier om te weten of dit alles werkt, is precies zoals in deel 17: <strong>het testen door het daadwerkelijk kapot te maken.</strong></p>
+<p>Vier scenario’s om te oefenen, in oplopende moeilijkheid:</p>
+<p><strong>1. Primary hard stoppen.</strong> (Dagdeel A, opdracht behandeld.) Verwacht: failover binnen <code>ttl</code> + wat marge.</p>
+<p><strong>2. Eén etcd-node uitschakelen.</strong> Verwacht: geen enkel effect — twee van de drie vormen nog een meerderheid.</p>
+<p><strong>3. Twee van de drie etcd-nodes uitschakelen.</strong> Verwacht: het cluster kan geen leiderschap meer vernieuwen of overdragen. <strong>De huidige primary blijft draaien</strong> (hij hoeft niet actief te bewijzen dat hij primary is bij elke query — alleen periodiek het slot te vernieuwen) maar geen failover is meer mogelijk totdat het quorum herstelt. Dit is een bewust, veilig aftakelscenario: beschikbaar maar niet meer beschermd, in plaats van stuk.</p>
+<p><strong>4. Netwerkpartitie: de primary geïsoleerd, maar zelf nog draaiend.</strong> Het scenario uit paragraaf 3 en 8, nu echt uitgevoerd (bijvoorbeeld met een firewallregel die verkeer tussen de primary en de rest blokkeert, niet het proces stoppen). Verwacht: de replica’s promoveren een nieuwe primary; de oude primary degradeert zichzelf zodra hij merkt dat hij het slot niet kan vernieuwen — <strong>maar er is een venster waarin hij, nog onwetend, schrijfopdrachten van clients zou kunnen accepteren die hem nog bereiken.</strong> Meet hoe lang dat venster is.</p>
+<p><strong>Scenario 4 is het scenario dat er echt toe doet.</strong> Het onderscheidt een goed geteste HA-opstelling van een die er alleen goed uitziet op een architectuurplaat.</p>
+<hr>
+<h2>19. RTO in de praktijk meten</h2>
+<p>Voor elk scenario uit paragraaf 18, meet:</p>
+<ol>
+<li><strong>Detectietijd</strong> — hoe lang tot Patroni het probleem opmerkt.</li>
+<li><strong>Beslistijd</strong> — hoe lang tot een nieuwe primary is gekozen.</li>
+<li><strong>Promotietijd</strong> — hoe lang tot die nieuwe primary schrijfbaar is.</li>
+<li><strong>Routeringstijd</strong> — hoe lang tot HAProxy/PgBouncer verkeer daarheen stuurt.</li>
+<li><strong>Totaal</strong> — de som, gemeten van begin tot eind, niet geschat.</li>
+</ol>
+<pre><code class="language-sql">-- Simpel meetpatroon: een client die continu probeert te schrijven
+-- en de eerste succesvolle INSERT na de storing timet
+</code></pre>
+<p><strong>Vergelijk dit getal met de RTO-doelstelling uit deel 17.</strong> Als Meridiaan een RTO van twee uur nodig had en een handmatige procedure (deel 17-18) daar ruimschoots binnen bleef, was de investering in dit hele dagdeel misschien niet nodig geweest — <strong>dat is een eerlijke, legitieme conclusie.</strong> Automatische failover heeft eigen complexiteit en eigen faalmodi (paragraaf 10, 18-3). Hij is het waard bij een laag RTO, een grote installatie, of frequent onderhoud dat anders telkens handmatig werk vraagt.</p>
+<hr>
+<h2>20. Het geheel: van RPO/RTO naar architectuur</h2>
+<p>De volledige keten die deel 17, 18 en 19 samen vormen:</p>
+<pre><code>RPO/RTO-eisen (bedrijfsbeslissing, deel 17)
+        │
+        ▼
+Back-upstrategie (deel 17) ── vangnet voor fouten in de tijd
+        │
+        ▼
+Replicatietopologie (deel 18) ── synchroon/asynchroon per RPO
+        │
+        ▼
+Consensus en automatische failover (deel 19a) ── voor het RTO
+        │
+        ▼
+Connection pooling en routering (deel 19b) ── zodat de applicatie niets hoeft te weten
+</code></pre>
+<p><strong>Geen van deze lagen vervangt een andere.</strong> Een organisatie met een uitstekende Patroni-opstelling en geen geteste back-up is nog steeds kwetsbaar voor een verkeerde <code>DROP TABLE</code>. Een organisatie met perfecte back-ups en geen replicatie heeft een RTO die wordt gemeten in uren, niet in seconden. Ze zijn complementair, en de volgorde waarin je ze opbouwt, volgt de volgorde waarin de risico’s meestal ontdekt worden — meestal ook de volgorde van deze drie dagdelen.</p>
+<hr>
+<h2>21. Veelgemaakte fouten, aansluiting op de certificering, kernbegrippen</h2>
+<h3>Veelgemaakte fouten</h3>
+<table>
+<thead>
+<tr>
+<th>Fout</th>
+<th>Gevolg</th>
+<th>Beter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Elke node laten zelf-detecteren en zelf-promoveren</td>
+<td>Split-brain bij een netwerkstoring</td>
+<td>Consensus via een onafhankelijke meerderheid</td>
+</tr>
+<tr>
+<td>Etcd-knooppunten op dezelfde stroomkring/rack</td>
+<td>De consensuslaag valt in zijn geheel weg</td>
+<td>Fysiek gescheiden faalgebieden</td>
+</tr>
+<tr>
+<td>Applicatie rechtstreeks naar een vast databaseadres</td>
+<td>Werkt niet meer na failover</td>
+<td>PgBouncer + HAProxy die Patroni volgen</td>
+</tr>
+<tr>
+<td><code>transaction</code>-pooling zonder de beperkingen te kennen</td>
+<td><code>SET</code>, advisory locks, prepared statements falen onvoorspelbaar</td>
+<td><code>SET LOCAL</code>, <code>pg_advisory_xact_lock</code>, of <code>session</code>-modus waar nodig</td>
+</tr>
+<tr>
+<td>Rapportage- en portaalverkeer door dezelfde pool</td>
+<td>Verkeerde poolmodus voor minstens één werklast</td>
+<td>Aparte pools per werklast</td>
+</tr>
+<tr>
+<td>Failover nooit echt getest, alleen switchover</td>
+<td>Onbekend gedrag bij een echte storing</td>
+<td>Chaos-scenario’s, inclusief netwerkpartitie</td>
+</tr>
+<tr>
+<td><code>maximum_lag_on_failover</code> te ruim</td>
+<td>Promotie van een te ver achterlopende replica; groter dataverlies dan RPO toestaat</td>
+<td>Instellen op basis van het werkelijke RPO</td>
+</tr>
+<tr>
+<td>Automatische failover invoeren zonder RTO-onderbouwing</td>
+<td>Complexiteit zonder aantoonbare noodzaak</td>
+<td>Eerst meten of het handmatige traject al voldoet</td>
+</tr>
+</tbody>
+</table>
+<h3>Aansluiting op de certificering</h3>
+<p>Voor de EDB PostgreSQL Professional-certificering paraat:</p>
+<ul>
+<li>het split-brain-probleem en waarom consensus nodig is;</li>
+<li>de rol van etcd/Consul als onafhankelijke consensuslaag;</li>
+<li>Patroni’s architectuur: leiderschapsslot, <code>ttl</code>, <code>maximum_lag_on_failover</code>;</li>
+<li>het verschil tussen failover en switchover;</li>
+<li>fencing en waarom actieve zelfdegradatie nodig is;</li>
+<li>PgBouncer: de drie poolmodi en hun compatibiliteitsbeperkingen;</li>
+<li>de combinatie PgBouncer/HAProxy/Patroni voor transparante routering;</li>
+<li>het testen van HA met opzettelijke storingen, inclusief netwerkpartities.</li>
+</ul>
+<p>Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+<h3>Kernbegrippen</h3>
+<p><strong>Split-brain</strong> — twee nodes die tegelijk denken primary te zijn.
+<strong>Consensus/quorum</strong> — een meerderheid van onafhankelijke waarnemers die een beslissing bevestigt.
+<strong>etcd</strong> — gedistribueerde sleutel-waardeopslag met ingebouwd consensus (Raft), gebruikt door Patroni.
+<strong>Patroni</strong> — beheerlaag die PostgreSQL-failover orkestreert via een consensussysteem.
+<strong>Leiderschapsslot</strong> — de door consensus bewaakte aanwijzing van de huidige primary.
+<strong>Fencing</strong> — het actief onschadelijk maken van een node die mogelijk nog denkt primary te zijn.
+<strong>Failover</strong> — ongeplande, automatische rolwisseling na een storing.
+<strong>Switchover</strong> — geplande, gecontroleerde rolwisseling zonder dataverlies.
+<strong>PgBouncer</strong> — connection pooler tussen applicatie en PostgreSQL.
+<strong>Poolmodus (session/transaction/statement)</strong> — bepaalt wanneer een databaseverbinding wordt vrijgegeven.
+<strong>Netwerkpartitie</strong> — een node die geïsoleerd raakt maar zelf blijft functioneren; het scherpste testscenario.</p>
+<hr>
+<p><em>Volgende deel: monitoring — zelfstandig leesbaar, en de plek waar alle signalen uit dit hele niveau samenkomen. Je hebt nu een systeem dat zichzelf herstelt. Volgende keer zorg je dat je het ook zíét gebeuren, vóórdat een gebruiker het meldt.</em></p>
+
+</article>
+<aside class="dbm-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="dbm-download-size">26 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="dbm-download-size">23 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="dbm-download-size">19 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="dbm-download-size">402 KB</span></li>
+  </ul>
+</aside>
+<nav class="dbm-partnav"><a class="dbm-prevnext prev" href="../deel-18-replicatie/reader.html">&larr; Deel 18 — Replicatie</a><a class="dbm-prevnext next" href="../deel-20-monitoring-logging-en-pgaudit/reader.html">Deel 20 — Monitoring, logging en pgaudit &rarr;</a></nav>
+</main>
+<footer class="dbm-footer">
+  <p>Ductus-cursusfamilie · Databasemanagement · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
