@@ -25,6 +25,7 @@ COPY outsystems/ /usr/share/nginx/html/outsystems/
 COPY databasemanagement/ /usr/share/nginx/html/databasemanagement/
 COPY project-en-programmamanagement/ /usr/share/nginx/html/project-en-programmamanagement/
 COPY pensioenverzekeringen/ /usr/share/nginx/html/pensioenverzekeringen/
+COPY enterprise-architectuur/ /usr/share/nginx/html/enterprise-architectuur/
 COPY btabok/ /usr/share/nginx/html/btabok/
 
 EXPOSE 80
