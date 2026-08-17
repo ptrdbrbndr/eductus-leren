@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Data- en integratiearchitectuur — Business- en enterprise-architectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../enterprise-architectuur.css">
+</head>
+<body>
+<header class="ea-header">
+  <div class="ea-header-inner">
+    <a class="ea-brand" href="../../index.html">Business- en enterprise-architectuur</a>
+    <nav class="ea-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="ea-main">
+<div class="ea-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="ea-article">
+<h1>Business &amp; Enterprise Architectuur — Niveau 2</h1>
+<h2>Deel 16 · Reader — Data- en integratiearchitectuur</h2>
+<blockquote>
+<p><strong>Positionering.</strong> Dit deel verdiept niveau 1, deel 5-6 naar programmaschaal. Het overlapt bewust met de API-cursus in deze cursusfamilie — die cursus behandelt ontsluiting, contracten en gateways in technische diepte; hier blijft het op architectuurniveau: welk datamodel, welke integratiepatronen, welke besluiten. Elke cursus in de familie staat zelfstandig; de duplicatie is een vaste keuze, geen omissie.</p>
+</blockquote>
+<hr>
+<h3>Leerdoelen</h3>
+<p>Na dit deel kun je:</p>
+<ol>
+<li>een gedeeld conceptueel datamodel ontwerpen voor een programma met meerdere domeinen, met generieke en domeinspecifieke entiteiten;</li>
+<li>integratiepatronen op programmaschaal beoordelen: één generieke ontsluiting versus per-domein koppelvlakken;</li>
+<li>data-eigenaarschap op programmaschaal beleggen wanneer een entiteit door meerdere domeinen wordt gebruikt;</li>
+<li>een integratiearchitectuur ontwerpen die de vijf mutatiedomeinen op één gedeelde laag laat samenkomen zonder hun eigen systemen te vervangen.</li>
+</ol>
+<hr>
+<h3>1. Casus: één mutatie, vijf systemen</h3>
+<p>Elke mutatie-afdeling heeft haar eigen brongegevens (deel 11, bijlage A): Adreswijzigingen in het CRM, Dienstverbandmutaties in het deelnemersysteem (u kent het uit niveau 1), Begunstigden in een eigen registratie, Betalingsmutaties in het premiesysteem, Waardeoverdrachten deels op papier. De generieke mutatieverwerkingscapability (deel 11) moet ze allemaal kunnen bedienen zonder dat Meridiaan vijf systemen vervangt door één nieuw systeem — dat zou het B12-risico (niveau 1) in optima forma herhalen: alles herbouwen wat al bestaat.</p>
+<p>De opgave van dit deel: een datamodel en integratiearchitectuur die de generieke laag <em>over</em> de bestaande systemen heen legt, in plaats van ze te vervangen.</p>
+<hr>
+<h3>2. Het gedeelde conceptuele datamodel</h3>
+<h4>2.1 Generieke en domeinspecifieke entiteiten</h4>
+<p>Net als de generieke capability (deel 11) en de generieke waardestroom (deel 12) kent het datamodel een generieke kern en domeinspecifieke uitbreidingen. De generieke kern: <strong>Mutatieverzoek</strong> (elk type mutatie is een verzoek, met een type, een indiener, een status), <strong>Autorisatiebeslissing</strong> (het resultaat van de identiteit/bevoegdheid-stap, met het geparametriseerde niveau uit deel 11). Domeinspecifiek: <strong>Dienstverbandwijziging</strong> (met de peildatum- en historieregels uit niveau 1, deel 5), <strong>Begunstigdewijziging</strong> (met de tweeogen-autorisatiedata), enzovoort — elk een specialisatie die aan het generieke Mutatieverzoek hangt.</p>
+<h4>2.2 De relatie met de vijf bronsystemen</h4>
+<p>Het generieke model is geen nieuwe bronregistratie voor alles — de bronregelspelregels uit niveau 1 (deel 5, §4) blijven onverkort gelden: het CRM blijft bron voor adresgegevens, het deelnemersysteem voor dienstverbanden. Het generieke Mutatieverzoek-model is een <strong>coördinerende laag</strong>: het volgt de status van een mutatie door de keten, zonder zelf bron te worden van de inhoud. Dit is dezelfde denkfiguur als het begrippenkader uit niveau 1, deel 5 — een gedeeld stelsel dat de varianten verbindt zonder ze te vervangen.</p>
+<hr>
+<h3>3. Integratiepatronen op programmaschaal</h3>
+<p>Niveau 1 (deel 6, §3) gaf het onderscheid punt-tot-punt versus ontsluiting via services, met de redenering “afnemers × verandering”. Op programmaschaal komt daar een patroon bij dat specifiek voor generieke platforms relevant is:</p>
+<ul>
+<li><strong>Orkestratie via de generieke laag:</strong> de generieke mutatieverwerkingscapability treedt op als coördinator — zij ontvangt het verzoek, roept de juiste domeinservice aan (adreswijziging → CRM-service, dienstverbandmutatie → deelnemersysteem-service), en bewaakt de voortgang. De vijf bronsystemen weten niets van elkaar; alle coördinatie zit in de generieke laag.</li>
+<li><strong>Choreografie tussen domeinen:</strong> de systemen reageren zelf op gebeurtenissen zonder centrale coördinator (een gebeurtenis “dienstverband gewijzigd” wordt gepubliceerd, en het deelnemersysteem en het premiesysteem reageren elk zelfstandig).</li>
+</ul>
+<p>Voor het Mutatieplatform is <strong>orkestratie</strong> de aangewezen keuze: de generieke capability bestáát juist om coördinatie te centraliseren (deel 11, §3), en vijf domeinen die onderling los van elkaar op gebeurtenissen reageren, zouden precies de ondoorzichtige verwevenheid herintroduceren die WGP 2.0 kenmerkte. Choreografie is krachtiger bij losse koppeling tussen veel, onafhankelijke consumenten — een patroon dat in deel 18 (architectuurpatronen) verder wordt afgewogen tegen orkestratie voor andere situaties.</p>
+<figure class="ea-figure"><img src="../../figuren/deel-16/fig_16_1_orkestratie.png" alt="Orkestratie — de generieke laag als coördinator boven de vijf domeinsystemen, die elkaar niet rechtstreeks kennen" loading="lazy"><figcaption>Figuur 16-1 — Orkestratie — de generieke laag als coördinator boven de vijf domeinsystemen, die elkaar niet rechtstreeks kennen</figcaption></figure>
+<hr>
+<h3>4. Data-eigenaarschap bij gedeelde entiteiten</h3>
+<p>Het generieke Mutatieverzoek wordt door alle vijf domeinen gebruikt — wie is de data-eigenaar? Niveau 1 (deel 5, §5) kende eigenaarschap per domein toe; hier is de entiteit zelf domeinoverstijgend. De oplossing volgt hetzelfde patroon als het architectuurgremium (niveau 1, deel 9): de architectuurfunctie is eigenaar namens het geheel, met de vijf domeinarchitecten als adviserende partijen bij wijzigingen die hun specialisatie raken — geen vijfkoppig eigenaarschap (dat verlamt besluitvorming), geen eenzijdig eigenaarschap door één domein (dat bevoordeelt dat domein).</p>
+<hr>
+<h3>5. Samenvatting</h3>
+<ul>
+<li>Een gedeeld conceptueel datamodel op programmaschaal combineert een generieke kern met domeinspecifieke uitbreidingen — dezelfde structuur als de generieke capability.</li>
+<li>De generieke laag is een coördinerende laag, geen nieuwe bronregistratie — de bronregels uit niveau 1 blijven gelden.</li>
+<li>Orkestratie via de generieke laag past bij het Mutatieplatform: centrale coördinatie was juist het doel; choreografie zou de verwevenheid van WGP 2.0 herintroduceren.</li>
+<li>Domeinoverstijgende entiteiten krijgen de architectuurfunctie als eigenaar namens het geheel, met domeinarchitecten als adviseurs — geen gedeeld of eenzijdig eigenaarschap.</li>
+</ul>
+<h3>Begrippenlijst</h3>
+<table>
+<thead>
+<tr>
+<th>Begrip</th>
+<th>Omschrijving</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coördinerende laag</td>
+<td>een generiek model dat status volgt zonder zelf bron te worden</td>
+</tr>
+<tr>
+<td>Orkestratie</td>
+<td>centrale coördinatie van domeinservices door de generieke laag</td>
+</tr>
+<tr>
+<td>Choreografie</td>
+<td>domeinen reageren zelfstandig op gebeurtenissen, zonder centrale coördinator</td>
+</tr>
+</tbody>
+</table>
+<h3>Verder lezen</h3>
+<ul>
+<li>De API-cursus in deze cursusfamilie — voor de technische uitwerking van ontsluiting, contracten en gateways</li>
+</ul>
+<p><em>Volgende deel: gap-analyse, roadmapping en migratieplanning — fase E-F op programmaschaal.</em></p>
+
+</article>
+<aside class="ea-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="ea-download-size">120 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="ea-download-size">13 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="ea-download-size">13 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="ea-download-size">134 KB</span></li>
+  </ul>
+</aside>
+<nav class="ea-partnav"><a class="ea-prevnext prev" href="../deel-15/reader.html">&larr; Deel 15 — Solution- en projectarchitectuur: van enterprise naar project</a><a class="ea-prevnext next" href="../deel-17/reader.html">Deel 17 — Gap-analyse, roadmapping en migratieplanning &rarr;</a></nav>
+</main>
+<footer class="ea-footer">
+  <p>Ductus-cursusfamilie · Business- en enterprise-architectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
