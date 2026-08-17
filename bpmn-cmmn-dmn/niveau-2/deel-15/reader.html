@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 15 — DMN gevorderd — BPMN, CMMN &amp; DMN — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../bpmn-cmmn-dmn.css">
+</head>
+<body>
+<header class="bcd-header">
+  <div class="bcd-header-inner">
+    <a class="bcd-brand" href="../../index.html">BPMN, CMMN & DMN</a>
+    <nav class="bcd-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="bcd-main">
+<div class="bcd-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="bcd-article">
+<h1>Deel 15 — DMN gevorderd</h1>
+<p>Reader · Ductus-cursus BPMN, CMMN & DMN · niveau 2 (praktijk) · deel 15 van 30 · studielast &plusmn; 8 uur</p>
+<hr>
+<blockquote><p>Dit materiaal bereidt voor op DMN Method &amp; Style (Bruce Silver / Trisotech) en op het DMN-onderdeel van het BPM+ Certificate. Het is geen vervanging van het officiële examen- of trainingsmateriaal.</p></blockquote>
+<blockquote><p><strong>Indeling over twee dagdelen.</strong> Dagdeel 1 behandelt §15.1 tot en met §15.5 (decompositie, FEEL, boxed expressions, iterators, business knowledge models). Dagdeel 2 behandelt §15.6 en §15.7 (tabelanalyse en testen). Dit is het zwaarste deel van niveau 2 — de zelfstudiecomponent is hier het grootst.</p></blockquote>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ol><li>Beslismodellen decomponeren en beargumenteren waar je splitst.</li><li>FEEL toepassen op praktijkniveau: types, contexts, lists, ranges, temporele expressies, functies.</li><li>Boxed expressions kiezen en toepassen: literal, context, invocation, relation, function, iterator.</li><li>Business knowledge models ontwerpen voor hergebruik.</li><li>Beslistabellen analyseren op volledigheid, overlap, subsumptie en onbereikbare regels.</li><li>Beslismodellen testen met testsets en dekkingsgraad.</li></ol>
+<p># Dagdeel 1</p>
+<hr>
+<h2>15.1 Decompositie</h2>
+<p>Niveau 1, deel 6 behandelde één decision met één beslistabel. In de praktijk groeit een beslismodel al snel voorbij wat in één tabel leesbaar blijft, en dan moet je <strong>decomponeren</strong>: één grote beslissing opsplitsen in meerdere, kleinere, elk met een eigen tabel, verbonden in een DRD.</p>
+<p><strong>Signalen dat een tabel te groot wordt.</strong> Meer dan vijf tot zeven inputkolommen, regels die zichtbaar in groepen uiteenvallen (bijvoorbeeld: een blok regels dat alleen relevant is als één specifieke inputwaarde een bepaalde waarde heeft), of een tabel waarvan de auteur zelf de volledigheid niet meer kan overzien — dat laatste is het duidelijkste signaal, en precies het probleem dat niveau 1, deel 6, §6.5 al aanstipte.</p>
+<p><strong>De DRD als architectuur, niet als plaatje.</strong> Een gedecomponeerd beslismodel toont in de DRD zelf de opbouw van de redenering: een tussenliggende decision (bijvoorbeeld &quot;korting voor vervroeging&quot;) die zelf weer input is voor een eindbeslissing (&quot;definitief uitkeringspercentage&quot;). Dit is geen esthetische keuze — het bepaalt welk deel van de logica je apart kunt hergebruiken, apart kunt testen (§15.7), en apart kunt laten wijzigen zonder de rest te raken (het regelbeheer-vraagstuk van deel 16).</p>
+<blockquote><p><strong>Casusfragment — Programma Mutatieplatform</strong> De rekenregels voor vervroegde uittreding (bekend uit de niveau 1-capstone) combineren drie factoren: jaren vervroeging, partnerpensioen, eerdere waardeoverdracht. Een enkele tabel met alle drie als inputkolommen zou werken voor kleine aantallen jaren, maar wordt bij een fijnmazige staffeling van kortingspercentages al snel tientallen regels. Decompositie in een tussenliggende decision &quot;kortingspercentage vervroeging&quot; (alleen afhankelijk van jaren) en een eindbeslissing die dat percentage combineert met de andere twee factoren, houdt beide tabellen overzichtelijk en maakt de eerste herbruikbaar voor andere producten die dezelfde vervroegingsstaffel hanteren.</p></blockquote>
+<hr>
+<h2>15.2 FEEL diepgaand</h2>
+<p>Niveau 1, deel 6, §6.6 introduceerde de basis. Op praktijkniveau komt daar het volgende bij:</p>
+<ul><li><strong>Types en type-conversie</strong> — FEEL kent number, string, boolean, date, time, date and time, duration, en de collectietypen list en context. Conversiefuncties (`string()`, `number()`, `date()`) zijn nodig zodra data uit verschillende bronnen (bijvoorbeeld een systeemveld dat als tekst binnenkomt) samen moeten worden vergeleken.</li><li><strong>Contexts</strong> — een verzameling naam-waardeparen, vergelijkbaar met een object: `{ leeftijd: 45, actief: true }`. Contexts zijn de basis van de boxed expression van hetzelfde type (§15.3) en worden gebruikt om samengestelde gegevens te structureren.</li><li><strong>Lists</strong> — een geordende verzameling waarden: `[1, 2, 3]` of een lijst van contexts (bijvoorbeeld: alle dienstverbanden van een deelnemer). Lists zijn de basis voor iteratie (§15.4).</li><li><strong>Temporele expressies</strong> — cruciaal in een pensioencontext. `date(&quot;2026-01-01&quot;)`, `duration(&quot;P5Y&quot;)` (een periode van vijf jaar), en berekeningen daartussen: `date(&quot;2026-01-01&quot;) - date(&quot;2021-01-01&quot;)` levert een duration op. Peildatums, ingangsdatums en de vraag &quot;hoeveel jaar zit er tussen twee datums&quot; komen in vrijwel elke pensioenberekening terug.</li><li><strong>Ingebouwde functies</strong> — een uitgebreide bibliotheek voor tekst (`substring`, `upper case`), lijsten (`count`, `sum`, `sort`), en datums (`year`, `month of`, `date and time`). Ken de meest gebruikte functies uit het hoofd; de rest zoek je op wanneer nodig.</li></ul>
+<hr>
+<h2>15.3 Boxed expressions</h2>
+<p>Een beslistabel (niveau 1, deel 6) is één van zes vormen waarin je de logica van een decision kunt uitdrukken — een <strong>boxed expression</strong>. De andere vijf:</p>
+<ul><li><strong>Literal expression</strong> — een enkele FEEL-expressie, zonder tabelstructuur. Geschikt voor eenvoudige berekeningen die geen regels nodig hebben: `jaren_vervroeging * 0.03`.</li><li><strong>Context</strong> — een boxed expression die zelf een context opbouwt, met per regel een naam en een sub-expressie. Geschikt wanneer een decision meerdere samenhangende waarden tegelijk moet opleveren.</li><li><strong>Invocation</strong> — een aanroep van een business knowledge model (§15.5) met concrete argumenten. Dit is de vorm die hergebruik zichtbaar maakt in de boxed expression zelf.</li><li><strong>Relation</strong> — een tabel van waarden zonder regellogica — puur een gestructureerde verzameling data, vergelijkbaar met een kleine, statische tabel (bijvoorbeeld: een lijst van geldige productcodes met hun omschrijving).</li><li><strong>Function</strong> — de definitie van een herbruikbare functie, met parameters en een body-expressie; dit is wat een business knowledge model intern bevat.</li><li><strong>Iterator (for/every/some)</strong> — behandeld in §15.4.</li></ul>
+<p><strong>Wanneer een beslistabel niet meer de juiste vorm is.</strong> Zodra de logica geen &quot;als deze combinatie van condities, dan die uitkomst&quot;-structuur heeft — bijvoorbeeld een directe berekening, of een aanroep van eerder gedefinieerde logica — is een andere boxed expression passender. Het forceren van elke decision in tabelvorm, ook waar dat niet past, is een stijlfout die de leesbaarheid schaadt, vergelijkbaar met het forceren van elke beslissing in een BPMN-gateway (niveau 1, deel 3, §3.5).</p>
+<hr>
+<h2>15.4 Iterators</h2>
+<p>FEEL kent drie iteratorvormen om met lijsten te werken:</p>
+<ul><li><strong>for</strong> — transformeert elk element van een lijst tot een nieuwe lijst: `for d in dienstverbanden return d.jaren` levert een lijst van jarentotalen op.</li><li><strong>every</strong> — controleert of een voorwaarde voor élk element geldt: `every d in dienstverbanden satisfies d.actief` levert `true` of `false` op.</li><li><strong>some</strong> — controleert of een voorwaarde voor ten minste één element geldt: `some d in dienstverbanden satisfies d.type = &quot;overdracht&quot;`.</li></ul>
+<p><strong>Werken met lijsten in de praktijk.</strong> Het totaal aantal opbouwjaren van een deelnemer met meerdere dienstverbanden is een klassiek voorbeeld: `sum(for d in dienstverbanden return d.jaren)` combineert een for-iterator met de ingebouwde functie `sum`. Dit soort constructie komt terug zodra een beslissing niet op één simpel gegeven werkt, maar op een verzameling — en die verzameling qua lengte per deelnemer verschilt, wat een vaste beslistabel onmogelijk zou maken.</p>
+<hr>
+<h2>15.5 Business knowledge models</h2>
+<p>Een <strong>business knowledge model</strong> (BKM, geïntroduceerd in niveau 1, deel 6, §6.2) is herbruikbare logica — in essentie een functie — die door meerdere decisions kan worden aangeroepen via een invocation (§15.3).</p>
+<p><strong>Granulariteit.</strong> Een BKM voor &quot;bereken kortingspercentage bij vervroeging&quot; is herbruikbaar en behapbaar. Een BKM die de hele uitkeringsberekening in één keer doet, is eigenlijk gewoon de hoofddecision met een andere naam — geen echt hergebruik. De vuistregel: een BKM verdient zijn bestaan als hij door minstens twee verschillende decisions wordt (of redelijkerwijs zal worden) aangeroepen, of als hij een stuk logica isoleert dat een eigen, apart te wijzigen levenscyclus heeft (bijvoorbeeld: een wettelijk vastgestelde staffel die jaarlijks wijzigt, los van de rest van de berekening).</p>
+<p><strong>Het risico van te fijnmazig hergebruik.</strong> Een BKM voor elke afzonderlijke rekenstap, ook waar die maar op één plek wordt gebruikt, versplintert het beslismodel in een web van aanroepen dat moeilijker te doorzien is dan één iets grotere, samenhangende decision. Hergebruik is een middel, geen doel op zich — dezelfde afweging die niveau 1, deel 4, §4.5 al maakte voor BPMN-subprocessen, hier toegepast op DMN.</p>
+<p># Dagdeel 2</p>
+<hr>
+<h2>15.6 Analyse van tabellen</h2>
+<p>Niveau 1, deel 6, §6.5 introduceerde volledigheid, consistentie en overlap. Op dit niveau komen twee begrippen bij die pas relevant worden bij grotere, gedecomponeerde tabellen:</p>
+<ul><li><strong>Subsumptie</strong> — een regel die volledig &quot;opgeslokt&quot; wordt door een andere, bredere regel, waardoor hij feitelijk nooit het verschil maakt. Bijvoorbeeld: een regel voor &quot;leeftijd &gt; 65&quot; en een andere regel voor &quot;leeftijd &gt; 60 en leeftijd &lt; 70&quot; kunnen elkaar overlappen op een manier die niet meteen zichtbaar is zonder de ranges naast elkaar te leggen.</li><li><strong>Onbereikbare regels</strong> — een regel die door de volgorde van eerdere regels (bij een hit policy als First) nooit aan de beurt komt, ook al is hij op zichzelf geldig. Dit is een fout die alleen optreedt bij volgorde-afhankelijke hit policies en die des te sluipender is omdat de tabel er op het eerste gezicht compleet correct uitziet.</li></ul>
+<p><strong>Wat een tool detecteert en wat niet.</strong> De meeste DMN-tools detecteren overlap bij een Unique-tabel automatisch (het is een structurele fout). Subsumptie en onbereikbare regels zijn subtieler: sommige tools signaleren ze, andere niet — en zelfs waar een tool het signaleert, blijft de vraag of de subsumptie een bewuste vereenvoudiging is (de bredere regel was zo bedoeld) of een fout (de bredere regel verbergt per ongeluk een uitzondering die had moeten gelden). Dat onderscheid maken vergt een mens die de businessbetekenis kent, niet alleen een tool die de logica ontleedt.</p>
+<hr>
+<h2>15.7 Testen</h2>
+<p>Een beslismodel dat nooit getest is, is een aanname met een mooie tabel eromheen. Testen bij DMN is, net als bij elke andere logica, een deliverable op zich — niet iets dat je &quot;erbij doet&quot; als er tijd over is.</p>
+<p><strong>Testsets opstellen.</strong> Voor elke decision: een set testgevallen met concrete inputwaarden en de verwachte uitkomst. Een goede testset dekt niet alleen de duidelijke gevallen (elke regel minstens één keer geraakt) maar ook de randen (grenswaarden van ranges, bijvoorbeeld precies op de leeftijdsgrens) en de combinaties die het meest foutgevoelig zijn gebleken bij de tabelanalyse uit §15.6.</p>
+<p><strong>Dekkingsgraad bepalen.</strong> Hoeveel van de regels in de tabel worden daadwerkelijk geraakt door minstens één testgeval? Een testset die drie van de tien regels nooit test, laat een deel van het beslismodel feitelijk ongevalideerd — een parallel met codedekkingsmetrieken in softwaretesten, hier toegepast op beslislogica.</p>
+<p><strong>Regressie bij regelwijziging.</strong> Wanneer een tabel wijzigt (bijvoorbeeld: de kortingsstaffel wordt per 1 januari aangepast — direct gekoppeld aan het regelbeheervraagstuk van deel 16), draai je de bestaande testset opnieuw: welke testgevallen leveren nu een andere uitkomst op, en is dat de bedoelde wijziging of een onbedoelde neveneffect? Testen zonder deze regressiestap laat de vraag &quot;heb ik alleen veranderd wat ik wilde veranderen&quot; onbeantwoord.</p>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Decompositie</strong> — het opsplitsen van een grote beslissing in kleinere, verbonden decisions · <strong>Type / context / list</strong> — de FEEL-datatypen · <strong>Boxed expression</strong> — de zes vormen waarin decisielogica wordt uitgedrukt (decision table, literal, context, invocation, relation, function, iterator) · <strong>for / every / some</strong> — de drie FEEL-iteratorvormen · <strong>Business knowledge model (BKM)</strong> — herbruikbare logica, aangeroepen via invocation · <strong>Subsumptie</strong> — een regel die volledig wordt opgeslokt door een bredere regel · <strong>Onbereikbare regel</strong> — een regel die door tabelvolgorde nooit aan de beurt komt · <strong>Testset / dekkingsgraad / regressie</strong> — de drie bouwstenen van beslismodeltesten</p>
+<hr>
+<h2>Examenrelevantie</h2>
+<p>Dit deel is de directe voorbereiding op <strong>DMN Method &amp; Style</strong>, waar modellen beoordeeld worden op basis van daadwerkelijk ingediend werk in plaats van meerkeuzevragen. Ook relevant voor het DMN-onderdeel van BPM+.</p>
+<hr>
+<h2>Leeswijzer</h2>
+<p>Raadpleeg de actuele DMN-specificatie voor de volledige FEEL-grammatica en de volledige lijst ingebouwde functies — dit deel behandelt de meest gebruikte constructies, niet de complete taal. Voor Method &amp; Style: de officiële cursusmaterialen van Bruce Silver / Trisotech behandelen de beoordelingscriteria in detail.</p>
+<hr>
+<h2>Figurenlijst</h2>
+<figure class="bcd-figure"><img src="../../figuren/deel-15/figuur-15-1-drd-decompositie.svg" alt="Figuur 15.1 — Een DRD met drie gedecomponeerde decisions voor de vervroegde-uittredingberekening." loading="lazy"><figcaption>Figuur 15.1 — Een DRD met drie gedecomponeerde decisions voor de vervroegde-uittredingberekening.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-15/figuur-15-2-boxed-expressions.svg" alt="Figuur 15.2 — De zes boxed expressions naast elkaar, elk met een kort voorbeeld uit Meridiaan." loading="lazy"><figcaption>Figuur 15.2 — De zes boxed expressions naast elkaar, elk met een kort voorbeeld uit Meridiaan.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-15/figuur-15-3-iterator.svg" alt="Figuur 15.3 — Een iterator visueel: lijst dienstverbanden in, aggregatie (totaal aantal jaren) uit." loading="lazy"><figcaption>Figuur 15.3 — Een iterator visueel: lijst dienstverbanden in, aggregatie (totaal aantal jaren) uit.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-15/figuur-15-4-tabelanalyse.svg" alt="Figuur 15.4 — Tabelanalyse: subsumptie en een onbereikbare regel gemarkeerd in een voorbeeldtabel." loading="lazy"><figcaption>Figuur 15.4 — Tabelanalyse: subsumptie en een onbereikbare regel gemarkeerd in een voorbeeldtabel.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-15/figuur-15-5-testset-dekkingsmatrix.svg" alt="Figuur 15.5 — Een testset met dekkingsmatrix: welke regel door welk testgeval wordt geraakt." loading="lazy"><figcaption>Figuur 15.5 — Een testset met dekkingsmatrix: welke regel door welk testgeval wordt geraakt.</figcaption></figure>
+</article>
+<aside class="bcd-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+<li><a href="reader.docx">Reader (.docx)</a><span class="bcd-download-size">627 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="bcd-download-size">13 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="bcd-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="bcd-download-size">1759 KB</span></li>
+  </ul>
+</aside>
+<nav class="bcd-partnav"><a class="bcd-prevnext prev" href="../deel-14/reader.html">&larr; Deel 14 — BPMN gevorderd II: data, resources en semantiek</a><a class="bcd-prevnext next" href="../deel-16/reader.html">Deel 16 — Beslismanagement en regelbeheer &rarr;</a></nav>
+</main>
+<footer class="bcd-footer">
+  <p>Ductus-cursusfamilie · BPMN, CMMN & DMN · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -28,6 +28,7 @@ COPY pensioenverzekeringen/ /usr/share/nginx/html/pensioenverzekeringen/
 COPY enterprise-architectuur/ /usr/share/nginx/html/enterprise-architectuur/
 COPY btabok/ /usr/share/nginx/html/btabok/
 COPY datamanagement/ /usr/share/nginx/html/datamanagement/
+COPY bpmn-cmmn-dmn/ /usr/share/nginx/html/bpmn-cmmn-dmn/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 20 — Procesmining: model versus werkelijkheid — BPMN, CMMN &amp; DMN — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../bpmn-cmmn-dmn.css">
+</head>
+<body>
+<header class="bcd-header">
+  <div class="bcd-header-inner">
+    <a class="bcd-brand" href="../../index.html">BPMN, CMMN & DMN</a>
+    <nav class="bcd-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 20 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="bcd-main">
+<div class="bcd-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="docentenhandleiding.html">Docentenhandleiding</a><a href="slidedeck.html">Slidedeck</a></div>
+<article class="bcd-article">
+<h1>Deel 20 — Procesmining: model versus werkelijkheid</h1>
+<p>Reader · Ductus-cursus BPMN, CMMN & DMN · niveau 2 (praktijk) · deel 20 van 30 · studielast &plusmn; 6 uur</p>
+<hr>
+<blockquote><p>Dit materiaal is onderdeel van de driedelige BPMN/CMMN/DMN-cursus, maar zo opgezet dat het ook zelfstandig, los van de rest van het programma, te volgen is. Waar een begrip uit een eerder deel van deze cursus relevant is, wordt het hier kort herhaald.</p></blockquote>
+<h2>Positie in het curriculum</h2>
+<p>Bewust vóór governance geplaatst, niet erna. Een deelnemer meet in dit deel eerst zelf de kloof tussen zijn eigen procesmodel en de werkelijkheid; het gesprek over het operating model in deel 21 krijgt daarmee een concrete aanleiding in plaats van een theoretische. De tooling in dit deel is <strong>Retroductus</strong>, een procesmining-platform op basis van PM4Py.</p>
+<p><strong>Afbakening ten opzichte van de verdieping in niveau 3.</strong> Dit deel beantwoordt: <em>klopt mijn model met de werkelijkheid?</em> De verdieping in niveau 3 beantwoordt: <em>wat vertelt mining me dat ik nog niet wist?</em> — discovery-algoritmen, het extraheren van event logs uit legacy-systemen, simulatie en performance-analyse horen daar, niet hier. Wie alleen dit deel volgt, krijgt een compleet, zelfstandig bruikbaar instrument voor conformance checking; wie de volledige cursus volgt, bouwt dit uit in niveau 3.</p>
+<hr>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kun je:</p>
+<ol><li>Uitleggen wat een event log is en welke drie gegevens minimaal nodig zijn.</li><li>Een event log inlezen en de kwaliteit ervan beoordelen voordat je conclusies trekt.</li><li>Conformance checking uitvoeren tegen een eigen procesmodel en de afwijkingen benoemen.</li><li>Beoordelen of een gevonden afwijking betekent dat het model fout is of dat de werkelijkheid afwijkt — en wat dat voor vervolg betekent.</li><li>Een miningbevinding vertalen naar een concreet voorstel: modelwijziging, procesinterventie, of niets doen.</li></ol>
+<hr>
+<h2>20.1 Wat is procesmining</h2>
+<p><strong>Procesmining</strong> analyseert de digitale sporen die een proces achterlaat — wie deed wat, wanneer — om vast te stellen hoe een proces zich in werkelijkheid gedraagt, in plaats van hoe het is opgeschreven of getekend. Drie hoofdtoepassingen:</p>
+<ul><li><strong>Discovery</strong> — een procesmodel afleiden uit de data zelf, zonder vooraf een model te hebben. Nuttig wanneer er nog geen model bestaat.</li><li><strong>Conformance checking</strong> — een bestaand model naast de werkelijke data leggen en de afwijkingen vaststellen. Dit is het onderwerp van dit deel.</li><li><strong>Enhancement</strong> — een bestaand model verrijken met informatie uit de data (bijvoorbeeld: gemiddelde doorlooptijd per stap toevoegen aan een BPMN-diagram).</li></ul>
+<p>Dit deel richt zich uitsluitend op conformance checking, omdat dat de meest directe toepassing is voor iemand die — zoals een deelnemer aan deze cursus — al modellen heeft gemaakt en wil weten of ze kloppen.</p>
+<hr>
+<h2>20.2 De event log</h2>
+<p>Een <strong>event log</strong> is een geordende verzameling gebeurtenissen, waarbij elke gebeurtenis minimaal drie gegevens bevat:</p>
+<ul><li><strong>Case-ID</strong> — welk geval (welke aanvraag, welk dossier, welke mutatie) deze gebeurtenis betreft.</li><li><strong>Activiteit</strong> — welke stap heeft plaatsgevonden.</li><li><strong>Tijdstempel</strong> — wanneer.</li></ul>
+<p>Optionele, maar vaak waardevolle, aanvullende attributen: wie de activiteit uitvoerde (de resource — een directe link naar het resource-begrip uit BPMN, zie deel 14 van deze cursus), en eventuele extra gegevens over het geval (bedrag, type, kanaal).</p>
+<p><strong>Waar een log vandaan komt.</strong> In een organisatie als een pensioenuitvoerder zit deze informatie meestal verspreid over systeemtabellen, workflow-logs, of — bij een geautomatiseerd platform zoals Conductus — direct beschikbaar uit de proceshistorie van de engine zelf (een directe aanvulling op wat deel 19 van deze cursus over uitvoeringslogging behandelde). Het samenstellen van een bruikbare event log uit deze bronnen is vaak het meest tijdrovende deel van een miningtraject, ook al krijgt het analytische deel achteraf de meeste aandacht.</p>
+<hr>
+<h2>20.3 Logkwaliteit</h2>
+<p>Voordat je conclusies trekt uit een conformance-analyse, controleer je de kwaliteit van de log zelf. Vier veelvoorkomende problemen:</p>
+<ul><li><strong>Ontbrekende events</strong> — een stap die in werkelijkheid plaatsvond maar niet is gelogd (bijvoorbeeld een telefonisch contact dat niet in het systeem is vastgelegd). Dit doet voorkomen dat een proces korter of eenvoudiger verliep dan het was.</li><li><strong>Onjuiste tijdstempels</strong> — een systeem dat de verwerkingstijd logt in plaats van het werkelijke moment van handelen, of tijdzoneverschillen die de volgorde van gebeurtenissen door elkaar husselen.</li><li><strong>Naamgevingsverschillen</strong> — dezelfde activiteit die in het systeem onder een andere naam bekend staat dan in het procesmodel (bijvoorbeeld: het systeem logt &quot;STEP_04_VALID&quot; waar het model &quot;Volledigheid controleren&quot; toont). Zonder een correcte mapping tussen deze twee levert de conformance-analyse valse afwijkingen op die niets met de werkelijkheid te maken hebben.</li><li><strong>Grensoverschrijdende cases</strong> — een dossier dat de log-periode overlapt (begonnen vóór de startdatum van je dataset, of nog niet afgesloten aan het eind ervan). Dit soort gevallen dreigt onterecht als &quot;incompleet&quot; of &quot;afwijkend&quot; te worden gemarkeerd.</li></ul>
+<p><strong>Waarom je hier eerst naar kijkt.</strong> Een conformance-analyse op een slechte log levert precieze, overtuigend ogende getallen op die niets zeggen over de werkelijkheid — het is eenvoudiger om een mooi rapport te maken van slechte data dan om slechte data te herkennen. De discipline om eerst de log te controleren, is dezelfde discipline als het controleren van de kwaliteit van elke andere gegevensbron voordat je hem gebruikt.</p>
+<hr>
+<h2>20.4 Conformance checking</h2>
+<p><strong>Het model naast de werkelijke paden.</strong> Conformance checking vergelijkt, voor elk geval in de log, het werkelijk gevolgde pad met wat het procesmodel toestaat. De uitkomst wordt meestal uitgedrukt in:</p>
+<ul><li><strong>Fitness</strong> — in welke mate de werkelijke paden passen binnen wat het model toestaat, doorgaans als percentage of score.</li><li><strong>Ontbrekende stappen</strong> — activiteiten die het model verwacht maar die in de werkelijkheid niet altijd voorkomen.</li><li><strong>Toegevoegde stappen</strong> — activiteiten die in de werkelijkheid voorkomen maar niet in het model staan.</li><li><strong>Afwijkende volgorde</strong> — stappen die wel allemaal voorkomen, maar in een andere volgorde dan het model beschrijft.</li></ul>
+<p><strong>Hoe je de uitkomst leest zonder erin te verdrinken.</strong> Een conformance-rapport voor een proces met honderden cases kan honderden individuele afwijkingen tonen. De vaardigheid is niet elke afwijking apart te bekijken, maar te clusteren: welke afwijking komt vaak voor (een structureel patroon, de moeite van onderzoeken waard) versus welke komt zelden voor (mogelijk een incident, minder relevant voor een structurele modelwijziging).</p>
+<hr>
+<h2>20.5 Wie heeft gelijk</h2>
+<p>De vraag die na elke conformance-bevinding volgt: <strong>is het model verouderd, is de werkelijkheid fout, of is er een derde verklaring?</strong></p>
+<ul><li><strong>Het model is verouderd.</strong> Het proces is in de praktijk geëvolueerd (een nieuwe systeemkoppeling, een aangepaste werkwijze) zonder dat het model is bijgewerkt — precies het probleem dat niveau 1 van deze cursus al aankaartte met het voorbeeld van een modellenbibliotheek die na oplevering nooit meer werd onderhouden.</li><li><strong>De werkelijkheid is fout.</strong> Medewerkers volgen de voorgeschreven werkwijze niet — bijvoorbeeld omdat een stap als overbodig wordt ervaren, of omdat de systeemondersteuning voor die stap ontbreekt. Dit is een signaal voor training, sturing, of het wegnemen van een systeembeperking.</li><li><strong>Een legitieme, nooit vastgelegde variant.</strong> De meest onderschatte categorie: een deel van de &quot;afwijking&quot; blijkt een geldige, bewuste aanpassing te zijn voor specifieke gevallen (bijvoorbeeld: een versnelde route voor een vaste, vertrouwde klant) die nooit formeel in het model is opgenomen. Dit is geen fout van het model, en geen fout van de uitvoering — het is een niet-gedocumenteerde legitieme praktijk die alsnog om een besluit vraagt: formaliseren, of afbouwen?</li></ul>
+<p>Deze derde categorie wordt het vaakst gemist, juist omdat de eerste twee zo voor de hand liggend zijn als verklaring. In de praktijk is dit ook de categorie die het vaakst daadwerkelijk aan de orde is.</p>
+<hr>
+<h2>20.6 Van bevinding naar voorstel</h2>
+<p>Een miningrapport dat eindigt bij &quot;hier zijn de afwijkingen&quot; is geen resultaat — het is een tussenstap. De stap die het vaakst wordt overgeslagen, is de vertaling naar een concreet vervolg. Voor elke significante bevinding hoort een van drie uitkomsten:</p>
+<ul><li><strong>Modelwijziging</strong> — het model wordt bijgewerkt om de (legitieme) werkelijkheid te weerspiegelen.</li><li><strong>Procesinterventie</strong> — de werkelijkheid wordt bijgestuurd om weer bij het model te passen (training, communicatie, een systeemaanpassing die een omzeilde stap weer aantrekkelijk maakt).</li><li><strong>Bewust niets doen</strong> — de afwijking is bekend, klein, en de kosten van ingrijpen wegen niet op tegen de baten; dit is een geldige uitkomst, mits expliciet vastgelegd en niet stilzwijgend genegeerd.</li></ul>
+<hr>
+<h2>20.7 Wat mining niet vertelt</h2>
+<p>Een event log toont wát er gebeurde en wanneer, niet <strong>waarom</strong>. Een conformance-analyse kan laten zien dat een stap vaak wordt overgeslagen, maar niet of dat komt door tijdgebrek, onduidelijke instructies, een systeembeperking, of een bewuste, ervaren afweging van de medewerker. Voor dat waarom blijft de discovery-toolkit uit deel 12 van deze cursus (interviews, observatie) nodig — procesmining vervangt die technieken niet, het richt ze: het vertelt je wáár je moet gaan kijken, niet wat je daar zult vinden.</p>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Discovery / conformance checking / enhancement</strong> — de drie hoofdtoepassingen van procesmining · <strong>Event log</strong> — een geordende verzameling gebeurtenissen met minimaal case-ID, activiteit en tijdstempel · <strong>Logkwaliteit</strong> — ontbrekende events, onjuiste tijdstempels, naamgevingsverschillen, grensoverschrijdende cases · <strong>Fitness</strong> — de mate waarin werkelijke paden passen binnen het model · <strong>Conformance-afwijking</strong> — ontbrekende stap, toegevoegde stap, afwijkende volgorde · <strong>Verouderd model / foute uitvoering / legitieme niet-vastgelegde variant</strong> — de drie verklaringen voor een afwijking</p>
+<hr>
+<h2>Examenrelevantie</h2>
+<p>Niet rechtstreeks examenstof voor OCEB 2 of BPM+. De vaardigheid is wel relevant voor de praktijkcomponent van beide certificeringen en voor de capstone (deel 22): een to-be ontwerp dat is getoetst aan een conformance-bevinding is aantoonbaar sterker onderbouwd dan een ontwerp dat alleen op discovery-interviews steunt.</p>
+<hr>
+<h2>Figurenlijst</h2>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-1-drie-soorten-mining.svg" alt="Figuur 20.1 — De drie soorten procesmining naast elkaar, met conformance checking uitgelicht." loading="lazy"><figcaption>Figuur 20.1 — De drie soorten procesmining naast elkaar, met conformance checking uitgelicht.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-2-anatomie-event-log.svg" alt="Figuur 20.2 — Anatomie van een event log: de drie verplichte kolommen plus optionele attributen." loading="lazy"><figcaption>Figuur 20.2 — Anatomie van een event log: de drie verplichte kolommen plus optionele attributen.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-3-logkwaliteitsproblemen.svg" alt="Figuur 20.3 — Vier logkwaliteitsproblemen gemarkeerd in een voorbeeldlog." loading="lazy"><figcaption>Figuur 20.3 — Vier logkwaliteitsproblemen gemarkeerd in een voorbeeldlog.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-4-conformance-uitkomst.svg" alt="Figuur 20.4 — Een conformance-uitkomst: het model naast de werkelijke paden, met fitness, ontbrekende en toegevoegde stappen gemarkeerd." loading="lazy"><figcaption>Figuur 20.4 — Een conformance-uitkomst: het model naast de werkelijke paden, met fitness, ontbrekende en toegevoegde stappen gemarkeerd.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-5-wie-heeft-gelijk-beslisboom.svg" alt="Figuur 20.5 — De drie verklaringen voor een afwijking als beslisboom." loading="lazy"><figcaption>Figuur 20.5 — De drie verklaringen voor een afwijking als beslisboom.</figcaption></figure>
+<figure class="bcd-figure"><img src="../../figuren/deel-20/figuur-20-6-bevindingenrapport-opbouw.svg" alt="Figuur 20.6 — De opbouw van een bevindingenrapport: van afwijking naar categorie naar voorstel." loading="lazy"><figcaption>Figuur 20.6 — De opbouw van een bevindingenrapport: van afwijking naar categorie naar voorstel.</figcaption></figure>
+</article>
+<aside class="bcd-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+<li><a href="reader.docx">Reader (.docx)</a><span class="bcd-download-size">879 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="bcd-download-size">12 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="bcd-download-size">15 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="bcd-download-size">1555 KB</span></li>
+  </ul>
+</aside>
+<nav class="bcd-partnav"><a class="bcd-prevnext prev" href="../deel-19/reader.html">&larr; Deel 19 — Van model naar uitvoering</a><a class="bcd-prevnext next" href="../deel-21/reader.html">Deel 21 — Governance van modellen &rarr;</a></nav>
+</main>
+<footer class="bcd-footer">
+  <p>Ductus-cursusfamilie · BPMN, CMMN & DMN · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
