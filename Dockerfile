@@ -23,6 +23,7 @@ COPY requirementsmanagement/ /usr/share/nginx/html/requirementsmanagement/
 COPY risicomanagement/ /usr/share/nginx/html/risicomanagement/
 COPY outsystems/ /usr/share/nginx/html/outsystems/
 COPY databasemanagement/ /usr/share/nginx/html/databasemanagement/
+COPY project-en-programmamanagement/ /usr/share/nginx/html/project-en-programmamanagement/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
