@@ -22,6 +22,7 @@ COPY informatiebeveiliging/ /usr/share/nginx/html/informatiebeveiliging/
 COPY requirementsmanagement/ /usr/share/nginx/html/requirementsmanagement/
 COPY risicomanagement/ /usr/share/nginx/html/risicomanagement/
 COPY outsystems/ /usr/share/nginx/html/outsystems/
+COPY databasemanagement/ /usr/share/nginx/html/databasemanagement/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
