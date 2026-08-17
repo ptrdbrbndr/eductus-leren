@@ -20,6 +20,7 @@ COPY businessanalyse/ /usr/share/nginx/html/businessanalyse/
 COPY testen-en-kwaliteitsborging/ /usr/share/nginx/html/testen-en-kwaliteitsborging/
 COPY informatiebeveiliging/ /usr/share/nginx/html/informatiebeveiliging/
 COPY requirementsmanagement/ /usr/share/nginx/html/requirementsmanagement/
+COPY risicomanagement/ /usr/share/nginx/html/risicomanagement/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
