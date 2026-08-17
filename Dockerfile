@@ -27,6 +27,7 @@ COPY project-en-programmamanagement/ /usr/share/nginx/html/project-en-programmam
 COPY pensioenverzekeringen/ /usr/share/nginx/html/pensioenverzekeringen/
 COPY enterprise-architectuur/ /usr/share/nginx/html/enterprise-architectuur/
 COPY btabok/ /usr/share/nginx/html/btabok/
+COPY datamanagement/ /usr/share/nginx/html/datamanagement/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
