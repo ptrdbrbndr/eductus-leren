@@ -30,6 +30,7 @@ COPY btabok/ /usr/share/nginx/html/btabok/
 COPY datamanagement/ /usr/share/nginx/html/datamanagement/
 COPY bpmn-cmmn-dmn/ /usr/share/nginx/html/bpmn-cmmn-dmn/
 COPY software-architectuur/ /usr/share/nginx/html/software-architectuur/
+COPY software-architectuur-experiment/ /usr/share/nginx/html/software-architectuur-experiment/
 
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
