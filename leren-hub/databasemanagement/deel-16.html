@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 16 — Partitionering | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 16 (EDB Professional): waarom mutatie de partitioneringskandidaat is, declaratieve range-, list- en hash-partitionering, partition pruning, een bestaande tabel migreren, pg_partman, en wanneer partitioneren de verkeerde keuze is.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-16.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 16</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 16 van 30</p>
+  <h1>Partitionering</h1>
+  <p class="hero__lead">Vier delen lang was <code>mutatie</code> de tabel waar de problemen zich verzamelden: een autovacuum-drempel die pas na 24 dagen viel, bijna dubbele omvang na een grote update, indexen die duizend keer zo groot waren als BRIN. Geen van die problemen was fout ontwerp — ze zijn het voorspelbare gevolg van één ding: <code>mutatie</code> groeit onbegrensd en wordt vrijwel uitsluitend tijdgebonden bevraagd. Dit deel knipt de tabel in stukken langs precies die as.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>ms</b><span>een oude partitie weggooien</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → <b>16 Partitionering (hier)</b> → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Waarom mutatie de kandidaat is</a></li>
+      <li><a href="#s3" data-target="s3">Declaratieve partitionering en range</a></li>
+      <li><a href="#s4" data-target="s4">List- en hash-partitionering</a></li>
+      <li><a href="#s5" data-target="s5">Partition pruning</a></li>
+      <li><a href="#s6" data-target="s6">Indexen, constraints en de default-partitie</a></li>
+      <li><a href="#s7" data-target="s7">Partities beheren en een tabel migreren</a></li>
+      <li><a href="#s8" data-target="s8">pg_partman en wanneer niet partitioneren</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Aan het eind van dit deel kunt u: beargumenteren of een tabel een partitioneringskandidaat is; een gepartitioneerde tabel opzetten met range-, list- of hash-partitionering; partition pruning herkennen in een queryplan; indexen, constraints en foreign keys op een gepartitioneerde tabel correct toepassen; een default-partitie inzetten en de risico's ervan benoemen; partities toevoegen, loskoppelen en verwijderen zonder de tabel te blokkeren; een bestaande grote tabel migreren naar een gepartitioneerde structuur; onderhoud automatiseren met <code>pg_partman</code>; en uitleggen wanneer partitionering de verkeerde oplossing is.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Waarom mutatie de kandidaat is</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Deel</th><th>Wat er misging</th></tr></thead>
+          <tbody>
+            <tr><td>11</td><td>Autovacuum haalt de drempel pas na 24 dagen</td></tr>
+            <tr><td>12</td><td>Na het laden bijna twee keer zo groot als de gegevens erin</td></tr>
+            <tr><td>13</td><td>De query naar onverwerkte mutaties staat bovenaan de belasting</td></tr>
+            <tr><td>14</td><td>Een B-tree op aangemeld_op kost 50 MB; BRIN is duizend keer kleiner maar trager</td></tr>
+            <tr><td>15</td><td>De verwerking met vier workers vraagt om zorgvuldige pakketgrootte</td></tr>
+          </tbody>
+        </table></div>
+        <p>Geen van die problemen was fout ontwerp. Ze zijn het voorspelbare gevolg van één ding: <code>mutatie</code> groeit <strong>onbegrensd</strong> en wordt vrijwel uitsluitend tijdgebonden bevraagd — recente mutaties, dit kwartaal, dit jaar. Dat is precies het profiel waarvoor partitionering bestaat: u knipt de tabel in stukken langs de as waarop hij al leeft, de tijd. Wat er dan verandert: autovacuum werkt per partitie, dus een partitie van één maand haalt zijn drempel in dagen; een oude partitie weggooien kost geen <code>DELETE</code> en geen bloat, het is <code>DROP TABLE</code>, milliseconden; query's die alleen de laatste maand raken doorzoeken alleen die partitie; en een BRIN-index per partitie is nog kleiner met een nog hogere correlatie, omdat elke partitie zelf al chronologisch is.</p>
+        <h4>Wat partitionering wel en niet oplost</h4>
+        <p><strong>Wel:</strong> onderhoud wordt per partitie behapbaar; oude gegevens verwijderen wordt <code>DROP TABLE</code>; query's die van nature binnen één partitie vallen worden sneller door pruning; oude partities kunnen naar goedkopere opslag (deel 11). <strong>Niet:</strong> het maakt een enkele query die de hele tabel nodig heeft niet sneller — eerder iets trager door plannerkosten; het lost geen slecht datamodel op; het lost geen ontbrekende index op, elke partitie heeft zijn eigen indexen nodig; en het is geen vervanging voor archivering.</p>
+        <div class="callout tip"><span class="lbl">De vraag vóór u partitioneert</span><p>Bevraag ik deze tabel structureel langs een as die ook zijn natuurlijke groei bepaalt, en wil ik oude delen periodiek in bulk kunnen verwijderen of verplaatsen? Bij <code>mutatie</code>: ja op beide. Bij <code>deelnemer</code>: nee op beide.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.1 — is dit een kandidaat?</p>
+        <details class="q"><summary><span class="qn">1</span><span>premienota heeft 181.000 rijen, per werkgever per maand, en er is een natuurlijke as (periode_jaar/periode_maand). Is dit een sterke kandidaat voor partitionering?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een twijfelgeval dat naar "nee, nu nog niet" kantelt. Er is wel een as, maar de bulkverwijdering ontbreekt vaak — financiële gegevens hebben juist lange bewaarplichten in plaats van een korte bewaartermijn die je periodiek in bulk zou opruimen. Bovendien is de tabel op 181.000 rijen nog te klein om de plannerkosten van partitionering terug te verdienen. Twee redenen om het nu niet te doen, ook al is er wel een as — precies waarom de toetsvraag uit twee delen bestaat en niet uit één.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Declaratieve partitionering en range</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Sinds PostgreSQL 10 is partitionering declaratief: u definieert de indeling en de server regelt de rest.</p>
+        <pre><code class="language-sql">CREATE TABLE mutatie (
+    mutatie_id   bigint GENERATED ALWAYS AS IDENTITY,
+    deelnemer_id integer NOT NULL,
+    soort        text NOT NULL,
+    kanaal       text NOT NULL,
+    aangemeld_op timestamptz NOT NULL,
+    verwerkt_op  timestamptz,
+    PRIMARY KEY (mutatie_id, aangemeld_op)
+) PARTITION BY RANGE (aangemeld_op);</code></pre>
+        <p><strong>De eerste verrassing:</strong> de primaire sleutel moet de partitiesleutel bevatten. Dat voelt onnatuurlijk, maar PostgreSQL kan uniciteit alleen per partitie afdwingen, niet over partities heen zonder de partitiesleutel mee te nemen — de belangrijkste ontwerpbeperking van dit deel. Zonder minstens één partitie is de tabel onbruikbaar; hij accepteert geen rijen.</p>
+        <figure><img src="figuren/figuur-16-1.png" alt="De gepartitioneerde tabel als een lege koepel met partities eronder die elk hun eigen fysieke opslag hebben"><figcaption>Figuur 16-1 — de gepartitioneerde tabel als een lege "koepel" met partities eronder die elk hun eigen fysieke opslag hebben</figcaption></figure>
+        <h4>Range-partitionering</h4>
+        <pre><code class="language-sql">CREATE TABLE mutatie_2025_12 PARTITION OF mutatie
+    FOR VALUES FROM ('2025-12-01') TO ('2026-01-01');
+CREATE TABLE mutatie_2026_01 PARTITION OF mutatie
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');</code></pre>
+        <p>De grens is inclusief onderaan en exclusief bovenaan — hetzelfde veilige patroon als bij datumfilters (deel 3) en rangetypen (deel 6). Kiezen van de partitiegrootte is een afweging: per dag geeft zeer fijne pruning maar veel plannerkosten, per maand een goede balans, per kwartaal weinig partities maar grovere pruning. Voor <code>mutatie</code> met 2,4 miljoen rijen over vier jaar is <strong>per maand</strong> een goede keuze: 48 partities, elk rond de 50.000 rijen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.2 — de gepartitioneerde structuur bouwen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U probeert de primaire sleutel op alleen mutatie_id te zetten in plaats van (mutatie_id, aangemeld_op). Welke foutmelding krijgt u, en waarom eist PostgreSQL dit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>ERROR: unique constraint on partitioned table must include all partitioning columns</code>. PostgreSQL kan uniciteit niet over partities heen garanderen zonder de sleutel waarlangs die partities zijn opgedeeld, omdat elke partitie zijn eigen, onafhankelijke index heeft — er is geen enkele globale index die alle partities samen controleert. Twee verschillende partities zouden dus zonder deze eis onafhankelijk van elkaar dezelfde mutatie_id kunnen uitgeven.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">List- en hash-partitionering</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>List-partitionering</strong> deelt op basis van een expliciete lijst waarden, geen bereik:</p>
+        <pre><code class="language-sql">CREATE TABLE werkgever_partitioned (
+    werkgever_id integer GENERATED ALWAYS AS IDENTITY,
+    sector       text NOT NULL,
+    naam         text NOT NULL,
+    PRIMARY KEY (werkgever_id, sector)
+) PARTITION BY LIST (sector);
+
+CREATE TABLE werkgever_bouw   PARTITION OF werkgever_partitioned FOR VALUES IN ('Bouw');
+CREATE TABLE werkgever_zorg   PARTITION OF werkgever_partitioned FOR VALUES IN ('Zorg');
+CREATE TABLE werkgever_overig PARTITION OF werkgever_partitioned DEFAULT;</code></pre>
+        <p>Wanneer dit past: een klein aantal duidelijk onderscheiden categorieën waarop u vaak op precies één filtert. Bij Meridiaan ligt dit minder voor de hand dan range, want <code>werkgever</code> heeft slechts 4.100 rijen. List-partitionering wordt relevanter in een multi-tenant-scenario, per klant of per fonds.</p>
+        <h4>Hash-partitionering</h4>
+        <pre><code class="language-sql">CREATE TABLE deelnemer_partitioned (
+    deelnemer_id integer GENERATED ALWAYS AS IDENTITY,
+    achternaam   text NOT NULL,
+    PRIMARY KEY (deelnemer_id)
+) PARTITION BY HASH (deelnemer_id);
+
+CREATE TABLE deelnemer_p0 PARTITION OF deelnemer_partitioned
+    FOR VALUES WITH (MODULUS 4, REMAINDER 0);</code></pre>
+        <p>Partities op basis van een hash, voor gelijkmatige verdeling zonder natuurlijke categorieën — nuttig bij zeer hoge invoegsnelheden waar één tabel een knelpunt wordt. De prijs: u verliest pruning voor de meeste query's. <code>WHERE deelnemer_id = 42</code> weet in welke partitie hij moet zoeken, maar <code>WHERE achternaam = 'Jansen'</code> moet alle partities doorzoeken, want er is geen verband tussen achternaam en hash-partitie. Bij Meridiaan geen directe kandidaat: hash-partitionering lost een schrijfdoorvoerprobleem op dat Meridiaan nog niet heeft — ken het voor het examen, zelden de eerste keuze in de praktijk.</p>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Partition pruning</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De reden dat dit alles de moeite waard is.</p>
+        <pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS)
+SELECT count(*) FROM mutatie
+WHERE aangemeld_op >= '2026-01-01' AND aangemeld_op < '2026-02-01';</code></pre>
+        <pre><code>Aggregate
+  ->  Seq Scan on mutatie_2026_01 mutatie (actual rows=51204 loops=1)</code></pre>
+        <p>Er staat maar één partitie in het plan. De planner heeft op basis van de <code>WHERE</code>-voorwaarde vastgesteld dat de andere 47 partities onmogelijk rijen kunnen bevatten die aan de voorwaarde voldoen, en heeft ze niet eens overwogen — dat heet <strong>pruning</strong>, en het gebeurt zowel tijdens het plannen als (sinds versie 11) tijdens het uitvoeren.</p>
+        <p>Pruning werkt als de <code>WHERE</code>-voorwaarde op de partitiesleutel staat en herleidbaar is tot een bereik. Het werkt <strong>niet</strong> bij een functie om de partitiesleutel:</p>
+        <pre><code class="language-sql">-- Geen pruning: functie om de partitiesleutel
+WHERE extract(year FROM aangemeld_op) = 2026
+
+-- Wel pruning: bereik op de kolom zelf
+WHERE aangemeld_op >= '2026-01-01' AND aangemeld_op < '2027-01-01'</code></pre>
+        <div class="callout warn"><span class="lbl">Exact dezelfde fout als in deel 8 en 13</span><p>Alleen met veel grotere gevolgen. Zonder pruning doorzoekt de query alle 48 partities in plaats van 12, met alle plannerkosten van dien. Controleer altijd met <code>EXPLAIN</code> of pruning optreedt: bij pruning ziet u alleen de betrokken partities in het plan; zonder pruning een <code>Append</code> met alle 48 eronder.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.4 — partition pruning zien werken</p>
+        <details class="q"><summary><span class="qn">1</span><span>U draait een query zonder enige voorwaarde op aangemeld_op, bijvoorbeeld alleen filteren op kanaal. Het plan toont een Append met alle partities. Is dit een falen van pruning?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee, dit is correct gedrag, geen falen. Er is geen voorwaarde op de partitiesleutel die iets zou kunnen uitsluiten — de query heeft potentieel data uit elke partitie nodig, dus moet de planner ze allemaal overwegen. Pruning kan alleen optreden wanneer de WHERE-voorwaarde de planner in staat stelt om partities logisch uit te sluiten; zonder zo'n voorwaarde is er simpelweg niets om uit te sluiten.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Indexen, constraints en de default-partitie</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><code>CREATE INDEX ON mutatie (deelnemer_id);</code> maakt op een gepartitioneerde tabel in één opdracht een index aan op elke bestaande partitie én op elke partitie die u daarna toevoegt — de ouder-index is een verzamelnaam, de werkelijke indexen bestaan per partitie. Partiële en expressie-indexen (deel 8, 14) werken ook per partitie. Controleer na een indexbouw of alle partitie-indexen geldig zijn, net als bij een gewone <code>CONCURRENTLY</code>-bouw, nu vermenigvuldigd met het aantal partities.</p>
+        <p><code>NOT NULL</code> en <code>CHECK</code> werken zoals verwacht. <code>UNIQUE</code> en <code>PRIMARY KEY</code> moeten de partitiesleutel bevatten — de beperking uit sectie 3. Praktisch gevolg: een query die alleen op <code>mutatie_id</code> zoekt zonder de partitiesleutel te weten, kan geen enkele index gebruiken die alleen op die kolom staat, tenzij u een aparte, niet-unieke index toevoegt. Het praktische gevolg voor het model uit deel 5 en 6: een gepartitioneerde tabel is geen vrije herstructurering van uw schema — de partitiekeuze raakt uw sleutels, en dat moet u vroeg in het ontwerp meenemen.</p>
+        <h4>De default-partitie</h4>
+        <pre><code class="language-sql">CREATE TABLE mutatie_default PARTITION OF mutatie DEFAULT;</code></pre>
+        <p>Vangt rijen op die in geen enkele gedefinieerde partitie passen — nuttig als vangnet tegen dataverlies. De valkuil: zodra er een default-partitie bestaat en u een nieuwe range-partitie toevoegt die overlapt met wat al in de default zit, moet PostgreSQL die default <strong>scannen</strong> om conflicterende rijen uit te sluiten. Op een default die stilletjes is gegroeid, kan dat een onverwacht lange, blokkerende operatie worden.</p>
+        <div class="callout note"><span class="lbl">Praktisch advies</span><p>Gebruik een default-partitie als vangnet, maar monitor hem actief en houd hem leeg. <code>SELECT count(*) FROM mutatie_default;</code> hoort structureel 0 te zijn — een default die groeit, is een signaal dat uw partitiebeheer niet op tijd nieuwe partities aanmaakt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.2 — de gepartitioneerde structuur bouwen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U probeert een rij in te voegen met een datum die twee jaar in de toekomst ligt, eerst mét een default-partitie aanwezig, en daarna zonder. Wat is het verschil in gedrag, en welke variant zou u bij Meridiaan aanhouden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Met een default-partitie wordt de rij geaccepteerd en belandt hij daar — er bestaat nog geen partitie voor die toekomstige maand, maar er gaat niets verloren. Zonder default faalt de invoeging volledig met "no partition of relation mutatie found for row". Bij Meridiaan: default aanhouden als vangnet tegen dataverlies bij een fout in de applicatie of een vergeten nieuwe partitie, gecombineerd met actieve monitoring op de omvang van die default — anders ruilt u het risico van dataverlies in voor het risico van een stilletjes groeiende, ongemonitorde tabel.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Partities beheren en een tabel migreren</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een nieuwe partitie toevoegen is licht en moet vóór de eerste rij van die maand binnenkomt gebeuren. Een oude partitie verwijderen is de kernbelofte van dit deel: <code>DROP TABLE mutatie_2022_01;</code> — milliseconden, geen <code>DELETE</code> over honderdduizenden rijen, geen bloat, geen WAL-golf, geen vacuum nodig achteraf. Voorzichtiger is eerst loskoppelen:</p>
+        <pre><code class="language-sql">ALTER TABLE mutatie DETACH PARTITION mutatie_2022_01 CONCURRENTLY;
+-- de tabel bestaat nu zelfstandig, niet meer gekoppeld
+DROP TABLE mutatie_2022_01;</code></pre>
+        <p><code>DETACH ... CONCURRENTLY</code> (sinds versie 14) doet dit zonder de gepartitioneerde tabel te blokkeren, en is de aanbevolen route op productie: loskoppelen is omkeerbaar, verwijderen niet.</p>
+        <h4>Een bestaande tabel migreren naar partities</h4>
+        <p><code>mutatie</code> bestaat al, gevuld, in productie. Hem in-place partitioneren kan niet — een gewone tabel omzetten naar gepartitioneerd is geen ondersteunde operatie. Het patroon: nieuwe gepartitioneerde structuur bouwen, partities voor de volledige historie plus de toekomst aanmaken, data kopiëren, indexen en constraints toevoegen, en dan omwisselen met <code>RENAME</code>.</p>
+        <div class="callout warn"><span class="lbl">Op ware productieschaal is dit geen avondklus</span><p>Voor kleine tot middelgrote tabellen (tot enkele honderdduizenden rijen, buiten de piek): het patroon in één venster. Voor grote tabellen zoals <code>mutatie</code> op ware productieschaal: een gefaseerde migratie — een lege nieuwe structuur voor nieuwe gegevens, nieuwe rijen naar beide tabellen laten schrijven, historische gegevens in kleine batches over meerdere dagen kopiëren, en dan pas omwisselen. Het volledige repertoire van zero-downtime-migraties met dubbel schrijven hoort in deel 22.</p></div>
+        <p>Verificatie na de omwisseling, altijd: rijtelling én een inhoudelijke vergelijking die daadwerkelijk iets bewijst, niet alleen telt (deel 6). Bewaar de oude tabel een periode als terugvaloptie voordat u hem verwijdert.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.6 — een partitie weggooien</p>
+        <details class="q"><summary><span class="qn">1</span><span>U vergelijkt een DELETE van 50.000 rijen op een niet-gepartitioneerde tabel met DETACH CONCURRENTLY + DROP TABLE op een gepartitioneerde tabel met dezelfde hoeveelheid data. Wat is het verschil in tijd én in nazorg?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ordes van grootte verschil. De DELETE kost seconden en laat bloat achter — n_dead_tup stijgt met het aantal verwijderde rijen, en die ruimte blijft bezet totdat een VACUUM (of pg_repack) loopt. DETACH CONCURRENTLY gevolgd door DROP TABLE kost samen milliseconden en laat niets achter, want de hele fysieke structuur van de partitie verdwijnt in één keer. Er is geen nazorg nodig — geen vacuum, geen bloatmeting, niets om achteraf op te ruimen.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">pg_partman en wanneer niet partitioneren</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het handmatige patroon uit sectie 7 — nieuwe partities op tijd aanmaken, oude op tijd loskoppelen — is exact het soort taak dat u wilt automatiseren in plaats van te onthouden.</p>
+        <pre><code class="language-sql">CREATE EXTENSION pg_partman;
+
+SELECT partman.create_parent(
+    p_parent_table => 'meridiaan_prod.mutatie',
+    p_control      => 'aangemeld_op',
+    p_type         => 'range',
+    p_interval     => 'monthly',
+    p_premake      => 3
+);
+
+UPDATE partman.part_config
+   SET retention = '4 years', retention_keep_table = false
+ WHERE parent_table = 'meridiaan_prod.mutatie';</code></pre>
+        <p>Een achtergrondtaak roept periodiek <code>partman.run_maintenance()</code> aan. Wat dit oplost: het menselijke risico dat iemand vergeet een partitie aan te maken. Wat het <strong>niet</strong> oplost: de beslissing over de bewaartermijn zelf — dat is een bedrijfsvraag (deel 9, AVG-beginsel opslagbeperking), niet een technische instelling. Bij Meridiaan is de bewaartermijn van mutatiegegevens een vraag voor de privacyfunctionaris en compliance, niet voor u alleen.</p>
+        <h4>Wanneer partitioneren de verkeerde keuze is</h4>
+        <p>De eerlijke tegenkant, in dezelfde geest als deel 14. Een <strong>te kleine tabel</strong> — onder enkele miljoenen rijen weegt het zelden op. <strong>Geen natuurlijke as</strong> — een gekunstelde partitiesleutel komt overal terug zonder ergens winst op te leveren. <strong>Query's die structureel alle partities raken</strong> — een rapportage die altijd over de volledige historie sommeert, profiteert niet van pruning en betaalt wel de overhead. <strong>Veel kleine, verspreide updates die de partitiesleutel niet raken</strong>. En <strong>als het probleem eigenlijk bloat is</strong> — dan zijn fill factor en autovacuum-afstelling (deel 12) de eerste stap, niet partitionering.</p>
+        <div class="callout tip"><span class="lbl">Drie verbanden met de rest van het niveau</span><p>Met deel 12: een <code>DROP TABLE</code> op een partitie laat geen bloat achter — de meest directe manier waarop partitionering dat probleem vermijdt. Met deel 14: een BRIN-index op één partitie heeft een hogere correlatie dan op de hele tabel. Met deel 15: de hotspot-oplossing (invoegen in plaats van bijwerken) is de natuurlijke opmaat naar een gepartitioneerde gebeurtenistabel, waar oude gebeurtenissen met <code>DROP TABLE</code> verdwijnen.</p></div>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: declaratieve partitionering (<code>PARTITION BY RANGE/LIST/HASH</code>); de eis dat unieke sleutels de partitiesleutel bevatten; partition pruning; indexen op gepartitioneerde tabellen inclusief <code>CONCURRENTLY</code>-gedrag; de default-partitie en de scan-valkuil; <code>ATTACH</code>/<code>DETACH PARTITION</code>; het migratiepatroon voor een bestaande tabel; subpartitionering als concept; en de rol van <code>pg_partman</code>.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.8 — wanneer niet partitioneren</p>
+        <details class="q"><summary><span class="qn">1</span><span>"Onze deelnemer-tabel is traag door bloat, zullen we hem partitioneren?" Is dit een goed voorstel als eerste stap?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee, niet als eerste stap. Bloat is een symptoom dat u met fill factor en autovacuum-afstelling aanpakt (deel 12). Partitioneren zou de vacuum-eenheden kleiner maken en dus indirect helpen, maar het lost de onderliggende oorzaak niet op en is een zware ingreep — inclusief de eis dat de primaire sleutel de partitiesleutel moet bevatten, wat overal in het schema doorwerkt — voor wat vaak met een instellingswijziging kan worden opgelost.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 17</h3>
+      <p>U kunt nu een tabel van vier jaar mutaties in behapbare stukken knippen. Deel 17 zorgt dat u die stukken ooit kunt terughalen — en leert u het verschil tussen een back-up die klaarstaat en een back-up die werkt.</p>
+      <a class="btn" href="deel-17.html">Deel 17 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 16 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-16-partitionering/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm16_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

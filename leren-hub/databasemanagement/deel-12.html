@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 12 — Fysiek ontwerp: pagina's, TOAST en bloat | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 12 (EDB Professional): hoe gegevens fysiek in een 8kB-pagina liggen, waarom uitlijning en TOAST ruimte kosten, HOT-updates en fill factor, en hoe u bloat en wraparound meet, opruimt en voorkomt.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-12.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 12</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 12 van 30</p>
+  <h1>Fysiek ontwerp: pagina's,<br><em>TOAST en bloat</em>.</h1>
+  <p class="hero__lead">In deel 11 zag u het al: de tabel <code>mutatie</code> was na het laden bijna twee keer zo groot als de gegevens erin. Dit deel maakt zichtbaar waarom een tabel groter kan zijn dan wat erin staat — de vaste overhead per rij, uitlijning, TOAST, bloat en fill factor — en waarom dat geen boekhoudkundige kwestie is: een tabel die kleiner is, past vaker in het geheugen, en dat is een directe prestatiewinst.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>8kB</b><span>de pagina waar alles om draait</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → <b>12 Fysiek ontwerp: pagina's, TOAST en bloat (hier)</b> → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De pagina van 8 kilobyte</a></li>
+      <li><a href="#s3" data-target="s3">Uitlijning: de kolomvolgorde die bytes kost</a></li>
+      <li><a href="#s4" data-target="s4">TOAST: wat er gebeurt met grote waarden</a></li>
+      <li><a href="#s5" data-target="s5">HOT-updates en fill factor</a></li>
+      <li><a href="#s6" data-target="s6">Bloat: herkomst, meten en opruimen</a></li>
+      <li><a href="#s7" data-target="s7">Freeze, wraparound en de visibility map</a></li>
+      <li><a href="#s8" data-target="s8">Correlatie en wat u meeneemt in een ontwerp</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vijf redenen waarom een tabel groter is dan de gegevens die erin staan: de vaste overhead per rij, uitlijning tussen kolommen, bloat door dode rijversies, bewust vrijgelaten ruimte via fill factor, en indexen die meetellen in de totale omvang en hun eigen bloat hebben. Dit deel maakt alle vijf zichtbaar en meetbaar.</p>
+        <p>Dat is geen boekhoudkundige oefening: op 2,4 miljoen mutaties is het verschil tussen een goed en een slecht fysiek ontwerp honderden megabytes, en daarmee ook het verschil in hoeveel er in uw bufferpool past. Een tabel die 30% kleiner is, past 30% vaker in het geheugen — fysiek ontwerp is dan geen ruimtebesparing maar een prestatiemaatregel.</p>
+        <p>Aan het eind van dit deel kunt u: de opbouw van een pagina en een rijversie beschrijven; een kolomvolgorde kiezen die ruimte bespaart; vertellen wanneer een waarde naar TOAST gaat; fill factor instellen en HOT-updates herkennen; bloat meten en met het juiste gereedschap opruimen; en uitleggen waarom <code>age(relfrozenxid)</code> de ene waarde is die u nooit uit het oog mag verliezen.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De pagina van 8 kilobyte</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>PostgreSQL leest en schrijft altijd in pagina's van 8 kB. Alles in dit deel gaat over wat er in zo'n pagina past. De opbouw: een page header van 24 bytes (checksum, vrije ruimte, LSN), item pointers van 4 bytes per rij die naar de rijen verwijzen, vrije ruimte waar nieuwe rijen komen, en de rijversies zelf. De rijen worden van achteren naar voren in de pagina geschreven, de pointers van voren naar achteren — ze groeien naar elkaar toe, en als ze elkaar raken, is de pagina vol.</p>
+        <figure><img src="figuren/figuur-12-1.png" alt="Opbouw van een 8 kB-pagina met header, item pointers, vrije ruimte en rijversies"><figcaption>Figuur 12-1 — opbouw van een 8 kB-pagina met header, item pointers, vrije ruimte en rijversies</figcaption></figure>
+        <p>Praktisch gevolg: een rij kan nooit groter zijn dan een pagina. Wat niet past, gaat naar TOAST (sectie 4).</p>
+        <h4>Hoe een rij eruitziet</h4>
+        <p>Elke rijversie begint met een header van 23 bytes, opgevuld tot 24 door uitlijning: <code>t_xmin</code> en <code>t_xmax</code> (de transacties die de versie maakten en beëindigden, deel 7), <code>t_cid</code>/<code>t_xvac</code>, <code>t_ctid</code> (de fysieke locatie, verwijst bij een update naar de nieuwe versie), statusvelden, en een NULL-bitmap van 1 bit per kolom die alleen aanwezig is als er NULL-waarden zijn. Dat is 24 bytes overhead per rij, plus 4 bytes voor de item pointer in de pagina.</p>
+        <p>Op een tabel met smalle rijen is dat aanzienlijk: een tabel met alleen twee <code>integer</code>-kolommen (8 bytes gegevens) verbruikt per rij ruim 36 bytes. <strong>De les:</strong> heel smalle tabellen met heel veel rijen zijn relatief duur — een argument tegen het opsplitsen van een tabel "voor de netheid" wanneer de kolommen altijd samen worden opgehaald. Merk ook op dat de NULL-bitmap alleen bestaat als er in die rij minstens één NULL staat; een kolom <code>NOT NULL</code> maken bespaart dus soms werkelijk ruimte, al is het effect klein.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.1 — de overhead per rij</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een tabel met twee <code>integer</code>-kolommen (8 bytes gegevens) blijkt 36 bytes per rij te gebruiken; een tabel met tien <code>integer</code>-kolommen (40 bytes gegevens) gebruikt 68 bytes per rij. Wat volgt hieruit voor een tabel die u zou willen opsplitsen "voor de netheid"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De overhead is bij de smalle tabel 78% van de opslag, bij de brede tabel 41%. Een tabel opsplitsen die altijd samen wordt opgehaald, verdubbelt de vaste overhead per rij én voegt een join toe. Bij smalle tabellen met veel rijen is die overhead het grootste deel van de opslag. Splitsen doet u omdat het model erom vraagt — normalisatie, deel 5 — niet omdat het er netter uitziet.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Uitlijning: de kolomvolgorde die bytes kost</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is het onderwerp waarvan de meeste mensen niet weten dat het bestaat. PostgreSQL lijnt waarden uit op hun natuurlijke grens: een <code>integer</code> (4 bytes) begint op een veelvoud van 4, een <code>bigint</code> of <code>timestamptz</code> (8 bytes) op een veelvoud van 8. Ruimte die daarvoor moet worden overgeslagen, is verloren.</p>
+        <pre><code class="language-sql">-- Ongunstig: totaal 36 bytes
+CREATE TABLE slecht (
+    a smallint,     -- 2 bytes, dan 6 bytes opvulling
+    b bigint,       -- 8
+    c smallint,     -- 2, dan 6 opvulling
+    d bigint,       -- 8
+    e integer       -- 4
+);
+
+-- Gunstig: totaal 24 bytes
+CREATE TABLE goed (
+    b bigint,       -- 8
+    d bigint,       -- 8
+    e integer,      -- 4
+    a smallint,     -- 2
+    c smallint      -- 2
+);</code></pre>
+        <p>Twaalf bytes verschil per rij, op identieke gegevens. Op 2,4 miljoen rijen is dat bijna 29 MB — en dat is dan alleen deze vijf kolommen. De vuistregel: zet kolommen op aflopende grootte. Eerst de 8-bytestypen (<code>bigint</code>, <code>timestamptz</code>, <code>double precision</code>), dan 4-bytestypen (<code>integer</code>, <code>date</code>, <code>real</code>), dan 2-bytestypen (<code>smallint</code>), dan <code>boolean</code> en <code>char</code>, en als laatste de variabele types (<code>text</code>, <code>numeric</code>, <code>jsonb</code>).</p>
+        <div class="callout note"><span class="lbl">Wanneer dit ertoe doet, en wanneer niet</span><p>Bij tabellen met miljoenen rijen en veel smalle kolommen is het meetbaar. Bij een tabel met 4.100 rijen is het verspilde moeite. En als het de leesbaarheid van uw <code>CREATE TABLE</code> onwerkbaar maakt, weegt logische groepering soms zwaarder — optimaliseer waar het meetbaar is, en documenteer waarom de volgorde is zoals hij is, anders zet de volgende ontwikkelaar hem "netjes" terug.</p></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">TOAST: wat er gebeurt met grote waarden</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een rij past niet in meer dan één pagina. Wat doet PostgreSQL met een <code>text</code>-veld van 50 kB? <strong>TOAST</strong> — The Oversized-Attribute Storage Technique. Zodra een rij groter dreigt te worden dan ongeveer 2 kB (een kwart pagina), gaat PostgreSQL waarden comprimeren en zo nodig verplaatsen naar een aparte TOAST-tabel; in de hoofdtabel blijft dan een verwijzing van 18 bytes achter.</p>
+        <p>Vier opslagstrategieën per kolom: <code>PLAIN</code> (niet comprimeren, niet verplaatsen — standaard voor vaste types), <code>EXTENDED</code> (beide — standaard voor <code>text</code>, <code>jsonb</code>, <code>bytea</code>), <code>EXTERNAL</code> (verplaatsen zonder compressie) en <code>MAIN</code> (comprimeren, zo laat mogelijk verplaatsen). <code>EXTERNAL</code> kost meer schijfruimte maar maakt deelbewerkingen zoals <code>substring</code> of het opvragen van één <code>jsonb</code>-sleutel sneller, omdat er niet eerst gedecomprimeerd hoeft te worden.</p>
+        <div class="callout warn"><span class="lbl">Wat u moet weten voor de praktijk</span><p><code>pg_relation_size</code> telt de TOAST-tabel <strong>niet</strong> mee — gebruik <code>pg_total_relation_size</code>, anders lijkt een tabel klein terwijl ze in werkelijkheid veel ruimte inneemt. En een TOAST-waarde ophalen kost een extra leesbewerking: <code>SELECT *</code> op een tabel met een groot <code>jsonb</code>-veld is daarom veel duurder dan alleen de kolommen opvragen die u nodig heeft — het concrete argument tegen <code>SELECT *</code> uit deel 3, nu met een mechanisme erbij.</p></div>
+        <p>Bij Meridiaan speelt dit bij <code>koppelvlakbericht</code> uit deel 6: ruwe berichten in <code>jsonb</code>. Die tabel is in de hoofdstructuur klein en in werkelijkheid de grootste van het schema.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.3 — TOAST zichtbaar maken</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welk advies geeft u voor de tabel <code>koppelvlakbericht</code>, die ruwe berichten in <code>jsonb</code> bewaart voor onderzoek en aantoonbaarheid, en die zelden wordt geraadpleegd?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Laat de standaard <code>EXTENDED</code> staan: compressie bespaart aanzienlijk op een tabel die vooral groeit en zelden gelezen wordt. <code>EXTERNAL</code> is pas interessant zodra structureel deelvelden uit die berichten worden opgevraagd — en dan is de betere vraag of die velden niet als echte kolom horen te bestaan, wat terugverwijst naar het normalisatiewerk uit deel 5.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">HOT-updates en fill factor</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <code>UPDATE</code> schrijft een nieuwe rijversie. Normaal moet elke index die naar die rij wijst een nieuwe verwijzing krijgen — tien indexen betekent tien indexbijwerkingen voor één <code>UPDATE</code>. <strong>HOT — Heap-Only Tuple</strong> — is de optimalisatie die dat voorkomt, mits aan twee voorwaarden is voldaan: geen enkele geïndexeerde kolom wordt gewijzigd, en de nieuwe rijversie past op dezelfde pagina. Dan hoeft geen enkele index te worden bijgewerkt.</p>
+        <p>Voorwaarde 1 is een ontwerpkeuze: indexeer geen kolommen die vaak wijzigen als dat niet nodig is. Voorwaarde 2 is waar <strong>fill factor</strong> binnenkomt:</p>
+        <pre><code class="language-sql">ALTER TABLE mutatie SET (fillfactor = 85);</code></pre>
+        <p>De standaard is 100: pagina's worden volledig gevuld, dus is er bij een <code>UPDATE</code> geen ruimte op de pagina en moet de nieuwe versie ergens anders heen — geen HOT. Met <code>fillfactor = 85</code> blijft 15% van elke pagina vrij voor toekomstige updates. De afruil: 100 is compact maar zonder HOT-updates, 85-90 maakt HOT-updates mogelijk tegen 10-15% meer pagina's, en onder 70 is zelden zinvol.</p>
+        <div class="callout tip"><span class="lbl">Wanneer wel, wanneer niet</span><p>Verlagen bij tabellen die veel worden bijgewerkt op niet-geïndexeerde kolommen — <code>mutatie</code> is het schoolvoorbeeld, want elke rij wordt precies één keer bijgewerkt om <code>verwerkt_op</code> te vullen, en die kolom is niet geïndexeerd. Niet verlagen bij tabellen die alleen groeien en nooit wijzigen — daar is een lagere fill factor pure verspilling. En let op: de instelling geldt alleen voor <strong>nieuwe</strong> pagina's; bestaande pagina's blijven vol tot ze herschreven worden.</p></div>
+        <p>Controleren of HOT werkt: <code>SELECT relname, n_tup_upd, n_tup_hot_upd, round(100.0 * n_tup_hot_upd / nullif(n_tup_upd, 0), 1) AS pct_hot FROM pg_stat_user_tables WHERE n_tup_upd &gt; 0 ORDER BY n_tup_upd DESC;</code> — een laag percentage bij een tabel die veel wordt bijgewerkt, is een concrete verbeterkans.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.4 — HOT-updates en fill factor</p>
+        <details class="q"><summary><span class="qn">1</span><span>U vergelijkt twee identieke tabellen na dezelfde updates: één met fillfactor 100, één met fillfactor 85. De tabel met fillfactor 85 was bij het vullen groter, maar na de updates lijkt de omvangvergelijking niet het hele verhaal te vertellen. Wat mist die vergelijking?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De winst van HOT zit vooral in minder indexbijwerking en minder indexbloat, niet in tabelomvang. De tabel met fillfactor 100 moest voor elke update een nieuwe pagina gebruiken én alle indexen bijwerken; de tabel met fillfactor 85 kon de meeste updates HOT verwerken. Alleen naar de tabelomvang kijken verhult dus de echte winst, die in het aantal indexbijwerkingen zit.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Bloat: herkomst, meten en opruimen</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Bloat is ruimte die is ingenomen door rijversies die niemand meer kan zien. Drie bronnen: updates en deletes (elke <code>UPDATE</code> laat de oude versie achter, MVCC uit deel 7), lang lopende transacties (zolang een transactie openstaat, moeten alle rijversies bewaard blijven die zij nog zou kunnen zien, in de <strong>hele</strong> database — de meest onderschatte oorzaak, en de reden dat <code>idle in transaction</code> een productieprobleem is en geen netheidskwestie), en autovacuum dat het niet bijhoudt (deel 11). Er is ook onvermijdbare bloat: een zekere hoeveelheid vrije ruimte is normaal, want daar landen de volgende rijen. Vuistregel: onder 20% is prima, boven 50% is een probleem, en de trend zegt meer dan het getal.</p>
+        <h4>Meten</h4>
+        <p>PostgreSQL heeft geen ingebouwde bloatmeting. De schatting uit <code>pg_stat_user_tables</code> (<code>n_dead_tup</code> tegenover <code>n_live_tup</code>) is goedkoop en prima als signaal, maar <code>n_dead_tup</code> is een schatting die door autovacuum wordt bijgewerkt, niet een telling. Voor een exacte meting bestaat de extensie <code>pgstattuple</code>, met <code>free_percent</code> als de kolom die u zoekt — nauwkeurig, maar hij scant de hele tabel. <code>pgstattuple_approx</code> gebruikt een steekproef en is op grote tabellen ordes van grootte sneller; draai de exacte variant niet routinematig op productie tijdens kantooruren, want hij verdringt uw bufferpool.</p>
+        <div class="callout note"><span class="lbl">De juiste vraag</span><p>Niet "hoeveel bloat is er", maar "groeit het". Een tabel die stabiel op 25% zit, is in evenwicht: vacuum ruimt evenveel op als er bijkomt. Een tabel die van 10% naar 40% is gegaan in een maand, heeft een probleem — meestal een lang lopende transactie of een te hoge autovacuum-drempel.</p></div>
+        <h4>Opruimen: drie gereedschappen</h4>
+        <p><code>VACUUM</code> geeft geen ruimte terug aan het OS, neemt een lichte lock, en is de normale gang van zaken — de ruimte blijft in de tabel en wordt hergebruikt, wat meestal precies goed is. <code>VACUUM FULL</code> herschrijft de tabel volledig, geeft ruimte terug, maar neemt een <code>ACCESS EXCLUSIVE</code>-lock en heeft tijdelijk een volledige tweede kopie nodig — alleen voor een eenmalige grote opruiming in een onderhoudsvenster. <code>pg_repack</code> doet hetzelfde online: hij bouwt een kopie op terwijl de tabel in gebruik blijft en wisselt aan het eind om onder een korte lock — voor een productieomgeving die niet uit mag, is dit het gereedschap.</p>
+        <p>De volgorde bij een bloatprobleem: zoek eerst de oorzaak (lang lopende transacties? een te hoge autovacuum-drempel?), los die op, en ruim daarna pas op. Wie de eerste twee stappen overslaat, staat elk kwartaal opnieuw een tabel te herschrijven.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.5 — bloat meten en opruimen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U opent in een tweede sessie een transactie die openblijft staan (<code>BEGIN; SELECT count(*) FROM mutatie;</code>), werkt daarna rijen bij in een kopie van de tabel, en draait <code>VACUUM</code>. Wat gebeurt er, en hoe legt u het aan Ruud uit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Vacuum kan nu niets opruimen: de openstaande transactie heeft een momentopname waarin de oude rijversies mogelijk nog zichtbaar zijn, dus ze moeten bewaard blijven. <code>n_dead_tup</code> blijft hoog en de tabel blijft groeien. Aan Ruud: "Eén sessie die een transactie open laat staan, blokkeert het opruimen in de hele database — ook in tabellen waar die sessie nooit is geweest, want vacuum moet alles bewaren wat zij nog zou kunnen zien." Daarom is <code>idle in transaction</code> geen netheidskwestie maar de meest onderschatte oorzaak van een volle schijf.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Freeze, wraparound en de visibility map</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Elke rijversie draagt de transactie-ID die hem maakte (<code>xmin</code>). Die teller is 32 bits: ongeveer 4 miljard waarden, en hij loopt rond. Zou een oude rij een <code>xmin</code> houden die na het rondlopen "in de toekomst" ligt, dan wordt hij onzichtbaar — gegevensverlies zonder foutmelding. Om dat te voorkomen bevriest vacuum oude rijen: hij markeert ze als "altijd zichtbaar", waarna hun <code>xmin</code> niet meer relevant is.</p>
+        <p>Volgen hoe ver u bent: <code>SELECT relname, age(relfrozenxid) AS transacties_sinds_freeze FROM pg_class ... ORDER BY age(relfrozenxid) DESC;</code>. Wat er gebeurt als u dit negeert, in oplopende ernst: autovacuum start een agressieve freeze-run met merkbare I/O op een ongelegen moment; PostgreSQL begint te waarschuwen in de log; bij ongeveer 3 miljoen resterende transacties komen er waarschuwingen bij elke commit; en uiteindelijk weigert de database nieuwe transacties en gaat alleen nog lezen. Herstel vraagt dan een handmatige vacuum in single-user mode, met downtime.</p>
+        <div class="callout warn"><span class="lbl">De enige waarde die u écht moet monitoren</span><p>Dat laatste punt haalt het nieuws elke paar jaar bij een grote organisatie — altijd hetzelfde verhaal: autovacuum stond uit of kwam er niet doorheen, en niemand keek naar <code>age(relfrozenxid)</code>. Het is een van de weinige waarden waarbij het falen catastrofaal en niet geleidelijk is, én de enige waarbij u maanden van tevoren kunt zien dat er iets misgaat. Zet dit in uw monitoring (deel 20).</p></div>
+        <h4>De visibility map en index-only scans</h4>
+        <p>Bij elke tabel hoort een visibility map: één bit per pagina dat zegt "alle rijen op deze pagina zijn zichtbaar voor iedereen". Vacuum kan pagina's overslaan die sinds de vorige keer niet zijn gewijzigd, wat vacuum op grote, stabiele tabellen goedkoop maakt. En index-only scans (deel 8) worden erdoor mogelijk: een index bevat de waarde maar niet de zichtbaarheidsinformatie, dus moet de database normaal alsnog de tabel raadplegen — tenzij de pagina in de visibility map als volledig zichtbaar staat.</p>
+        <p>Ziet u in <code>EXPLAIN ANALYZE</code> een <code>Index Only Scan</code> met een hoog aantal <code>Heap Fetches</code>, dan is de visibility map verouderd — de oplossing is niet een andere index maar <code>VACUUM</code>. Dit is de derde plek in deze cursus waar vacuum een prestatievraag blijkt te zijn in plaats van een opruimkwestie: eerder waren het de statistieken (deel 8) en de bloat (sectie 6).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.7 — index-only scans en Heap Fetches</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een index-only scan op <code>mutatie (deelnemer_id) INCLUDE (aangemeld_op)</code> toont ineens veel Heap Fetches, terwijl de index alle gevraagde kolommen bevat. Wat is er mis, en wat lost het op?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Er is niets mis met de index — hij bevat alle gevraagde kolommen. Wat ontbreekt, is de zichtbaarheidsinformatie: de index weet niet of een rij zichtbaar is voor uw transactie, en alleen de visibility map kan dat garanderen. Na een <code>UPDATE</code> op een rij wordt de betrokken pagina uit de visibility map gehaald, en dan moet de database alsnog de tabel raadplegen. Een <code>VACUUM mutatie;</code> werkt de visibility map bij en brengt <code>Heap Fetches</code> weer omlaag.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Correlatie en wat u meeneemt in een ontwerp</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De <strong>correlatie</strong> geeft aan in hoeverre de fysieke volgorde van de rijen overeenkomt met de logische volgorde van een kolom, een waarde tussen −1 en 1: <code>SELECT attname, correlation FROM pg_stats WHERE ... ORDER BY abs(correlation) DESC;</code>. Bij een correlatie dicht bij 1 liggen rijen met opeenvolgende waarden fysiek naast elkaar, en een indexscan over een bereik leest dan aaneengesloten pagina's in plaats van door de hele tabel te springen. Bij <code>mutatie</code> is <code>mutatie_id</code> sterk gecorreleerd omdat de identiteitskolom oploopt in dezelfde volgorde als het invoegen; <code>deelnemer_id</code> is dat juist niet, want de mutaties van één deelnemer liggen verspreid over de hele tabel. Dat is precies de eigenschap waarop een BRIN-index leunt (deel 14): minuscuul van omvang, maar alleen bruikbaar bij hoge correlatie.</p>
+        <p>U kunt de fysieke volgorde afdwingen met <code>CLUSTER mutatie USING mutatie_aangemeld_idx;</code>, maar dat neemt een <code>ACCESS EXCLUSIVE</code>-lock en de volgorde blijft niet vanzelf behouden — nieuwe en bijgewerkte rijen komen gewoon waar plaats is. Voor een tabel die van nature chronologisch groeit is de correlatie vanzelf goed; voor een tabel die willekeurig wordt bijgewerkt, keert de wanorde na <code>CLUSTER</code> snel terug. Er is een reden dat u dit commando zelden ziet.</p>
+        <h4>Wat u hiervan meeneemt, in volgorde van opbrengst</h4>
+        <p>Kolomvolgorde op aflopende grootte bij tabellen met miljoenen rijen — gratis, meetbaar, en alleen bij het ontwerp te doen. Fill factor verlagen bij tabellen die veel worden bijgewerkt op niet-geïndexeerde kolommen. Niet indexeren wat vaak wijzigt, tenzij nodig. <code>SELECT *</code> vermijden bij tabellen met grote TOAST-kolommen. Autovacuum per tabel afstellen in plaats van achteraf herstellen. En <code>age(relfrozenxid)</code> monitoren — van alle waarden in dit deel de enige waarbij falen catastrofaal is.</p>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: de opbouw van een pagina en de vaste overhead per rijversie; uitlijning en het effect van kolomvolgorde; wanneer TOAST optreedt en de vier opslagstrategieën; HOT-updates en de rol van fill factor; de drie manieren om bloat op te ruimen en hun lock-gedrag; freeze en de gevolgen van wraparound; de visibility map in relatie tot index-only scans; en correlatie in relatie tot queryplannen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.9 — het opslagadvies</p>
+        <details class="q"><summary><span class="qn">1</span><span>In het modelantwoord voor Ruuds opslagadvies staat "kolomvolgorde herzien" als afgeraden maatregel voor de bestaande tabel <code>mutatie</code>, terwijl diezelfde maatregel bij het ontwerp van nieuwe tabellen wél wordt aanbevolen. Is dat tegenstrijdig?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee. Bij <code>mutatie</code> is de winst klein omdat de variabele kolommen daar toevallig al achteraan staan, terwijl de kosten van herzien een migratie van 2,4 miljoen rijen met bijbehorend risico zijn — een slechte ruil. Bij het ontwerp van een nieuwe tabel is de juiste kolomvolgorde daarentegen gratis: er is nog niets om te migreren. Dezelfde maatregel is dus vooraf bijna kosteloos en achteraf duur, en dat is precies waarom hij in het ene geval wordt aangeraden en in het andere wordt afgeraden.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 13</h3>
+      <p>U weet nu hoe de gegevens er fysiek liggen. Deel 13 leert u queryplannen lezen op productieschaal met EXPLAIN ANALYZE, en hoe u met de planner en pg_stat_statements de query's vindt die er werkelijk toe doen.</p>
+      <a class="btn" href="deel-13.html">Deel 13 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 12 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-12-fysiek-ontwerp-pagina-s-toast-en-bloat/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm12_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 3 — SQL basis: SELECT, filteren, sorteren, aggregeren | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 3 (EDB Associate): psql, SELECT, filteren met WHERE en NULL, sorteren, tekst- en datumfuncties, aggregeren en GROUP BY, en de logische uitvoeringsvolgorde van SQL — tegen de Meridiaan-database.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-03.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+td code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 3</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 3 van 30</p>
+  <h1>SQL basis: SELECT, filteren,<br><em>sorteren, aggregeren</em>.</h1>
+  <p class="hero__lead">Met het model en de architectuur van deel 2 op zak schrijft u nu uw eerste query's tegen de Meridiaan-database. Dit deel behandelt psql, de opbouw van een SELECT, filteren met WHERE inclusief de NULL-vallen uit deel 2, sorteren en beperken, tekst- en datumfuncties, aggregeren en groeperen — en de logische uitvoeringsvolgorde die bijna elke beginnersfout verklaart.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>8</b><span>stappen uitvoeringsvolgorde</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap: waarom PostgreSQL → ➋ Het relationele model en de PostgreSQL-architectuur → <b>➌ SQL basis: SELECT, filteren, sorteren, aggregeren (hier)</b> → ➍ SQL verdieping: joins, subquery's en CTE's → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → ➑ Indexen en views → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">psql: uw werkomgeving</a></li>
+      <li><a href="#s3" data-target="s3">De vorm van een SELECT</a></li>
+      <li><a href="#s4" data-target="s4">Filteren met WHERE, ook met NULL erbij</a></li>
+      <li><a href="#s5" data-target="s5">Sorteren, beperken en DISTINCT</a></li>
+      <li><a href="#s6" data-target="s6">Tekst- en datumfuncties</a></li>
+      <li><a href="#s7" data-target="s7">CASE, COALESCE, NULLIF en casting</a></li>
+      <li><a href="#s8" data-target="s8">Aggregeren, GROUP BY en HAVING</a></li>
+      <li><a href="#s9" data-target="s9">De uitvoeringsvolgorde, en aansluiting op de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>uw weg vinden in psql en de belangrijkste meta-commando's gebruiken;</li>
+          <li>kolommen kiezen, hernoemen en berekenen;</li>
+          <li>rijen filteren met samengestelde voorwaarden, inclusief correcte behandeling van NULL;</li>
+          <li>resultaten sorteren en beperken, en uitleggen waarom <code>LIMIT</code> zonder <code>ORDER BY</code> onbetrouwbaar is;</li>
+          <li>tekst- en datumfuncties toepassen op de casusgegevens;</li>
+          <li><code>CASE</code>, <code>COALESCE</code> en <code>NULLIF</code> inzetten;</li>
+          <li>aggregeren, groeperen en groepen filteren;</li>
+          <li>de logische uitvoeringsvolgorde van een SELECT uitleggen en daarmee de meeste beginnersfouten zelf verklaren.</li>
+        </ul>
+        <div class="callout note"><span class="lbl">Zwaar wegend domein</span><p>SQL is een zwaar wegend domein in de Associate-certificering. Alles wat u vanaf hier schrijft, draait tegen de Meridiaan-casusdatabase.</p></div>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">psql: uw werkomgeving</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>psql is de opdrachtregelclient. Grafische clients zijn prettiger, maar psql is overal beschikbaar, ook op een server om drie uur 's nachts. Deze cursus gebruikt psql; wie liever DBeaver of pgAdmin gebruikt, mag dat, maar moet de meta-commando's kennen.</p>
+        <pre><code>psql -d meridiaan</code></pre>
+        <p>Meta-commando's beginnen met een backslash en zijn geen SQL:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Commando</th><th>Betekenis</th></tr></thead>
+          <tbody>
+            <tr><td><code>\l</code></td><td>Databases in dit cluster</td></tr>
+            <tr><td><code>\dn</code></td><td>Schema's</td></tr>
+            <tr><td><code>\dt</code></td><td>Tabellen in het zoekpad</td></tr>
+            <tr><td><code>\d deelnemer</code></td><td>Structuur van een tabel: kolommen, typen, constraints, indexen</td></tr>
+            <tr><td><code>\du</code></td><td>Rollen</td></tr>
+            <tr><td><code>\x</code></td><td>Uitgebreide weergave aan/uit (onmisbaar bij brede tabellen)</td></tr>
+            <tr><td><code>\timing</code></td><td>Uitvoeringstijd tonen</td></tr>
+            <tr><td><code>\i bestand.sql</code></td><td>Script uitvoeren</td></tr>
+            <tr><td><code>\q</code></td><td>Afsluiten</td></tr>
+          </tbody>
+        </table></div>
+        <p>Het zoekpad instellen, zodat u niet elke tabel met <code>meridiaan.</code> hoeft voor te voegen: <code>SET search_path TO meridiaan, public;</code> — zet dit in <code>~/.psqlrc</code> als u het elke sessie wilt (zie Toolbijlage).</p>
+        <div class="callout warn"><span class="lbl">Eén gewoonte die u meteen moet aanleren</span><p>Elke SQL-opdracht eindigt met een puntkomma. Vergeet u die, dan wacht psql zwijgend op meer invoer en denkt u dat de database hangt. De prompt verandert dan van <code>meridiaan=#</code> in <code>meridiaan-#</code>.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De vorm van een SELECT</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>SELECT   &lt;kolommen&gt;
+FROM     &lt;tabellen&gt;
+WHERE    &lt;rijfilter&gt;
+GROUP BY &lt;groepering&gt;
+HAVING   &lt;groepsfilter&gt;
+ORDER BY &lt;sortering&gt;
+LIMIT    &lt;aantal&gt;;</code></pre>
+        <p>Deze volgorde is de <strong>schrijfvolgorde</strong>. De <strong>uitvoeringsvolgorde</strong> is een andere, en dat verschil verklaart bijna elke beginnersfout — sectie 9 komt erop terug.</p>
+        <h4>Kolommen kiezen en berekenen</h4>
+        <pre><code>SELECT achternaam, geboortedatum FROM deelnemer;</code></pre>
+        <p><code>SELECT *</code> haalt alles op. Prima om te verkennen, maar <strong>niet in applicatiecode</strong>: als iemand later een kolom toevoegt, verandert uw resultaat ongemerkt, en u haalt gegevens op die u niet gebruikt.</p>
+        <pre><code>SELECT
+    achternaam,
+    jaarsalaris,
+    jaarsalaris / 12             AS maandsalaris,
+    jaarsalaris * deeltijdfactor AS salaris_naar_rato
+FROM dienstverband
+JOIN deelnemer USING (deelnemer_id);</code></pre>
+        <p>Over aliassen: <code>AS</code> mag u weglaten, maar doe dat niet — <code>jaarsalaris maandsalaris</code> leest als een fout. Wil u hoofdletters of spaties in een alias, gebruik dan dubbele aanhalingstekens.</p>
+        <div class="callout note"><span class="lbl">Aanhalingstekens in PostgreSQL — leer dit nu goed</span><p><code>'enkele'</code> = een tekstwaarde. <code>"dubbele"</code> = een identifier (kolom- of tabelnaam). <code>SELECT "Jansen"</code> zoekt naar een <em>kolom</em> met die naam en levert een foutmelding — de meest voorkomende verwarring bij mensen die uit MySQL of Excel komen. Advies: gebruik consequent kleine letters met liggende streepjes, dan heeft u hier nooit last van.</p></div>
+        <p>Tekst samenvoegen met <code>||</code>: <code>SELECT voorletters || ' ' || coalesce(tussenvoegsel || ' ', '') || achternaam AS volledige_naam FROM deelnemer;</code> — let op de <code>coalesce</code>: zonder die functie wordt de hele uitdrukking NULL zodra <code>tussenvoegsel</code> NULL is. Concatenatie met NULL levert NULL — de eerste plek waar deel 2 zich terugbetaalt.</p>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Filteren met WHERE, ook met NULL erbij</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>SELECT achternaam, woonplaats
+FROM deelnemer
+WHERE land = 'NL'
+  AND geboortedatum &lt; DATE '1960-01-01';</code></pre>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Operator</th><th>Betekenis</th></tr></thead>
+          <tbody>
+            <tr><td><code>= &lt;&gt; &lt; &gt; &lt;= &gt;=</code></td><td>Vergelijken (<code>!=</code> mag ook, maar <code>&lt;&gt;</code> is standaard)</td></tr>
+            <tr><td><code>BETWEEN a AND b</code></td><td>Inclusief beide grenzen</td></tr>
+            <tr><td><code>IN (…)</code></td><td>In een lijst</td></tr>
+            <tr><td><code>LIKE</code> / <code>ILIKE</code></td><td>Patroon; <code>ILIKE</code> is hoofdletterongevoelig</td></tr>
+            <tr><td><code>IS NULL</code> / <code>IS NOT NULL</code></td><td>Onbekend of niet</td></tr>
+            <tr><td><code>AND OR NOT</code></td><td>Combineren</td></tr>
+          </tbody>
+        </table></div>
+        <p><code>LIKE</code>-jokers: <code>%</code> is nul of meer tekens, <code>_</code> is precies één teken.</p>
+        <div class="callout warn"><span class="lbl">BETWEEN en datums: let op</span><p><code>BETWEEN DATE '2025-01-01' AND DATE '2025-12-31'</code> werkt goed voor een <code>date</code>-kolom, maar op een <code>timestamp</code>-kolom mist u alles ná middernacht op 31 december. Gebruik <code>WHERE aangemeld_op &gt;= TIMESTAMP '2025-01-01' AND aangemeld_op &lt; TIMESTAMP '2026-01-01'</code> — ondergrens inclusief, bovengrens exclusief, de veilige gewoonte voor alles wat tijd bevat.</p></div>
+        <p><strong>Haakjes bij AND/OR.</strong> <code>AND</code> bindt sterker dan <code>OR</code>. <code>WHERE land = 'BE' OR land = 'DE' AND einddatum_deelname IS NULL</code> betekent <code>land = 'BE' OR (land = 'DE' AND einddatum_deelname IS NULL)</code>, wat vrijwel nooit de bedoeling is. Zet haakjes, ook als u zeker weet dat het klopt — de volgende lezer weet dat niet.</p>
+        <h4>Filteren met NULL erbij</h4>
+        <pre><code>-- Werkt niet zoals verwacht: laat deelnemers zonder woonplaats weg
+SELECT count(*) FROM deelnemer WHERE woonplaats &lt;&gt; 'Utrecht';
+
+-- Wel correct
+SELECT count(*) FROM deelnemer WHERE woonplaats IS DISTINCT FROM 'Utrecht';</code></pre>
+        <p>Bij Meridiaan heeft circa 3% van de deelnemers geen woonplaats. Op 8.000 rijen is dat 240 deelnemers die stilzwijgend uit een rapportage vallen, zonder foutmelding — alleen een getal dat 240 te laag is. Merk op hoe NULL bewust betekenisdragend wordt gebruikt in <code>einddatum_deelname IS NULL</code> ("nog aangesloten") en <code>verwerkt_op IS NULL</code> ("nog niet verwerkt"): verdedigbaar, maar het betekent dat elke query op die kolommen NULL expliciet moet adresseren.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.3e — filteren met NULL</p>
+        <details class="q"><summary><span class="qn">1</span><span>Hoeveel deelnemers wonen niet in Utrecht? Geef twee antwoorden — één naïef en één correct — en verklaar het verschil.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Naïef: <code>SELECT count(*) FROM deelnemer WHERE woonplaats &lt;&gt; 'Utrecht';</code>. Correct: <code>SELECT count(*) FROM deelnemer WHERE woonplaats IS DISTINCT FROM 'Utrecht';</code>. Het verschil is circa 240 deelnemers met <code>woonplaats IS NULL</code>. De naïeve variant sluit die stil uit, want <code>NULL &lt;&gt; 'Utrecht'</code> is onbekend en <code>WHERE</code> laat alleen <code>true</code> door.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Sorteren, beperken en DISTINCT</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>SELECT achternaam, geboortedatum
+FROM deelnemer
+ORDER BY geboortedatum DESC, achternaam ASC;</code></pre>
+        <p><code>ASC</code> is de standaard. U mag ook op positienummer sorteren (<code>ORDER BY 2</code>), maar doe dat niet in code die iemand later moet onderhouden.</p>
+        <div class="callout note"><span class="lbl">NULL bij sorteren</span><p>In PostgreSQL komt NULL standaard als laatste bij <code>ASC</code> en als eerste bij <code>DESC</code>. Wil u dat anders: <code>ORDER BY einddatum_deelname DESC NULLS LAST;</code> — een verschil met sommige andere DBMS'en en een klassieke examenvraag.</p></div>
+        <p>Sorteren van tekst hangt af van de collatie: of "van der Berg" vóór "Van Dijk" komt, wordt bepaald door de collatie van de database (details in niveau 2).</p>
+        <h4>Beperken: LIMIT, OFFSET, FETCH</h4>
+        <pre><code>SELECT achternaam FROM deelnemer ORDER BY achternaam LIMIT 10;
+SELECT achternaam FROM deelnemer ORDER BY achternaam LIMIT 10 OFFSET 20;</code></pre>
+        <div class="callout warn"><span class="lbl">Regel</span><p><code>LIMIT</code> zonder <code>ORDER BY</code> levert <em>willekeurige</em> rijen. Het lijkt vaak stabiel, maar die stabiliteit is toeval — na een update, een vacuum of een gewijzigd queryplan krijgt u andere rijen. Wie "de tien duurste" wil, moet zeggen waarop gesorteerd wordt.</p></div>
+        <p>Paginering met een grote <code>OFFSET</code> is traag: de database moet alle overgeslagen rijen alsnog produceren. <code>OFFSET 100000</code> doet het werk van honderdduizend rijen om er tien te tonen; in niveau 2 leert u keyset-paginering als alternatief.</p>
+        <h4>DISTINCT</h4>
+        <pre><code>SELECT DISTINCT sector FROM werkgever ORDER BY sector;
+SELECT DISTINCT sector, plaats FROM werkgever;   -- unieke combinaties</code></pre>
+        <p><code>DISTINCT</code> werkt over álle geselecteerde kolommen, niet over de eerste. PostgreSQL kent daarnaast <code>DISTINCT ON</code>, een eigen uitbreiding die de eerste rij per groep teruggeeft — krachtig, maar niet-standaard: gebruik het bewust en documenteer het. In deel 4 ziet u het alternatief met vensterfuncties.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Tekst- en datumfuncties</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Functie</th><th>Doet</th></tr></thead>
+          <tbody>
+            <tr><td><code>length(t)</code></td><td>Aantal tekens</td></tr>
+            <tr><td><code>upper(t)</code> / <code>lower(t)</code></td><td>Hoofd-/kleine letters</td></tr>
+            <tr><td><code>initcap(t)</code></td><td>Eerste letter per woord hoofdletter</td></tr>
+            <tr><td><code>trim(t)</code></td><td>Spaties weghalen</td></tr>
+            <tr><td><code>split_part(t, '-', 2)</code></td><td>Deel op scheidingsteken</td></tr>
+            <tr><td><code>concat_ws(' ', a, b, c)</code></td><td>Samenvoegen; <strong>negeert NULL</strong></td></tr>
+          </tbody>
+        </table></div>
+        <p><code>concat_ws</code> is de nette oplossing voor het naamprobleem uit sectie 3: <code>SELECT concat_ws(' ', voorletters, tussenvoegsel, achternaam) AS volledige_naam FROM deelnemer;</code></p>
+        <p>De rommelige woonplaatsen in de casus ("den haag", "DEN HAAG", " Den Haag") normaliseert u zo:</p>
+        <pre><code>SELECT initcap(trim(woonplaats)) AS woonplaats_net, count(*)
+FROM deelnemer
+GROUP BY 1
+ORDER BY 2 DESC;</code></pre>
+        <div class="callout note"><span class="lbl">Symptoom versus oorzaak</span><p>Dit ruimt het <em>symptoom</em> op in een query. De echte oplossing is een domein afdwingen — een aparte plaatsentabel met een foreign key, zodat een onbekende plaats bij invoer wordt geweigerd in plaats van bij rapportage opgeruimd. Dat is deel 5 en 6.</p></div>
+        <h4>Datum- en tijdfuncties</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bewerking</th><th>Voorbeeld</th></tr></thead>
+          <tbody>
+            <tr><td>Interval</td><td><code>now() - INTERVAL '3 months'</code></td></tr>
+            <tr><td>Deel eruit</td><td><code>extract(year FROM geboortedatum)</code></td></tr>
+            <tr><td>Afronden op periode</td><td><code>date_trunc('month', aangemeld_op)</code></td></tr>
+            <tr><td>Leeftijd</td><td><code>age(geboortedatum)</code> → interval</td></tr>
+            <tr><td>Opmaken</td><td><code>to_char(aangemeld_op, 'YYYY-MM-DD HH24:MI')</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Doorlooptijd van mutaties: <code>count(*)</code> telt alle mutaties, <code>count(verwerkt_op)</code> alleen de verwerkte, en het verschil is precies wat er nog openstaat — het <code>COUNT</code>-onderscheid uit deel 2, nu als bruikbare stuurinformatie.</p>
+        <div class="callout tip"><span class="lbl">timestamp versus timestamptz</span><p><code>timestamptz</code> slaat een absoluut moment op en rekent om naar de tijdzone van de sessie; <code>timestamp</code> is een lokale wandkloktijd zonder context. Gebruik <code>timestamptz</code> tenzij u een heel goede reden heeft — zomertijd is de reden dat dit ertoe doet: op de nacht van de overgang bestaat een uur twee keer of helemaal niet.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.5 — rommelige data opruimen in een query</p>
+        <details class="q"><summary><span class="qn">1</span><span>Karin wil de opschoonquery met <code>initcap(trim(woonplaats))</code> als vaste query in het rapportagepakket zetten. Waarom is dat de verkeerde oplossing, en wat is wél de oplossing?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een schoonmaakquery repareert het symptoom bij elke bevraging opnieuw, en werkt alleen voor de varianten die vandaag bekend zijn — morgen typt iemand "Dan Haag" en dan klopt het rapport weer niet. De echte oplossing is het domein afdwingen: een aparte plaatsentabel met een foreign key, zodat een onbekende plaats bij invoer wordt geweigerd in plaats van bij rapportage opgeruimd. Dat is de brug naar deel 5 en 6.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">CASE, COALESCE, NULLIF en casting</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><code>CASE</code> is de if-then-else van SQL:</p>
+        <pre><code>SELECT
+    achternaam,
+    CASE
+        WHEN einddatum_deelname IS NULL THEN 'actief'
+        WHEN einddatum_deelname &gt; current_date THEN 'eindigt binnenkort'
+        ELSE 'beëindigd'
+    END AS status
+FROM deelnemer;</code></pre>
+        <p>Zonder <code>ELSE</code> levert een niet-passende rij NULL. Schrijf <code>ELSE</code> altijd expliciet, ook als u denkt dat alle gevallen gedekt zijn.</p>
+        <p><code>COALESCE</code> geeft de eerste niet-NULL waarde. Wees hier voorzichtig: <code>coalesce(jaarsalaris, 0)</code> in een gemiddelde verandert de betekenis — ontbrekende salarissen tellen dan mee als nul en drukken het gemiddelde. "Onbekend" is niet "nul"; dit is een van de vaakst gemaakte fouten in rapportages. <code>NULLIF</code> doet het omgekeerde en is vooral nuttig tegen deling door nul: <code>bedrag / nullif(aantal_deelnemers, 0)</code>.</p>
+        <h4>Typen en casting</h4>
+        <p>Casten kan op twee manieren: <code>'2025-01-01'::date</code> (PostgreSQL-eigen) of <code>CAST('2025-01-01' AS date)</code> (standaard-SQL).</p>
+        <div class="callout warn"><span class="lbl">De valkuil van integerdeling</span><p><code>SELECT 7 / 2;</code> levert <code>3</code>, niet 3,5. Twee integers delen levert een integer, wat stille fouten veroorzaakt in percentageberekeningen: <code>count(*) FILTER (...) / count(*)</code> levert altijd 0. Goed: <code>round(100.0 * count(*) FILTER (...) / count(*), 1)</code> — de <code>100.0</code> dwingt een numerieke deling af.</p></div>
+        <p><strong>Gebruik <code>numeric</code> voor geld, nooit <code>float</code>.</strong> <code>numeric</code> rekent exact; <code>real</code> en <code>double precision</code> zijn binaire benaderingen waarin <code>0.1 + 0.2</code> niet precies <code>0.3</code> is. Voor een pensioenuitvoerder is dat geen academisch punt — in de casus zijn alle bedragen daarom <code>numeric</code>.</p>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Aggregeren, GROUP BY en HAVING</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Functie</th><th>Doet</th></tr></thead>
+          <tbody>
+            <tr><td><code>count(*)</code></td><td>Aantal rijen</td></tr>
+            <tr><td><code>count(kolom)</code></td><td>Aantal niet-NULL waarden</td></tr>
+            <tr><td><code>count(DISTINCT kolom)</code></td><td>Aantal verschillende niet-NULL waarden</td></tr>
+            <tr><td><code>sum / avg / min / max</code></td><td>Spreekt voor zich; negeren NULL</td></tr>
+            <tr><td><code>string_agg(t, ', ')</code></td><td>Tekst samenvoegen over rijen</td></tr>
+          </tbody>
+        </table></div>
+        <h4>FILTER: aggregeren over een deelverzameling</h4>
+        <p>Een PostgreSQL-mogelijkheid die veel werk bespaart:</p>
+        <pre><code>SELECT
+    count(*)                                            AS totaal,
+    count(*) FILTER (WHERE einddatum_deelname IS NULL)  AS actief,
+    count(*) FILTER (WHERE bsn IS NULL)                 AS zonder_bsn,
+    count(*) FILTER (WHERE land &lt;&gt; 'NL')                AS buitenland
+FROM deelnemer;</code></pre>
+        <p>Vier getallen, één scan over de tabel. Het alternatief — vier losse query's — is trager en levert bovendien gegevens die niet uit hetzelfde moment komen.</p>
+        <h4>GROUP BY</h4>
+        <div class="callout warn"><span class="lbl">De regel die alles verklaart</span><p>Elke kolom in de <code>SELECT</code>-lijst moet óf in <code>GROUP BY</code> staan, óf in een aggregatiefunctie zitten. Doe u dat niet, dan volgt <code>ERROR: column must appear in the GROUP BY clause or be used in an aggregate function.</code> Geen pesterij: als u per sector groepeert en er zitten dertig werkgevers in, wélke naam moet er dan staan? De vraag is onbeantwoordbaar, dus wordt hij geweigerd.</p></div>
+        <h4>HAVING — en waarom het niet hetzelfde is als WHERE</h4>
+        <p><code>WHERE</code> filtert <strong>rijen, vóór het groeperen</strong>. <code>HAVING</code> filtert <strong>groepen, ná het groeperen</strong>. In <code>HAVING</code> mag u aggregaties gebruiken; in <code>WHERE</code> niet. Alles wat u in <code>WHERE</code> kúnt filteren, moet u daar filteren — het scheelt werk, want er blijven minder rijen over om te groeperen.</p>
+        <pre><code>SELECT werkgever_id, count(*) AS onbetaald
+FROM premienota
+WHERE betaaldatum IS NULL
+GROUP BY werkgever_id
+HAVING count(*) &gt; 3
+ORDER BY onbetaald DESC;</code></pre>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.7f — de GROUP BY-fout repareren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom levert <code>SELECT sector, naam, count(*) FROM werkgever GROUP BY sector;</code> een foutmelding op, en wat zijn twee manieren om hem te repareren — met een verschillende betekenis?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>naam</code> staat niet in <code>GROUP BY</code> en zit niet in een aggregatie: per sector zijn er meerdere namen, en welke zou getoond moeten worden? Onbeantwoordbaar, dus geweigerd. Reparatie 1 (fijner groeperen): <code>GROUP BY sector, naam</code> — één rij per sector-naam-combinatie. Reparatie 2 (aggregeren): <code>string_agg(naam, ', ' ORDER BY naam)</code> — één rij per sector met de namen samengevoegd. De twee reparaties beantwoorden een andere vraag; welke juist is, hangt af van wat het rapport moet laten zien.</div></details>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">De uitvoeringsvolgorde, en aansluiting op de certificering</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Nu de kern van dit deel. De logische uitvoeringsvolgorde is:</p>
+        <pre><code>1. FROM      (en JOIN)   → welke rijen zijn er
+2. WHERE                 → welke rijen blijven
+3. GROUP BY              → hoe worden ze gegroepeerd
+4. HAVING                → welke groepen blijven
+5. SELECT                → welke kolommen, aliassen ontstaan hier
+6. DISTINCT
+7. ORDER BY              → hier mogen aliassen wél
+8. LIMIT / OFFSET</code></pre>
+        <figure><img src="figuren/figuur-3-1.png" alt="Schrijfvolgorde naast uitvoeringsvolgorde, met pijlen die de verschillen aangeven"><figcaption>Figuur 3-1 — Schrijfvolgorde naast uitvoeringsvolgorde, met pijlen die de verschillen aangeven</figcaption></figure>
+        <p>Hieruit volgt direct: u mag een alias niet in <code>WHERE</code> gebruiken (de alias ontstaat in stap 5, <code>WHERE</code> draait in stap 2), maar wél in <code>ORDER BY</code> (stap 7, na stap 5). En <code>WHERE</code> staat geen aggregaties toe, omdat er in stap 2 nog geen groepen bestaan om over te aggregeren.</p>
+        <div class="callout note"><span class="lbl">Let op het woord logische</span><p>De planner mag intern een andere volgorde kiezen, zolang het resultaat gelijk blijft — precies het punt uit deel 2 over geslotenheid van relationele bewerkingen. Wat u hier leert is het model waarmee u over uw query redeneert, niet het uitvoeringsplan.</p></div>
+        <h4>Veelgemaakte fouten</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Oplossing</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;&gt;</code> op een kolom met NULL</td><td>Rijen vallen stil weg</td><td><code>IS DISTINCT FROM</code></td></tr>
+            <tr><td>Integerdeling in een percentage</td><td>Altijd 0</td><td>Vermenigvuldig met <code>100.0</code></td></tr>
+            <tr><td><code>LIMIT</code> zonder <code>ORDER BY</code></td><td>Willekeurige rijen</td><td>Altijd sorteren</td></tr>
+            <tr><td><code>coalesce(x, 0)</code> in een gemiddelde</td><td>Vertekend gemiddelde</td><td>Onbekend is niet nul</td></tr>
+            <tr><td>Alias in <code>WHERE</code></td><td>Foutmelding</td><td>Uitdrukking herhalen</td></tr>
+            <tr><td><code>AND</code>/<code>OR</code> zonder haakjes</td><td>Verkeerd resultaat, geen foutmelding</td><td>Altijd haakjes</td></tr>
+            <tr><td><code>float</code> voor geld</td><td>Afrondingsverschillen</td><td><code>numeric</code></td></tr>
+          </tbody>
+        </table></div>
+        <h4>Wat het examen hierover vraagt</h4>
+        <p>Paraat moet zijn: de logische uitvoeringsvolgorde en de gevolgen daarvan; het verschil tussen <code>WHERE</code> en <code>HAVING</code>; <code>count(*)</code> versus <code>count(kolom)</code> versus <code>count(DISTINCT kolom)</code>; NULL-gedrag bij vergelijken, aggregeren en sorteren; de GROUP BY-regel; casting en het gedrag van integerdeling.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>Alias</strong> — alternatieve naam voor kolom of tabel, ontstaat in de <code>SELECT</code>-fase. <strong>Predicaat</strong> — een voorwaarde die waar, onwaar of onbekend oplevert. <strong>Aggregatiefunctie</strong> — functie die veel rijen tot één waarde reduceert. <strong>FILTER</strong> — beperking van een aggregatie tot rijen die aan een voorwaarde voldoen. <strong>Logische uitvoeringsvolgorde</strong> — FROM → WHERE → GROUP BY → HAVING → SELECT → DISTINCT → ORDER BY → LIMIT. <strong>Collatie</strong> — de regels die de sorteervolgorde van tekst bepalen. <strong><code>timestamptz</code></strong> — tijdstip met tijdzonebesef; de standaardkeuze.</p>
+        <p><strong>Vooruit naar deel 4.</strong> U gaat gegevens uit meerdere tabellen combineren — en u zult ontdekken dat de keuze tussen <code>INNER</code> en <code>LEFT</code> een inhoudelijke vraag is, geen technische.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.8a en 3.8c — de uitvoeringsvolgorde toepassen</p>
+        <details class="q"><summary><span class="qn">1</span><span><code>SELECT jaarsalaris * deeltijdfactor AS naar_rato FROM dienstverband WHERE naar_rato &gt; 50000;</code> — wat gebeurt hier, zonder de query uit te voeren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Foutmelding: <code>column "naar_rato" does not exist</code>. <code>WHERE</code> draait vóór <code>SELECT</code> (stap 2 versus stap 5), dus de alias bestaat nog niet op het moment dat <code>WHERE</code> wordt geëvalueerd. Reparatie: herhaal de uitdrukking in <code>WHERE</code>: <code>WHERE jaarsalaris * deeltijdfactor &gt; 50000</code>.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span><code>SELECT sector, count(*) AS aantal FROM werkgever WHERE count(*) &gt; 10 GROUP BY sector;</code> — wat gebeurt hier?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Foutmelding: <code>aggregate functions are not allowed in WHERE</code>. In de <code>WHERE</code>-fase (stap 2) bestaan er nog geen groepen om over te aggregeren — dat gebeurt pas in stap 3. Dit hoort in <code>HAVING</code> (stap 4): <code>GROUP BY sector HAVING count(*) &gt; 10</code>.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 4</h3>
+      <p>Deel 4 verdiept SQL: joins tussen meerdere tabellen, subquery's en common table expressions. U leert waarom de keuze tussen INNER en LEFT JOIN een inhoudelijke vraag is over de casus, geen technische keuze.</p>
+      <a class="btn" href="deel-04.html">Deel 4 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 3 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-03-sql-basis-select-filteren-sorteren-aggregeren/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm3_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

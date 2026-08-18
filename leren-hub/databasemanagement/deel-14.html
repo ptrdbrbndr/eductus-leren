@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 14 — Geavanceerde indexering | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 14 (EDB Professional): zes indextypen naast elkaar — B-tree verdiept, partiële en expressie-indexen, GIN met jsonb en pg_trgm, GiST voor bereiken, BRIN voor zeer grote tabellen — en wat een index niet oplost.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-14.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 14</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 14 van 30</p>
+  <h1>Geavanceerde<br><em>indexering</em>.</h1>
+  <p class="hero__lead">In deel 13 was de maatregel bij bijna elke query een index — en steeds een B-tree. Terecht: B-tree lost het merendeel op. Maar welke berichten bevatten deze sleutel in hun JSON? Welke deelnemers heten ongeveer "Janssen"? Welke adresperioden overlappen met deze? Voor elk van die vragen faalt een B-tree principieel. Dit deel behandelt de vijf andere indextypen, wat ze kosten, en — minstens zo belangrijk — wanneer een index helemaal niet het antwoord is.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>6</b><span>indextypen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → <b>14 Geavanceerde indexering (hier)</b> → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De indextypen in kaart</a></li>
+      <li><a href="#s3" data-target="s3">B-tree, verdiept</a></li>
+      <li><a href="#s4" data-target="s4">Partiële en expressie-indexen, verdiept</a></li>
+      <li><a href="#s5" data-target="s5">GIN en pg_trgm: zoeken binnen een waarde</a></li>
+      <li><a href="#s6" data-target="s6">GiST en BRIN</a></li>
+      <li><a href="#s7" data-target="s7">Een index kiezen en bouwen op productie</a></li>
+      <li><a href="#s8" data-target="s8">Onderhoud en wat een index niet oplost</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De rode draad van dit deel: een index is een afruil tussen leessnelheid en schrijfsnelheid, en bij de niet-B-tree-types is die afruil scherper. GIN maakt zoeken duizend keer sneller en schrijven merkbaar trager. BRIN is bijna gratis maar werkt alleen onder één strikte voorwaarde. Wie het type kiest zonder de afruil te kennen, verplaatst het probleem.</p>
+        <p>Aan het eind van dit deel kunt u: de zes indextypen benoemen en per werklast het passende type kiezen; B-tree-indexen verfijnen met <code>INCLUDE</code>, sorteervolgorde en kolomvolgorde; een GIN-index inzetten voor <code>jsonb</code>, arrays en tekstzoeken; <code>pg_trgm</code> gebruiken voor <code>LIKE '%…%'</code> en fuzzy zoeken; beoordelen of een tabel geschikt is voor BRIN; een index veilig aanmaken op een draaiende productieomgeving; en beargumenteren wanneer een index níét de oplossing is.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De indextypen in kaart</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Type</th><th>Voor</th><th>Omvang</th><th>Schrijfkosten</th></tr></thead>
+          <tbody>
+            <tr><td><strong>B-tree</strong></td><td>Gelijkheid, bereik, sortering</td><td>Middel</td><td>Laag</td></tr>
+            <tr><td><strong>GIN</strong></td><td>Zoeken <em>binnen</em> een waarde: jsonb, arrays, tekst</td><td>Groot</td><td><strong>Hoog</strong></td></tr>
+            <tr><td><strong>GiST</strong></td><td>Bereiken, meetkunde, uitsluiting, fuzzy</td><td>Middel</td><td>Middel</td></tr>
+            <tr><td><strong>SP-GiST</strong></td><td>Niet-gebalanceerde structuren: quadtrees, tekstprefixen</td><td>Klein</td><td>Middel</td></tr>
+            <tr><td><strong>BRIN</strong></td><td>Zeer grote tabellen met hoge correlatie</td><td><strong>Minuscuul</strong></td><td><strong>Zeer laag</strong></td></tr>
+            <tr><td><strong>Hash</strong></td><td>Alleen gelijkheid</td><td>Klein</td><td>Laag</td></tr>
+          </tbody>
+        </table></div>
+        <p>Twee waarnemingen die de rest van dit deel structureren. <strong>GIN en BRIN staan aan de uiteinden.</strong> GIN is duur in ruimte en schrijfsnelheid en levert enorme leeswinst op vragen die anders onbeantwoordbaar zijn. BRIN is vrijwel gratis en levert alleen iets op onder een strikte voorwaarde. Alles ertussenin is nuance. <strong>B-tree blijft de standaardkeuze.</strong> De andere types zijn specialisaties voor gevallen waarin B-tree niet kán — geen upgrade, precies zoals de datastore-categorieën in deel 1 geen generaties waren maar specialisaties.</p>
+        <figure><img src="figuren/figuur-14-1.png" alt="De zes indextypen op de assen omvang en schrijfkosten, met per type de typische vraag erbij"><figcaption>Figuur 14-1 — de zes indextypen op de assen "omvang" en "schrijfkosten", met per type de typische vraag erbij</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.1 — vier vragen die B-tree niet aankan</p>
+        <details class="q"><summary><span class="qn">1</span><span>Van de vier vragen — jsonb-inhoud doorzoeken, fuzzy zoeken op naam, overlappende adresperioden, en een datumbereik op mutatie — is er precies één die een B-tree wél zou kunnen, maar tegen hoge kosten. Welke, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het datumbereik op <code>mutatie</code>. Een B-tree op <code>aangemeld_op</code> werkt prima voor die query, maar kost op een tabel van 600 MB ongeveer 50 MB aan indexruimte. De andere drie — jsonb-containment, gelijkenis in tekst, en overlappende bereiken — kan een B-tree principieel niet beantwoorden, ongeacht de kosten. Dat verschil is precies de opening naar BRIN, dat later in dit deel als goedkoper alternatief voor precies dit datumbereik-scenario terugkomt.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">B-tree, verdiept</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Deduplicatie.</strong> Sinds PostgreSQL 13 slaat een B-tree herhaalde sleutelwaarden gecomprimeerd op: één keer de waarde, dan een lijst van rijverwijzingen. Op een kolom met weinig verschillende waarden scheelt dat aanzienlijk in omvang, en het staat standaard aan.</p>
+        <p><strong>INCLUDE, herzien.</strong> Uit deel 8: <code>INCLUDE</code>-kolommen staan in de index maar zijn niet doorzoekbaar, met als doel een index-only scan. Twee dingen die u nu weet: de winst hangt af van de visibility map (deel 12) — een index-only scan met veel <code>Heap Fetches</code> levert niets op, dus <code>INCLUDE</code> toevoegen op een tabel die zelden gevacuümd wordt is verspilling. En <code>INCLUDE</code>-kolommen blokkeren HOT-updates niet zoals sleutelkolommen dat wel doen — zet daarom alleen in <code>INCLUDE</code> wat u nooit als zoek- of sorteersleutel gebruikt.</p>
+        <p><strong>Sorteervolgorde in de index.</strong> Een B-tree is gesorteerd, en de richting doet ertoe zodra u <code>ORDER BY … DESC</code> combineert met <code>LIMIT</code>:</p>
+        <pre><code class="language-sql">CREATE INDEX premienota_recent_idx
+    ON premienota (werkgever_id, periode_jaar DESC, periode_maand DESC);</code></pre>
+        <p>Met de juiste richting kan de database de index van voren aflopen en na tien rijen stoppen; met de verkeerde moet hij alles sorteren. Ook <code>NULLS FIRST</code>/<code>NULLS LAST</code> hoort erbij (deel 3): een index die anders sorteert dan uw <code>ORDER BY</code>, kan de sortering niet vervangen.</p>
+        <div class="callout tip"><span class="lbl">Kolomvolgorde, herzien</span><p>De voorvoegselregel uit deel 8 blijft, met één toevoeging die op productieschaal telt: <strong>zet gelijkheid altijd vóór bereik.</strong> <code>WHERE werkgever_id = 42 AND periode_jaar BETWEEN 2023 AND 2025</code> vraagt om <code>(werkgever_id, periode_jaar)</code>, niet andersom — na een bereikvoorwaarde kan de index niet meer selectief verder zoeken, en alles wat daarna komt is filteren in plaats van zoeken.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.2 — B-tree verfijnen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een index op (werkgever_id, periode_jaar, periode_maand) laat bij ORDER BY periode_jaar DESC, periode_maand DESC nog een Sort-knoop zien. Een tweede index met DESC op beide periodekolommen laat die sortering verdwijnen. Verklaar het verschil.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een B-tree is gesorteerd, en PostgreSQL kan een index vaak ook achterstevoren aflopen om aan een omgekeerde volgorde te voldoen. Maar bij gemengde richtingen (a ASC, b DESC) lukt dat niet: het achterstevoren aflopen keert álle kolommen om, niet een deel ervan. Een index waarvan de opgeslagen richting exact overeenkomt met de gevraagde ORDER BY is dan de enige manier om de sortering helemaal te vermijden.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Partiële en expressie-indexen, verdiept</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 8: een index over een deel van de tabel. Op productieschaal is dit een van de krachtigste middelen.</p>
+        <pre><code class="language-sql">CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;</code></pre>
+        <p>Drie eigenschappen die u nu kunt waarderen: hij is klein (12% van 2,4 miljoen in plaats van alles); hij groeit niet mee met de historie, want verwerkte mutaties verdwijnen eruit — op een tabel die vijf jaar groeit blijft deze index even groot, een structureel voordeel; en hij verlaagt de schrijfkosten, want een <code>INSERT</code> van een mutatie die meteen verwerkt is, raakt deze index helemaal niet.</p>
+        <div class="callout warn"><span class="lbl">De valkuil</span><p>De planner gebruikt een partiële index alleen als hij kan bewijzen dat de query binnen de voorwaarde valt. <code>WHERE verwerkt_op IS NULL</code> in de query matcht met dezelfde voorwaarde in de index. Maar <code>WHERE verwerkt_op &gt; now() - interval '1 day'</code> niet, ook al is er overlap — de planner doet geen logisch redeneerwerk over datumbereiken. De voorwaarde in de index moet exact overeenkomen met wat er in de <code>WHERE</code> van uw query staat.</p></div>
+        <h4>Expressie-indexen, verdiept</h4>
+        <p>Twee dingen die er op productieschaal bij komen. Een expressie-index levert <strong>statistieken</strong> op — het onderbelichte voordeel. Zonder index heeft de planner geen idee hoeveel rijen aan <code>lower(achternaam) = 'jansen'</code> voldoen; met een expressie-index verzamelt <code>ANALYZE</code> statistieken over de uitkomst van die expressie, en dan klopt de schatting — soms lost dat een rij-estimatiefout (deel 13) op zonder dat de index zelf wordt gebruikt.</p>
+        <p>De expressie moet <strong>immutable</strong> zijn: geen <code>now()</code>, geen <code>current_date</code>, geen functie die van de tijdzone afhangt (dezelfde eis als bij gegenereerde kolommen, deel 6). Let op de valkuil: <code>to_char(aangemeld_op, 'YYYY-MM')</code> is <strong>niet</strong> immutable, want <code>timestamptz</code> naar tekst hangt af van de tijdzone-instelling van de sessie. De oplossing is niet de expressie forceren maar de query herschrijven naar een bereik op de kolom zelf.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.3 — partiële index op productieschaal</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een partiële index met WHERE verwerkt_op IS NULL wordt niet gebruikt door een query die filtert op verwerkt_op &gt; now() - interval '1 day'. Is dit een bug, en wat is de les?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Geen bug — correct gedrag. Sterker nog: de twee voorwaarden sluiten elkaar zelfs logisch uit, want de query vraagt juist naar recent verwérkte mutaties, terwijl de index alleen onverwerkte bevat. De planner doet geen inhoudelijk redeneerwerk over wat een voorwaarde impliceert; hij vereist een letterlijke overeenkomst. De les: de voorwaarde in een partiële index moet exact overeenkomen met de voorwaarde in de query, anders wordt de index nooit gebruikt en kost hij alleen onderhoud.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">GIN en pg_trgm: zoeken binnen een waarde</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een B-tree indexeert een waarde als geheel. <strong>GIN</strong> (Generalized Inverted Index) indexeert de onderdelen van een waarde: de sleutels in een <code>jsonb</code>, de elementen van een array, de woorden in een tekst — een omgekeerde index, zoals achter in een boek.</p>
+        <pre><code class="language-sql">CREATE INDEX bericht_inhoud_idx ON koppelvlakbericht USING gin (inhoud);
+
+SELECT * FROM koppelvlakbericht WHERE inhoud @&gt; '{"soort": "adreswijziging"}';
+SELECT * FROM koppelvlakbericht WHERE inhoud ? 'bsn';</code></pre>
+        <p>De ondersteunde operatoren: <code>@&gt;</code> (bevat), <code>?</code> (heeft sleutel), <code>?|</code>, <code>?&amp;</code>. <strong>Let op:</strong> de gewone <code>-&gt;&gt;</code>-toegang gebruikt deze index <strong>niet</strong> — <code>WHERE inhoud -&gt;&gt; 'soort' = 'adreswijziging'</code> valt terug op een sequentiële scan. Wilt u dat wel indexeren, dan is een expressie-index met een B-tree de betere keuze: <code>CREATE INDEX ON koppelvlakbericht ((inhoud -&gt;&gt; 'soort'));</code>. GIN voor "bevat deze structuur", B-tree op een expressie voor "deze specifieke sleutel heeft deze waarde" — en dan is de vervolgvraag vaak of dat veld niet gewoon een kolom hoort te zijn (deel 5).</p>
+        <p>De kleinere variant <code>jsonb_path_ops</code> ondersteunt alleen <code>@&gt;</code>, maar is aanzienlijk kleiner en sneller. De kosten van GIN: schrijven is traag, want één rij invoegen betekent voor elk onderdeel van de waarde een indexbijwerking. PostgreSQL verzacht dat met een <strong>pending list</strong> — nieuwe items komen eerst in een ongeordende lijst — maar bij een grote pending list worden zoekopdrachten onvoorspelbaar traag, en op een tabel die veel wordt geschreven én bevraagd is <code>fastupdate = off</code> vaak de rustigere keuze. GIN-indexen zijn bovendien groot: reken op een aanzienlijk deel van de tabelomvang, soms meer.</p>
+        <h4>pg_trgm: het probleem van LIKE '%…%'</h4>
+        <p>De klantenservice van Meridiaan zoekt op een deel van een achternaam. <code>WHERE achternaam LIKE '%anss%'</code> kan geen B-tree gebruiken — er is geen voorvoegsel om op te zoeken.</p>
+        <pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX deelnemer_naam_trgm ON deelnemer USING gin (achternaam gin_trgm_ops);
+
+SELECT achternaam, similarity(achternaam, 'Jansenn') AS gelijkenis
+FROM deelnemer
+WHERE achternaam % 'Jansenn'
+ORDER BY gelijkenis DESC LIMIT 10;</code></pre>
+        <p>De tekst wordt opgedeeld in trigrammen — groepjes van drie tekens — en de operator <code>%</code> betekent "lijkt op", met een instelbare drempel. Dat tweede voorbeeld is waardevoller dan simpelweg <code>LIKE</code> versnellen: een klantenservicemedewerker die een naam telefonisch opneemt, typt hem verkeerd, en zoeken op gelijkenis vindt de deelnemer alsnog — een functionele verbetering, geen prestatiemaatregel. Kosten: een trigram-index is groot, vaak groter dan de geïndexeerde kolom zelf.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.5 — zoeken op naam met pg_trgm</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat zou u antwoorden op het voorstel om een trigram-index toe te voegen op elke tekstkolom van deelnemer — voorletters, tussenvoegsel, achternaam, woonplaats — "voor het geval dat"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Afraden. Trigram-indexen zijn groot — vaak groter dan de kolom die ze indexeren — dus op vier kolommen zou dat een veelvoud van de tabelomvang aan extra indexruimte kosten, plus schrijfkosten op elke wijziging van een van die velden. Alleen indexeren waar men werkelijk zo zoekt: in de praktijk is dat de achternaam, en misschien de woonplaats. Een index bouwen op basis van "voor het geval dat" in plaats van op basis van pg_stat_statements is precies de fout die sectie 7 waarschuwt te vermijden.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">GiST en BRIN</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>GiST</strong> (Generalized Search Tree) is een raamwerk waarop verschillende indexstructuren worden gebouwd. Bij <strong>bereiken</strong> komt u het tegen via de exclusion constraint uit deel 6: <code>EXCLUDE USING gist (deelnemer_id WITH =, geldigheid WITH &amp;&amp;)</code> bouwt een GiST-index, en zonder GiST is dit onmogelijk — een bereik is niet lineair te ordenen, dus een B-tree kan "overlapt met" niet beantwoorden. Diezelfde index versnelt ook peildatumquery's: een prettig neveneffect, want de constraint die u om correctheidsredenen aanmaakte, betaalt zich uit in prestaties. Voor trigrammen bestaat ook <code>gist_trgm_ops</code>: kleiner en sneller te bouwen, langzamer bij zoeken — voor <code>pg_trgm</code> is GIN meestal de betere keuze.</p>
+        <h4>BRIN: de index van een paar kilobyte</h4>
+        <p><strong>BRIN</strong> (Block Range INdex) slaat per groep van opeenvolgende blokken alleen het minimum en maximum op — standaard 128 pagina's per groep, ongeveer 1 MB tabel per indexregel. Op <code>mutatie</code> met 600 MB betekent dat een index van enkele kilobytes, tegenover 50 MB voor een B-tree op dezelfde kolom.</p>
+        <pre><code class="language-sql">CREATE INDEX mutatie_aangemeld_brin ON mutatie USING brin (aangemeld_op);</code></pre>
+        <p>Bij een query over een datumbereik controleert PostgreSQL per blokgroep of het gevraagde bereik binnen het opgeslagen minimum-maximum kan vallen; groepen die dat uitsluiten worden overgeslagen. <strong>De strikte voorwaarde is hoge correlatie</strong> — de betaling van deel 12. Bij een correlatie dicht bij 1 liggen opeenvolgende waarden fysiek bij elkaar en sluit elke blokgroep een groot deel uit; bij lage correlatie bevat vrijwel elke blokgroep vrijwel het hele waardebereik, en dan sluit de index niets uit.</p>
+        <div class="callout warn"><span class="lbl">De eerlijke afweging</span><p>BRIN is trager dan een B-tree bij het lezen — hij sluit uit, hij wijst niet aan. De winst zit in ruimte en schrijfsnelheid. Op een tabel van 600 MB is een B-tree van 50 MB prima betaalbaar; op een tabel van 600 GB is dat een ander gesprek. Wanneer BRIN de juiste keuze is: zeer grote tabellen die van nature chronologisch groeien, waar u bereikquery's op doet, en waar een B-tree te veel ruimte of schrijfkosten zou kosten — logtabellen, gebeurtenistabellen, tijdreeksen.</p></div>
+        <p>Onderhoud: een BRIN-index wordt niet automatisch bijgewerkt voor nieuwe blokken tot er gevacuümd wordt; gebruik <code>brin_summarize_new_values()</code> of <code>autosummarize = on</code>. En kort door de bocht: <strong>hash-indexen</strong> ondersteunen alleen gelijkheid, zijn sinds PostgreSQL 10 veilig en repliceerbaar, maar een B-tree kan alles wat een hash-index kan tegen vergelijkbare kosten — ken ze voor het examen, gebruik ze zelden.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.6 — BRIN</p>
+        <details class="q"><summary><span class="qn">1</span><span>U maakt een BRIN-index op deelnemer_id in de tabel mutatie. De planner gebruikt hem zelden, en als hij het wel doet, is het resultaat slecht. Waarom, gegeven wat u over correlatie weet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>deelnemer_id</code> heeft een lage correlatie: de mutaties van één deelnemer liggen verspreid over de hele tabel in plaats van bij elkaar. Bij lage correlatie bevat vrijwel elke blokgroep vrijwel het hele waardebereik, dus sluit de BRIN-index niets uit — u leest dan de hele tabel én raadpleegt de index, wat strikt genomen erger is dan geen index. Dit is niet suboptimaal maar waardeloos: BRIN werkt alleen onder de strikte voorwaarde van hoge correlatie, en zonder die voorwaarde moet u B-tree gebruiken of geen index op die kolom.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Een index kiezen en bouwen op productie</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De beslisboom: gelijkheid of bereik op een hele waarde gaat naar B-tree, of naar BRIN bij een zeer grote tabel met hoge correlatie; zoeken bínnen een waarde gaat naar GIN (met <code>jsonb_path_ops</code> voor containment, of een expressie-index voor één specifieke sleutel); <code>LIKE '%…%'</code> of gelijkenis gaat naar GIN met <code>gin_trgm_ops</code>; overlappende bereiken of uitsluiting gaat naar GiST. En "alleen een deel van de rijen" is geen apart type maar een eigenschap — u kunt een partiële GIN-index maken, een partiële BRIN-index, of een partiële B-tree, en combineren waar het kan. Twee vragen vóór u de boom in gaat: wat zegt <code>pg_stat_statements</code> (bouw indexen voor de query's die bovenaan staan, niet voor de query's die u verwacht), en is een index wel het antwoord (sectie 8)?</p>
+        <h4>Indexen bouwen op productie</h4>
+        <pre><code class="language-sql">CREATE INDEX CONCURRENTLY mutatie_open_idx ON mutatie (aangemeld_op)
+    WHERE verwerkt_op IS NULL;</code></pre>
+        <p><code>CONCURRENTLY</code> blokkeert geen schrijvers, maar het duurt langer (de tabel wordt twee keer doorlopen), het kan niet in een transactie (de uitzondering op deel 6), en het kan mislukken — dan blijft er een <strong>ongeldige index</strong> achter: hij bestaat, hij wordt onderhouden bij elke schrijfbewerking, en hij wordt nooit gebruikt, het slechtste van beide werelden.</p>
+        <div class="callout tip"><span class="lbl">Het patroon voor een productiemigratie</span><p>Bouw de index <code>CONCURRENTLY</code> buiten de piek. Controleer <code>indisvalid</code>. Controleer met <code>EXPLAIN</code> dat hij gebruikt wordt. Meet de query opnieuw. En controleer na een week <code>idx_scan</code> — wordt hij werkelijk gebruikt? Die laatste stap slaat vrijwel iedereen over, en het is de enige die vaststelt of de index zijn schrijfkosten waard was.</p></div>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Onderhoud en wat een index niet oplost</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Ongebruikte indexen spoort u op met <code>idx_scan</code> uit <code>pg_stat_user_indexes</code>, met drie voorbehouden: de teller loopt sinds de laatste reset, sommige indexen zijn seizoensgebonden, en een index die een constraint afdwingt is nodig ook zonder zoekgebruik. Op productieschaal komt er een vierde bij: <strong>een index die alleen op een leesreplica wordt gebruikt, telt niet mee in de statistieken van de primaire</strong> (deel 18). Dubbele indexen — een index op <code>(a)</code> naast een index op <code>(a, b)</code> — zijn overbodig volgens de voorvoegselregel uit deel 8. En indexbloat meet u met <code>pgstatindex</code> (deel 12); onder 50% <code>avg_leaf_density</code> is <code>REINDEX INDEX CONCURRENTLY</code> zinvol.</p>
+        <h4>Wat een index niet oplost</h4>
+        <p>De eerlijke tegenkant, en een terugkeer naar de vier oorzaken uit deel 13. <strong>Vergrendeling:</strong> een query die wacht op een lock, rekent niet — een index maakt hem geen milliseconde sneller. <strong>Te veel rijen ophalen:</strong> een query die een miljoen rijen teruggeeft, is traag door het transport, niet door het zoeken. <strong>Te veel aanroepen:</strong> een query van 2 ms die per pagina honderd keer wordt aangeroepen, is een applicatieprobleem — een index verlaagt hem naar 1 ms en het probleem blijft. <strong>Een verkeerd datamodel:</strong> als elke query drie zelfgemaakte joins nodig heeft om een gegeven te vinden dat een kolom had moeten zijn, is het antwoord deel 5, niet dit deel. <strong>Onvoldoende geheugen:</strong> een index die niet in de bufferpool past, wordt elke keer van schijf gelezen — dan is de vraag of <code>shared_buffers</code> klopt (deel 11). En <strong>schrijfbelasting:</strong> indexen maken schrijven trager, en op een tabel die vooral geschreven wordt, kan een extra index de totale doorvoer verslechteren, ook al is die ene query sneller.</p>
+        <div class="callout note"><span class="lbl">De vraag vóór u een index bouwt</span><p>Welke van de vier oorzaken uit deel 13 is dit? Alleen bij "ontbrekende index" is een index het antwoord.</p></div>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: de zes indextypen en hun toepassingsgebied; B-tree-deduplicatie, <code>INCLUDE</code>, sorteervolgorde, voorvoegselregel; partiële en expressie-indexen inclusief de immutable-eis; GIN met <code>jsonb</code>-operatoren, <code>jsonb_path_ops</code> en <code>fastupdate</code>; <code>pg_trgm</code>; GiST en de relatie met exclusion constraints; BRIN met de correlatievoorwaarde en <code>pages_per_range</code>; <code>CREATE INDEX CONCURRENTLY</code> en ongeldige indexen; en het opsporen van ongebruikte en dubbele indexen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 14, Opdracht 14.8 — wat een index niet oplost</p>
+        <details class="q"><summary><span class="qn">1</span><span>"Sinds we drie indexen hebben toegevoegd, is de nachtelijke import twee keer zo traag." Is een index hier het probleem of de oplossing, en wat onderzoekt u eerst?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Hier is een index niet de oplossing maar de oorzaak: elke <code>INSERT</code> tijdens de import moet nu ook de drie nieuwe structuren bijwerken, wat schrijfsnelheid kost. Eerst onderzoeken: staan alle drie de indexen daadwerkelijk <code>idx_scan &gt; 0</code>, worden ze dus werkelijk gebruikt? Zo niet, zijn ze pure kosten zonder baat. Een gangbare maatregel bij een bulkimport is de indexen vóór de import te droppen en ná de import opnieuw te bouwen — sneller dan bijhouden tijdens elke rij.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 15</h3>
+      <p>U heeft nu een database die snel is. Deel 15 kijkt wat er gebeurt als honderdvijftig sessies tegelijk hetzelfde willen — en dan blijkt snelheid niet het probleem: concurrency en locking, in twee dagdelen.</p>
+      <a class="btn" href="deel-15.html">Deel 15 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 14 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-14-geavanceerde-indexering/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm14_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

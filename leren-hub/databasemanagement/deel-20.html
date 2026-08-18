@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 20 — Monitoring, logging en pgaudit | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 20 (EDB Professional): de losse monitoringsignalen uit niveau 2 samengebracht tot drie lagen — ad-hoc bevragen, historisch vastleggen en continue alarmering — met logging, auto_explain en pgaudit als antwoord op de herleidbaarheidseis uit deel 9.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-20.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 20</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 20 van 30</p>
+  <h1>Monitoring, logging<br>en <em>pgaudit</em>.</h1>
+  <p class="hero__lead">Negen dagdelen lang riep dit niveau telkens: "dit zou je moeten monitoren." Dit deel brengt die losse signalen — bloatpercentage, replicatievertraging, lockwachtrijen, checkpointfrequentie — samen tot één systeem van drie lagen: ad-hoc bevragen, historisch vastleggen en continue alarmering. Daarnaast lost het een belofte in uit deel 9: Sanne, de privacyfunctionaris, vroeg toen wie het BSN had ingezien. Met <strong>pgaudit</strong> is dat nu een vraag die wél betrouwbaar te beantwoorden is.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±1 dagdeel</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>13</b><span>alarmdrempels</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering en uitdrukkelijk geen vervanging van het officiële EDB-examenmateriaal — studeer voor het examen altijd óók de officiële bron. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → <b>20 Monitoring, logging en pgaudit (hier)</b> → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De lijst die je hebt opgebouwd: drie lagen van monitoring</a></li>
+      <li><a href="#s3" data-target="s3">Wat er nu gebeurt: pg_stat_activity en pg_stat_statements</a></li>
+      <li><a href="#s4" data-target="s4">De staat van je objecten, bgwriter en vergeten weergaven</a></li>
+      <li><a href="#s5" data-target="s5">Logging: diagnostisch vermogen versus privacyrisico</a></li>
+      <li><a href="#s6" data-target="s6">pgaudit: de belofte uit deel 9 ingelost</a></li>
+      <li><a href="#s7" data-target="s7">Extern gereedschap en alarmdrempels</a></li>
+      <li><a href="#s8" data-target="s8">Van dashboard tot incident: wat monitoring wel en niet oplost</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit deel is zelfstandig leesbaar: het consolideert monitoringsignalen uit de hele cursus tot één samenhangend systeem. Ben je een dagdeel misgelopen, dan kun je dit deel toch volgen — elke verwijzing naar eerdere stof staat er met genoeg context bij.</p>
+        <p>Aan het eind van dit deel kun je:</p>
+        <ul>
+          <li>de systeemweergaven van PostgreSQL doelgericht raadplegen voor een specifieke vraag;</li>
+          <li>onderscheid maken tussen wat je nu bekijkt, wat je structureel bijhoudt, en wat je extern verzamelt;</li>
+          <li>een logconfiguratie opzetten die bruikbaar is zonder een privacyrisico te worden;</li>
+          <li><code>auto_explain</code> inzetten als permanente monitoringlaag in plaats van eenmalig hulpmiddel;</li>
+          <li><code>pgaudit</code> inrichten voor de herleidbaarheidseis uit deel 9;</li>
+          <li>Prometheus en Grafana positioneren ten opzichte van de ingebouwde weergaven;</li>
+          <li>concrete alarmdrempels vaststellen voor de belangrijkste risico's uit dit niveau;</li>
+          <li>een eerste-vijf-minuten-protocol volgen bij een onbekend incident.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De lijst die je hebt opgebouwd: drie lagen van monitoring</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Negen dagdelen niveau 2 lang is er telkens een signaal genoemd dat je "zou moeten monitoren". Hier is de volledige lijst, ter herinnering:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Deel</th><th>Signaal</th><th>Waarom het ertoe doet</th></tr></thead>
+          <tbody>
+            <tr><td>11</td><td>Cachetrefkans, checkpointfrequentie, verbindingsdruk</td><td>Basisgezondheid van de configuratie</td></tr>
+            <tr><td>12</td><td>Bloatpercentage, <code>age(relfrozenxid)</code></td><td>Het enige catastrofale falen in dit niveau</td></tr>
+            <tr><td>13</td><td><code>pg_stat_statements</code>-rangorde, <code>stddev_exec_time</code></td><td>Wat werkelijk de server belast</td></tr>
+            <tr><td>14</td><td><code>idx_scan = 0</code>, indexbloat</td><td>Kosten zonder baten</td></tr>
+            <tr><td>15</td><td>Wachtende sessies, deadlocks, <code>idle in transaction</code></td><td>Vergrendeling die niet als traagheid oogt</td></tr>
+            <tr><td>16</td><td>Default-partitie-omvang</td><td>Stil gegroeide vangnetten</td></tr>
+            <tr><td>17</td><td>Archiveringsfouten, restore-testresultaten</td><td>Een back-up die niet werkt</td></tr>
+            <tr><td>18</td><td>Replicatievertraging, inactieve slots</td><td>Een RPO-schending in wording</td></tr>
+            <tr><td>19</td><td>Clusterstatus, failoverfrequentie</td><td>Of de bescherming nog intact is</td></tr>
+          </tbody>
+        </table></div>
+        <p>Dit deel doet twee dingen met die lijst: het brengt de losse queries samen tot een samenhangend systeem, en het voegt twee onderwerpen toe die nog niet aan bod kwamen — gestructureerde logging en <code>pgaudit</code>, de auditinguitbreiding die in deel 9 werd beloofd voor "niveau 2, deel 20".</p>
+        <h3>Drie lagen</h3>
+        <p><strong>Laag 1 — Ad-hoc bevragen.</strong> Een <code>SELECT</code> op een systeemweergave, getypt op het moment dat je een vraag hebt. Dit is wat je de hele cursus hebt gedaan. Onmisbaar voor diagnose, ongeschikt als enige verdediging — je moet weten dát er een probleem is vóór je de query typt.</p>
+        <p><strong>Laag 2 — Historisch vastleggen.</strong> <code>pg_stat_statements</code> en de log houden dingen bij die je later kunt raadplegen, ook over gebeurtenissen die je niet live hebt gezien. Beter, maar nog steeds passief: iemand moet er actief naar kijken.</p>
+        <p><strong>Laag 3 — Continue verzameling met alarmering.</strong> Een extern systeem (Prometheus) dat periodiek alle relevante weergaven uitleest, historie bijhoudt, en automatisch waarschuwt zodra een drempel wordt overschreden. Dit is waar "iemand ziet het vóórdat een gebruiker het meldt" werkelijkheid wordt.</p>
+        <p>De rest van dit deel bouwt deze drie lagen op, in die volgorde.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Wat er nu gebeurt: pg_stat_activity en pg_stat_statements</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De weergave die je al uit deel 7, 12 en 15 kent, nu als volledig overzicht:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vraag</th><th>Kolom</th></tr></thead>
+          <tbody>
+            <tr><td>Wacht iemand op een lock?</td><td><code>wait_event_type = 'Lock'</code></td></tr>
+            <tr><td>Staat er een sessie in <code>idle in transaction</code>?</td><td><code>state = 'idle in transaction'</code></td></tr>
+            <tr><td>Draait er een verdacht lang lopende query?</td><td><code>queryduur</code></td></tr>
+            <tr><td>Hoeveel verbindingen zijn er werkelijk actief?</td><td><code>count(*) GROUP BY state</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Dit is je <strong>laag 1</strong>: het eerste dat je opent bij een melding, precies zoals in deel 15 bij de lockwachtrij.</p>
+        <h3>pg_stat_statements als permanente bron</h3>
+        <p>Uit deel 13, nu als permanente monitoringbron in plaats van eenmalig diagnosemiddel. Het verschil met deel 13: daar gebruikte je dit om één keer een probleem te vinden. Als monitoringbron bekijk je de <strong>trend</strong> — is de rangorde deze week anders dan vorige week? Is er een query die plotseling in de top 10 is verschenen?</p>
+        <div class="callout note"><span class="lbl">Reset-discipline</span><p><code>pg_stat_statements_reset()</code> wist de geschiedenis. Doe dit bewust en gedocumenteerd (bijvoorbeeld na een grote release), niet per ongeluk — anders verlies je precies de trendinformatie die de reden was om dit bij te houden. Een dagelijkse snapshot, of opname in Prometheus (paragraaf 7), maakt het mogelijk om te zien wanneer een query begon te verslechteren, in plaats van alleen dat hij nu slecht is.</p></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De staat van je objecten, bgwriter en vergeten weergaven</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 8, 12 en 14, samengebracht: <code>pg_stat_user_tables</code> (bloat, autovacuum-tijdstippen, HOT-updates) en <code>pg_stat_user_indexes</code> (ongebruikte indexen). <strong>Herinnering uit deel 18:</strong> deze weergaven zijn per server. Op een omgeving met replica's moet je ze op elke node apart raadplegen, anders concludeer je ten onrechte dat een index overbodig is.</p>
+        <h3>pg_stat_bgwriter en checkpointing</h3>
+        <p>Uit deel 11, nu met de volledige interpretatie. <strong><code>pct_afgedwongen</code></strong> is het getal dat ertoe doet: checkpoints die "op tijd" gebeuren (<code>checkpoints_timed</code>) zijn gepland en voorspelbaar; checkpoints die worden afgedwongen omdat <code>max_wal_size</code> is bereikt (<code>checkpoints_req</code>) betekenen dat je schrijfbelasting de geplande cyclus inhaalt.</p>
+        <p><em>(Let op: deze weergave is in recente PostgreSQL-versies deels herschikt naar <code>pg_stat_checkpointer</code>; controleer de exacte naam voor je versie.)</em></p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.2 — pg_stat_bgwriter interpreteren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat zou je concluderen als <code>buffers_backend</code> structureel hoog is ten opzichte van <code>buffers_checkpoint</code> en <code>buffers_clean</code>?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een hoog <code>buffers_backend</code> betekent dat gewone sessies zelf vuile pagina's naar schijf moeten schrijven omdat de achtergrondprocessen (checkpointer, background writer) het tempo niet bijhouden — dat kost die sessies onnodig extra I/O-latency, wat zich vertaalt in tragere query's zonder dat er iets mis is met de query zelf.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Welke configuratiewijziging uit deel 11 zou je overwegen als <code>checkpoints_req</code> domineert?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>max_wal_size</code> verhogen, zodat checkpoints minder snel worden afgedwongen en meer op het geplande <code>checkpoint_timeout</code>-ritme gebeuren.</div></details>
+      </div>
+      <div class="prose">
+        <h3>pg_stat_replication en drie vergeten weergaven</h3>
+        <p>Uit deel 18 en 19, nu structureel bijgehouden in plaats van tijdens een experiment bekeken: <code>pg_stat_replication</code> (op de primary) en <code>pg_stat_wal_receiver</code> (op een replica). Wat je hier structureel bijhoudt is de <strong>trend</strong> van <code>replay_lag</code> — een geleidelijk oplopende lag over dagen is een ander signaal dan een kortstondige piek tijdens een batchrun, en alleen historische opname onderscheidt de twee.</p>
+        <p>Drie weergaven die niet eerder in de cursus centraal stonden maar in een volwassen monitoringopzet thuishoren: <strong><code>pg_stat_database</code></strong> (databasebreed, met <code>temp_files</code>/<code>temp_bytes</code> als signaal voor een te lage <code>work_mem</code>), <strong><code>pg_stat_progress_vacuum</code></strong> en <code>pg_stat_progress_create_index</code> (voortgang van lopende, langdurige operaties — nuttig tijdens de migraties uit deel 16 en de indexbouw uit deel 14), en <strong><code>pg_replication_slots</code></strong> — met de waarschuwing herhaald: een inactief slot met groeiende ophoping hoort een alarm te zijn, niet iets dat je toevallig een keer opmerkt.</p>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Logging: diagnostisch vermogen versus privacyrisico</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 11, nu volledig uitgewerkt: <code>log_min_duration_statement</code> (query's boven een drempel), <code>log_checkpoints</code>, <code>log_lock_waits</code>, <code>log_autovacuum_min_duration</code>, <code>log_connections</code>/<code>log_disconnections</code>.</p>
+        <div class="callout warn"><span class="lbl">De spanning, expliciet</span><p>Meer logging betekent meer diagnostisch vermogen, maar ook meer kans dat er persoonsgegevens in terechtkomen. <code>log_min_duration_statement</code> logt de <strong>query tekst</strong>, inclusief letterlijke waarden in <code>WHERE</code>-clausules — een BSN in een <code>WHERE bsn = '123456789'</code> staat dan gewoon in de log.</p></div>
+        <p>Het antwoord is niet "log minder" maar "behandel de log als wat hij is": een bestand met mogelijk persoonsgegevens, met dezelfde toegangsbeperkingen als de database zelf (deel 9). Wie leesrechten op de serverlog heeft, moet even zorgvuldig gekozen worden als wie leesrechten op <code>deelnemer</code> heeft.</p>
+        <p><strong>Gestructureerd loggen</strong> (<code>log_destination = 'csvlog'</code>) maakt latere analyse werkbaar: CSV-logs zijn direct in te lezen als tabel (<code>COPY</code> of een foreign data wrapper) in plaats van met tekstverwerking te moeten worden ontleed.</p>
+        <h3>auto_explain in productie</h3>
+        <p>Uit deel 13, nu als permanente voorziening in plaats van eenmalig hulpmiddel. De reden dat het hier terugkeert: <code>pg_stat_statements</code> vertelt je <strong>welke</strong> query structureel traag is; <code>auto_explain</code> legt <strong>het plan van een specifieke, werkelijk opgetreden trage uitvoering</strong> vast. Samen vormen ze het paar dat je nodig hebt om een incident achteraf te reconstrueren zonder het te hoeven reproduceren. <code>auto_explain.sample_rate = 0.1</code> blijft essentieel — zonder steekproef meet je elke query, met meetbare overhead op de snelle meerderheid.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">pgaudit: de belofte uit deel 9 ingelost</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 9 kwam de vraag van Sanne, de privacyfunctionaris: "kunnen jullie aantonen wie het BSN heeft ingezien?" Het eerlijke antwoord toen was: niet met standaardlogging. Hier is het gereedschap dat het wél kan: <code>pgaudit</code>, met <code>pgaudit.log = 'read, write, role'</code> en <code>pgaudit.log_relation = on</code>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Gewone logging</th><th>pgaudit</th></tr></thead>
+          <tbody>
+            <tr><td>Logt trage query's, of alles (kostbaar)</td><td>Logt <strong>categorieën van handelingen</strong>, ongeacht snelheid</td></tr>
+            <tr><td>Eén regel per query, moeilijk te filteren op object</td><td><strong>Eén regel per geraakt object</strong> (<code>pgaudit.log_relation</code>)</td></tr>
+            <tr><td>Geen onderscheid DDL/DML/rechten</td><td>Aparte categorieën: <code>read</code>, <code>write</code>, <code>ddl</code>, <code>role</code>, <code>misc</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Voor Sannes vraag specifiek, gecombineerd met rolgebonden instellingen — alleen aanzetten voor de rol die toegang heeft tot <code>deelnemer</code>, niet voor het hele cluster:</p>
+        <pre><code>ALTER ROLE klantenservice SET pgaudit.log = 'read, write';</code></pre>
+        <p>Nu staat er voor elke keer dat de rol <code>klantenservice</code> een rij uit <code>deelnemer</code> leest, een regel in de log: wie, wanneer, welke tabel. Dit is precies wat er in deel 9 ontbrak.</p>
+        <div class="callout note"><span class="lbl">De prijs, eerlijk benoemd</span><p>Logvolume. <code>pgaudit.log = 'read'</code> op een druk bevraagde tabel genereert veel regels — dit is waarom de rolgebonden aanpak (alleen loggen voor rollen die het aangaat) de praktische keuze is boven een cluster-brede instelling.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.5 — pgaudit voor Sanne</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat gebeurt er met het logvolume als je <code>pgaudit.log = 'read'</code> cluster-breed zou zetten in plaats van rolgebonden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Cluster-breed zou elke leesquery van elke rol op elke tabel loggen — bij een portaal met duizenden query's per uur (deel 13, 19) zou dat een veelvoud van het huidige logvolume betekenen, met het merendeel oninteressant voor de herleidbaarheidsvraag. De rolgebonden aanpak beperkt het tot precies de rollen die bij gevoelige gegevens kunnen komen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Schrijf het antwoord dat je nu, mét pgaudit, aan Sanne zou geven — vergelijk met het antwoord dat in deel 9 werd gegeven ("dat kan nu niet betrouwbaar").</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Modelantwoord: "In deel 9 konden we niet betrouwbaar aantonen wie het BSN had ingezien — standaardlogging legt dat niet gestructureerd vast. Met pgaudit, rolgebonden ingesteld op de rollen die toegang hebben tot deelnemergegevens, kunnen we nu voor elke leesactie op die tabel vastleggen wie, wanneer, en via welke rol. Dat dekt de herleidbaarheidseis uit de AVG voor deze specifieke vraag."</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Extern gereedschap en alarmdrempels</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Alles tot hier is laag 1 en 2 — bevragen en historisch vastleggen binnen PostgreSQL zelf. <strong>Laag 3</strong> vraagt een systeem dat er los van staat: <code>postgres_exporter</code> leest de <code>pg_stat_*</code>-weergaven periodiek uit, <strong>Prometheus</strong> slaat de historie op (tijdreeksen) en evalueert continu of een waarde een ingestelde drempel overschrijdt, en <strong>Grafana</strong> visualiseert — de dashboards die Ruud 's ochtends bekijkt, en waarop tijdens een incident wordt ingezoomd.</p>
+        <p>Waarom dit meer is dan "mooie grafieken": het verschil tussen "we hebben ooit met een query gezien dat de bloat 40% was" en "we zien in een grafiek precies wanneer de bloat van 10% naar 40% liep, en dat het samenviel met het uitschakelen van autovacuum op die tabel" is het verschil tussen een diagnose en een vermoeden.</p>
+        <h3>Drempels die ertoe doen</h3>
+        <p>Niet alles hoeft een alarm te zijn — te veel alarmen leidt tot het negeren van alle alarmen. Onderstaande tabel is de samenvatting van wat in dit niveau al eerder als "monitor dit" is genoemd, nu als concrete drempel.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Signaal</th><th>Drempel</th><th>Bron</th></tr></thead>
+          <tbody>
+            <tr><td><code>age(relfrozenxid)</code></td><td>&gt; 50% van <code>autovacuum_freeze_max_age</code></td><td>Deel 12 — het enige catastrofale falen</td></tr>
+            <tr><td>Bloatpercentage</td><td>&gt; 40%, of een snelle stijging</td><td>Deel 12</td></tr>
+            <tr><td>Sessies wachtend op een lock</td><td>&gt; 5, of langer dan 30s</td><td>Deel 15</td></tr>
+            <tr><td>Langste transactieduur</td><td>&gt; 5 minuten</td><td>Deel 7, 12, 15</td></tr>
+            <tr><td><code>idle in transaction</code></td><td>&gt; 2, of langer dan 1 minuut</td><td>Deel 7, 12</td></tr>
+            <tr><td>Deadlocks per dag</td><td>&gt; 5</td><td>Deel 15</td></tr>
+            <tr><td><code>replay_lag</code></td><td>&gt; 2 minuten (of een fractie van je RPO)</td><td>Deel 18</td></tr>
+            <tr><td>Inactief replicatieslot</td><td>&gt; 1 uur</td><td>Deel 18</td></tr>
+            <tr><td>Default-partitie omvang</td><td>&gt; 0, aanhoudend</td><td>Deel 16</td></tr>
+            <tr><td>Archiveringsfout</td><td>Elke fout, direct</td><td>Deel 17</td></tr>
+            <tr><td>Cachetrefkans</td><td>&lt; 99% structureel</td><td>Deel 11</td></tr>
+            <tr><td><code>stddev_exec_time</code> op een topquery</td><td>&gt; 3× het gemiddelde</td><td>Deel 13</td></tr>
+            <tr><td>Patroni-clusterstatus</td><td>Geen leider, of onverwachte rolwisseling</td><td>Deel 19</td></tr>
+          </tbody>
+        </table></div>
+        <p>Het principe achter deze tabel: elke rij is een les die je in dit niveau hebt geleerd, teruggebracht tot één meetbaar getal. Dat is precies het doel van monitoring — niet nieuwe kennis, maar het operationaliseren van kennis die je al hebt.</p>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Van dashboard tot incident: wat monitoring wel en niet oplost</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Een dashboard bouwen</h3>
+        <p>Drie niveaus, van grof naar fijn. <strong>Niveau 1 — Is alles in orde?</strong> Eén scherm, groen/oranje/rood per categorie: gezondheid, prestatie, beschikbaarheid, capaciteit. <strong>Niveau 2 — Waar zit het probleem?</strong> Per categorie een detailscherm. <strong>Niveau 3 — Wat is de oorzaak?</strong> Hier val je terug op laag 1: een live <code>EXPLAIN ANALYZE</code>, <code>pg_blocking_pids()</code>, de serverlog. Een dashboard vervangt dit niet — het vertelt je wélke vraag je moet stellen.</p>
+        <h3>De eerste vijf minuten van een incident</h3>
+        <ol>
+          <li><strong>Wat meldt de gebruiker?</strong> ("Traag" kan alles betekenen, deel 13.)</li>
+          <li><strong><code>pg_stat_activity</code></strong> — is het CPU/I/O-druk (echt traag) of <code>wait_event_type = 'Lock'</code> (vergrendeld)?</li>
+          <li><strong>Bij vergrendeling:</strong> <code>pg_blocking_pids()</code>, zoek de wortel (deel 15).</li>
+          <li><strong>Bij trage query's:</strong> <code>pg_stat_statements</code> gesorteerd op <code>total_exec_time</code> sinds de laatste reset — is de rangorde veranderd?</li>
+          <li><strong>Bij een structurele verandering:</strong> <code>age(relfrozenxid)</code>, bloatpercentages, replicatievertraging.</li>
+          <li><strong>Bij twijfel over de infrastructuur:</strong> Patroni-clusterstatus, of er recent een failover was.</li>
+        </ol>
+        <p>Dit protocol is niets nieuws — het is een samenvatting van deel 7, 8, 12, 13, 15, 18 en 19, geordend als checklist. Dat is precies het punt van dit deel: je hebt de kennis al; monitoring is die kennis toegankelijk maken vóór en tijdens het moment dat je hem nodig hebt.</p>
+        <h3>Wat monitoring niet oplost</h3>
+        <div class="callout warn"><span class="lbl">De vertrouwde tegenhanger</span><p>Monitoring lost geen enkel onderliggend probleem op — het vertelt je dat er iets is om op te ruimen. Het vervangt geen back-up, geen replicatie, geen HA. Het genereert vals vertrouwen als het ongebruikt blijft, of als er zo veel alarmen zijn dat ze worden genegeerd. En het is geen vervanging voor het testen uit deel 17 en 19: een dashboard dat "alles groen" toont, bewijst niet dat een herstel of een failover werkt — alleen dat er op dit moment geen bekend probleem is.</p></div>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: alle behandelde <code>pg_stat_*</code>-weergaven en wat elk laat zien, logginginstellingen en de afweging tussen diagnostisch vermogen en privacyrisico, <code>auto_explain</code> als permanente voorziening, <code>pgaudit</code>-categorieën en rolgebonden instelling, de architectuur van een extern monitoringsysteem, en het onderscheid tussen ad-hoc bevragen, historisch vastleggen en continue alarmering.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 21</h3>
+      <p>Je kunt nu zien wat er gebeurt. Deel 21 gaat over security-verdieping — row level security-patronen, encryptie in de praktijk — en de laatste voorbereiding op het examen: volgende keer maak je waar wie er precies bij mag, tot in het laatste detail.</p>
+      <a class="btn" href="deel-21.html">Deel 21 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 20 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-20-monitoring-logging-en-pgaudit/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm20_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

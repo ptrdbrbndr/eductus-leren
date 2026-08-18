@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 11 — Installatie, configuratie en tablespaces | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 11 (EDB Professional): het eerste deel van niveau 2 — een PostgreSQL-cluster initialiseren, het configuratiesysteem, de vier geheugensparameters, checkpoints, autovacuum en tablespaces, aan de hand van Meridiaans opschaling naar productie.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-11.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 11</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 11 van 30</p>
+  <h1>Installatie, configuratie<br><em>en tablespaces</em>.</h1>
+  <p class="hero__lead">De datalaag uit niveau 1 is goedgekeurd. Fase 2 van Programma Open Pensioen zet de volledige administratie over: 340.000 deelnemers, een portaal met 3.000 gelijktijdige bezoekers in de piek, en één fysieke server met 32 GB geheugen. Ruud, het beheerhoofd, heeft één vraag: welke instellingen zet u waarop, en waarom? Dit deel geeft het antwoord — en het antwoord op zijn tweede vraag, hoe u weet dat het geholpen heeft.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>32GB</b><span>Meridiaan-productieserver</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: <b>11 Installatie, configuratie en tablespaces (hier)</b> → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: Open Pensioen fase 2</a></li>
+      <li><a href="#s3" data-target="s3">Initialiseren: initdb, locale en encoding</a></li>
+      <li><a href="#s4" data-target="s4">Het configuratiesysteem</a></li>
+      <li><a href="#s5" data-target="s5">Geheugen: de vier parameters die ertoe doen</a></li>
+      <li><a href="#s6" data-target="s6">Checkpoints, WAL en autovacuum</a></li>
+      <li><a href="#s7" data-target="s7">Verbindingen, de planner en tablespaces</a></li>
+      <li><a href="#s8" data-target="s8">Configuratie als code en meten of het werkt</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Welkom in niveau 2. In niveau 1 heeft u een datalaag ontworpen en gebouwd op uw eigen machine, met 8.000 deelnemers. Niveau 2 gaat over wat er gebeurt als die datalaag naar productie moet: 340.000 deelnemers, 2,4 miljoen mutaties, een portaal dat 24 uur per dag beschikbaar moet zijn, en een beheerteam van vier mensen dat er 's nachts niet wakker van mag liggen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Niveau 1</th><th>Niveau 2</th></tr></thead>
+          <tbody>
+            <tr><td>Werkt het?</td><td>Werkt het onder belasting, over jaren?</td></tr>
+            <tr><td>Op mijn machine</td><td>Op een server die ik deel</td></tr>
+            <tr><td>Als het misgaat: opnieuw laden</td><td>Als het misgaat: herstellen, en aantonen wat er weg is</td></tr>
+            <tr><td>Ik ben de enige gebruiker</td><td>Er zijn honderd sessies tegelijk</td></tr>
+            <tr><td>Standaardinstellingen</td><td>Instellingen die ik kan verantwoorden</td></tr>
+          </tbody>
+        </table></div>
+        <p>Dat laatste is de kern van dit deel. PostgreSQL start met instellingen die op elke machine moeten kunnen starten — dus met bescheiden waarden. Ze zijn niet fout; ze zijn conservatief. Uw werk is ze afstemmen op deze machine en deze werklast, en die afstemming kunnen uitleggen.</p>
+        <p>Aan het eind van dit deel kunt u: een cluster initialiseren met de juiste locale, encoding en collatie; het configuratiesysteem toepassen op meerdere niveaus; de vier geheugensparameters onderbouwd instellen; checkpoints en autovacuum afstemmen op een schrijfintensieve werklast; en beargumenteren wanneer tablespaces wel en niet nodig zijn.</p>
+        <div class="callout warn"><span class="lbl">Waarschuwing die het hele niveau kleurt</span><p>Internetadvies over PostgreSQL-instellingen is vaak verouderd, geschreven voor draaiende schijven, of overgenomen van een systeem met een andere werklast. Elke waarde die u overneemt zonder te weten waaróm, is een gok. Meten blijft de norm uit deel 8.</p></div>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: Open Pensioen fase 2</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De datalaag uit niveau 1 is goedgekeurd. Fase 2 is begonnen en de uitgangssituatie is veranderd: de volledige administratie is overgezet (340.000 deelnemers, 4.100 werkgevers, 2,4 miljoen mutaties over vier jaar), het deelnemersportaal gaat live met naar verwachting 3.000 gelijktijdige bezoekers in de piek elke dinsdagavond na de UPO-verzending, de verwerking van mutaties draait continu in vier parallelle processen, en de rapportage draait tijdens kantooruren over dezelfde database. Er is één fysieke server met 32 GB geheugen, 8 cores en SSD-opslag; voor acceptatie is er een kleinere machine.</p>
+        <p>Ruud, het beheerhoofd uit deel 10, heeft dit gekregen en één vraag: <em>"welke instellingen zet ik waarop, en waarom?"</em> Dat is uw werk vandaag. En zijn tweede vraag — <em>"hoe weet ik dat het geholpen heeft?"</em> — is minstens zo belangrijk (sectie 8).</p>
+        <h4>Vier dingen die op een server anders zijn dan op uw laptop</h4>
+        <p><strong>Er zijn andere gebruikers.</strong> Instellingen die u verandert, raken iedereen: een <code>work_mem</code> die uw rapportagequery sneller maakt, kan het portaal onderuithalen. <strong>De machine doet meer dan PostgreSQL, of juist niet</strong> — en dat verschil bepaalt hoeveel geheugen u mag claimen. <strong>Herstarten is duur</strong>: op uw laptop is het drie seconden, op productie is het een gepland moment met aankondiging. En <strong>wijzigingen moeten reproduceerbaar zijn</strong>: wat u met de hand in een bestand typt, is over een jaar niet meer te herleiden (sectie 8).</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Initialiseren: initdb, locale en encoding</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een cluster ontstaat met <code>initdb</code>, dat het datadirectory aanmaakt. De meeste installatiepakketten doen dit voor u, en dat is precies waarom de keuzes die daarbij gemaakt worden vaak niemands bewuste beslissing zijn.</p>
+        <pre><code class="language-bash">initdb -D /var/lib/postgresql/data \
+       --encoding=UTF8 \
+       --locale=nl_NL.UTF-8 \
+       --data-checksums</code></pre>
+        <p>Drie keuzes die u later niet meer kunt wijzigen zonder de database opnieuw op te bouwen. <strong>Encoding:</strong> neem <code>UTF8</code> — er is geen goede reden voor iets anders, en een verkeerde keuze ontdekt u pas bij de eerste naam met een accent. <strong>Locale en collatie:</strong> bepaalt de sorteervolgorde van tekst; <code>nl_NL.UTF-8</code> sorteert zoals een Nederlandse lezer verwacht, <code>C</code> sorteert op bytewaarde en is aanzienlijk sneller. Voor Meridiaan, waar sorteervolgorde in brievenruns zichtbaar is, is de Nederlandse collatie het waard.</p>
+        <div class="callout note"><span class="lbl">Let op bij collaties</span><p>Een wijziging in de onderliggende systeembibliotheek kan de sorteervolgorde veranderen, en dan kloppen bestaande indexen op tekstkolommen niet meer — een echt probleem bij OS-upgrades. Wie dat wil vermijden, kan <code>ICU</code> als collatieprovider gebruiken, wat versievastheid geeft. Overweeg dit bij het opzetten, niet achteraf.</p></div>
+        <p><strong>Data checksums:</strong> met <code>--data-checksums</code> controleert PostgreSQL bij elke leesbewerking of een pagina beschadigd is. Kosten: enkele procenten prestatie. Baten: u ontdekt stille schijfcorruptie voordat hij in uw back-ups zit. Zet dit aan — voor een pensioenuitvoerder is dat geen afweging.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.1 — je server leren kennen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U controleert op de Meridiaan-server met <code>SHOW data_checksums;</code> of checksums aanstaan, en het antwoord is nee — bij de meeste standaardinstallaties staat dit uit, want <code>initdb</code> schakelt het niet vanzelf in. Wat betekent dit voor uw configuratievoorstel, en hoe lastig is het om alsnog te herstellen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het is een bevinding die in het configuratievoorstel thuishoort: voor een pensioenuitvoerder is stille schijfcorruptie geen aanvaardbaar risico. Achteraf inschakelen kan niet met een simpele parameterwijziging — het vereist <code>pg_checksums</code> op een <strong>gestopt</strong> cluster, dus een onderhoudsvenster. Dat is precies waarom <code>--data-checksums</code> bij <code>initdb</code> hoort te staan: wat u bij het initialiseren vergeet, kost later een geplande stilstand om te repareren.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Het configuratiesysteem</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Instellingen komen uit meerdere bronnen, en de laatste wint: de ingebouwde standaardwaarde, <code>postgresql.conf</code>, <code>postgresql.auto.conf</code> (geschreven door <code>ALTER SYSTEM</code>), opstartparameters, en dan per database, per rol, per sessie en per transactie — elk specifieker dan het vorige.</p>
+        <pre><code class="language-sql">ALTER SYSTEM SET work_mem = '32MB';
+SELECT pg_reload_conf();</code></pre>
+        <p><code>ALTER SYSTEM</code> is prettig omdat het vanuit SQL kan, lastig omdat het buiten uw configuratiebeheer om gaat: iemand kan een waarde zetten die niet in uw versiebeheerde <code>postgresql.conf</code> staat, en dan wijkt productie af van wat het configuratiebestand zegt. Terugdraaien gaat met <code>ALTER SYSTEM RESET work_mem;</code>.</p>
+        <p><strong>Per rol en per database</strong> is het gereedschap dat het vaakst over het hoofd wordt gezien, en bij Meridiaan precies de oplossing voor het <code>work_mem</code>-dilemma:</p>
+        <pre><code class="language-sql">ALTER ROLE rapportage SET work_mem = '256MB';
+ALTER ROLE portaal_app SET work_mem = '8MB';</code></pre>
+        <p>De rapportagequery's krijgen ruimte om te sorteren zonder dat drieduizend portaalsessies elk 256 MB kunnen claimen. Dit is de belangrijkste instellingstruc van dit deel. Nakijken waar een waarde vandaan komt: <code>SELECT name, setting, unit, source, sourcefile, sourceline FROM pg_settings WHERE name = 'work_mem';</code> — de kolom <code>source</code> is de eerste query bij "waarom staat die waarde zo?".</p>
+        <h4>Welke wijzigingen vereisen wat</h4>
+        <p>De kolom <code>context</code> in <code>pg_settings</code> geeft het antwoord: <code>internal</code> is vaststaand (alleen met een nieuwe <code>initdb</code>), <code>postmaster</code> vereist een herstart, <code>sighup</code> is genoeg met een herlaadactie, <code>superuser</code> en <code>user</code> zijn per sessie te zetten. De parameters die een herstart vereisen — en die u dus in één onderhoudsvenster wilt afhandelen — zijn onder meer <code>shared_buffers</code>, <code>max_connections</code>, <code>wal_level</code>, <code>max_wal_senders</code> en <code>shared_preload_libraries</code>.</p>
+        <div class="callout tip"><span class="lbl">Praktische regel</span><p>Dat laatste is de reden dat u bij het opzetten al nadenkt over extensies als <code>pg_stat_statements</code> en <code>pgaudit</code>: die moeten vooraf geladen worden, en ze erbij zetten kost een herstart. Zet <code>shared_preload_libraries = 'pg_stat_statements'</code> er meteen bij als u een nieuwe server inricht — de kosten zijn verwaarloosbaar en u heeft hem in deel 13 en 20 nodig.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.3 — de configuratiebronnen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U zet <code>work_mem</code> op 12MB met <code>ALTER SYSTEM</code>, herlaadt, en zet daarna in dezelfde sessie <code>SET work_mem = '64MB'</code>. Welke waarde geldt nu, en wat geldt in een tweede, nieuwe sessie?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">In de eerste sessie geldt <strong>64MB</strong>: een sessie-instelling wint van een bestandswaarde, en <code>source</code> toont <code>session</code>. Een tweede, nieuwe sessie ziet gewoon <strong>12MB</strong> — een <code>SET</code> geldt alleen voor de sessie waarin hij is uitgevoerd. Dit is precies de hiërarchie uit dit deel: hoe specifieker de bron, hoe hoger de voorrang, en die voorrang stopt bij de grens van de sessie.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Geheugen: de vier parameters die ertoe doen</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>shared_buffers</h4>
+        <p>De gedeelde bufferpool. Vuistregel: <strong>25% van het RAM</strong>, met een bovengrens rond 8 tot 16 GB. Waarom niet meer? Omdat PostgreSQL bewust óók op de cache van het besturingssysteem leunt. Een pagina die in beide caches staat, kost twee keer geheugen — <em>double buffering</em>. Boven een bepaalde waarde wint u niets meer en verliest u OS-cache. Voor de Meridiaan-server (32 GB): <strong>8 GB</strong>.</p>
+        <h4>work_mem</h4>
+        <p>Geheugen per sorteer- of hashbewerking, <strong>per bewerking en per verbinding</strong>. Dit is de gevaarlijkste parameter in PostgreSQL, omdat hij vermenigvuldigt: een query met drie sorteringen en twee hash joins kan vijf keer <code>work_mem</code> gebruiken, en bij honderd gelijktijdige sessies is dat vijfhonderd keer de ingestelde waarde. Voor Meridiaan met 32 GB, 8 GB <code>shared_buffers</code> en piekbelasting: een basiswaarde van <strong>8 tot 16 MB</strong>, met de rolgebonden verhoging voor rapportage uit sectie 4. Hoe u weet dat hij te laag staat: in <code>EXPLAIN (ANALYZE, BUFFERS)</code> verschijnt <code>Sort Method: external merge Disk: 24680kB</code> — de sortering ging naar schijf (deel 13).</p>
+        <h4>maintenance_work_mem</h4>
+        <p>Voor <code>VACUUM</code>, <code>CREATE INDEX</code> en <code>ALTER TABLE</code>. Deze mag ruim: er zijn er zelden veel tegelijk. <strong>512 MB tot 1 GB</strong> op deze machine. Let op <code>autovacuum_work_mem</code>: staat die op −1, dan gebruiken autovacuum-processen <code>maintenance_work_mem</code> — en er kunnen er meerdere tegelijk draaien. Zet hem apart als u <code>maintenance_work_mem</code> hoog heeft gezet.</p>
+        <h4>effective_cache_size</h4>
+        <p>Dit is <strong>geen geheugentoewijzing</strong>. Het is een schatting die u aan de planner geeft: hoeveel gegevens er waarschijnlijk in de cache staan (die van PostgreSQL plus die van het OS). Een hogere waarde maakt indexscans aantrekkelijker. Vuistregel: <strong>50 tot 75% van het RAM</strong>. Voor Meridiaan: <strong>24 GB</strong>. Het kost niets en beïnvloedt de planner rechtstreeks — een van de goedkoopste verbeteringen die er zijn.</p>
+        <figure><img src="figuren/figuur-11-1.png" alt="De vier geheugensparameters op een 32 GB-machine, met wat gedeeld is en wat vermenigvuldigt"><figcaption>Figuur 11-1 — de vier geheugensparameters op een 32 GB-machine, met wat gedeeld is en wat vermenigvuldigt</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.5 — geheugen instellen voor Meridiaan</p>
+        <details class="q"><summary><span class="qn">1</span><span>Ruud stelt voor: "kan ik shared_buffers niet gewoon op 24 GB zetten? Dan zit alles in het geheugen." Wat antwoordt u hem, in maximaal honderd woorden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat werkt averechts. PostgreSQL gebruikt niet alleen zijn eigen buffer, maar leunt bewust ook op de cache van het besturingssysteem. Zet u 24 GB in <code>shared_buffers</code>, dan blijft er nauwelijks OS-cache over, en veel pagina's staan dan dubbel — één keer in elk. U verliest geheugen in plaats van het te winnen. Wat u wél wilt: 8 GB <code>shared_buffers</code> en <code>effective_cache_size</code> op 24 GB. Die laatste reserveert niets, maar vertelt de planner dat er ruim gecachet wordt, zodat hij vaker voor een index kiest — dat is de winst die u zoekt.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Checkpoints, WAL en autovacuum</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een checkpoint schrijft alle vuile pagina's naar de gegevensbestanden, zodat de WAL vóór dat punt niet meer nodig is voor crashherstel. De afruil: vaker checkpointen betekent constante schrijf-I/O en een korte hersteltijd na een crash; minder vaak checkpointen betekent rustiger I/O en een langere hersteltijd. De standaardwaarden zijn voor de meeste productiesystemen te krap: <code>checkpoint_timeout</code> naar 15 minuten (standaard 5), <code>max_wal_size</code> naar 4-8 GB (standaard 1), en <code>checkpoint_completion_target</code> op 0.9 om het schrijven uit te smeren.</p>
+        <p>Het signaal dat u ze moet verhogen: <code>SELECT checkpoints_timed, checkpoints_req FROM pg_stat_bgwriter;</code> — is <code>checkpoints_req</code> (afgedwongen door <code>max_wal_size</code>) een aanzienlijk deel van het totaal, dan checkpoint u te vaak op verzoek in plaats van op tijd. Zet ook <code>log_checkpoints = on</code>: dan staat er in de log hoe lang elk checkpoint duurde en hoeveel buffers hij schreef. Zonder dat gokt u.</p>
+        <h4>Autovacuum op productieschaal</h4>
+        <p>Autovacuum ruimt dode rijversies op en houdt de statistieken bij; laat het aan staan, dat is de regel. Maar de standaardwaarden zijn afgestemd op kleine tabellen: de drempel waarop een tabel wordt opgeruimd is <code>autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × aantal rijen</code>, standaard 50 + 0,2 × rijen. Op <code>mutatie</code> met 2,4 miljoen rijen betekent dat bijna 480.000 wijzigingen voordat er wordt opgeruimd. Tot die tijd groeit de tabel en verouderen de statistieken — en verouderde statistieken leiden tot slechte queryplannen, precies het patroon "draaide vorige week in twee seconden, nu in vier minuten" uit deel 8.</p>
+        <pre><code class="language-sql">ALTER TABLE mutatie SET (
+    autovacuum_vacuum_scale_factor  = 0.02,
+    autovacuum_analyze_scale_factor = 0.01,
+    autovacuum_vacuum_cost_delay    = 2
+);</code></pre>
+        <p><strong>Per tabel, niet globaal.</strong> Een globale verlaging laat autovacuum over álle tabellen vaker lopen, ook waar dat niets oplevert. Twee andere parameters die ertoe doen op een productieserver: <code>autovacuum_max_workers</code> (standaard 3, vaak te weinig — 5 tot 6 is gebruikelijk) en <code>autovacuum_vacuum_cost_limit</code>, dat op moderne SSD's fors omhoog mag en meestal het antwoord is op "autovacuum komt er niet doorheen".</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.7 — autovacuum afstellen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een collega stelt voor autovacuum 's nachts uit te zetten "omdat de I/O dan nodig is voor de batch". Reageer in maximaal tachtig woorden.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat is de bekendste manier om een PostgreSQL-omgeving stil te leggen. Autovacuum ruimt niet alleen op — het voorkomt ook dat de transactieteller omloopt, en als dat te lang niet gebeurt, stopt PostgreSQL uit zichzelf met schrijven. Wat wél kan: autovacuum tijdens de batch rustiger laten werken in plaats van uitzetten, met <code>autovacuum_vacuum_cost_delay</code>. Dan blijft hij lopen en concurreert hij minder om I/O.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Verbindingen, de planner en tablespaces</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><code>max_connections</code> is een <strong>bovengrens</strong>, geen capaciteit. Verhogen ervan lost een verbindingsprobleem niet op — het verplaatst het van "kan niet verbinden" naar "alles is traag". De praktische grens ligt rond twee tot vier keer het aantal cores aan gelijktijdig actieve backends; op acht cores dus tussen de 16 en 32 actieve query's. Het portaal van Meridiaan met 3.000 gelijktijdige bezoekers heeft dus <strong>geen</strong> 3.000 databaseverbindingen nodig, en mag ze ook niet openen. Het antwoord is <strong>PgBouncer</strong> (deel 19), met <code>max_connections</code> op iets als 200 en een pool die daar ruim onder blijft. Ziet u veel <code>idle in transaction</code> in <code>pg_stat_activity</code>, dan is dát het probleem, en dat lost u op in de applicatie, niet met een hogere <code>max_connections</code>.</p>
+        <h4>De planner vertellen hoe uw hardware eruitziet</h4>
+        <p>De planner rekent met kosten die zijn afgestemd op hardware uit een ander tijdperk. <code>random_page_cost</code> staat standaard op 4.0: willekeurig lezen is vier keer zo duur als achter elkaar lezen, wat klopte op een draaiende schijf. Op een SSD is het verschil veel kleiner, en de standaardwaarde maakt de planner onnodig terughoudend met indexscans. Op SSD zet u hem naar <strong>1.1</strong> en <code>effective_io_concurrency</code> naar <strong>200</strong>.</p>
+        <div class="callout tip"><span class="lbl">Vaak de goedkoopste prestatieverbetering op een moderne server</span><p>Eén parameter, geen herstart, en indexen worden ineens gebruikt waar ze eerst genegeerd werden. Doe het wel bewust: verlagen tot 1.0 of daaronder maakt de planner juist te enthousiast over indexen. Begin bij 1.1 en meet (deel 13).</p></div>
+        <h4>Tablespaces</h4>
+        <p>Een tablespace is een alternatieve opslaglocatie voor databaseobjecten. Nuttig bij verschillende opslagsoorten (hete tabellen op snelle NVMe, archief op goedkopere opslag) of een schijf die vol dreigt te lopen. Vaak níét nodig: met één opslagvolume voegen tablespaces alleen beheercomplexiteit toe, en ze compliceren back-ups — een filesystem-back-up moet alle tablespaces meenemen, en vergeet u er één, dan is het herstel onvolledig, wat u pas ontdekt op het slechtst denkbare moment. Advies voor Meridiaan: geen tablespaces bij aanvang, introduceer ze bij een concrete aanleiding, en documenteer die aanleiding.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.8 — tablespaces</p>
+        <details class="q"><summary><span class="qn">1</span><span>U verplaatst een tabel naar een andere tablespace met <code>ALTER TABLE … SET TABLESPACE</code>. Welke lock wordt daarbij genomen, en wat betekent dat voor productie?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een <code>ACCESS EXCLUSIVE</code>-lock: alles wacht, ook <code>SELECT</code>'s, en de hele tabel wordt fysiek gekopieerd. Op een tabel van enkele honderdduizenden rijen merkt u het al; op een tabel van tientallen gigabytes is het een onderhoudsvenster. In productie plant u dit dus bewust, of u kiest een andere aanpak — bijvoorbeeld een nieuwe tabel opbouwen en gefaseerd overzetten.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Configuratie als code en meten of het werkt</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Wat u met de hand in <code>postgresql.conf</code> typt, is over een jaar niet herleidbaar, en op acceptatie staat het anders — de oorzaak van "op acceptatie werkte het wel". Wat u minimaal doet: <code>postgresql.conf</code> in versiebeheer met commentaar per gewijzigde waarde; alleen afwijkingen vastleggen, niet het hele bestand met alle standaardwaarden; <code>ALTER SYSTEM</code> spaarzaam gebruiken, en de wijziging daarna alsnog vastleggen; en acceptatie afgeleid van productie, met alleen de geheugensparameters geschaald — de planner-kostenparameters moeten <strong>gelijk</strong> blijven, anders wijken de queryplannen op acceptatie af van wat er straks in productie draait.</p>
+        <p>Wat er in productie afwijkt van uw beheerde bestand, vindt u met <code>SELECT name, setting, source, sourcefile FROM pg_settings WHERE source NOT IN ('default', 'override') ORDER BY name;</code> — draai deze query bij elke overname van een omgeving.</p>
+        <h4>Ruuds tweede vraag: meten of het werkt</h4>
+        <p>Verander nooit een parameter zonder een voor- en nameting. Cache-effectiviteit meet u met <code>pg_stat_database</code> (<code>blks_hit</code> tegenover <code>blks_read</code>), boven 99% is gebruikelijk voor een OLTP-werklast. Checkpointgedrag met <code>pg_stat_bgwriter</code>, sorteringen naar schijf met <code>log_temp_files</code>, vacuumachterstand met <code>pg_stat_user_tables</code>, en verbindingsdruk met <code>pg_stat_activity</code>. Reset uw metingen voordat u begint (<code>SELECT pg_stat_reset();</code>), anders meet u maanden geschiedenis in plaats van het effect van uw wijziging.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Veelgemaakte fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Instellingen overnemen van een blog</td><td>Waarden die niet bij deze werklast passen</td><td>Redeneren vanuit de machine, dan meten</td></tr>
+            <tr><td><code>shared_buffers</code> op 80% van het RAM</td><td>Double buffering; minder OS-cache</td><td>25%, met bovengrens</td></tr>
+            <tr><td><code>work_mem</code> globaal hoog</td><td>Geheugen op bij piekbelasting</td><td>Basiswaarde laag, per rol verhogen</td></tr>
+            <tr><td><code>max_connections</code> verhogen bij traagheid</td><td>Nog trager</td><td>Pooling, en zoeken naar <code>idle in transaction</code></td></tr>
+            <tr><td><code>random_page_cost</code> op 4.0 laten op SSD</td><td>Indexen worden genegeerd</td><td>1.1, daarna meten</td></tr>
+            <tr><td>Meerdere parameters tegelijk wijzigen</td><td>U weet niet wat werkte</td><td>Eén per keer, met meting</td></tr>
+            <tr><td>Acceptatie anders ingesteld dan productie</td><td>Queryplannen wijken af</td><td>Zelfde planner-waarden, alleen geheugen geschaald</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: de configuratiebronnen en hun voorrang; de <code>context</code>-waarden in <code>pg_settings</code>; de vier geheugensparameters, inclusief welke gedeeld zijn en welke vermenigvuldigen; de checkpointparameters en hun afruil; de autovacuum-drempelformule; <code>random_page_cost</code> en <code>effective_io_concurrency</code> in relatie tot opslag; en tablespaces met hun gevolgen voor back-up.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.9 — het configuratievoorstel</p>
+        <details class="q"><summary><span class="qn">1</span><span>In het modelantwoord voor Ruuds configuratievoorstel staat <code>wal_compression</code> bewust op de standaardwaarde, met als reden "nog geen meting dat WAL-volume een probleem is". Waarom is dat een sterker voorstel dan een dat alle instellingen aanraakt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat het laat zien dat elke wijziging een afweging is, geen reflex. Een voorstel dat alles aanraakt, toont geen enkele keuze — het beoordelingscriterium is juist of er bij elke waarde een reden staat die naar déze machine of déze werklast verwijst, en een parameter bewust op standaard laten met een expliciete reden telt daarbij evenveel mee als een parameter wijzigen. Dezelfde logica als bij het bewust weglaten van een index in deel 10: een weloverwogen "nee" is sterker dan een ongemotiveerd "ja".</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 12</h3>
+      <p>U heeft de server nu ingesteld. Deel 12 kijkt naar hoe de gegevens er fysiek in liggen: pagina's, TOAST, fill factor en bloat — en waarom een tabel groter kan zijn dan de gegevens die erin staan.</p>
+      <a class="btn" href="deel-12.html">Deel 12 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 11 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-11-installatie-configuratie-en-tablespaces/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm11_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

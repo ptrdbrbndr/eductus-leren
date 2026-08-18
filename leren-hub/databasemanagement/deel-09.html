@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 9 — Rollen, rechten en security | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 9 (EDB Associate): de vier lagen van toegang, rollen en rechten, de PUBLIC-valkuil, row level security en SECURITY DEFINER — aan de hand van een stagiair die per ongeluk bij burgerservicenummers kon.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-09.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 9</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 9 van 30</p>
+  <h1>Rollen, rechten<br><em>en security</em>.</h1>
+  <p class="hero__lead">Een stagiair krijgt toegang tot een map met werkgeversdata om een analyse te maken, en ziet daarbij ook de bestanden met deelnemergegevens inclusief burgerservicenummers. Niemand brak in — hij kreeg legitiem toegang die breder bleek dan bedoeld. Dat is het zesde en laatste probleem uit de openingscasus van deze cursus, en dit deel sluit het: van <code>pg_hba.conf</code> tot rollen en rechten, van de <code>PUBLIC</code>-valkuil tot row level security en <code>SECURITY DEFINER</code>.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>6/6</b><span>casusproblemen gesloten</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap → ➋ Het relationele model en de architectuur → ➌ SQL basis → ➍ SQL verdieping → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → ➑ Indexen en views → <b>➒ Rollen, rechten en security (hier)</b> → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Het laatste probleem: de stagiair en het BSN</a></li>
+      <li><a href="#s3" data-target="s3">Vier lagen van toegang</a></li>
+      <li><a href="#s4" data-target="s4">Rollen: gebruikers en groepen</a></li>
+      <li><a href="#s5" data-target="s5">Rechten toekennen en de publieke valkuil</a></li>
+      <li><a href="#s6" data-target="s6">Standaardrechten en het rollenmodel</a></li>
+      <li><a href="#s7" data-target="s7">Fijnmazige toegang: kolommen, views en RLS</a></li>
+      <li><a href="#s8" data-target="s8">Superuser, encryptie, auditing en AVG</a></li>
+      <li><a href="#s9" data-target="s9">Veelgemaakte fouten en de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De vorige delen losten vijf problemen uit de openingscasus van deze cursus op: normalisatie (deel 5), constraints (deel 6), transacties (deel 7), en herstelbaarheid via de write-ahead log (deel 2). Dit deel sluit het zesde en laatste: wie mag er eigenlijk bij wat.</p>
+        <p>Aan het eind van dit deel kunt u:</p>
+        <ul>
+          <li>de vier lagen van toegangsbeheer benoemen en zeggen welke laag welk probleem oplost;</li>
+          <li>rollen aanmaken en het onderscheid tussen gebruikers en groepen toepassen;</li>
+          <li>rechten toekennen en intrekken op database-, schema-, tabel- en kolomniveau, inclusief standaardrechten voor nieuwe objecten;</li>
+          <li>de <code>PUBLIC</code>-valkuil herkennen en dichtzetten;</li>
+          <li>row level security en <code>SECURITY DEFINER</code>-functies toepassen, en de AVG-beginselen vertalen naar concrete databasemaatregelen.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Het laatste probleem: de stagiair en het BSN</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit het casusdossier van Meridiaan Pensioen: een stagiair krijgt toegang tot de map met werkgeverdata om een analyse te maken, en ziet daarbij ook de bestanden met deelnemergegevens inclusief burgerservicenummers.</p>
+        <p>Let op wat er precies misging. De stagiair kreeg <strong>legitiem</strong> toegang tot iets, en die toegang bleek breder dan bedoeld. Dat is de normale vorm van een beveiligingsprobleem: niet een inbreker, maar iemand met te veel rechten die iets ziet wat hem niet aangaat.</p>
+        <div class="callout tip"><span class="lbl">Het beginsel dat dit hele deel draagt</span><p><strong>Geef de minste rechten die het werk mogelijk maken, en niet meer.</strong> Klinkt vanzelfsprekend. In de praktijk krijgt vrijwel elke applicatie bij Meridiaan straks één databasegebruiker met alle rechten op alles, omdat dat sneller werkt tijdens het bouwen. Dat is de gewoonte die u vandaag leert doorbreken.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Vier lagen van toegang</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Toegang tot een PostgreSQL-database wordt op vier plekken bepaald. Ze werken in volgorde, en een <code>GRANT</code> helpt niets als de eerste laag u al tegenhoudt.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Laag</th><th>Vraag</th><th>Waar geregeld</th></tr></thead>
+          <tbody>
+            <tr><td><strong>1. Netwerk</strong></td><td>Kunt u de server bereiken?</td><td>Firewall, <code>listen_addresses</code></td></tr>
+            <tr><td><strong>2. Verbinding</strong></td><td>Mag u van daaraf verbinden, en hoe bewijst u wie u bent?</td><td><code>pg_hba.conf</code></td></tr>
+            <tr><td><strong>3. Rollen</strong></td><td>Wie bent u, en tot welke groepen behoort u?</td><td><code>CREATE ROLE</code></td></tr>
+            <tr><td><strong>4. Rechten</strong></td><td>Wat mag u met welk object?</td><td><code>GRANT</code> / <code>REVOKE</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Bij een toegangsprobleem loopt u ze in deze volgorde af. De meest gemaakte diagnosefout is meteen naar laag 4 kijken terwijl het probleem in laag 2 zit.</p>
+        <figure><img src="figuren/figuur-9-1.png" alt="De vier lagen als opeenvolgende poorten, met de foutmelding die bij elke laag hoort"><figcaption>Figuur 9-1 — de vier lagen als opeenvolgende poorten, met de foutmelding die bij elke laag hoort</figcaption></figure>
+        <h4>pg_hba.conf: wie van waar op welke manier</h4>
+        <p><code>pg_hba.conf</code> (host-based authentication) staat in het datadirectory en bepaalt wie van waar op welke manier mag verbinden. Hij wordt van boven naar beneden gelezen; de eerste passende regel geldt, de rest wordt genegeerd.</p>
+        <pre><code># TYPE  DATABASE     USER          ADDRESS          METHOD
+local   all          postgres                       peer
+host    meridiaan    meridiaan_app 10.0.1.0/24      scram-sha-256
+host    all          all           0.0.0.0/0        reject</code></pre>
+        <p>De belangrijkste methoden: <code>scram-sha-256</code> (wachtwoord, veilig gehasht — de standaardkeuze), <code>md5</code> (verouderd), <code>peer</code> (lokaal, de OS-gebruikersnaam moet gelijk zijn aan de rolnaam), <code>cert</code> (clientcertificaat), <code>reject</code> (weiger expliciet), en <code>trust</code> — geen controle, nooit gebruiken buiten een wegwerpomgeving.</p>
+        <div class="callout note"><span class="lbl">Twee dingen om te onthouden</span><p>De <strong>volgorde is beslissend</strong>: een regel die alles toestaat bovenaan maakt alles daaronder betekenisloos. En wijzigingen vereisen een herlaadactie, geen herstart: <code>SELECT pg_reload_conf();</code>, gevolgd door een controle op fouten met <code>SELECT * FROM pg_hba_file_rules WHERE error IS NOT NULL;</code> — een typefout in dit bestand kan u anders buitensluiten.</p></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Rollen: gebruikers en groepen</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>PostgreSQL kent geen apart begrip "gebruiker" en "groep". Er zijn alleen <strong>rollen</strong>, en het enige verschil is of een rol mag inloggen.</p>
+        <pre><code class="language-sql">CREATE ROLE meridiaan_lezer;                    -- groep (NOLOGIN is standaard)
+CREATE ROLE anouk LOGIN PASSWORD 'wachtwoord';  -- gebruiker
+GRANT meridiaan_lezer TO anouk;                 -- lidmaatschap</code></pre>
+        <p><code>CREATE USER</code> is precies hetzelfde als <code>CREATE ROLE … LOGIN</code>; het bestaat alleen voor de leesbaarheid. Het model dat u aanhoudt: <strong>rechten geeft u aan groepsrollen</strong>, nooit rechtstreeks aan personen, en <strong>personen krijgen lidmaatschap</strong> van de groepen die bij hun functie horen.</p>
+        <p>Waarom dat ertoe doet: gaat Anouk weg, dan verwijdert u één rol. Zijn de rechten rechtstreeks aan haar toegekend, dan moet u ze stuk voor stuk terugvinden — en dat lukt zelden volledig.</p>
+        <h4>Nuttige rolattributen</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Attribuut</th><th>Betekent</th></tr></thead>
+          <tbody>
+            <tr><td><code>LOGIN</code></td><td>Mag verbinden</td></tr>
+            <tr><td><code>SUPERUSER</code></td><td>Omzeilt alle rechtencontroles</td></tr>
+            <tr><td><code>CREATEDB</code> / <code>CREATEROLE</code></td><td>Mag databases respectievelijk rollen maken</td></tr>
+            <tr><td><code>NOINHERIT</code></td><td>Erft rechten niet automatisch; vereist <code>SET ROLE</code></td></tr>
+            <tr><td><code>CONNECTION LIMIT n</code></td><td>Maximum aantal gelijktijdige verbindingen</td></tr>
+            <tr><td><code>VALID UNTIL 'datum'</code></td><td>Vervaldatum — nuttig voor tijdelijke toegang</td></tr>
+          </tbody>
+        </table></div>
+        <p><code>VALID UNTIL</code> is het antwoord op de stagiair uit sectie 2: geef tijdelijke toegang een einddatum, dan hoeft niemand eraan te denken hem in te trekken.</p>
+        <h4>Wachtwoorden en verificatie</h4>
+        <p>Een wachtwoord dat u in psql intypt, belandt in uw shellgeschiedenis en mogelijk in de serverlog. Gebruik <code>\password anouk</code> — dat vraagt het wachtwoord interactief en stuurt alleen de hash. Voor applicaties: zet wachtwoorden niet in code of configuratiebestanden die in versiebeheer staan, maar in een <code>.pgpass</code>-bestand, omgevingsvariabelen of een sleutelkluis.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 9, Opdracht 9.2 — je eerste rol</p>
+        <details class="q"><summary><span class="qn">1</span><span>U maakt een groepsrol <code>analist</code> zonder loginrecht en een inlogbare rol <code>stagiair</code> die lid wordt van <code>analist</code>. U verbindt als <code>stagiair</code> en probeert <code>SELECT * FROM deelnemer;</code>. Vervolgens geeft u <code>analist</code> leesrecht op de tabel. Werkt het nu?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nog niet — er volgt een nieuwe foutmelding, nu <code>permission denied for schema meridiaan</code>. Pas na <code>GRANT USAGE ON SCHEMA meridiaan TO analist;</code> werkt het. In totaal zijn drie toekenningen nodig: schema-<code>USAGE</code>, tabel-<code>SELECT</code>, en het rollidmaatschap. Rechten zijn hiërarchisch en elke laag moet apart worden opengezet.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Rechten toekennen en de publieke valkuil</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code class="language-sql">GRANT CONNECT ON DATABASE meridiaan TO meridiaan_lezer;
+GRANT USAGE  ON SCHEMA meridiaan     TO meridiaan_lezer;
+GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_lezer;</code></pre>
+        <p>Alle drie zijn nodig, en dat is de meest voorkomende verwarring: rechten zijn hiërarchisch en elke laag moet apart worden opengezet. Wie alleen <code>SELECT</code> geeft maar <code>USAGE</code> op het schema vergeet, krijgt een gebruiker met een foutmelding en geen idee waarom.</p>
+        <p>De rechten per objecttype: database (<code>CONNECT</code>, <code>CREATE</code>, <code>TEMPORARY</code>), schema (<code>USAGE</code>, <code>CREATE</code>), tabel (<code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>TRUNCATE</code>, <code>REFERENCES</code>, <code>TRIGGER</code>), kolom (<code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>REFERENCES</code>), sequentie (<code>USAGE</code>, <code>SELECT</code>, <code>UPDATE</code>) en functie (<code>EXECUTE</code>). Intrekken gaat met dezelfde structuur, via <code>REVOKE</code>.</p>
+        <div class="callout warn"><span class="lbl">Vergeet de sequenties niet</span><p>Een rol met <code>INSERT</code>-recht op een tabel met een identiteitskolom heeft ook <code>USAGE</code> op de onderliggende sequentie nodig, anders faalt de invoeging met een onduidelijke foutmelding: <code>GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;</code></p></div>
+        <h4>De publieke valkuil</h4>
+        <p>Er bestaat een ingebouwde rol <code>PUBLIC</code> waarvan <strong>iedereen</strong> automatisch lid is. Een aantal rechten is standaard aan <code>PUBLIC</code> toegekend, en dat verrast mensen: <code>CONNECT</code> op elke nieuwe database, <code>EXECUTE</code> op nieuwe functies, en <code>USAGE</code> op nieuwe talen en datatypen.</p>
+        <pre><code class="language-sql">REVOKE CONNECT ON DATABASE meridiaan FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;</code></pre>
+        <p>Doe dit bewust en gecontroleerd: het intrekken van rechten van <code>PUBLIC</code> kan bestaande applicaties breken die er stilzwijgend op leunden. Test het op acceptatie.</p>
+        <div class="callout"><span class="lbl">Dit is het stagiairprobleem in databasevorm</span><p>De stagiair uit sectie 2 kreeg een account voor de werkgeversanalyse; via <code>PUBLIC</code> kon hij verbinden met elke database op het cluster. Niemand had hem dat gegeven — het stond standaard aan.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 9, Opdracht 9.3 — de publieke valkuil</p>
+        <details class="q"><summary><span class="qn">1</span><span>U maakt een rol <code>buitenstaander</code> met loginrecht en geeft hem geen enkel recht. Kan hij verbinden met de database <code>meridiaan</code>, en zo ja, wat kan hij daarna nog?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Verbinden lukt — dat verrast vrijwel iedereen. De rol <code>PUBLIC</code> heeft standaard <code>CONNECT</code> op elke nieuwe database, en iedereen is automatisch lid van <code>PUBLIC</code>. Daarna werkt ook <code>SELECT current_user;</code> en zelfs <code>SELECT * FROM pg_roles;</code> gewoon: de systeemcatalogus is standaard leesbaar. Een rol zonder enige toekenning kan dus de volledige rollenlijst van het cluster opvragen, inclusief wie superuser is — geen ramp, maar wel informatie die een aanvaller graag heeft.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Standaardrechten en het rollenmodel</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><code>GRANT … ON ALL TABLES</code> geldt alleen voor de tabellen die op dat moment bestaan. Een tabel die morgen wordt aangemaakt, valt erbuiten — de meest voorkomende oorzaak van "het werkte gisteren nog".</p>
+        <pre><code class="language-sql">ALTER DEFAULT PRIVILEGES IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO meridiaan_lezer;</code></pre>
+        <p>Belangrijk detail: standaardrechten gelden per <strong>aanmakende rol</strong>. Stelt u ze in als <code>postgres</code>, dan werken ze alleen voor tabellen die <code>postgres</code> aanmaakt. Maakt uw migratieproces tabellen aan onder een andere rol, dan moet u die rol expliciet noemen:</p>
+        <pre><code class="language-sql">ALTER DEFAULT PRIVILEGES FOR ROLE meridiaan_eigenaar IN SCHEMA meridiaan
+    GRANT SELECT ON TABLES TO meridiaan_lezer;</code></pre>
+        <p>Dit is de subtielste valkuil van dit deel: het stelt in, het test goed, en pas maanden later — als het migratieproces onder een andere rol gaat draaien — worden nieuwe tabellen stilzwijgend onzichtbaar.</p>
+        <h4>Het rollenmodel: leesrol, schrijfrol, applicatierol</h4>
+        <p>Het patroon dat u bij Meridiaan zou toepassen:</p>
+        <pre><code class="language-sql">-- Eigenaar: bezit de objecten, voert migraties uit. Logt niet in.
+CREATE ROLE meridiaan_eigenaar NOLOGIN;
+
+CREATE ROLE meridiaan_lezer NOLOGIN;
+CREATE ROLE meridiaan_schrijver NOLOGIN;
+
+GRANT CONNECT ON DATABASE meridiaan TO meridiaan_lezer;
+GRANT USAGE ON SCHEMA meridiaan TO meridiaan_lezer;
+GRANT SELECT ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_lezer;
+
+GRANT meridiaan_lezer TO meridiaan_schrijver;     -- schrijver kan ook lezen
+GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA meridiaan TO meridiaan_schrijver;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;
+
+CREATE ROLE portaal_app LOGIN PASSWORD '…';
+GRANT meridiaan_schrijver TO portaal_app;
+
+CREATE ROLE rapportage LOGIN PASSWORD '…';
+GRANT meridiaan_lezer TO rapportage;</code></pre>
+        <p>Drie ontwerpkeuzes die het uitleggen waard zijn. <strong>De eigenaar logt niet in</strong>: objecten worden bezeten door een rol die niemand rechtstreeks gebruikt, migraties draait u met <code>SET ROLE meridiaan_eigenaar</code>, en zo kan een gecompromitteerd applicatieaccount geen tabellen wijzigen of verwijderen — het bezit ze niet. <strong>De applicatie is geen superuser</strong>: de belangrijkste regel van dit deel, want een applicatie die als superuser verbindt omzeilt elke rechtencontrole, elke row level security en elke auditmaatregel. En <strong>tijdelijke toegang heeft een einddatum</strong>, zoals bij de stagiair.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 9, Opdracht 9.6 — het rollenmodel bouwen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U bouwt <code>meridiaan_eigenaar</code>, <code>meridiaan_lezer</code> en <code>meridiaan_schrijver</code>, en test daarna als <code>portaal_app</code> een <code>INSERT</code> in de tabel <code>mutatie</code>. De invoeging faalt met een foutmelding over een object dat u nooit expliciet heeft aangemaakt. Wat ontbreekt er, en waarom is dit een veelgemaakte fout?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <code>USAGE</code>-rechten op de onderliggende sequentie: <code>ERROR: permission denied for sequence mutatie_mutatie_id_seq</code>. <code>GRANT USAGE ON ALL SEQUENCES IN SCHEMA meridiaan TO meridiaan_schrijver;</code> lost het op. Dit is een van de vaakst gemiste rechten, precies omdat de foutmelding gaat over een object dat u nooit met naam heeft aangemaakt — het ontstaat automatisch bij een identiteitskolom.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Fijnmazige toegang: kolommen, views en RLS</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Terug naar het burgerservicenummer. De eerste optie is kolomrechten:</p>
+        <pre><code class="language-sql">GRANT SELECT (deelnemer_id, voorletters, achternaam, woonplaats)
+    ON deelnemer TO meridiaan_lezer;</code></pre>
+        <p>De rol kan deze kolommen zien en de rest niet; <code>SELECT *</code> levert een foutmelding op, wat op zichzelf informatief is. De beperking: kolomrechten zijn omslachtig in beheer. Elke nieuwe kolom moet expliciet worden toegevoegd, anders is hij standaard onzichtbaar voor die rol.</p>
+        <h4>Views als toegangslaag</h4>
+        <pre><code class="language-sql">CREATE VIEW deelnemer_beperkt AS
+SELECT deelnemer_id, voorletters, tussenvoegsel, achternaam,
+       woonplaats, startdatum_deelname, einddatum_deelname
+FROM deelnemer;
+
+REVOKE ALL ON deelnemer FROM meridiaan_lezer;
+GRANT SELECT ON deelnemer_beperkt TO meridiaan_lezer;</code></pre>
+        <p>De rol heeft geen enkel recht op de onderliggende tabel, maar kan de view wel bevragen — omdat de view draait met de rechten van zijn <strong>eigenaar</strong>, niet van de aanroeper. Voordelen boven kolomrechten: één plek om te onderhouden, en de definitie is leesbaar — dezelfde reden om views te gebruiken die al bij indexen en views (deel 8) werd aangekondigd. Let op: een view met <code>security_invoker = true</code> (vanaf PostgreSQL 15) draait juist wél met de rechten van de aanroeper; de standaard is <code>false</code>.</p>
+        <h4>Row level security</h4>
+        <p>Kolomrechten en views beperken welke kolommen iemand ziet. Row level security beperkt welke <strong>rijen</strong>.</p>
+        <pre><code class="language-sql">ALTER TABLE deelnemer ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY deelnemer_eigen_gegevens ON deelnemer
+    FOR SELECT
+    TO portaal_app
+    USING (deelnemer_id = current_setting('app.deelnemer_id')::integer);</code></pre>
+        <p>De applicatie zet bij elke verbinding de context (<code>SET app.deelnemer_id = '1001';</code>); vanaf dat moment ziet die sessie alleen de eigen rij, ook bij <code>SELECT * FROM deelnemer</code>. Voor het deelnemersportaal van Meridiaan is dat een sterke maatregel: een fout in de applicatiecode kan dan geen gegevens van een andere deelnemer tonen.</p>
+        <div class="callout warn"><span class="lbl">Drie dingen die u moet weten</span><p>De <strong>tabeleigenaar omzeilt RLS standaard</strong> — een veelgemaakte testfout: u test als eigenaar, ziet alles, en concludeert dat het niet werkt. Forceer met <code>ALTER TABLE … FORCE ROW LEVEL SECURITY</code>. <strong>Superusers omzeilen RLS altijd</strong> — nog een reden waarom de applicatie geen superuser is. En het <strong>kost prestaties</strong>: de policy-voorwaarde wordt aan elke query toegevoegd, dus zorg dat de kolom in de policy geïndexeerd is.</p></div>
+        <h4>SECURITY DEFINER-functies</h4>
+        <p>Soms moet een gebruiker een handeling kunnen uitvoeren zonder de onderliggende rechten te hebben — bijvoorbeeld: de klantenservice mag een mutatie als verwerkt markeren, maar niet zomaar in de mutatietabel schrijven.</p>
+        <pre><code class="language-sql">CREATE FUNCTION mutatie_afronden(p_mutatie_id integer)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = meridiaan, pg_temp
+AS $$
+    UPDATE mutatie SET verwerkt_op = now()
+    WHERE mutatie_id = p_mutatie_id AND verwerkt_op IS NULL;
+$$;
+
+GRANT EXECUTE ON FUNCTION mutatie_afronden(integer) TO meridiaan_lezer;</code></pre>
+        <p>De functie draait met de rechten van haar maker, niet van de aanroeper. De <code>SET search_path</code> is niet optioneel: zonder die regel kan een aanvaller een eigen tabel of functie in zijn eigen schema zetten die eerder in het zoekpad staat, en die wordt dan uitgevoerd met verhoogde rechten — een bekende aanvalsvorm. Elke <code>SECURITY DEFINER</code>-functie hoort een vast zoekpad te hebben.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 9, Opdracht 9.7 — row level security</p>
+        <details class="q"><summary><span class="qn">1</span><span>U zet RLS aan en test de policy eerst als de tabeleigenaar. U ziet alle rijen in plaats van alleen de eigen rij. Betekent dit dat de policy niet werkt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee — dit is de klassieke testfout. De tabeleigenaar omzeilt RLS standaard, dus het feit dat u alles ziet, zegt niets over de policy zelf. Wilt u dat ook de eigenaar de policy ondergaat, dan gebruikt u <code>ALTER TABLE … FORCE ROW LEVEL SECURITY</code>. Test daarna als de bedoelde rol (bijvoorbeeld <code>portaal_app</code>) met de sessie-instelling gezet — pas dan zegt de test iets zinnigs.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Superuser, encryptie, auditing en AVG</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een superuser omzeilt <strong>alle</strong> controles: rechten, RLS, <code>pg_hba</code> niet, maar al het overige wel. Hij kan bestanden op de server lezen en schrijven en willekeurige code uitvoeren via bepaalde extensies. Applicaties verbinden daarom nooit als superuser, mensen verbinden er zelden als, en de rol <code>postgres</code> is voor beheer, niet voor dagelijks werk. Wat u vaak nodig heeft zonder superuser te zijn, kan met ingebouwde rollen: <code>pg_read_all_data</code>, <code>pg_write_all_data</code>, <code>pg_monitor</code>, <code>pg_signal_backend</code>. <code>pg_monitor</code> is het bruikbaarst: toegang tot de statistiekweergaven zonder verdere rechten — precies wat een monitoringsysteem nodig heeft.</p>
+        <h4>Encryptie: drie plekken, drie mechanismen</h4>
+        <p><strong>Onderweg (in transit):</strong> TLS tussen client en server, aan te zetten in <code>postgresql.conf</code> en af te dwingen in <code>pg_hba.conf</code> met <code>hostssl</code> in plaats van <code>host</code>. Doe dit altijd voor verbindingen die het netwerk over gaan. <strong>In rust (at rest):</strong> PostgreSQL heeft geen ingebouwde tabelencryptie; in de praktijk versleutelt u het bestandssysteem of de schijf, wat beschermt tegen een gestolen schijf, niet tegen iemand met een geldige databaseverbinding. <strong>Op kolomniveau:</strong> met de extensie <code>pgcrypto</code> kunt u afzonderlijke waarden versleutelen, maar versleutelde kolommen zijn niet doorzoekbaar en niet indexeerbaar, en het sleutelbeheer wordt uw probleem. Voor de meeste gevallen zijn goede rechten en RLS effectiever dan kolomencryptie.</p>
+        <h4>Auditing en logging</h4>
+        <p>De standaardlog van PostgreSQL logt geen query's. <code>log_statement = 'all'</code> logt alles, informatief maar schrijft veel — en het zet ook gegevens in de log, inclusief burgerservicenummers in <code>WHERE</code>-clausules. Dat maakt van uw logbestand een tweede kopie van uw persoonsgegevens, met andere toegangsregels. Voor echte auditing bestaat de extensie <strong>pgaudit</strong>: die logt gestructureerd wie wat op welk object deed, met configuratie per rol en per objecttype — wat u nodig heeft als een toezichthouder vraagt wie de aanspraken van deelnemer X heeft ingezien.</p>
+        <h4>Privacy: AVG in de database</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Beginsel</th><th>In de database</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Dataminimalisatie</strong></td><td>Alleen vastleggen wat nodig is; BSN niet als sleutel</td></tr>
+            <tr><td><strong>Doelbinding</strong></td><td>Rollen per doel: rapportage ziet geen BSN</td></tr>
+            <tr><td><strong>Opslagbeperking</strong></td><td>Bewaartermijnen, en een proces dat ze uitvoert</td></tr>
+            <tr><td><strong>Integriteit en vertrouwelijkheid</strong></td><td>Rechten, RLS, TLS, encryptie in rust</td></tr>
+            <tr><td><strong>Verantwoordingsplicht</strong></td><td>Auditlog: aantoonbaar wie wat zag</td></tr>
+          </tbody>
+        </table></div>
+        <p>Drie dingen die bij Meridiaan concreet spelen. <strong>Het BSN:</strong> in deel 2 werd besloten het niet als primaire sleutel te gebruiken, en het privacyargument was toen dat het zich als sleutel via elke foreign key door het hele model zou verspreiden. Nu ziet u de tweede helft van dat argument: omdat het BSN in één kolom van één tabel staat, kunt u er gericht rechten op zetten. <strong>Testgegevens:</strong> een kopie van productie op acceptatie is een tweede verzameling persoonsgegevens met zwakkere toegangscontrole — in de praktijk de meest verwaarloosde maatregel. <strong>Back-ups:</strong> een back-up bevat alles, ook wat op verzoek van een deelnemer is verwijderd.</p>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Veelgemaakte fouten en de certificering</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Oplossing</th></tr></thead>
+          <tbody>
+            <tr><td>Applicatie verbindt als superuser</td><td>Alle controles omzeild</td><td>Eigen rol met minimale rechten</td></tr>
+            <tr><td><code>SELECT</code> gegeven, <code>USAGE</code> op schema vergeten</td><td>Foutmelding zonder duidelijke oorzaak</td><td>Alle drie de lagen</td></tr>
+            <tr><td><code>PUBLIC</code>-rechten niet ingetrokken</td><td>Iedereen kan overal verbinden</td><td><code>REVOKE … FROM PUBLIC</code></td></tr>
+            <tr><td>Standaardrechten niet ingesteld</td><td>Nieuwe tabellen onzichtbaar</td><td><code>ALTER DEFAULT PRIVILEGES</code></td></tr>
+            <tr><td>Standaardrechten voor de verkeerde rol</td><td>Werkt niet, en niemand ziet waarom</td><td><code>FOR ROLE …</code> toevoegen</td></tr>
+            <tr><td>Rechten rechtstreeks aan personen</td><td>Onmogelijk op te ruimen bij vertrek</td><td>Groepsrollen</td></tr>
+            <tr><td><code>INSERT</code> gegeven, sequentie vergeten</td><td>Invoegen faalt</td><td><code>GRANT USAGE ON … SEQUENCES</code></td></tr>
+            <tr><td>RLS getest als eigenaar</td><td>Lijkt niet te werken</td><td><code>FORCE ROW LEVEL SECURITY</code></td></tr>
+            <tr><td><code>SECURITY DEFINER</code> zonder <code>search_path</code></td><td>Rechtenescalatie mogelijk</td><td>Altijd <code>SET search_path</code></td></tr>
+            <tr><td>Productiekopie op acceptatie</td><td>Datalek in wachtstand</td><td>Anonimiseren bij kopiëren</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de Associate-certificering paraat: de rol van <code>pg_hba.conf</code>, de volgorde van regels en de verificatiemethoden; rollen versus gebruikers en rolattributen; de rechtenhiërarchie database → schema → tabel → kolom; <code>PUBLIC</code> en de standaardrechten daarvan; <code>ALTER DEFAULT PRIVILEGES</code>; het verschil tussen <code>SECURITY DEFINER</code> en <code>SECURITY INVOKER</code>; de basis van row level security; en de ingebouwde rollen zoals <code>pg_monitor</code> en <code>pg_read_all_data</code>.</p>
+        <div class="callout note"><span class="lbl">Terug naar de casus</span><p>Alle zes problemen uit de openingscasus zijn nu gesloten: normalisatie, constraints, transacties, herstelbaarheid, indexering — en nu autorisatie. De stagiair had nooit bij de burgerservicenummers moeten kunnen, en met het rollenmodel, de kolomrechten of view, en de ingetrokken <code>PUBLIC</code>-rechten uit dit deel is precies dát afgesloten.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 9, Opdracht 9.5 en 9.9 — het BSN afschermen en het beveiligingsonderzoek</p>
+        <details class="q"><summary><span class="qn">1</span><span>U schermt het BSN eerst af met kolomrechten, daarna met een view. Beide werken. Welke zou u bij Meridiaan kiezen, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <strong>view</strong>, om twee redenen: onderhoudbaarheid — één object, leesbare definitie, één plek om te wijzigen — en zichtbaarheid, want de definitie van "wat een analist mag zien" staat als leesbare SQL in de database in plaats van verspreid over een rechtentabel die niemand opvraagt. Kolomrechten blijven nuttig als aanvullende laag, of voor <code>UPDATE</code>-rechten op specifieke kolommen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>In het beveiligingsonderzoek van opdracht 9.9 staat de bevinding "tabellen zijn in bezit van postgres, de applicatie verbindt met dezelfde rol" met prioriteit Hoog, terwijl "geen standaardrechten ingesteld" op Midden staat. Waarom die volgorde, ook al lijkt de BSN-afscherming persoonlijk urgenter?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat een superuser-applicatie élke andere maatregel betekenisloos maakt — inclusief een zorgvuldig afgeschermd BSN via een view. De juiste onderzoeksvraag is dan "wat is het nut van uw BSN-view als de applicatie superuser is?" Ontbrekende standaardrechten gaan zeker een keer misgaan maar richten weinig schade aan; een superuser-applicatie gaat misschien nooit mis en is dan catastrofaal. Beide horen op de lijst, maar de bevinding die alle andere ondermijnt, staat bovenaan.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 10</h3>
+      <p>Deel 10 is de capstone van niveau 1: u bouwt en verdedigt de complete Meridiaan-datalaag — model, DDL, query's, indexen én autorisatie — tegenover een verdedigingscommissie van vier rollen. Alles uit deel 1 tot en met 9 komt daarin samen.</p>
+      <a class="btn" href="deel-10.html">Deel 10 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 9 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-09-rollen-rechten-en-security/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm9_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

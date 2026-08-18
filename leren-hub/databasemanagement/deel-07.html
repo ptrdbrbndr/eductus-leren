@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 7 — Transacties, ACID en MVCC | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 7 (EDB Associate): transacties en savepoints, de vier anomalieën en isolatieniveaus, MVCC met xmin/xmax, locks en deadlocks, de lost update oplossen, en VACUUM — het gelijktijdigheidsprobleem uit deel 1 opgelost.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-07.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+td code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 7</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 7 van 30</p>
+  <h1>Transacties, ACID<br><em>en MVCC</em>.</h1>
+  <p class="hero__lead">Uit deel 1: twee collega's werken 's middags in hetzelfde Excel-bestand, en om 17:10 blijkt het werk van de een verdwenen. Vijf van de zes problemen van de schil zijn inmiddels opgelost — dit deel lost het zesde en lastigste op: gelijktijdigheid. U reproduceert de lost update zelf in twee psql-vensters, leert wat MVCC daadwerkelijk doet met xmin en xmax, en ziet waarom ACID u hier niet vanzelf beschermt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>anomalieën</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap: waarom PostgreSQL → ➋ Het relationele model en de PostgreSQL-architectuur → ➌ SQL basis: SELECT, filteren, sorteren, aggregeren → ➍ SQL verdieping: joins, subquery's en CTE's → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → <b>➐ Transacties, ACID en MVCC (hier)</b> → ➑ Indexen en views → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat: het probleem dat nog openstaat</a></li>
+      <li><a href="#s2" data-target="s2">Wat een transactie is, BEGIN/COMMIT/ROLLBACK, savepoints</a></li>
+      <li><a href="#s3" data-target="s3">ACID nu concreet, en de vier anomalieën</a></li>
+      <li><a href="#s4" data-target="s4">Isolatieniveaus</a></li>
+      <li><a href="#s5" data-target="s5">MVCC: hoe PostgreSQL het oplost</a></li>
+      <li><a href="#s6" data-target="s6">Locks, SELECT FOR UPDATE en deadlocks</a></li>
+      <li><a href="#s7" data-target="s7">De lost update in de praktijk</a></li>
+      <li><a href="#s8" data-target="s8">VACUUM en het prijskaartje van MVCC</a></li>
+      <li><a href="#s9" data-target="s9">Transactiegrenzen, en aansluiting op de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat: het probleem dat nog openstaat</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>uitleggen wat een transactie is en waar de grenzen ervan horen te liggen;</li>
+          <li>transacties beheren met <code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> en savepoints;</li>
+          <li>de vier ACID-eigenschappen koppelen aan het mechanisme dat ze in PostgreSQL waarmaakt;</li>
+          <li>de vier anomalieën herkennen en zeggen welk isolatieniveau ze uitsluit;</li>
+          <li>uitleggen hoe MVCC gelijktijdigheid regelt en welke prijs daarvoor betaald wordt;</li>
+          <li>een lost update reproduceren en op twee manieren voorkomen;</li>
+          <li>een deadlock herkennen, verklaren en voorkomen;</li>
+          <li>de rol van <code>VACUUM</code> uitleggen en de gevolgen van het uitzetten van autovacuum benoemen.</li>
+        </ul>
+        <div class="dialogue"><p>"Twee collega's werken 's middags in hetzelfde Excel-bestand met premiemutaties. Om 17:10 blijkt het werk van de een verdwenen."</p></div>
+        <p>Uit deel 1: vijf van de zes problemen van de schil bij Meridiaan zijn inmiddels opgelost — redundantie en inconsistentie met normalisatie (deel 5), integriteitsbewaking met constraints (deel 6), toegangsbeheer volgt in deel 9. Dit is het probleem dat overblijft, en het is het lastigste van de zes, omdat het pas optreedt als er meerdere mensen tegelijk werken, en dus zelden op een testomgeving. De naam ervan is <strong>lost update</strong>. U reproduceert hem zelf in twee psql-vensters, en lost hem daarna op.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat een transactie is, BEGIN/COMMIT/ROLLBACK, savepoints</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>transactie</strong> is een groep bewerkingen die als één ondeelbaar geheel wordt uitgevoerd: alles slaagt, of niets slaagt. Het schoolvoorbeeld is de waardeoverdracht uit deel 1: bedrag af bij fonds A, bedrag bij bij fonds B — mislukt de tweede stap, dan mag de eerste niet blijven staan. Maar ook: een deelnemer aanmaken met zijn eerste dienstverband, of een adres beëindigen en het nieuwe adres openen (die twee handelingen samen mogen nooit een gat of overlap opleveren, deel 6).</p>
+        <p><strong>In PostgreSQL is elke opdracht al een transactie.</strong> Type u een losse <code>UPDATE</code>, dan draait die impliciet tussen een <code>BEGIN</code> en een <code>COMMIT</code> — autocommit. Zodra u meerdere opdrachten wilt samenvoegen, maakt u de transactie expliciet:</p>
+        <pre><code>BEGIN;
+UPDATE rekening SET saldo = saldo - 1000 WHERE fonds = 'A';
+UPDATE rekening SET saldo = saldo + 1000 WHERE fonds = 'B';
+COMMIT;</code></pre>
+        <p>Gaat er iets mis: <code>ROLLBACK;</code> — alles sinds <code>BEGIN</code> wordt teruggedraaid alsof het nooit is gebeurd.</p>
+        <div class="callout warn"><span class="lbl">De aborted-toestand</span><p>Treedt er binnen een transactie een fout op, dan weigert PostgreSQL alle volgende opdrachten: <code>ERROR: current transaction is aborted, commands ignored until end of transaction block</code>, tot u <code>ROLLBACK</code> uitvoert. Dat voelt streng maar is precies goed: het voorkomt dat u verder werkt op een toestand die u niet kent. Uw sessie is niet kapot — hij beschermt u.</p></div>
+        <p><strong>Savepoints</strong> zijn terugvalpunten binnen een transactie, nuttig bij importscripts waarin één mislukte rij niet de hele partij mag laten sneuvelen: <code>SAVEPOINT voor_import; ... ROLLBACK TO SAVEPOINT voor_import;</code> draait alleen dat stukje terug. Wees er spaarzaam mee — duizenden savepoints in één transactie zijn een bekende oorzaak van prestatieproblemen.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">ACID nu concreet, en de vier anomalieën</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 1 introduceerde ACID als belofte. Nu het mechanisme erachter:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Eigenschap</th><th>Betekent</th><th>Waargemaakt door</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Atomicity</strong></td><td>Alles of niets</td><td>Transactiebeheer + WAL (deel 2)</td></tr>
+            <tr><td><strong>Consistency</strong></td><td>Geldige toestand in, geldige toestand uit</td><td>Constraints (deel 6)</td></tr>
+            <tr><td><strong>Isolation</strong></td><td>Gelijktijdige transacties storen elkaar niet</td><td>MVCC + locks (dit deel)</td></tr>
+            <tr><td><strong>Durability</strong></td><td>Bevestigd is bevestigd</td><td>WAL met <code>fsync</code> (deel 2)</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout note"><span class="lbl">De C is de enige die u invult</span><p>Atomiciteit, isolatie en duurzaamheid regelt de database; consistentie is de verzameling regels die u in deel 6 heeft vastgelegd. Een database zonder constraints is nog steeds ACID — hij bewaakt dan alleen niets. Nuttige zin voor een gesprek met een leverancier die zegt dat zijn systeem "volledig ACID" is.</p></div>
+        <h4>De vier anomalieën</h4>
+        <p>Zonder isolatie kunnen vier soorten problemen optreden. <strong>Dirty read</strong> — transactie A leest een wijziging van B die nog niet is vastgelegd, en B draait daarna terug. <strong>Non-repeatable read</strong> — A leest een rij, B wijzigt en commit die rij, A leest hem opnieuw en krijgt een andere waarde. <strong>Phantom read</strong> — A telt rijen die aan een voorwaarde voldoen, B voegt een nieuwe rij toe die er ook aan voldoet en commit, A telt opnieuw en krijgt een ander aantal. <strong>Serialization anomaly</strong> — subtieler: elke transactie is op zichzelf correct, maar het resultaat komt niet overeen met welke seriële volgorde dan ook.</p>
+        <figure><img src="figuren/figuur-7-1.png" alt="Tijdlijn van twee transacties per anomalie, met het moment waarop het misgaat"><figcaption>Figuur 7-1 — Tijdlijn van twee transacties per anomalie, met het moment waarop het misgaat</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.3 — de anomalieën reproduceren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Sessie 1 telt onder read committed hoeveel dienstverbanden een deeltijdfactor boven 0,9 hebben. Tussendoor wijzigt sessie 2 een rij zodat die er ook aan voldoet, en committed. Sessie 1 telt opnieuw binnen dezelfde transactie. Verschillen de twee tellingen, en welke anomalie is dit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ja, de tellingen verschillen: onder read committed neemt elke opdracht een nieuwe momentopname, dus de tweede telling ziet de commit van sessie 2. Dit is de <strong>non-repeatable read</strong> — binnen één transactie is dezelfde vraag twee keer anders beantwoord. Onder <code>REPEATABLE READ</code> zouden beide tellingen gelijk zijn, omdat de transactie dan op één momentopname werkt die bij de eerste opdracht is genomen. Waarom dit erg is: een rapportage die eerst telt en daarna sommeert, kan getallen opleveren die niet bij elkaar horen.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Isolatieniveaus</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De SQL-standaard kent vier niveaus, gedefinieerd naar welke anomalieën ze toestaan: van <strong>read uncommitted</strong> (alles toegestaan) via <strong>read committed</strong> en <strong>repeatable read</strong> tot <strong>serializable</strong> (niets toegestaan).</p>
+        <p>Drie dingen die specifiek voor PostgreSQL gelden: <strong>read uncommitted bestaat niet</strong> — vraagt u erom, dan krijgt u read committed, en dirty reads zijn onmogelijk (een gevolg van MVCC). <strong>De standaard is read committed</strong>: elke opdracht ziet een momentopname van het moment waarop díé opdracht begon. <strong>Repeatable read voorkomt in PostgreSQL óók phantom reads</strong>, strenger dan de standaard eist — de hele transactie werkt op één momentopname.</p>
+        <p>Welk niveau kiest u? <strong>Read committed</strong> voor vrijwel al het gewone werk. <strong>Repeatable read</strong> als een transactie meerdere keren leest en een consistent beeld nodig heeft — een rapportage die over meerdere tabellen optelt. <strong>Serializable</strong> als correctheid boven doorvoer gaat en de logica te subtiel is om met locks te bewaken.</p>
+        <div class="callout warn"><span class="lbl">De prijs van de strengere niveaus</span><p>Transacties kunnen worden afgebroken met <code>ERROR: could not serialize access due to concurrent update</code>. Dat is geen bug maar het ontwerp. Uw applicatie moet die fout opvangen en de transactie opnieuw proberen — wie <code>serializable</code> inschakelt zonder retry-logica te bouwen, ruilt een zeldzame stille fout in voor een frequente luidruchtige.</p></div>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">MVCC: hoe PostgreSQL het oplost</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 2 gaf de samenvatting; hier de werking. <strong>Het kernidee:</strong> een <code>UPDATE</code> wijzigt de bestaande rij niet. PostgreSQL schrijft een <em>nieuwe versie</em> en markeert de oude als geldig tot een bepaald transactiemoment; een <code>DELETE</code> markeert de rij alleen als verwijderd, hij blijft fysiek staan. Elke rijversie draagt twee verborgen kolommen: <strong><code>xmin</code></strong> (het transactie-ID dat deze versie maakte) en <strong><code>xmax</code></strong> (het transactie-ID dat hem beëindigde, 0 als hij nog geldig is) — op te vragen met <code>SELECT xmin, xmax, * FROM plaats;</code></p>
+        <p>Een transactie ziet een rijversie als: <code>xmin</code> is vastgelegd en zichtbaar voor mij, en <code>xmax</code> is dat niet. Daaruit volgt:</p>
+        <div class="callout tip"><span class="lbl">Het gevolg dat alles verklaart</span><p>Lezers blokkeren geen schrijvers, en schrijvers blokkeren geen lezers. Een lezer heeft de oude versie nog beschikbaar terwijl een schrijver de nieuwe maakt — niemand hoeft te wachten. Een lang lopende rapportagequery legt in PostgreSQL de administratie niet stil, terwijl dat in systemen met vergrendelend lezen wel gebeurt.</p></div>
+        <figure><img src="figuren/figuur-7-2.png" alt="Twee rijversies met xmin/xmax, en twee transacties die elk een andere versie zien"><figcaption>Figuur 7-2 — Twee rijversies met xmin/xmax, en twee transacties die elk een andere versie zien</figcaption></figure>
+        <h4>Transactie-ID's en zichtbaarheid</h4>
+        <p>Elke transactie die iets wijzigt, krijgt een oplopend transactie-ID (XID). Onder <strong>read committed</strong> neemt elke opdracht een nieuwe momentopname; onder <strong>repeatable read</strong> en <strong>serializable</strong> neemt de hele transactie één momentopname bij de eerste opdracht.</p>
+        <div class="callout warn"><span class="lbl">Waarom lange transacties schadelijk zijn</span><p>Zolang een transactie loopt, moeten alle rijversies die zij mogelijk nog nodig heeft, bewaard blijven — in de hele database, niet alleen in de tabellen die zij aanraakte. Een transactie die uren openstaat (vaak een applicatie die wacht op gebruikersinvoer) verhindert het opruimen van dode rijversies overal. De toestand <code>idle in transaction</code> met een lange duur in <code>pg_stat_activity</code> is het signaal.</p></div>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Locks, SELECT FOR UPDATE en deadlocks</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>MVCC lost het lezen op. Voor schrijven zijn locks nodig: twee transacties mogen niet tegelijk dezelfde rij wijzigen. De zwaarste is <code>ACCESS EXCLUSIVE</code> (genomen door <code>ALTER TABLE</code>, <code>DROP</code>, <code>TRUNCATE</code>, <code>VACUUM FULL</code>) en conflicteert met <strong>alles</strong> — dat verklaart de waarschuwing uit deel 6: een tabelherschrijvende <code>ALTER TABLE</code> laat ook gewone <code>SELECT</code>s wachten.</p>
+        <p>Een <code>UPDATE</code> neemt een lock op de gewijzigde rijen tot het eind van de transactie; een tweede sessie die dezelfde rij wijzigt, wacht. Wilt u een rij vergrendelen op het moment dat u hem leest, gebruik <code>SELECT ... FOR UPDATE</code>:</p>
+        <pre><code>BEGIN;
+SELECT saldo FROM rekening WHERE fonds = 'A' FOR UPDATE;
+-- niemand anders kan deze rij nu wijzigen
+UPDATE rekening SET saldo = saldo - 1000 WHERE fonds = 'A';
+COMMIT;</code></pre>
+        <p><code>FOR UPDATE SKIP LOCKED</code> is het gereedschap voor werkverdeling: meerdere verwerkers halen elk een andere onverwerkte mutatie op zonder elkaar te blokkeren — precies wat Meridiaan nodig heeft om de mutatieverwerking over meerdere processen te verdelen.</p>
+        <h4>Deadlocks</h4>
+        <p>Twee transacties wachten op elkaar (sessie 1 wijzigt rij A dan B, sessie 2 wijzigt rij B dan A). PostgreSQL detecteert dit automatisch, kiest een slachtoffer en breekt die transactie af met <code>ERROR: deadlock detected</code>.</p>
+        <div class="callout tip"><span class="lbl">Voorkomen</span><p>Verreweg de belangrijkste maatregel: <strong>benader rijen altijd in dezelfde volgorde.</strong> Als beide sessies eerst A en dan B doen, kan er geen cyclus ontstaan. Verder: houd transacties kort, vergrendel niet meer dan nodig, en vang de fout op om opnieuw te proberen — een deadlock is bij gelijktijdige belasting nooit volledig uit te sluiten.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.6d — de deadlock-oplossing testen</p>
+        <details class="q"><summary><span class="qn">1</span><span>U reproduceert een deadlock (sessie 1: rij A dan B; sessie 2: rij B dan A), en herhaalt daarna het experiment maar laat beide sessies de rijen in dezelfde volgorde benaderen. Treedt de deadlock nog op, en waarom (niet)?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee. Benaderen beide sessies eerst rij 1 en dan rij 2, dan wacht de tweede sessie netjes bij rij 1 tot de eerste klaar is — er ontstaat geen cyclus van wachtende transacties. Er is wél wachttijd, maar geen deadlock. Dit is de reden dat "benader rijen altijd in dezelfde volgorde" hoort in de afspraken van een ontwikkelteam: het is de meest effectieve maatregel tegen deadlocks, effectiever dan enige technische oplossing achteraf.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">De lost update in de praktijk</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Nu het probleem uit deel 1. Twee medewerkers passen het jaarsalaris van hetzelfde dienstverband aan: de een verhoogt met 2.000, de ander met 1.000, beide beginnend bij 50.000. Beide lezen 50.000, sessie 1 zet 52.000 en committed, sessie 2 zet 51.000 (gebaseerd op haar eigen, verouderde lezing) en committed. <strong>Eindresultaat: 51.000.</strong> De verhoging van sessie 1 is verdwenen zonder enige foutmelding — precies het Excel-probleem uit deel 1, nu in een echte database, want een database beschermt hier niet vanzelf tegen.</p>
+        <p>Drie oplossingen. <strong>1. Reken in de database, niet in de applicatie:</strong> <code>UPDATE dienstverband SET jaarsalaris = jaarsalaris + 2000 ...</code> — de tweede sessie wacht op de rijlock, leest daarna de nieuwe waarde en telt daarbovenop, resultaat 53.000, wat beide bedoelden. <strong>2. Vergrendel bij het lezen</strong> met <code>SELECT ... FOR UPDATE</code>: pessimistisch, u claimt de rij voordat u gaat rekenen. <strong>3. Optimistisch vergrendelen met een versiekolom:</strong> <code>UPDATE ... WHERE dienstverband_id = 1 AND versie = 7</code> — levert dit nul gewijzigde rijen op, dan heeft iemand anders de rij intussen aangepast en moet u opnieuw beginnen.</p>
+        <div class="callout note"><span class="lbl">Optimistisch versus pessimistisch</span><p>Pessimistisch (<code>FOR UPDATE</code>) is goed bij veel conflicten en korte bewerkingen: anderen wachten. Optimistisch (versiekolom) is goed bij weinig conflicten en lange bedenktijd: werk opnieuw doen bij conflict. Doorslaggevend bij webtoepassingen: u kunt geen databaselock vasthouden terwijl een gebruiker een formulier invult — die transactie zou minuten <code>idle in transaction</code> staan. Voor het deelnemersportaal van Meridiaan is optimistisch vergrendelen daarom de enige werkbare keuze.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.5f — de lost update uitleggen aan Karin</p>
+        <details class="q"><summary><span class="qn">1</span><span>Karin vraagt waarom de database de lost update niet vanzelf voorkomt. Geef een antwoord in maximaal 80 woorden.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat de database niet kan weten dat die twee wijzigingen bij elkaar horen. Vanuit haar gezichtspunt heeft iemand eerst 52.000 opgeslagen en daarna iemand 51.000 — beide zijn geldige waarden, netjes na elkaar vastgelegd. Dat de tweede persoon rekende op basis van een verouderd scherm, is informatie die alleen wij hebben. Daarom moeten wij het aangeven: door in de database te rekenen, door de rij te vergrendelen, of door een versienummer mee te sturen.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">VACUUM en het prijskaartje van MVCC</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Elke <code>UPDATE</code> en <code>DELETE</code> laat een dode rijversie achter. Zonder opruiming groeit de tabel onbeperkt — <strong>table bloat</strong>. <code>VACUUM</code> doet drie dingen: ruimt dode rijversies op (ruimte blijft binnen de tabel beschikbaar), werkt de statistieken bij die de planner gebruikt, en voorkomt het aflopen van de transactie-ID-teller.</p>
+        <div class="callout warn"><span class="lbl">XID-wraparound</span><p>De XID-teller is eindig. Zonder opruiming zou hij na verloop van tijd omlopen en zouden oude rijen "in de toekomst" lijken te liggen — en daarmee onzichtbaar worden. <code>VACUUM</code> bevriest oude rijen om dat te voorkomen. Gebeurt dat te lang niet, dan <strong>stopt PostgreSQL met schrijven</strong> om gegevensverlies te voorkomen — de bekendste manier om een PostgreSQL-productieomgeving stil te leggen, en het begint altijd hetzelfde: iemand zet autovacuum uit omdat het I/O kost.</p></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Variant</th><th>Doet</th><th>Lock</th></tr></thead>
+          <tbody>
+            <tr><td><code>VACUUM</code></td><td>Ruimt op, ruimte blijft in de tabel</td><td>Licht; tabel blijft bruikbaar</td></tr>
+            <tr><td><code>VACUUM FULL</code></td><td>Herschrijft de tabel, geeft ruimte terug aan het OS</td><td><strong><code>ACCESS EXCLUSIVE</code> — alles wacht</strong></td></tr>
+            <tr><td><code>ANALYZE</code></td><td>Alleen statistieken</td><td>Licht</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong><code>VACUUM FULL</code> is geen routineonderhoud.</strong> Het herschrijft de tabel volledig, heeft tijdelijk twee keer de ruimte nodig en blokkeert alles — gebruik het alleen na een eenmalige grote opruiming, in een onderhoudsvenster. <strong>Autovacuum</strong> draait permanent op de achtergrond; de afstelling hoort in niveau 2, de boodschap voor nu: laat het aan staan.</p>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Transactiegrenzen, en aansluiting op de certificering</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Waar begint en eindigt een transactie? Een ontwerpvraag, geen technische. Vuistregels: <strong>één transactie per bedrijfshandeling</strong>; <strong>geen gebruikersinteractie binnen een transactie</strong> (nooit <code>BEGIN</code> doen, een formulier tonen en op de gebruiker wachten); <strong>geen externe aanroepen binnen een transactie</strong> als te vermijden; <strong>zo kort mogelijk, maar niet korter</strong> — opsplitsen "voor de prestaties" verbreekt de atomiciteit die u juist wilde.</p>
+        <p>Een transactie kan mislukken door een <strong>constraintschending</strong> (voorspelbaar, hoort in de applicatielogica), een <strong>serialisatiefout</strong>, of een <strong>deadlock</strong> — voor de laatste twee geldt: vang de fout op, wacht kort met oplopende wachttijd, probeer opnieuw, en geef na een paar pogingen op met een begrijpelijke melding. Wat u niet doet: de foutmelding onderdrukken en doorgaan.</p>
+        <h4>Wat het examen hierover vraagt</h4>
+        <p>Paraat moet zijn: de vier ACID-eigenschappen en het mechanisme per eigenschap; de vier anomalieën en welk isolatieniveau ze uitsluit; dat PostgreSQL geen read uncommitted kent en dat repeatable read hier ook phantoms uitsluit; de werking van MVCC met <code>xmin</code>/<code>xmax</code>; de belangrijkste locktypen; het doel van <code>VACUUM</code> inclusief XID-wraparound; het verschil tussen <code>VACUUM</code> en <code>VACUUM FULL</code>.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>Transactie</strong> — groep bewerkingen die geheel of niet wordt uitgevoerd. <strong>Savepoint</strong> — terugvalpunt binnen een transactie. <strong>Isolatieniveau</strong> — mate waarin gelijktijdige transacties elkaar kunnen beïnvloeden. <strong>Dirty/non-repeatable/phantom read, serialization anomaly</strong> — de vier anomalieën. <strong>MVCC</strong> — meerdere rijversies naast elkaar voor gelijktijdigheid zonder blokkeren. <strong>xmin/xmax</strong> — verborgen kolommen die de zichtbaarheid van een rijversie bepalen. <strong>Lost update</strong> — een wijziging die stil wordt overschreven door een andere sessie. <strong>Optimistisch/pessimistisch vergrendelen.</strong> <strong>Deadlock</strong> — twee transacties die op elkaar wachten. <strong>Bloat</strong> — ruimte ingenomen door niet-opgeruimde dode rijversies. <strong>XID-wraparound.</strong> <strong><code>idle in transaction</code></strong> — sessie met een openstaande transactie die niets doet.</p>
+        <p><strong>Vooruit naar deel 8.</strong> U heeft nu een database die correct is onder gelijktijdige belasting. Volgende keer maakt u hem snel — en leert u waarom "traag" bijna nooit betekent wat mensen denken.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.9B — transactieontwerp voor een adreswijziging</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij een adreswijziging via het deelnemersportaal opent de deelnemer een formulier, past het adres aan en verstuurt. Waar horen BEGIN en COMMIT te staan, en welke vergrendelstrategie past hier?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De transactie begint <strong>ná</strong> het versturen van het formulier en omvat alleen het afsluiten van de oude periode en het openen van de nieuwe — nooit rond de gebruikersinteractie. Een <code>BEGIN</code> bij het openen van het formulier zou <code>idle in transaction</code> opleveren zolang de deelnemer nadenkt, met bloat en locks tot gevolg. Vergrendeling: <strong>optimistisch, met een versiekolom</strong> — tussen het openen en versturen kan de klantenservice het adres al hebben gewijzigd, en dan hoort de gebruiker te horen "dit is intussen gewijzigd" in plaats van de correctie stil te overschrijven.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 8</h3>
+      <p>Deel 8 gaat over indexen en views: nu de database correct is onder gelijktijdige belasting, maakt u hem snel — en leert u lezen wat EXPLAIN u vertelt over een query.</p>
+      <a class="btn" href="deel-08.html">Deel 8 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 7 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-07-transacties-acid-en-mvcc/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm7_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

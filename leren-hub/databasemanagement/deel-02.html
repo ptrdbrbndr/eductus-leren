@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 2 — Het relationele model en de PostgreSQL-architectuur | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 2 (EDB Associate): het relationele model van Codd, sleutels en integriteitsregels, en de PostgreSQL-architectuur — processen, geheugen, WAL en MVCC — voor de nieuwe datalaag bij Meridiaan Pensioen.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-02.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 2</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 2 van 30</p>
+  <h1>Het relationele model en<br><em>de PostgreSQL-architectuur</em>.</h1>
+  <p class="hero__lead">Met de platformkeuze uit deel 1 op zak gaat dit deel van theorie naar machine. U leert het relationele model van Codd, hoe sleutels en integriteitsregels de kern van elk ontwerp vormen, en hoe PostgreSQL dat model onder de motorkap uitvoert: processen, geheugen, write-ahead log en MVCC. Dit is inhoudelijk het zwaarste deel van niveau 1 — de architectuur die u hier leert, is de basis voor alles wat vanaf deel 3 volgt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>fasen in de query-pijplijn</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap: waarom PostgreSQL → <b>➋ Het relationele model en de PostgreSQL-architectuur (hier)</b> → ➌ SQL basis: SELECT, filteren, sorteren, aggregeren → ➍ SQL verdieping: joins, subquery's en CTE's → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → ➑ Indexen en views → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Waarom een model vóór een product</a></li>
+      <li><a href="#s3" data-target="s3">Het relationele model: bouwstenen en sleutels</a></li>
+      <li><a href="#s4" data-target="s4">De drie integriteitsregels</a></li>
+      <li><a href="#s5" data-target="s5">NULL en de driewaardige logica</a></li>
+      <li><a href="#s6" data-target="s6">Relationele algebra en waar SQL afwijkt</a></li>
+      <li><a href="#s7" data-target="s7">PostgreSQL-architectuur: processen en geheugen</a></li>
+      <li><a href="#s8" data-target="s8">Opslag op schijf, systeemcatalogus, WAL en MVCC</a></li>
+      <li><a href="#s9" data-target="s9">De reis van een query, en aansluiting op de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is inhoudelijk het zwaarste deel van niveau 1. Het examen weegt architectuur zwaar, en alles wat u in latere delen leert over indexen, tuning, back-up en replicatie veronderstelt het model uit dit deel.</p>
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>de begrippen relatie, tupel, attribuut en domein correct gebruiken en koppelen aan hun SQL-tegenhangers;</li>
+          <li>de soorten sleutels onderscheiden en een sleutelkeuze motiveren;</li>
+          <li>de drie integriteitsregels benoemen en per regel aangeven wat er misgaat als u hem loslaat;</li>
+          <li>uitleggen waarom <code>NULL = NULL</code> niet waar is en welke gevolgen dat heeft voor uw query's;</li>
+          <li>de belangrijkste PostgreSQL-processen benoemen en zeggen wat elk doet;</li>
+          <li>het onderscheid cluster / database / schema toepassen bij het inrichten van een omgeving;</li>
+          <li>de reis van een query door parser, rewriter, planner en executor beschrijven;</li>
+          <li>uitleggen waarom WAL bestaat en wat er zonder WAL misgaat bij een crash;</li>
+          <li>verklaren waarom PostgreSQL-verbindingen duur zijn en wanneer pooling nodig is.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Waarom een model vóór een product</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het relationele model is in 1970 beschreven door Edgar F. Codd in een artikel van dertien pagina's. Het is opmerkelijk dat een model uit 1970 nog steeds de basis vormt van vrijwel alle administratieve systemen ter wereld. De reden is dat Codd geen product beschreef maar een <em>wiskundige</em> basis: relaties als verzamelingen, met bewerkingen die gesloten zijn — het resultaat van een bewerking op relaties is zelf weer een relatie.</p>
+        <p>Die geslotenheid is de reden dat u in SQL een query op het resultaat van een query kunt loslaten, en dat een optimalisator een query mag herschrijven zolang het resultaat gelijk blijft. Zonder wiskundige basis was query-optimalisatie (deel 8, en niveau 2) onmogelijk geweest.</p>
+        <div class="callout tip"><span class="lbl">Praktisch belang</span><p>Als u het model kent, herkent u wanneer een product ervan afwijkt. Dat gebeurt vaker dan u denkt, en het is meestal precies daar waar de verrassingen zitten.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Het relationele model: bouwstenen en sleutels</h2><span class="chip time">⏱ 22 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Model</th><th>SQL</th><th>Alledaags</th></tr></thead>
+          <tbody>
+            <tr><td>Relatie</td><td>Tabel</td><td>Verzameling gelijksoortige gegevens</td></tr>
+            <tr><td>Tupel</td><td>Rij</td><td>Eén exemplaar</td></tr>
+            <tr><td>Attribuut</td><td>Kolom</td><td>Eigenschap</td></tr>
+            <tr><td>Domein</td><td>Datatype (+ constraints)</td><td>De toegestane waarden</td></tr>
+            <tr><td>Cardinaliteit</td><td>Aantal rijen</td><td>—</td></tr>
+            <tr><td>Graad</td><td>Aantal kolommen</td><td>—</td></tr>
+          </tbody>
+        </table></div>
+        <p>Twee eigenschappen van een relatie die SQL <em>niet</em> naleeft, maar die u moet kennen:</p>
+        <ol>
+          <li><strong>Een relatie is een verzameling.</strong> Dubbele tupels bestaan niet, en er is geen volgorde. In SQL kan een tabel wél dubbele rijen bevatten (tenzij u dat verbiedt) en heeft een resultaat wél een volgorde zodra u <code>ORDER BY</code> gebruikt.</li>
+          <li><strong>Attributen zijn atomair.</strong> Eén waarde per cel, niet een lijstje. PostgreSQL biedt arrays en <code>jsonb</code> en schendt hiermee bewust de eerste normaalvorm — soms terecht, vaak niet. Deel 5 gaat over wanneer wel en wanneer niet.</li>
+        </ol>
+        <h4>Het domein</h4>
+        <p>Het domein wordt onderschat. <code>varchar(200)</code> is een zwak domein: het staat "Nvt", "onbekend" en "zie mail Karin" toe. Een sterk domein is een datatype plus constraints plus, waar mogelijk, een referentie naar een tabel met toegestane waarden.</p>
+        <p>Bij Meridiaan is <code>burgerlijke_staat</code> in de oude Access-schil een vrij tekstveld. Er staan negen varianten van "gehuwd" in. Dat is geen datakwaliteitsprobleem dat u met een schoonmaakactie oplost; het is een domeinprobleem dat u met een ontwerpbeslissing oplost.</p>
+        <figure><img src="figuren/figuur-2-1.png" alt="Relatie, tupel, attribuut en domein op één voorbeeldtabel deelnemer"><figcaption>Figuur 2-1 — Relatie, tupel, attribuut en domein op één voorbeeldtabel deelnemer</figcaption></figure>
+        <h4>Sleutels</h4>
+        <p><strong>Supersleutel</strong> — elke verzameling attributen die een tupel uniek identificeert. Meestal zijn er veel, en de meeste zijn nutteloos ("bsn + achternaam + postcode"). <strong>Kandidaatsleutel</strong> — een supersleutel waaruit u geen attribuut kunt weglaten zonder de uniciteit te verliezen. <strong>Primaire sleutel</strong> — de kandidaatsleutel die u kiest als officiële identificatie, één per tabel, mag nooit NULL zijn. <strong>Alternatieve sleutel</strong> — de kandidaatsleutels die u niet koos; die verdienen alsnog een <code>UNIQUE</code>-constraint. <strong>Vreemde sleutel (foreign key)</strong> — een attribuut dat verwijst naar de primaire sleutel van een andere (of dezelfde) tabel. <strong>Samengestelde sleutel</strong> — een sleutel die uit meerdere attributen bestaat.</p>
+        <h4>Natuurlijk of surrogaat?</h4>
+        <p>De keuze die in elk project terugkomt. Een <strong>natuurlijke sleutel</strong> komt uit het domein zelf: burgerservicenummer, KvK-nummer, ISBN. Een <strong>surrogaatsleutel</strong> is betekenisloos en door het systeem gegenereerd: een volgnummer of een UUID.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Natuurlijk</th><th>Surrogaat</th></tr></thead>
+          <tbody>
+            <tr><td>Betekenisvol voor mensen</td><td>Ja</td><td>Nee</td></tr>
+            <tr><td>Stabiel over de tijd</td><td>Vaak niet</td><td>Altijd</td></tr>
+            <tr><td>Bruikbaar bij ontbreken</td><td>Nee (buitenlandse deelnemer zonder BSN)</td><td>Ja</td></tr>
+            <tr><td>Privacygevoelig</td><td>Vaak</td><td>Nee</td></tr>
+            <tr><td>Extra join nodig om te herkennen</td><td>Nee</td><td>Ja</td></tr>
+          </tbody>
+        </table></div>
+        <p>Voor Meridiaan is dit geen theoretische kwestie. Het burgerservicenummer lijkt de perfecte sleutel voor <code>deelnemer</code>, maar niet elke deelnemer heeft er een (grensarbeiders, gepensioneerden in het buitenland), het is een bijzonder persoonsgegeven dat zich via foreign keys door het hele model verspreidt, en het kan in uitzonderingsgevallen wijzigen.</p>
+        <div class="callout tip"><span class="lbl">Advies dat in deze cursus consequent wordt aangehouden</span><p>Gebruik een surrogaatsleutel als primaire sleutel, en leg de natuurlijke sleutel vast als <code>UNIQUE</code>-constraint waar hij bestaat en werkelijk uniek is. Zo krijgt u stabiliteit én bewaakte betekenis. In deel 5 en 6 werken we dit uit.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 2, Opdracht 2.2 — Sleutelkeuze verdedigen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Tarik (enterprise-architect) stelt voor om overal het burgerservicenummer als primaire sleutel te gebruiken: "Dan hebben we tenminste geen betekenisloze nummers en kunnen we systemen makkelijk koppelen." Geef een reactie met minstens drie argumenten, waarvan minstens één over privacy, en sluit af met een concreet alternatief.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het koppelvoordeel is echt, maar de kosten wegen niet op. <strong>Ten eerste:</strong> niet elke deelnemer heeft een BSN — grensarbeiders en deelnemers in het buitenland kunnen dan niet worden vastgelegd, terwijl entiteitsintegriteit eist dat een primaire sleutel nooit NULL is. <strong>Ten tweede:</strong> het BSN is een bijzonder identificerend gegeven; als primaire sleutel verspreidt het zich via elke foreign key door het hele model, tot in tabellen waar niemand het nodig heeft — dataminimalisatie wordt dan onhaalbaar. <strong>Ten derde:</strong> het kan in uitzonderingsgevallen wijzigen, en dan moet elke verwijzing mee. Voorstel: <code>deelnemer_id</code> als surrogaatsleutel, en het BSN als <code>UNIQUE</code>-kolom in de deelnemertabel, waar het één keer staat en gericht geautoriseerd kan worden.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De drie integriteitsregels</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Entiteitsintegriteit.</strong> Geen enkel attribuut van de primaire sleutel mag NULL zijn. Logisch: een identificatie die "onbekend" kan zijn, identificeert niet.</p>
+        <p><strong>Referentiële integriteit.</strong> Een vreemde sleutel verwijst naar een bestaande rij, of is volledig NULL. Dit is de regel die het SharePoint-probleem uit deel 1 (mutatie op niet-bestaand werkgeversnummer 8842) onmogelijk maakt.</p>
+        <p>Bij referentiële integriteit hoort een gedragskeuze bij verwijderen of wijzigen van de verwezen rij:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Optie</th><th>Betekenis</th><th>Wanneer</th></tr></thead>
+          <tbody>
+            <tr><td><code>NO ACTION</code> / <code>RESTRICT</code></td><td>Weiger de bewerking</td><td>Standaard en meestal juist</td></tr>
+            <tr><td><code>CASCADE</code></td><td>Verwijder/wijzig mee</td><td>Alleen bij echte eigendomsrelaties</td></tr>
+            <tr><td><code>SET NULL</code></td><td>Zet verwijzing op NULL</td><td>Als de relatie optioneel is</td></tr>
+            <tr><td><code>SET DEFAULT</code></td><td>Zet op standaardwaarde</td><td>Zelden</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout warn"><span class="lbl">CASCADE op een deelnemertabel is levensgevaarlijk</span><p>Eén verwijderde deelnemer neemt zijn hele aansprakenhistorie mee. Gebruik <code>CASCADE</code> alleen waar het kind zonder de ouder werkelijk geen bestaansrecht heeft.</p></div>
+        <p><strong>Domeinintegriteit.</strong> Elke waarde valt binnen het domein van het attribuut. In PostgreSQL: datatypen, <code>CHECK</code>-constraints, <code>NOT NULL</code>, en eigen domeinen (<code>CREATE DOMAIN</code>).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 2, Opdracht 2.3 — Referentiële integriteit en verwijdergedrag</p>
+        <details class="q"><summary><span class="qn">1</span><span>Meridiaan krijgt drie tabellen: werkgever, deelnemer en aanspraak (een aanspraak hoort bij precies één deelnemer). Wat is er mis met de gedachte "we zetten overal CASCADE, dan hebben we nooit foutmeldingen"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Twee dingen. Ten eerste verandert <code>CASCADE</code> foutmeldingen niet in correct gedrag, maar in <strong>stille gegevensvernietiging</strong>: één verwijderde werkgever kan de hele keten van deelnemers en aanspraken meenemen zonder waarschuwing. Ten tweede is de foutmelding het <em>doel</em> — het systeem beschermt tegen een handeling die iemand niet had moeten doen. Voor een werkgever met 800 gekoppelde deelnemers hoort de verwijdering geweigerd te worden (<strong>RESTRICT</strong>); deelnemers zelf verwijdert men in de praktijk niet, maar beëindigt men met een status of einddatum. <code>CASCADE</code> hoort alleen thuis waar het kind zonder de ouder werkelijk geen bestaansrecht heeft.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">NULL en de driewaardige logica</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>NULL is niet nul, niet een lege string, en niet "leeg". NULL betekent <strong>onbekend of niet van toepassing</strong>. Daaruit volgt logica met drie waarden: waar, onwaar, <strong>onbekend</strong>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Uitdrukking</th><th>Resultaat</th></tr></thead>
+          <tbody>
+            <tr><td><code>NULL = NULL</code></td><td>onbekend, niet waar</td></tr>
+            <tr><td><code>NULL &lt;&gt; NULL</code></td><td>onbekend</td></tr>
+            <tr><td><code>NULL IS NULL</code></td><td>waar</td></tr>
+            <tr><td><code>5 &gt; NULL</code></td><td>onbekend</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-2-2.png" alt="Waarheidstabel driewaardige logica voor AND, OR, NOT"><figcaption>Figuur 2-2 — Waarheidstabel driewaardige logica voor AND, OR, NOT</figcaption></figure>
+        <p>Gevolgen die in de praktijk fout gaan:</p>
+        <ol>
+          <li><strong><code>WHERE</code>-clausules filteren onbekend weg.</strong> <code>WHERE einddatum &lt;&gt; '2026-01-01'</code> levert géén rijen op waar <code>einddatum</code> NULL is. Wie alle rijen wil behalve die ene datum, schrijft <code>WHERE einddatum IS DISTINCT FROM DATE '2026-01-01'</code>.</li>
+          <li><strong>Aggregaties negeren NULL.</strong> <code>AVG(premie)</code> rekent over de niet-NULL waarden. <code>COUNT(premie)</code> telt alleen niet-NULL; <code>COUNT(*)</code> telt alle rijen. Dat verschil verklaart de meeste "de aantallen kloppen niet"-meldingen.</li>
+          <li><strong><code>NOT IN</code> met NULL in de lijst levert nooit rijen op.</strong> Berucht. Gebruik <code>NOT EXISTS</code>.</li>
+          <li><strong><code>UNIQUE</code> staat meerdere NULL's toe.</strong> Twee rijen met NULL in dezelfde unieke kolom zijn toegestaan, want ze zijn niet aantoonbaar gelijk.</li>
+        </ol>
+        <p><strong>Ontwerpregel:</strong> gebruik NULL alleen als "onbekend of niet van toepassing" werkelijk een geldige toestand is. Gebruik het nooit als vervanging voor een status. Een <code>einddatum</code> die NULL is omdat het dienstverband loopt, is verdedigbaar; een <code>bedrag</code> dat NULL is omdat de berekening nog moet draaien, is een verkapte statuskolom.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 2, Opdracht 2.4 — NULL-vallen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij Meridiaan blijkt een maandrapport 340.000 deelnemers te tellen terwijl een tweede rapport op 338.412 uitkomt. Beide gebruiken COUNT. Wat is de meest waarschijnlijke oorzaak, en welk patroon uit deze sectie herkent u erin?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Vrijwel zeker gebruikt het ene rapport <code>COUNT(*)</code> en het andere <code>COUNT(kolom)</code> op een kolom met NULL-waarden — of er zit een <code>WHERE</code>-voorwaarde in die met <code>&lt;&gt;</code> of <code>NOT IN</code> werkt en daardoor NULL-rijen stil wegfiltert. Vuistregel: gebruik <code>NOT EXISTS</code> in plaats van <code>NOT IN</code> zodra NULL mogelijk is, en wees expliciet over <code>COUNT(*)</code> versus <code>COUNT(kolom)</code>. Dit is exact het "drie afdelingen, drie aantallen"-probleem uit deel 1, nu met een technische oorzaak.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Relationele algebra en waar SQL afwijkt</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>U hoeft geen algebra te kunnen schrijven, maar u moet de operatoren herkennen — de queryplannen die u in deel 8 en in niveau 2 gaat lezen, zijn er letterlijk in opgesteld.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Operator</th><th>Betekenis</th><th>SQL</th></tr></thead>
+          <tbody>
+            <tr><td>Selectie (σ)</td><td>Rijen kiezen</td><td><code>WHERE</code></td></tr>
+            <tr><td>Projectie (π)</td><td>Kolommen kiezen</td><td><code>SELECT</code>-lijst</td></tr>
+            <tr><td>Vereniging (∪)</td><td>Rijen samenvoegen</td><td><code>UNION</code></td></tr>
+            <tr><td>Doorsnede (∩)</td><td>Gemeenschappelijke rijen</td><td><code>INTERSECT</code></td></tr>
+            <tr><td>Verschil (−)</td><td>Rijen die niet in de tweede staan</td><td><code>EXCEPT</code></td></tr>
+            <tr><td>Cartesisch product (×)</td><td>Elke rij met elke rij</td><td><code>CROSS JOIN</code></td></tr>
+            <tr><td>Join (⋈)</td><td>Product plus voorwaarde</td><td><code>JOIN ... ON</code></td></tr>
+            <tr><td>Hernoeming (ρ)</td><td>Alias</td><td><code>AS</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Onthoud vooral: <strong>een join is een cartesisch product met een filter.</strong> Wie dat begrijpt, begrijpt onmiddellijk waarom een vergeten joinvoorwaarde 340.000 × 4.100 rijen oplevert en waarom de planner joins probeert om te zetten in iets goedkopers.</p>
+        <h4>Waar SQL afwijkt van het model</h4>
+        <p>Puristen ergeren zich hieraan; u moet het simpelweg weten omdat het uw query's beïnvloedt.</p>
+        <ol>
+          <li><strong>Bags in plaats van sets.</strong> SQL-tabellen en -resultaten kunnen duplicaten bevatten. Vandaar <code>DISTINCT</code>.</li>
+          <li><strong>Volgorde bestaat.</strong> In het model niet, in SQL wel via <code>ORDER BY</code> — en zonder <code>ORDER BY</code> is de volgorde <em>niet gegarandeerd</em>, ook al lijkt hij stabiel. Vertrouw daar nooit op.</li>
+          <li><strong>NULL.</strong> Het model in zijn zuivere vorm kent geen NULL; SQL koos voor NULL en de driewaardige logica.</li>
+          <li><strong>Kolomvolgorde is betekenisvol.</strong> <code>SELECT *</code> levert kolommen in de volgorde van definitie; in het model heeft een relatie geen kolomvolgorde.</li>
+          <li><strong>Niet-atomaire waarden.</strong> Arrays, <code>jsonb</code>, samengestelde typen.</li>
+        </ol>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">PostgreSQL-architectuur: processen en geheugen</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Hier gaan we van theorie naar machine. PostgreSQL gebruikt een <strong>procesmodel</strong>, geen threadmodel: elke clientverbinding krijgt een eigen besturingssysteemproces. Dat is een fundamentele ontwerpkeuze met zichtbare gevolgen (sectie 9).</p>
+        <p><strong>Postmaster (de hoofdserver).</strong> Het eerste proces dat start. Luistert op de poort, accepteert verbindingen, start voor elke verbinding een backend, start en bewaakt de achtergrondprocessen, en herstart alles na een crash van een backend.</p>
+        <p><strong>Backend.</strong> Eén per verbinding. Voert de query's van die ene client uit. Sterft als de verbinding sluit.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Achtergrondproces</th><th>Taak</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Background writer</strong></td><td>Schrijft "vuile" pagina's uit shared buffers geleidelijk naar schijf, zodat backends dat niet zelf hoeven</td></tr>
+            <tr><td><strong>Checkpointer</strong></td><td>Voert checkpoints uit: alle vuile pagina's naar schijf, zodat herstel na crash niet vanaf het begin van de WAL hoeft</td></tr>
+            <tr><td><strong>WAL writer</strong></td><td>Schrijft de WAL-buffers naar het WAL-bestand</td></tr>
+            <tr><td><strong>Autovacuum launcher/workers</strong></td><td>Ruimen dode rijversies op en verversen statistieken (essentieel — zie MVCC)</td></tr>
+            <tr><td><strong>Archiver</strong></td><td>Kopieert volle WAL-segmenten naar de archieflocatie (nodig voor PITR, niveau 2)</td></tr>
+            <tr><td><strong>Logger</strong></td><td>Schrijft de serverlog</td></tr>
+            <tr><td><strong>Statistics collector</strong></td><td>Verzamelt gebruiksstatistieken voor de planner en voor monitoring</td></tr>
+            <tr><td><strong>WAL sender / receiver</strong></td><td>Alleen bij replicatie (niveau 2)</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-2-3.png" alt="Procesdiagram — postmaster, backends, achtergrondprocessen, gedeeld geheugen"><figcaption>Figuur 2-3 — Procesdiagram — postmaster, backends, achtergrondprocessen, gedeeld geheugen</figcaption></figure>
+        <div class="callout note"><span class="lbl">Waarom u dit moet kennen</span><p>Als in niveau 2 een productieprobleem zich manifesteert als "de schijf loopt vol", is het antwoord vrijwel altijd terug te voeren op één van deze processen dat zijn werk niet doet — meestal autovacuum of de archiver.</p></div>
+        <h4>Geheugen: shared buffers en de rest</h4>
+        <p><strong>shared_buffers</strong> — de bufferpool: het gedeelte van het RAM waarin PostgreSQL datapagina's vasthoudt (gedeeld door alle processen). Elke lees- of schrijfbewerking gaat hierdoorheen; een pagina is standaard 8 kB. <strong>WAL buffers</strong> — waar WAL-records verzamelen voordat ze naar schijf gaan.</p>
+        <div class="callout note"><span class="lbl">Belangrijk en contra-intuïtief</span><p>PostgreSQL vertrouwt bewust ook op de cache van het besturingssysteem. Het zet <code>shared_buffers</code> daarom niet op 90% van het geheugen, zoals sommige andere DBMS'en doen. De vuistregel (25% van het RAM, met nuances) komt in niveau 2.</p></div>
+        <p>Lokaal, per backend: <strong>work_mem</strong> — per sorteer- of hash-bewerking. Te laag: de sortering gaat naar schijf en de query wordt traag. Te hoog: bij veel gelijktijdige query's raakt het geheugen op, want dit geldt <em>per bewerking, per verbinding</em> — de meest verkeerd ingestelde parameter in PostgreSQL. Daarnaast <strong>maintenance_work_mem</strong> (voor <code>VACUUM</code>, <code>CREATE INDEX</code>) en <strong>temp_buffers</strong> (tijdelijke tabellen).</p>
+        <figure><img src="figuren/figuur-2-4.png" alt="Geheugenlagen — client, backend-lokaal geheugen, gedeeld geheugen, OS-cache, schijf"><figcaption>Figuur 2-4 — Geheugenlagen — client, backend-lokaal geheugen, gedeeld geheugen, OS-cache, schijf</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Opslag op schijf, systeemcatalogus, WAL en MVCC</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit onderscheid is een klassieke examenvraag én een klassieke bron van verwarring in projecten. <strong>Cluster</strong> — één draaiende PostgreSQL-installatie op één datadirectory, met één postmaster en één poort, bevat meerdere databases. <em>Let op: "cluster" betekent hier dus niet "meerdere machines".</em> <strong>Database</strong> — een geïsoleerde verzameling schema's; een verbinding maakt verbinding met precies één database. <strong>Schema</strong> — een naamruimte binnen een database, bevat tabellen, views, functies, typen; standaard bestaat <code>public</code>. <strong>Tabel</strong> — waar de gegevens werkelijk staan.</p>
+        <p>Vraag uit de casus: moeten de nieuwe deelnemersgegevens en werkgeversgegevens in dezelfde database? <strong>Zelfde database, verschillende schema's</strong> → u kunt joinen, één back-up, één transactie over beide; rechten scheidt u op schemaniveau. <strong>Verschillende databases</strong> → harde scheiding, maar geen joins en geen transactie over beide heen. Vuistregel: <strong>scheid met schema's tenzij u een harde isolatie-eis heeft.</strong></p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Map/bestand</th><th>Inhoud</th></tr></thead>
+          <tbody>
+            <tr><td><code>base/</code></td><td>De databases; per database een submap, per tabel een of meer bestanden</td></tr>
+            <tr><td><code>global/</code></td><td>Objecten die voor het hele cluster gelden (o.a. de rollenlijst)</td></tr>
+            <tr><td><code>pg_wal/</code></td><td>De write-ahead log-segmenten</td></tr>
+            <tr><td><code>pg_tblspc/</code></td><td>Verwijzingen naar tablespaces buiten het datadirectory</td></tr>
+            <tr><td><code>postgresql.conf</code></td><td>Hoofdconfiguratie</td></tr>
+            <tr><td><code>pg_hba.conf</code></td><td>Wie mag van waar op welke manier verbinden</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout warn"><span class="lbl">Waarschuwing</span><p>Verwijder nooit met de hand bestanden uit <code>base/</code> of <code>pg_wal/</code>. Een volgelopen <code>pg_wal/</code> is een symptoom (meestal een gefaalde archiver of een vergeten replicatieslot); handmatig opruimen maakt de database onherstelbaar.</p></div>
+        <h4>De systeemcatalogus</h4>
+        <p>PostgreSQL beschrijft zichzelf in gewone tabellen: <strong><code>pg_catalog</code></strong> (o.a. <code>pg_class</code>, <code>pg_attribute</code>, <code>pg_namespace</code>, <code>pg_type</code>, <code>pg_roles</code>), <strong><code>information_schema</code></strong> (draagbare, gestandaardiseerde view), en <strong><code>pg_stat_*</code>-views</strong> (actueel gedrag, zoals <code>pg_stat_activity</code> — het eerste wat u opent bij "de database is traag").</p>
+        <h4>WAL: de belofte van duurzaamheid</h4>
+        <p>De <strong>write-ahead log</strong> is het mechanisme achter de D van ACID, en tevens de basis van back-up en replicatie (niveau 2). Vóór een wijziging naar het eigenlijke gegevensbestand gaat, wordt hij als record naar de WAL geschreven en daar afgedwongen naar schijf (<code>fsync</code>). Pas dan bevestigt de database de commit. Bij een crash leest PostgreSQL de WAL vanaf het laatste checkpoint en speelt de wijzigingen opnieuw af: wat gecommit was, komt terug; wat niet gecommit was, verdwijnt. Het is bovendien sneller, omdat WAL-schrijfacties sequentieel zijn terwijl het bijwerken van gegevensbestanden willekeurig verspreid is.</p>
+        <figure><img src="figuren/figuur-2-5.png" alt="WAL-stroom — wijziging → WAL-buffer → WAL-bestand (fsync) → commit bevestigd → later pas gegevensbestand"><figcaption>Figuur 2-5 — WAL-stroom — wijziging → WAL-buffer → WAL-bestand (fsync) → commit bevestigd → later pas gegevensbestand</figcaption></figure>
+        <h4>MVCC in één alinea</h4>
+        <p><strong>Multiversion Concurrency Control</strong> is de manier waarop PostgreSQL gelijktijdigheid regelt (volledig in deel 7). Een <code>UPDATE</code> wijzigt de bestaande rij niet; er wordt een nieuwe versie geschreven, de oude blijft staan. Gevolg: <strong>lezers blokkeren geen schrijvers, en schrijvers blokkeren geen lezers.</strong> De prijs: dode rijversies blijven op schijf staan, en <code>VACUUM</code> ruimt ze op — daarom draait autovacuum permanent op de achtergrond. Zet iemand autovacuum uit "omdat het I/O kost", dan groeit de tabel onbeperkt (<em>table bloat</em>): de bekendste manier om een PostgreSQL-productieomgeving te slopen.</p>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">De reis van een query, en aansluiting op de certificering</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vier fasen, en elke fase heeft een deel in deze cursus. <strong>1. Parser.</strong> Controleert de syntaxis en bouwt een parseboom; onbekende kolomnaam of ontbrekende komma gaat hier mis. <strong>2. Analyzer/rewriter.</strong> Zoekt de genoemde objecten op in de catalogus, controleert typen en rechten, en herschrijft de query waar nodig. <strong>3. Planner/optimizer.</strong> Bepaalt <em>hoe</em> de vraag beantwoord wordt: welke index, welke joinvolgorde, welk joinalgoritme, sequentiële scan of indexscan — op basis van statistieken die door autovacuum/<code>ANALYZE</code> worden bijgehouden. <strong>4. Executor.</strong> Voert het plan uit, haalt pagina's op via shared buffers, en levert rijen terug aan de client.</p>
+        <figure><img src="figuren/figuur-2-6.png" alt="Query-pijplijn — SQL → parseboom → herschreven boom → plan → resultaat, met per fase het cursusdeel"><figcaption>Figuur 2-6 — Query-pijplijn — SQL → parseboom → herschreven boom → plan → resultaat, met per fase het cursusdeel</figcaption></figure>
+        <div class="callout tip"><span class="lbl">Het belangrijkste inzicht van dit deel</span><p>SQL is <em>declaratief</em>. U beschrijft welk resultaat u wilt, niet hoe het opgehaald moet worden. Het "hoe" bepaalt de planner. Daarom kan dezelfde query vandaag snel en morgen traag zijn — en daarom leert u in deze cursus niet alleen SQL schrijven, maar ook plannen lezen.</p></div>
+        <h4>Verbindingen en waarom pooling bestaat</h4>
+        <p>Elke verbinding is een besturingssysteemproces, met eigen geheugen en opstartkosten. Gevolgen: verbindingen zijn duur (een applicatie die per verzoek een nieuwe verbinding opent, verspilt meer tijd aan verbinden dan aan de query), veel verbindingen schalen slecht, en <code>work_mem</code> vermenigvuldigt over gelijktijdig actieve backends. Daarom bestaat <strong>connection pooling</strong>: een tussenlaag houdt een beperkt aantal verbindingen open en deelt die tussen veel clients — op infrastructuurniveau is <strong>PgBouncer</strong> de standaard (volledig in niveau 2).</p>
+        <h4>Wat het examen hierover vraagt</h4>
+        <p>Architectuur is een zwaarwegend domein in de EDB Associate-certificering. Wat u paraat moet hebben: de rol van postmaster, backend, background writer, checkpointer, WAL writer en autovacuum; het doel van shared buffers versus <code>work_mem</code>; het onderscheid cluster/database/schema; de inhoud van het datadirectory op hoofdlijnen; waarom WAL bestaat en hoe crashherstel verloopt; de vier fasen van queryverwerking; en het principe van MVCC.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>Relatie/tupel/attribuut/domein</strong> — model-termen voor tabel, rij, kolom, toegestane waarden. <strong>Kandidaatsleutel</strong> — minimale unieke identificatie. <strong>Surrogaatsleutel</strong> — betekenisloze, door het systeem gegenereerde sleutel. <strong>Referentiële integriteit</strong> — vreemde sleutels verwijzen naar bestaande rijen. <strong>Driewaardige logica</strong> — waar, onwaar, onbekend. <strong>Cluster</strong> — één PostgreSQL-instantie op één datadirectory. <strong>Schema</strong> — naamruimte binnen een database. <strong>Shared buffers</strong> — gedeelde bufferpool voor datapagina's. <strong>WAL</strong> — write-ahead log. <strong>Checkpoint</strong> — moment waarop vuile pagina's naar de gegevensbestanden gaan. <strong>MVCC</strong> — meerdere rijversies naast elkaar voor gelijktijdigheid zonder blokkeren. <strong>Bloat</strong> — ruimte ingenomen door niet-opgeruimde dode rijversies. <strong>Connection pooling</strong> — hergebruik van een beperkt aantal verbindingen.</p>
+        <p><strong>Terug naar de casus.</strong> Met dit model en deze architectuur op zak kunt u het ontwerp van de nieuwe datalaag onderbouwen: een surrogaatsleutel per kerntabel, het BSN als bewaakte maar niet leidende kolom, schema's binnen één database voor deelnemer en werkgever, en een expliciete keuze voor WAL-gebaseerde duurzaamheid — precies wat Programma Open Pensioen nodig heeft om niet in dezelfde valkuilen te lopen als de oude schil.</p>
+        <p><strong>Vooruit naar deel 3.</strong> U schrijft in deel 3 uw eerste query's tegen de Meridiaan-database — en u zult merken dat u nu al kunt uitleggen waarom sommige daarvan traag zijn.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 2, Opdracht 2.7 en 2.8 — WAL uitleggen, en de reis van een query</p>
+        <details class="q"><summary><span class="qn">1</span><span>Ruud (beheerhoofd) vraagt: "Als de stroom uitvalt precies op het moment dat er honderd mutaties bezig zijn, wat is er dan kwijt?" Geef een antwoord dat benoemt wat er met bevestigde en onbevestigde transacties gebeurt, waarom de aanpak ook sneller is, en wat Meridiaan zelf moet regelen.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Er gaat niets kwijt dat bevestigd is. Voordat een wijziging in de gegevensbestanden terechtkomt, schrijft PostgreSQL hem eerst als logrecord weg en dwingt af dat het record fysiek op schijf staat; pas daarna volgt de bevestiging. Valt de stroom uit, dan leest de database bij het opstarten dat logboek terug vanaf het laatste checkpoint: alles wat bevestigd was, wordt opnieuw toegepast; alles wat nog liep, verdwijnt volledig — halve mutaties bestaan niet. Het is bovendien sneller omdat het logboek sequentieel wordt weggeschreven, terwijl het bijwerken van de gegevensbestanden verspreid over de schijf gebeurt en rustig mag volgen. Wat Meridiaan zelf moet regelen: schijven en controllers die een schrijfbevestiging niet mogen "liegen" — anders is de belofte waardeloos.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Een query levert het juiste antwoord, maar duurt sinds vorige week 40 seconden in plaats van 0,2 seconde, zonder dat de query, de data of de hardware is gewijzigd. In welke fase van de query-pijplijn zit de verklaring, en waarom kan dit gebeuren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De verklaring zit in de <strong>planner</strong>, niet in de query zelf. De planner kiest zijn plan op basis van statistieken over de gegevensverdeling. Als die statistieken verouderd zijn — bijvoorbeeld doordat autovacuum achterloopt terwijl de tabel sterk is gegroeid — schat hij de kosten verkeerd in en kiest hij bijvoorbeeld een sequentiële scan waar een indexscan beter was: dezelfde query, dezelfde data, een ander plan. Gereedschap om dit te onderzoeken: <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code> (deel 8). Dit verbindt autovacuum rechtstreeks met de planner.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 3</h3>
+      <p>Deel 3 zet het model en de architectuur uit dit deel om in praktijk: uw eerste query's tegen de Meridiaan-database, met SELECT, filteren, sorteren en aggregeren.</p>
+      <a class="btn" href="deel-03.html">Deel 3 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 2 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-02-het-relationele-model-en-de-postgresql-architectuur/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm2_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 1 — Databases en het DBMS-landschap: waarom PostgreSQL | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 1 (EDB Associate): het DBMS-landschap, ACID versus BASE, en de positionering van PostgreSQL — met de platformkeuze voor de nieuwe datalaag bij pensioenuitvoerder Meridiaan.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-01.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 1</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 1 van 30</p>
+  <h1>Databases en het DBMS-landschap:<br><em>waarom PostgreSQL</em>.</h1>
+  <p class="hero__lead">Dit eerste deel begint niet met SQL-syntaxis maar met een platformkeuze: pensioenuitvoerder Meridiaan bouwt in Programma Open Pensioen een nieuwe, eigen datalaag ter vervanging van een schil van Access-bestanden, Excel-sheets en SharePoint-lijsten, en de stuurgroep wil weten waarom dat PostgreSQL zou moeten worden. In dit deel leert u welke problemen een DBMS oplost die een verzameling bestanden niet oplost, hoe het DBMS-landschap in categorieën uiteenvalt, en waarom de keuze tussen ACID en BASE een businesskeuze is en geen technische smaakkwestie. U sluit af met een onderbouwd advies over PostgreSQL, inclusief het eerlijke tegengeluid.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>6</b><span>problemen van bestandsopslag</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: <b>➊ Databases en het DBMS-landschap: waarom PostgreSQL (hier)</b> → ➋ Het relationele model en de PostgreSQL-architectuur → ➌ SQL basis: SELECT, filteren, sorteren, aggregeren → ➍ SQL verdieping: joins, subquery's en CTE's → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → ➑ Indexen en views → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: Meridiaan Pensioen en Programma Open Pensioen</a></li>
+      <li><a href="#s3" data-target="s3">Van bestanden naar databases</a></li>
+      <li><a href="#s4" data-target="s4">Het DBMS-landschap in kaart</a></li>
+      <li><a href="#s5" data-target="s5">ACID en BASE: twee beloften</a></li>
+      <li><a href="#s6" data-target="s6">PostgreSQL gepositioneerd</a></li>
+      <li><a href="#s7" data-target="s7">Wanneer PostgreSQL wél, en wanneer niet</a></li>
+      <li><a href="#s8" data-target="s8">Aansluiting op de certificering, en terug naar de casus</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is het eerste deel van de cursus en het legt de bodem: wat een DBMS eigenlijk oplost, hoe het brede landschap van datastores in elkaar zit, en waarom PostgreSQL voor een organisatie als Meridiaan een verdedigbare keuze is — of juist niet.</p>
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>uitleggen welke problemen een DBMS oplost die een verzameling bestanden niet oplost;</li>
+          <li>de hoofdcategorieën van datastores benoemen en per categorie het typische gebruiksscenario aangeven;</li>
+          <li>ACID en BASE tegenover elkaar zetten en uitleggen waarom die keuze een businesskeuze is en geen technische smaakkwestie;</li>
+          <li>PostgreSQL positioneren ten opzichte van commerciële en open-source alternatieven, inclusief licentie- en supportmodel;</li>
+          <li>het versie- en supportbeleid van PostgreSQL toepassen op een concrete upgradevraag;</li>
+          <li>een onderbouwd advies geven over de vraag "is PostgreSQL hier de juiste keuze?" en dat advies verdedigen tegenover een opdrachtgever.</li>
+        </ul>
+        <div class="callout warn"><span class="lbl">Let op de laatste twee leerdoelen</span><p>In deze cursus tellen ze even zwaar als de technische. Een DBA die niet kan uitleggen waaróm iets zo staat, wordt overruled door iemand die harder praat.</p></div>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: Meridiaan Pensioen en Programma Open Pensioen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Alle opdrachten in niveau 1 spelen zich af bij <strong>Meridiaan Pensioen</strong>, een middelgrote Nederlandse pensioenuitvoerder. Meridiaan voert de regelingen uit voor circa 340.000 deelnemers en 4.100 aangesloten werkgevers.</p>
+        <p>De situatie bij aanvang:</p>
+        <ul>
+          <li>De kernadministratie draait op een pakket van een externe leverancier, met een gesloten database eronder. Meridiaan kan die alleen benaderen via nachtelijke exports.</li>
+          <li>Om die exports heen is in de loop van vijftien jaar een schil gegroeid: Access-databases, Excel-bestanden op netwerkschijven, een SharePoint-lijst met werkgevermutaties, en twee kleine applicaties die een collega ooit "even" heeft gebouwd.</li>
+          <li>Niemand weet precies wie welk bestand bijhoudt. Bij de laatste kwartaalrapportage bleken drie afdelingen drie verschillende deelnemersaantallen te hanteren, alle drie verdedigbaar.</li>
+        </ul>
+        <p><strong>Programma Open Pensioen</strong> is de meerjarige verandering waarin Meridiaan die schil vervangt door een eigen, beheerste datalaag. U bent in dit programma aangetrokken als beginnend databasespecialist. Uw eerste opdracht in deel 1 is niet bouwen, maar oordelen: het programmateam moet vastleggen op welk databaseplatform de nieuwe datalaag komt te staan, en de stuurgroep wil daar een onderbouwing bij.</p>
+        <p>Drie stemmen die in de casus steeds terugkeren:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Rol</th><th>Naam</th><th>Wat die persoon wil</th></tr></thead>
+          <tbody>
+            <tr><td>Programmamanager</td><td>Karin de Wolff</td><td>Voorspelbaarheid, geen verrassingen in de begroting</td></tr>
+            <tr><td>Enterprise-architect</td><td>Tarik Bousaid</td><td>Aansluiting op de doelarchitectuur, geen nieuwe lock-in</td></tr>
+            <tr><td>Beheerhoofd IT</td><td>Ruud Slager</td><td>Iets waar zijn team van vier man 's nachts niet wakker van ligt</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-1-1.png" alt="Contextplaat Meridiaan — kernadministratie, exportschil, en de beoogde nieuwe datalaag"><figcaption>Figuur 1-1 — Contextplaat Meridiaan — kernadministratie, exportschil, en de beoogde nieuwe datalaag</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Van bestanden naar databases</h2><span class="chip time">⏱ 22 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De schil bij Meridiaan is een tekstboekvoorbeeld van wat er misgaat zonder DBMS. Zes klassieke problemen, elk terug te vinden in de casus:</p>
+        <ul>
+          <li><strong>Redundantie.</strong> Hetzelfde deelnemersadres staat in vier bestanden. Elke kopie is een kans op afwijking.</li>
+          <li><strong>Inconsistentie.</strong> Als een adres in één bestand wordt gewijzigd en in de andere drie niet, is er geen instantie die dat merkt. De data spreekt zichzelf tegen zonder dat iemand het ziet.</li>
+          <li><strong>Gebrek aan gelijktijdigheid.</strong> Twee medewerkers openen hetzelfde Excel-bestand. De laatste die opslaat, wint. Het werk van de eerste is weg, zonder foutmelding.</li>
+          <li><strong>Geen integriteitsbewaking.</strong> Niets belet iemand om een mutatie vast te leggen op een werkgeversnummer dat niet bestaat, of een geboortedatum in 2087 in te typen.</li>
+          <li><strong>Geen herstelbaarheid.</strong> Valt de netwerkschijf uit tijdens het opslaan, dan is de toestand van het bestand onbepaald. De back-up is van vannacht; het werk van vandaag is verdwenen.</li>
+          <li><strong>Geen toegangsbeheer op gegevensniveau.</strong> Wie bij het bestand kan, kan bij álles in het bestand. Een medewerker die alleen werkgeverdata mag zien, ziet ook burgerservicenummers.</li>
+        </ul>
+        <p>Een DBMS bestaat om precies deze zes problemen te adresseren. Alles wat u in de rest van deze cursus leert — transacties, constraints, WAL, rollen, MVCC — is uiteindelijk een antwoord op één of meer punten uit dit lijstje. Houd de lijst bij de hand; we komen er in elk deel op terug.</p>
+        <figure><img src="figuren/figuur-1-2.png" alt="De zes problemen van bestandsopslag, gekoppeld aan de cursusdelen waar de oplossing behandeld wordt"><figcaption>Figuur 1-2 — De zes problemen van bestandsopslag, gekoppeld aan de cursusdelen waar de oplossing behandeld wordt</figcaption></figure>
+        <h4>Wat een DBMS precies doet</h4>
+        <p>Een <strong>databasemanagementsysteem</strong> is de software tussen de gebruiker of applicatie en de opgeslagen gegevens. De database zelf is de verzameling gegevens; het DBMS is het programma dat die beheert. Dat onderscheid lijkt pedanterig, maar u heeft het nodig zodra u in PostgreSQL het verschil tussen een <em>cluster</em>, een <em>database</em> en een <em>schema</em> leert (deel 2).</p>
+        <p>De kernfuncties:</p>
+        <ol>
+          <li><strong>Definitie</strong> — vastleggen welke gegevens er zijn en welke vorm ze hebben (DDL, deel 6).</li>
+          <li><strong>Manipulatie</strong> — toevoegen, wijzigen, verwijderen, opvragen (DML en query's, deel 3 en 4).</li>
+          <li><strong>Transactiebeheer</strong> — groepen bewerkingen die volledig slagen of volledig mislukken (deel 7).</li>
+          <li><strong>Gelijktijdigheidsbeheer</strong> — meerdere gebruikers tegelijk, zonder elkaars werk te vernietigen (deel 7, verdiept in niveau 2).</li>
+          <li><strong>Herstel</strong> — na een crash terug naar een consistente toestand (deel 7, uitgewerkt in niveau 2).</li>
+          <li><strong>Beveiliging en autorisatie</strong> — wie mag wat (deel 9, verdiept in niveau 2).</li>
+          <li><strong>Optimalisatie</strong> — dezelfde vraag zo goedkoop mogelijk beantwoorden (deel 8, verdiept in niveau 2).</li>
+        </ol>
+        <div class="callout tip"><span class="lbl">Data-onafhankelijkheid</span><p>De manier waarop gegevens fysiek zijn opgeslagen, mag geen invloed hebben op de manier waarop applicaties ze bevragen. Voegt u in deel 8 een index toe, dan verandert er niets aan de query's — alleen aan de snelheid. Dat is geen toevallige eigenschap; het is de belangrijkste reden dat relationele databases veertig jaar hebben overleefd terwijl de hardware eronder volledig is vervangen.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.1 — diagnose van de schil</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een medewerker Werkgeversbeheer wijzigt een correspondentieadres in het Access-bestand. De klantenservice ziet drie weken later nog het oude adres in haar eigen overzicht. En: in de SharePoint-lijst staat een mutatie op werkgeversnummer 8842, dat niet bestaat. Welk probleem uit het lijstje van zes doet zich in elk geval voor, en welk DBMS-mechanisme zou het hebben voorkomen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het adresgeval is <strong>inconsistentie</strong>, voortkomend uit redundantie: meerdere kopieën van hetzelfde gegeven, waarvan er één is bijgewerkt. Mechanisme: één bron van waarheid in een tabel, waarbij alle afnemers dezelfde rij lezen — redundantie wordt structureel aangepakt door normalisatie (deel 5). Het werkgeversnummer-geval is <strong>geen integriteitsbewaking</strong>, specifiek referentiële integriteit. Mechanisme: een foreign key-constraint die een mutatie zonder bestaande werkgever weigert (deel 6).</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Het DBMS-landschap in kaart</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>"Database" is geen enkelvoudige categorie meer. Voor uw advies aan de stuurgroep moet u het landschap kunnen schetsen.</p>
+        <h4>Relationeel (RDBMS)</h4>
+        <p>Gegevens in tabellen met rijen en kolommen, bevraagd met SQL, met sterke integriteitsbewaking en transacties. Voorbeelden: PostgreSQL, Oracle Database, Microsoft SQL Server, MySQL/MariaDB, IBM Db2. Typisch gebruik: administratieve systemen waarin correctheid zwaarder weegt dan absolute schaal — precies het Meridiaan-profiel.</p>
+        <h4>Documentstores</h4>
+        <p>Gegevens als zelfbeschrijvende documenten (meestal JSON), zonder vooraf afgedwongen schema. Voorbeeld: MongoDB. Typisch gebruik: gegevens waarvan de vorm per exemplaar verschilt en snel evolueert — productcatalogi, contentbeheer, logging van gebeurtenissen met wisselende attributen.</p>
+        <h4>Key-value stores</h4>
+        <p>Een sleutel, een waarde, extreem snel opvragen. Voorbeelden: Redis, Amazon DynamoDB. Typisch gebruik: caching, sessiebeheer, wachtrijen. Zelden de bron van waarheid.</p>
+        <h4>Column-family stores</h4>
+        <p>Gegevens per kolomfamilie opgeslagen, ontworpen voor schrijfvolume over veel machines. Voorbeelden: Apache Cassandra, HBase. Typisch gebruik: telemetrie, klikstromen, IoT-metingen op miljardenschaal.</p>
+        <h4>Graph databases</h4>
+        <p>Knopen en relaties als eersteklas burgers. Voorbeeld: Neo4j. Typisch gebruik: netwerkanalyse, fraudedetectie, aanbevelingen — vragen waarin het pad tussen entiteiten belangrijker is dan de entiteiten zelf.</p>
+        <h4>Time-series databases</h4>
+        <p>Geoptimaliseerd voor metingen met een tijdstempel. Voorbeelden: InfluxDB, TimescaleDB (een PostgreSQL-extensie).</p>
+        <h4>Analytische/kolomgeoriënteerde platformen</h4>
+        <p>Geoptimaliseerd voor het lezen van enorme hoeveelheden rijen over weinig kolommen. Voorbeelden: Snowflake, Google BigQuery, ClickHouse. Dit is het OLAP-domein tegenover het OLTP-domein van de klassieke RDBMS — een onderscheid dat we in niveau 2 uitwerken.</p>
+        <figure><img src="figuren/figuur-1-3.png" alt="Landschapskaart datastores, geplaatst op de assen &quot;schemastrengheid&quot; en &quot;schaalmodel&quot;"><figcaption>Figuur 1-3 — Landschapskaart datastores, geplaatst op de assen "schemastrengheid" en "schaalmodel"</figcaption></figure>
+        <div class="callout note"><span class="lbl">Waarschuwing tegen het modelvoorbeeld</span><p>Elke categorie hierboven wordt in verkoopmateriaal gepresenteerd als de opvolger van de vorige. Dat is onjuist. Ze zijn <em>specialisaties</em>. De vraag is nooit "wat is het beste type database", maar "welk type past bij deze werklast". In de NoSQL-elective werken we die afweging volledig uit; in niveau 2 krijgt u het overzichtsdeel.</p></div>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">ACID en BASE: twee beloften</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>ACID</h4>
+        <p>Klassieke transactiegarantie, in deel 7 volledig uitgewerkt. Kort:</p>
+        <ul>
+          <li><strong>Atomicity</strong> — een transactie gebeurt geheel of helemaal niet.</li>
+          <li><strong>Consistency</strong> — een transactie brengt de database van de ene geldige toestand naar de andere; alle regels blijven gelden.</li>
+          <li><strong>Isolation</strong> — gelijktijdige transacties beïnvloeden elkaar niet op een manier die zichtbaar is.</li>
+          <li><strong>Durability</strong> — wat bevestigd is, is bevestigd, ook als de stroom een seconde later uitvalt.</li>
+        </ul>
+        <h4>BASE</h4>
+        <p>Het alternatief uit de gedistribueerde wereld:</p>
+        <ul>
+          <li><strong>Basically Available</strong> — het systeem antwoordt altijd, desnoods met verouderde gegevens.</li>
+          <li><strong>Soft state</strong> — de toestand mag tijdelijk afwijken tussen knooppunten.</li>
+          <li><strong>Eventual consistency</strong> — gegeven genoeg tijd zonder nieuwe wijzigingen convergeren alle kopieën.</li>
+        </ul>
+        <h4>Waarom dit een businesskeuze is</h4>
+        <p>Stel: Meridiaan verwerkt een waardeoverdracht. Bedrag af bij fonds A, bedrag bij bij fonds B. Onder BASE is er een venster waarin het geld nergens staat, of overal. Voor een tijdlijn op een website is dat acceptabel. Voor een pensioenaanspraak is het dat niet — niet technisch, maar juridisch en reputationeel.</p>
+        <p>Formuleer het daarom nooit als "ACID is veiliger". Formuleer het als: <strong>hoe lang mag deze gegevenssoort onjuist zijn, en wie draagt de schade als dat gebeurt?</strong> Dat is een vraag die de business kan beantwoorden en u niet.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.3 — ACID of BASE</p>
+        <details class="q"><summary><span class="qn">1</span><span>Is eventual consistency acceptabel voor (a) het opgebouwde pensioenkapitaal van een deelnemer, en (b) de teller "aantal keer ingelogd deze maand" op het dashboard van de klantenservice? Beantwoord met de vraag uit de tekst — hoe lang mag dit onjuist zijn, en wie draagt de schade?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(a) <strong>Nee, ACID vereist.</strong> Een onjuist kapitaal is een onjuiste aanspraak; schade ligt bij de deelnemer en juridisch bij Meridiaan. Toegestane afwijkingsduur: nul. (b) <strong>Ja, eventual consistency prima.</strong> Een teller die enkele minuten achterloopt schaadt niemand; de schade van vertraging is groter dan die van onnauwkeurigheid. Het patroon is niet "belangrijk = ACID": het patroon is of er een tegenpartij, een geldbedrag of een wettelijke aantoonbaarheidsplicht in het spel is.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">PostgreSQL gepositioneerd</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>PostgreSQL is een open-source objectrelationeel DBMS met wortels in het POSTGRES-project aan de University of California, Berkeley (jaren tachtig), onder leiding van Michael Stonebraker. Sinds 1996 draagt het project de huidige naam en wordt het ontwikkeld door een wereldwijde community, niet door één bedrijf.</p>
+        <p>Wat het onderscheidt:</p>
+        <p><strong>Licentie.</strong> De PostgreSQL License is een permissieve licentie in de familie van BSD/MIT. Geen licentiekosten, geen gebruiksbeperkingen, geen verplichting om afgeleid werk vrij te geven. Voor Meridiaan betekent dat: geen core-gebaseerde afrekening, geen audit-risico, geen onderhandeling bij groei van het aantal cores.</p>
+        <p><strong>Governance.</strong> Geen bedrijf dat de licentie eenzijdig kan wijzigen. Dat is relevant sinds meerdere open-source projecten hun licentie hebben aangescherpt zodra de commerciële belangen wijzigden. Voor Tarik (enterprise-architect) is dit vaak het doorslaggevende argument tegen lock-in.</p>
+        <p><strong>Uitbreidbaarheid.</strong> PostgreSQL is ontworpen om uitgebreid te worden: eigen datatypen, eigen operatoren, eigen indextypen, eigen procedurele talen. Daaruit is een ecosysteem van extensies gegroeid: PostGIS (geodata), TimescaleDB (tijdreeksen), pgvector (vectoren voor AI-toepassingen), Citus (sharding), pg_stat_statements (querystatistieken). Deze uitbreidbaarheid is de reden dat PostgreSQL zoveel gespecialiseerde databases gedeeltelijk kan vervangen.</p>
+        <p><strong>Standaardconformiteit.</strong> PostgreSQL volgt de SQL-standaard nauwer dan de meeste concurrenten. Dat maakt kennis overdraagbaar en migratie minder pijnlijk.</p>
+        <p><strong>Rijk typesysteem.</strong> Naast de gebruikelijke typen: arrays, <code>jsonb</code> (geïndexeerd, doorzoekbaar JSON), ranges, <code>uuid</code>, geometrische typen, en eigen enum- en samengestelde typen. <code>jsonb</code> verdient bijzondere vermelding: het maakt documentopslag mogelijk <em>binnen</em> een transactionele relationele database. In veel projecten is dat de reden dat er géén aparte documentstore nodig blijkt.</p>
+        <h4>Tegenover de alternatieven</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Aspect</th><th>PostgreSQL</th><th>Oracle / SQL Server</th><th>MySQL / MariaDB</th></tr></thead>
+          <tbody>
+            <tr><td>Licentiekosten</td><td>Geen</td><td>Substantieel, per core</td><td>Geen (community)</td></tr>
+            <tr><td>Lock-in</td><td>Laag</td><td>Hoog</td><td>Middel (afhankelijk van eigenaar)</td></tr>
+            <tr><td>Standaardconformiteit</td><td>Hoog</td><td>Middel (eigen dialect)</td><td>Middel</td></tr>
+            <tr><td>Uitbreidbaarheid</td><td>Zeer hoog</td><td>Beperkt</td><td>Beperkt</td></tr>
+            <tr><td>Support</td><td>Via commerciële partijen</td><td>Van de leverancier</td><td>Via commerciële partijen</td></tr>
+            <tr><td>Beschikbaarheid van beheerders in NL</td><td>Goed en groeiend</td><td>Goed</td><td>Goed</td></tr>
+          </tbody>
+        </table></div>
+        <p>De eerlijkheid gebiedt de tegenkant te noemen: bij Oracle en SQL Server koopt u één telefoonnummer voor als het misgaat, inclusief contractuele aansprakelijkheid. Dat is voor Ruud (beheerhoofd) een reëel argument. Het antwoord is niet "dat heb je niet nodig", maar "dat kun je apart inkopen bij een supportpartij" — waarmee het een kostenvergelijking wordt in plaats van een geloofskwestie.</p>
+        <h4>Versiebeleid en support</h4>
+        <p>Sinds versie 10 gebruikt PostgreSQL een tweedelig schema: een hoofdversie (17, 18, …) en een subversie (17.1, 17.2, …). Hoofdversies verschijnen ongeveer jaarlijks en kunnen gedragswijzigingen bevatten; subversies zijn uitsluitend correcties en beveiligingsherstel.</p>
+        <p>Elke hoofdversie wordt vijf jaar ondersteund na verschijnen. Daarna verschijnen er geen beveiligingsherstellingen meer. Dat betekent voor Meridiaan een concrete beheerverplichting: <strong>plan de hoofdversie-upgrade als terugkerende gebeurtenis, niet als project.</strong> Een organisatie die dat nalaat, staat over vijf jaar op een niet-ondersteunde versie en heeft dan een migratie in plaats van een upgrade. Voor de exacte versienummers en einddata: zie de Toolbijlage.</p>
+        <h4>Het ecosysteem waar u in de praktijk mee werkt</h4>
+        <ul>
+          <li><strong>psql</strong> — de opdrachtregelclient; de gemeenschappelijke taal van alle PostgreSQL-beheerders. We gebruiken die vanaf deel 3.</li>
+          <li><strong>pgAdmin</strong> en <strong>DBeaver</strong> — grafische clients.</li>
+          <li><strong>pg_dump / pg_restore</strong> — logische back-up (deel 7 introductie, niveau 2 volledig).</li>
+          <li><strong>Barman</strong>, <strong>pgBackRest</strong> — back-upbeheer op productieschaal (niveau 2).</li>
+          <li><strong>Patroni</strong>, <strong>PgBouncer</strong> — hoge beschikbaarheid en connection pooling (niveau 2).</li>
+          <li><strong>pgaudit</strong>, <strong>pg_stat_statements</strong> — auditing en querystatistieken (niveau 2).</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wanneer PostgreSQL wél, en wanneer niet</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een advies dat alleen voordelen noemt, wordt niet geloofd. Leer daarom het tegengeluid uit uw hoofd.</p>
+        <p><strong>PostgreSQL past goed bij:</strong></p>
+        <ul>
+          <li>transactionele administraties met integriteitseisen (Meridiaan);</li>
+          <li>gemengde werklasten waarin relationele en documentachtige gegevens naast elkaar bestaan (<code>jsonb</code>);</li>
+          <li>organisaties die lock-in willen vermijden of licentiekosten willen drukken;</li>
+          <li>gespecialiseerde behoeften die een extensie afdekt (geodata, tijdreeksen, vectoren).</li>
+        </ul>
+        <p><strong>PostgreSQL past minder goed bij:</strong></p>
+        <ul>
+          <li><strong>analytische werklasten op petabyteschaal.</strong> Voor scans over miljarden rijen zijn kolomgeoriënteerde platformen fundamenteel efficiënter. PostgreSQL kan het, maar u vecht tegen het ontwerp.</li>
+          <li><strong>wereldwijd verspreide schrijfbelasting met lage latentie op elk continent.</strong> Dat is Cassandra-terrein — een gevolg van het CAP-vraagstuk, niet van implementatiekwaliteit (niveau 3).</li>
+          <li><strong>extreme sleutel-waarde-doorvoer</strong>, waar Redis ordes van grootte sneller is.</li>
+          <li><strong>organisaties zonder enige interne kennis en zonder bereidheid support in te kopen.</strong> Dit is het eerlijkste tegenargument: gratis software is niet gratis in beheer.</li>
+          <li><strong>applicaties die uitsluitend gecertificeerd zijn voor een ander platform.</strong> Bij pakketsoftware bepaalt de leverancier de database, niet u.</li>
+        </ul>
+        <figure><img src="figuren/figuur-1-4.png" alt="Beslisboom &quot;is PostgreSQL hier passend?&quot;"><figcaption>Figuur 1-4 — Beslisboom "is PostgreSQL hier passend?"</figcaption></figure>
+        <h4>De keuze in een organisatie: hoe die werkelijk verloopt</h4>
+        <p>In de theorie kiest een organisatie op basis van eisen. In de praktijk spelen vijf factoren mee die u moet benoemen omdat ze anders ongezien de doorslag geven:</p>
+        <ol>
+          <li><strong>Bestaande kennis.</strong> Een beheerteam dat twintig jaar SQL Server doet, is een reëel activum. Dat weggooien kost meer dan een licentie.</li>
+          <li><strong>Bestaande contracten.</strong> Een lopende enterprise-overeenkomst kan de marginale kosten van "nog een database" bijna nul maken.</li>
+          <li><strong>Inkoop- en beveiligingsbeleid.</strong> Sommige organisaties eisen een leverancier met contractuele aansprakelijkheid. Dan wordt het PostgreSQL <em>met</em> een supportcontract, niet PostgreSQL zonder.</li>
+          <li><strong>Cloudstrategie.</strong> Staat de organisatie op Azure, dan is een managed PostgreSQL-dienst iets anders dan zelf beheren — met eigen beperkingen (niveau 3).</li>
+          <li><strong>Wie het hardst praat.</strong> Niet zelden beslissend, en de reden dat uw onderbouwing schriftelijk moet zijn.</li>
+        </ol>
+        <div class="callout tip"><span class="lbl">Een bruikbare structuur voor uw advies</span><p><strong>Eis → wegingsfactor → score per platform → conclusie → expliciet benoemde risico's van de aanbevolen optie.</strong> Die laatste stap slaan beginners over. Juist die maakt het advies geloofwaardig: u laat zien dat u de nadelen kent en er een antwoord op heeft. U past deze structuur in het werkboek toe op de adviesnota voor de stuurgroep.</p></div>
+        <h4>Rollen rond de database</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Rol</th><th>Kernvraag</th><th>In deze cursus</th></tr></thead>
+          <tbody>
+            <tr><td>Applicatieontwikkelaar</td><td>Hoe kom ik bij mijn gegevens?</td><td>Delen 3-8</td></tr>
+            <tr><td>Databaseontwerper / datamodelleur</td><td>Hoe leg ik de werkelijkheid vast?</td><td>Deel 5, 6</td></tr>
+            <tr><td>DBA (beheer)</td><td>Blijft dit draaien en herstelbaar?</td><td>Niveau 2</td></tr>
+            <tr><td>Data-architect</td><td>Hoe past dit in het geheel?</td><td>Niveau 3</td></tr>
+            <tr><td>Security officer / privacyfunctionaris</td><td>Wie ziet wat, en kunnen we dat aantonen?</td><td>Deel 9, niveau 2</td></tr>
+          </tbody>
+        </table></div>
+        <p>In kleinere organisaties — en Meridiaan is er zo een — draagt één persoon meerdere van deze petten. Dat maakt het belangrijker, niet minder belangrijk, om te weten wélke pet u op heeft als u een beslissing neemt. Veel productie-incidenten ontstaan doordat iemand als ontwikkelaar een beheerbeslissing nam.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.4 — het tegengeluid</p>
+        <details class="q"><summary><span class="qn">1</span><span>Ruud, het beheerhoofd, is sceptisch en zegt letterlijk: "Als het om drie uur 's nachts omvalt, wie bel ik dan? Bij onze SQL Server-omgeving weet ik dat." Hoe erkent u die zorg zonder hem weg te wuiven, en welke kostenverschuiving legt u daarbij uit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De zorg is terecht en precies de vraag die de stuurgroep moet stellen. Het verschil is niet dat PostgreSQL geen support kent, maar dat u die apart inkoopt in plaats van gebundeld in de licentie: partijen als EDB en gespecialiseerde Nederlandse leveranciers bieden 24/7-contracten met vastgelegde reactietijden, inclusief escalatie naar mensen die aan de broncode meewerken. U vergelijkt dus niet "support" met "geen support", maar de kosten van licentie-plus-support tegen de kosten van support alleen. Wat vóór livegang geregeld moet zijn: een getekend supportcontract met een reactietijd die past bij de hersteltijddoelstelling, een beproefde herstelprocedure die minstens één keer echt is uitgevoerd op een teruggezette back-up, en minstens twee mensen in het beheerteam met de basiscertificering.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Aansluiting op de certificering, en terug naar de casus</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deze cursus bereidt voor op de EDB-certificeringslijn voor PostgreSQL: de Associate-certificering na niveau 1, de Professional-certificering na niveau 2, en de architectgerichte clustercertificering na niveau 3.</p>
+        <p>Twee dingen moet u daarover weten. Ten eerste is deze cursus voorbereiding, geen vervanging van het officiële examenmateriaal: bij aanschaf van een EDB-examen krijgt u uitsluitend het examen, geen lesmateriaal — dat gat vult deze cursus. Raadpleeg altijd de actuele examenblauwdruk van EDB voor de definitieve onderwerplijst; die kan per versie wijzigen. Ten tweede zijn de examens versiegebonden: welke PostgreSQL-versie het examen op dit moment toetst, staat in de Toolbijlage, niet hier.</p>
+        <p>De relevante examenonderwerpen voor dit deel zijn beperkt: de positionering en architectuurschets van PostgreSQL. Het echte examenwerk begint in deel 2.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>Database</strong> — een geordende verzameling gerelateerde gegevens. <strong>DBMS</strong> — de software die databases beheert. <strong>Data-onafhankelijkheid</strong> — wijzigingen in fysieke opslag raken de logische bevraging niet. <strong>RDBMS</strong> — relationeel DBMS: gegevens in tabellen, bevraagd met SQL. <strong>ACID</strong> — atomiciteit, consistentie, isolatie, duurzaamheid. <strong>BASE</strong> — basically available, soft state, eventual consistency. <strong>OLTP</strong> — transactieverwerking: veel kleine bewerkingen. <strong>OLAP</strong> — analyse: weinig, grote leesbewerkingen. <strong>Extensie</strong> — uitbreidingsmodule die PostgreSQL functionaliteit toevoegt. <strong>Lock-in</strong> — afhankelijkheid van één leverancier waardoor wisselen onevenredig duur wordt.</p>
+        <h4>Terug naar de casus</h4>
+        <p>Aan het eind van dit deel stelt u, net als in de hoofdopdracht van het werkboek, een adviesnota op voor de stuurgroep van Programma Open Pensioen: eisen, wegingsfactor, score per platform, conclusie, en de risico's van de aanbevolen optie — met Karin, Tarik en Ruud elk herkenbaar geadresseerd. Een verdedigbaar advies noemt PostgreSQL als platform, met een commercieel supportcontract, doorslaggevend op leverancierafhankelijkheid en kostenvoorspelbaarheid — en benoemt tegelijk eerlijk waar het team nog stappen moet zetten voordat het zover is.</p>
+        <p><strong>Vooruit naar deel 2.</strong> Dit deel bleef op het niveau van platformkeuze. Deel 2 gaat naar binnen: wat er werkelijk gebeurt tussen het moment dat u op Enter drukt en het moment dat er een antwoord terugkomt, en hoe het relationele model en de PostgreSQL-architectuur — cluster, database, schema, proces — in elkaar grijpen.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 2</h3>
+      <p>Deel 2 werkt het relationele model en de PostgreSQL-architectuur uit: cluster, database, schema, en wat er werkelijk gebeurt tussen uw query en het antwoord.</p>
+      <a class="btn" href="deel-02.html">Deel 2 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 1 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-01-databases-en-het-dbms-landschap-waarom-postgresql/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm1_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

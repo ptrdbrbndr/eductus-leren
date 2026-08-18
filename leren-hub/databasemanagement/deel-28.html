@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 28 — Event sourcing in de praktijk | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 28 (EDB-architectuurdomein): command handlers en optimistic concurrency, snapshotting, geautomatiseerde projecties, crypto-shredding voor het recht op vergetelheid en event-schema-evolutie — toegepast op Meridiaans mutatieverwerking.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-28.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 28</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 3 (architectcertificering) · Deel 28 van 30</p>
+  <h1>Event sourcing<br>in <em>productie</em>.</h1>
+  <p class="hero__lead">Deel 27 gaf de concepten van event sourcing en de geruststelling dat de bouwstenen — de <code>events</code>-tabel, het aggregaat, het volgnummer — al bekend waren uit eerdere delen. Dit deel voegt de stukken toe die nodig zijn om van een demonstratie naar een werkend systeem te gaan: command handlers die bedrijfsregels afdwingen vóórdat een event ontstaat, snapshotting tegen trage streams, geautomatiseerde projecties, en een antwoord op het recht op vergetelheid binnen een onveranderlijke geschiedenis — toegepast op Meridiaans mutatieverwerking.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±130 min</b><span>werkboek-tijdsindicatie</span></div>
+    <div class="stat"><b>14</b><span>controlevragen</span></div>
+    <div class="stat"><b>50%</b><span>drempel voor verplichte goedkeuring</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de architectgerichte clustercertificering van EDB (EnterpriseDB) en is geen vervanging van officieel examenmateriaal. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 3: 23 Architectuur voor meerdere fondsen → 24 Sharding-fundamenten → 25 Citus in de praktijk → 26 Foreign data wrappers en federatie → 27 Event sourcing: fundamenten → <b>28 Event sourcing in de praktijk (hier)</b> → 29 Geo-distributie → 30 Niveau-3-capstone en afsluiting</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Van concept naar productie</a></li>
+      <li><a href="#s2" data-target="s2">Command handlers en optimistic concurrency</a></li>
+      <li><a href="#s3" data-target="s3">Snapshotting: lange streams beheersbaar houden</a></li>
+      <li><a href="#s4" data-target="s4">Projecties automatisch bijwerken</a></li>
+      <li><a href="#s5" data-target="s5">Recht op vergetelheid: crypto-shredding</a></li>
+      <li><a href="#s6" data-target="s6">Schema-evolutie, testen en monitoring</a></li>
+      <li><a href="#s7" data-target="s7">Meridiaan end-to-end, valkuilen en kernbegrippen</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Van concept naar productie</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 27 gaf de concepten van event sourcing en de geruststelling dat de bouwstenen al bekend waren uit eerdere delen. Dit deel voegt precies de stukken toe die nodig zijn om van een demonstratie naar een werkend systeem te gaan.</p>
+        <p>Na dit deel kun je:</p>
+        <ul>
+          <li>een command handler bouwen die business regels toepast vóórdat een event wordt vastgelegd;</li>
+          <li>optimistische concurrency correct afhandelen bij een conflicterend volgnummer;</li>
+          <li>snapshotting toepassen om lange streams beheersbaar te houden;</li>
+          <li>projecties automatisch laten bijwerken, inclusief de afweging tussen polling en <code>LISTEN</code>/<code>NOTIFY</code>;</li>
+          <li>een oplossing ontwerpen voor het recht op vergetelheid binnen een onveranderlijke event store;</li>
+          <li>event-schema-evolutie beheren zonder de geschiedenis te breken;</li>
+          <li>een event-sourced systeem testen en monitoren;</li>
+          <li>de volledige mutatieverwerking van Meridiaan als event-sourced systeem beschrijven.</li>
+        </ul>
+        <p>Vijf stukken komen daarvoor aan bod: <strong>business logica</strong> die bepaalt of een event geldig is; <strong>snapshotting</strong>, zodat een stream van tienduizenden events niet bij elke berekening opnieuw hoeft te worden doorlopen; <strong>geautomatiseerde projectie-updates</strong>, in plaats van een handmatige <code>REFRESH</code>; een antwoord op het <strong>recht op vergetelheid</strong> — het AVG-vraagstuk dat in deel 27 als open probleem bleef liggen; en tot slot <strong>schema-evolutie, testen en monitoring</strong>: de operationele volwassenheid die elk patroon in deze cursus uiteindelijk nodig heeft.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Command handlers en optimistic concurrency</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Valideren vóór het feit bestaat</h3>
+        <p>Een event mag niet zomaar worden toegevoegd — er moet eerst gecontroleerd worden of het <strong>geldig</strong> is, gegeven de huidige stand van het aggregaat. Dat is de taak van een <strong>command handler</strong>.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>CREATE OR REPLACE FUNCTION verwerk_salariswijziging(
+    p_aggregate_id uuid, p_nieuw_salaris numeric, p_verwacht_volgnummer integer
+) RETURNS void AS $$
+DECLARE
+    v_huidig_salaris numeric;
+BEGIN
+    -- 1. Bereken de huidige stand (of lees uit een snapshot, zie sectie 3)
+    SELECT (payload-&gt;&gt;'nieuw_salaris')::numeric INTO v_huidig_salaris
+    FROM events WHERE aggregate_id = p_aggregate_id AND event_type = 'SalarisGewijzigd'
+    ORDER BY volgnummer DESC LIMIT 1;
+
+    -- 2. Bedrijfsregel: een salariswijziging van meer dan 50% vereist goedkeuring
+    IF v_huidig_salaris IS NOT NULL
+       AND abs(p_nieuw_salaris - v_huidig_salaris) / v_huidig_salaris &gt; 0.5 THEN
+        RAISE EXCEPTION 'Salariswijziging van meer dan 50%% vereist goedkeuring';
+    END IF;
+
+    -- 3. Vastleggen, met het verwachte volgnummer (optimistic concurrency)
+    INSERT INTO events (aggregate_id, event_type, payload, volgnummer)
+    VALUES (p_aggregate_id, 'SalarisGewijzigd',
+            jsonb_build_object('nieuw_salaris', p_nieuw_salaris),
+            p_verwacht_volgnummer);
+END;
+$$ LANGUAGE plpgsql;</code></pre>
+        <p>Dit is het punt waar het onderscheid tussen "commando" en "event" uit deel 27 operationeel wordt: <code>verwerk_salariswijziging</code> is het commando — een verzoek dat kan <strong>falen</strong>. Het <code>SalarisGewijzigd</code>-event dat er eventueel uit voortkomt, is een feit dat, eenmaal vastgelegd, niet meer ter discussie staat.</p>
+        <div class="callout tip"><span class="lbl">Database of applicatielaag?</span><p>Beide zijn gangbaar. In de database profiteer je van transactionele garanties zonder een extra rondgang; in de applicatielaag heb je meer flexibiliteit in taal en testbaarheid. Dit is dezelfde afweging als bij <code>SECURITY DEFINER</code>-functies (deel 21): logica dicht bij de data geeft garanties, logica in de applicatie geeft flexibiliteit.</p></div>
+        <h3>Optimistic concurrency: wie wint de botsing</h3>
+        <p>De <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint uit deel 27 voorkomt dubbele volgnummers. In de praktijk moet de <strong>aanroepende code</strong> dat conflict afhandelen: als twee sessies tegelijk hetzelfde aggregaat wijzigen, lukt het schrijven aan de sessie die het eerst is, en krijgt de andere sessie een <code>unique_violation</code> (SQLSTATE 23505) terug.</p>
+        <p>Het patroon dat daarbij hoort, is bijna identiek aan de retry-logica uit deel 15 bij serialisatiefouten onder <code>SERIALIZABLE</code>: opnieuw het huidige volgnummer lezen, opnieuw proberen met een vernieuwd volgnummer, met een oplopende en gespreide wachttijd en een bovengrens aan het aantal pogingen. Het is exact hetzelfde patroon als bij een serialisatiefout — een botsing die correct wordt afgevangen in plaats van stilzwijgend fout te gaan, met retry als de aangewezen afhandeling.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.1 (d)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom moet de validatie van een command handler vóór de <code>INSERT</code> gebeuren, en niet erna?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat een event, eenmaal vastgelegd, onveranderlijk is (deel 27). Zou de validatie ná de <code>INSERT</code> gebeuren, dan zou een ongeldig feit al deel uitmaken van de onveranderlijke geschiedenis vóórdat de fout wordt opgemerkt — het enige correcte moment om een commando af te wijzen is vóórdat het een event wordt.</div></details>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.2 (c en e)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Twee sessies lezen hetzelfde volgnummer van een aggregaat. Sessie A schrijft eerst een event met volgnummer+1. Wat gebeurt er als sessie B daarna hetzelfde volgnummer probeert vast te leggen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Sessie B krijgt een <strong>unique_violation</strong>-foutmelding (SQLSTATE 23505) — de <code>UNIQUE (aggregate_id, volgnummer)</code>-constraint voorkomt het dubbele volgnummer.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Vergelijk de retry-lus bij een conflicterend volgnummer met de retry-logica voor serialisatiefouten uit deel 15. Wat is identiek, wat verschilt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Identiek:</strong> na een conflict moet de hele operatie (niet alleen de laatste stap) opnieuw, met een oplopende en gespreide wachttijd om herhaalde botsingen te voorkomen. <strong>Verschil:</strong> hier is het conflict gebonden aan één aggregaat (het volgnummer van die ene stream), terwijl een serialisatiefout in deel 15 clusterbreed kon optreden.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Snapshotting: lange streams beheersbaar houden</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een dienstverband van dertig jaar, met honderden salariswijzigingen, promoties en aanpassingen, genereert een stream met honderden events. Elke keer de huidige stand berekenen door <strong>alle</strong> events opnieuw af te spelen, wordt op een gegeven moment traag — de "meet op schaal, niet op een speelgoedvoorbeeld"-les uit deel 12, nu toegepast op streams.</p>
+        <p><strong>Snapshotting</strong>: periodiek de berekende stand <strong>zelf opslaan</strong>, zodat je bij de volgende berekening niet bij event 1 hoeft te beginnen, maar bij de laatste snapshot plus de events die daarna zijn toegevoegd.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>CREATE TABLE snapshots (
+    aggregate_id uuid NOT NULL,
+    volgnummer   integer NOT NULL,
+    state        jsonb NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (aggregate_id, volgnummer)
+);</code></pre>
+        <div class="callout note"><span class="lbl">Vergelijkbaar patroon</span><p>Dit is hetzelfde idee als een materialized view (deel 8) of een BRIN-index (deel 14): een vooraf berekend, goedkoper te raadplegen tussenresultaat, met de bekende afruil tussen actualiteit en snelheid.</p></div>
+        <p>De stand berekenen wordt dan: snapshot ophalen, plus alle events met een hoger volgnummer erbij optellen — een aanmerkelijk kleinere set dan de volledige stream. <strong>Wanneer een snapshot maken?</strong> Een gangbare vuistregel: elke N events (bijvoorbeeld elke 100), of periodiek (bijvoorbeeld nachtelijk voor actieve aggregaten) — vergelijkbaar met de checkpoint-cyclus uit deel 11: te vaak is overhead, te zelden betekent lange herberekeningstijden.</p>
+        <div class="callout tip"><span class="lbl">Comfort, geen noodzaak</span><p>Snapshots zijn, net als projecties, volledig herbouwbaar — verlies of corrumpeer een snapshot, en je kunt hem opnieuw berekenen uit de events. De events blijven de enige, onvervangbare bron van waarheid; alles daarna afgeleid (projecties, snapshots) is comfort, geen noodzaak.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.3 (b, e en f)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij een stream van 500+ events zonder snapshot: hoe verhoudt de tijd om de huidige stand te berekenen zich tot dezelfde berekening mét een snapshot plus de laatste tien events?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Zonder snapshot kan de berekening bij 500 events al merkbaar zijn — orde van grootte tientallen tot honderden milliseconden, afhankelijk van de projectiequery. Met snapshot plus tien events is dat aanzienlijk sneller, omdat de berekening slechts tien rijen hoeft te verwerken in plaats van 500-plus.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Bij welke streamlengte zou je, op basis van zo'n meting, een snapshotstrategie invoeren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een redelijk antwoord ligt rond enkele honderden events, afhankelijk van hoe vaak de stand wordt opgevraagd en hoe duur de berekening per event is — dezelfde afweging als bij checkpoint-frequentie (deel 11): vaker snapshotten kost meer schrijfoverhead, minder snapshotten kost meer leesvertraging.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Projecties automatisch bijwerken</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 27 werkte je een materialized view handmatig bij met <code>REFRESH</code>. In productie wil je dat automatiseren, en daarvoor zijn er twee gangbare opties.</p>
+        <p><strong>Optie 1 — periodiek, met een geplande taak:</strong> via <code>pg_cron</code> (deel 16) elke paar minuten een <code>REFRESH MATERIALIZED VIEW CONCURRENTLY</code>. <code>CONCURRENTLY</code> (deel 8, deel 14) voorkomt dat de materialized view tijdens de verversing ontoegankelijk is voor lezers — dezelfde reden dat je <code>CREATE INDEX CONCURRENTLY</code> verkiest boven de gewone variant.</p>
+        <p><strong>Optie 2 — trigger-gebaseerd, direct na elk event:</strong> een <code>AFTER INSERT</code>-trigger op de <code>events</code>-tabel die met UPSERT-logica een gewone (niet-materialized) projectietabel bijwerkt voor dat ene aggregaat, in plaats van een volledige <code>REFRESH</code>.</p>
+        <p>De afweging tussen de twee is opnieuw de klok-versus-actualiteit-afweging uit deel 8 en 18: periodiek is eenvoudiger en lichter, maar met een vertragingsvenster; trigger-gebaseerd is bijna synchroon, maar voegt overhead toe aan elke schrijfactie op de event store — vergelijkbaar met hoe een index (deel 14) elke <code>INSERT</code> iets duurder maakt in ruil voor snellere leesacties.</p>
+        <h3>LISTEN/NOTIFY als tussenweg</h3>
+        <p>Een tussenweg tussen "periodiek" en "synchroon binnen dezelfde transactie": PostgreSQL's ingebouwde publish-subscribe-mechanisme.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>CREATE OR REPLACE FUNCTION notify_nieuw_event() RETURNS trigger AS $$
+BEGIN
+    PERFORM pg_notify('nieuw_event', NEW.aggregate_id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_notify_event AFTER INSERT ON events
+    FOR EACH ROW EXECUTE FUNCTION notify_nieuw_event();</code></pre>
+        <p>Een aparte projectie-bijwerkende dienst luistert (<code>LISTEN nieuw_event;</code>) en werkt, zodra een notificatie binnenkomt, buiten de oorspronkelijke transactie de relevante projectie bij — asynchroon, maar met minder vertraging dan een periodieke taak.</p>
+        <div class="callout warn"><span class="lbl">PgBouncer-valkuil</span><p><code>LISTEN</code>/<code>NOTIFY</code> werkt niet betrouwbaar in transaction-pooling-modus (PgBouncer, deel 15 en 19). Een dienst die op notificaties luistert, heeft een <strong>permanente, niet-gepoolde verbinding</strong> nodig — een detail dat gemakkelijk over het hoofd wordt gezien als je gewend bent dat alles door een pooler loopt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.4 (c en d)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat zou een trigger die bij elke event de projectie bijwerkt, kosten aan schrijfoverhead op een event store die duizenden events per seconde ontvangt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Elke <code>INSERT</code> op de event store draagt dan ook de trigger-overhead — vergelijkbaar met hoe elke extra index een <code>INSERT</code> duurder maakt (deel 14). Bij een zeer hoog schrijftempo kan dit een merkbare bottleneck worden.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Noem een scenario waarin je toch voor de periodieke (<code>pg_cron</code>) aanpak zou kiezen in plaats van een trigger.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bijvoorbeeld een projectie die een dure, samengestelde aggregatie vereist die niet efficiënt per-event kan worden bijgewerkt (zoals een lopend gemiddelde over de hele historie) — daar is een periodieke, volledige herberekening soms eenvoudiger en robuuster dan een incrementele trigger-update.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Recht op vergetelheid: crypto-shredding</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Terug naar Sanne, en naar de belofte aan het eind van deel 27. Een deelnemer oefent zijn recht op vergetelheid uit (AVG) en wil dat zijn persoonsgegevens worden verwijderd. Bij een event store is dat principieel lastiger dan bij een gewone tabel: bij een gewone tabel is <code>DELETE FROM deelnemer WHERE deelnemer_id = 42</code> triviaal, maar bij een event store bevatten de events het BSN, de naam, het adres — verspreid over tientallen events in de stream. Verwijderen zou de onveranderlijkheid schenden die het hele patroon draagt.</p>
+        <p><strong>Het spanningsveld, precies benoemd:</strong> event sourcing belooft een volledige, onveranderlijke geschiedenis — dat is de kern van zijn waarde (deel 27). De AVG vereist dat persoonsgegevens op verzoek daadwerkelijk verwijderd kunnen worden. Deze twee eisen lijken elkaar tegen te spreken.</p>
+        <p>De gangbare oplossing verzoent beide eisen door de vraag te herformuleren: <strong>je hoeft het event zelf niet te verwijderen — je moet het onleesbaar maken.</strong> Persoonsgegevens in de payload worden versleuteld met een sleutel die uniek is per deelnemer (niet per event, niet clusterbreed). Het recht op vergetelheid wordt dan: niet events verwijderen, maar de sleutel vernietigen.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>CREATE TABLE deelnemer_sleutels (
+    deelnemer_id integer PRIMARY KEY,
+    sleutel      bytea NOT NULL   -- of een verwijzing naar extern sleutelbeheer (deel 21)
+);
+
+-- Niet: events verwijderen (schendt onveranderlijkheid)
+-- Wel: de sleutel vernietigen
+DELETE FROM deelnemer_sleutels WHERE deelnemer_id = 42;</code></pre>
+        <p>Na het vernietigen van de sleutel zijn de versleutelde velden in alle historische events onherstelbaar onleesbaar — de gebeurtenis "er vond een adreswijziging plaats op deze datum" blijft bestaan (de structuur van de geschiedenis, nodig voor audit en analyse), maar de persoonsgegevens zelf zijn voorgoed ontoegankelijk. Dit heet <strong>crypto-shredding</strong>, en het is precies de toepassing van <code>pgcrypto</code> uit deel 21 op het specifieke probleem van dit deel.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Wat</th><th>Effect van crypto-shredding</th></tr></thead>
+          <tbody>
+            <tr><td>Persoonsgegevens onleesbaar maken</td><td>Ja, effectief onomkeerbaar</td></tr>
+            <tr><td>De structuur van de geschiedenis (dat er een wijziging was) bewaren</td><td>Ja</td></tr>
+            <tr><td>Volledig fysiek verwijderen van elk spoor</td><td>Nee — de versleutelde bytes blijven fysiek aanwezig</td></tr>
+            <tr><td>Werkt met back-ups (deel 17)</td><td>Ja, mits de sleutel niet ook in de back-up van de sleuteltabel overleeft</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout warn"><span class="lbl">Het reële aandachtspunt</span><p>Als <code>deelnemer_sleutels</code> zelf in oudere back-ups staat, overleeft de sleutel daar mogelijk nog. Het bewaarbeleid voor back-ups (deel 17) moet daarom consistent zijn met deze aanpak — een back-up van de sleuteltabel die langer bewaard blijft dan de intentie van het verwijderingsverzoek, ondermijnt crypto-shredding net zoals een te lange back-upbewaartermijn in deel 17 al een spanningsveld opleverde met gewone verwijderingsverzoeken.</p></div>
+        <div class="callout tip"><span class="lbl">Ontwerpimplicatie</span><p>Bepaal vooraf welke velden in een event-payload persoonsgegevens bevatten, en versleutel die specifiek — niet de hele payload (dat zou ook niet-persoonlijke, voor analyse waardevolle gegevens onnodig onleesbaar maken) en niet slechts een deel als het niet dekkend is (dan blijft er een lek).</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.5 (e, f en g) — de kernopdracht van dit deel</p>
+        <details class="q"><summary><span class="qn">1</span><span>Na het verwijderen van de sleutel uit <code>deelnemer_sleutels</code>: wat gebeurt er als je de payload opnieuw probeert te ontsleutelen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De ontsleuteling <strong>faalt</strong> (of levert onzinnige data op, afhankelijk van de gebruikte functie) — zonder de sleutel is de versleutelde waarde niet meer te herstellen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Bestaat het event zelf nog in de <code>events</code>-tabel? Blijft de structuur van de geschiedenis intact?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ja, het event zelf bestaat nog</strong> — alleen de versleutelde velden in de payload zijn onleesbaar geworden. De structuur (event-type, tijdstip, dat er een wijziging plaatsvond) blijft volledig intact en bevraagbaar.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat zou er gebeuren als er een oude back-up van <code>deelnemer_sleutels</code> bestaat van vóór het verwijderen van de sleutel?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Als die back-up wordt teruggezet, is de sleutel daarin nog aanwezig — het verwijderingsverzoek zou dan met terugwerkende kracht ondermijnd worden. Daarom moet het bewaarbeleid voor back-ups van de sleuteltabel (deel 17) consistent zijn met de crypto-shredding-aanpak.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Schema-evolutie, testen en monitoring</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Event-schema-evolutie: expliciete versionering</h3>
+        <p>Een <code>SalarisGewijzigd</code>-event kreeg ooit alleen <code>nieuw_salaris</code>. Een jaar later wil je ook <code>reden</code> vastleggen. De oude events in de store hebben dat veld niet en kunnen niet met terugwerkende kracht worden aangepast (onveranderlijkheid, deel 27). De oplossing is expliciete versionering: nieuwe events krijgen een <code>_version</code>-veld, en oude events blijven ongewijzigd in hun oorspronkelijke vorm.</p>
+        <p>Projecties en command handlers moeten met beide versies kunnen omgaan — een <strong>upcasting</strong>-functie vertaalt een oud-formaat-event naar het nieuwe formaat vóórdat de projectielogica erop wordt losgelaten:</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>CREATE FUNCTION upcast_salariswijziging(payload jsonb) RETURNS jsonb AS $$
+    SELECT CASE WHEN payload ? '_version' AND (payload-&gt;&gt;'_version')::int &gt;= 2
+           THEN payload
+           ELSE payload || jsonb_build_object('_version', 2, 'reden', 'onbekend (historisch)')
+           END;
+$$ LANGUAGE sql IMMUTABLE;</code></pre>
+        <p>Dit is vergelijkbaar met de kolomtype-migratie uit deel 22, maar dan voor de betekenis van een event in plaats van een kolom — met een belangrijk verschil: bij een kolomtype-migratie kun je uiteindelijk de oude kolom verwijderen; bij event-schema-evolutie blijven oude events voor altijd in hun oorspronkelijke vorm bestaan, en moet de toepassingslogica daarmee blijven leven, in principe voor de levensduur van het systeem.</p>
+        <h3>Testen: gegeven-wanneer-dan</h3>
+        <p>Het goede nieuws: event-sourced systemen zijn vaak <strong>makkelijker</strong> te testen dan state-based systemen, omdat elke test simpelweg is: gegeven deze reeks events, en dit commando, verwacht ik dit nieuwe event (of deze foutmelding). Zo test je bijvoorbeeld dat een salariswijziging van meer dan 50% zonder goedkeuring wordt geweigerd: gegeven een stream met <code>DienstverbandGestart</code> en <code>SalarisGewijzigd(40000)</code>, en het commando <code>verwerk_salariswijziging(nieuw_salaris=70000)</code>, verwacht je een foutmelding en géén nieuw event. Dit is geen databasetest in de traditionele zin — het is een test van de command handler-logica, en omdat de events onveranderlijk en expliciet zijn, is de testopzet gegeven-wanneer-dan natuurlijk en herleidbaar.</p>
+        <h3>Monitoring: nieuwe signalen</h3>
+        <p>Bovenop alles uit deel 20, komen er specifieke signalen bij:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Signaal</th><th>Waarom het ertoe doet</th></tr></thead>
+          <tbody>
+            <tr><td>Groei van de event store</td><td>Analoog aan elke tabelgroei (deel 12), maar hier is <code>DELETE</code> principieel geen optie — alleen partitioneren en archiveren (deel 16)</td></tr>
+            <tr><td>Projectie-lag (tijd sinds laatste <code>REFRESH</code>/update)</td><td>Het eventual-consistency-venster uit deel 27, nu een meetbaar getal</td></tr>
+            <tr><td>Aantal <code>unique_violation</code>-conflicten per aggregaat</td><td>Hoog aantal duidt op een hotspot-aggregaat (deel 15) dat vaak gelijktijdig wordt gewijzigd</td></tr>
+            <tr><td>Snapshot-leeftijd versus streamlengte</td><td>Te oude snapshots betekenen trage herberekeningen</td></tr>
+            <tr><td><code>LISTEN</code>/<code>NOTIFY</code>-achterstand (indien gebruikt)</td><td>Een luisterende dienst die zelf traag is, wordt een verborgen bottleneck</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.6 (c en d)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat levert het toepassen van de upcast-functie op beide versies van het <code>SalarisGewijzigd</code>-event op, en wat betekent dat voor de projectiequery?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De upcast-functie zorgt dat beide events, ongeacht hun oorspronkelijke formaat, door dezelfde projectielogica kunnen worden verwerkt — de projectiequery hoeft zelf geen kennis te hebben van de historische formaatverschillen, want die complexiteit is geconcentreerd in de upcast-functie.</div></details>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.7 (b)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Hoe zou je het aantal <code>unique_violation</code>-conflicten per aggregaat meten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Via een aparte <code>retry_log</code>-tabel die bij elke opgevangen <code>unique_violation</code> een rij toevoegt met <code>aggregate_id</code> en tijdstip — vergelijkbaar met hoe deadlocks in deel 15 via <code>pg_stat_database</code> werden bijgehouden, nu specifiek per aggregaat.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Meridiaan end-to-end, valkuilen en kernbegrippen</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Meridiaans mutatieverwerking, end-to-end</h3>
+        <p>Een samenvattend beeld van hoe deel 27 en 28 samen op de bestaande casus worden toegepast:</p>
+        <ol>
+          <li><strong>Commando:</strong> het portaal (of de klantenservice) dient een mutatieverzoek in.</li>
+          <li><strong>Command handler:</strong> controleert bedrijfsregels (bijvoorbeeld: is de deelnemer nog actief), en legt bij succes een <code>MutatieIngediend</code>-event vast, met optimistische concurrency op het dienstverband-aggregaat.</li>
+          <li><strong>Verwerking:</strong> een achtergrondproces (vergelijkbaar met de <code>SKIP LOCKED</code>-wachtrij uit deel 15, nu toegepast op events in plaats van rijen) verwerkt het event en legt een <code>MutatieVerwerkt</code>-event vast.</li>
+          <li><strong>Projectie:</strong> de "huidige stand van de deelnemer"-projectie wordt bijgewerkt, via <code>LISTEN</code>/<code>NOTIFY</code> of een periodieke taak.</li>
+          <li><strong>Persoonsgegevens:</strong> relevante velden in de payload zijn versleuteld per deelnemer, zodat een toekomstig verwijderingsverzoek mogelijk blijft.</li>
+          <li><strong>Partitionering:</strong> de event store zelf is, net als <code>mutatie</code> in deel 16, gepartitioneerd op tijd — oude, buiten de bewaartermijn vallende partities kunnen verdwijnen zodra de bijbehorende sleutels (indien van toepassing) al zijn vernietigd.</li>
+        </ol>
+        <div class="callout note"><span class="lbl">Geen ander systeem</span><p>Dit is geen ander systeem dan wat je in niveau 2 bouwde — het is dezelfde <code>mutatie</code>-verwerking, met de events als expliciet, eersteklas concept in plaats van een impliciete bijeffect van hoe de tabel toevallig was ingericht.</p></div>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Business logica pas ná het vastleggen van een event controleren</td><td>Ongeldige feiten in de geschiedenis</td><td>Command handler valideert vóór het event bestaat</td></tr>
+            <tr><td>Geen snapshotting bij lange streams</td><td>Trage, groeiende herberekeningstijden</td><td>Periodieke snapshots, herbouwbaar</td></tr>
+            <tr><td><code>LISTEN</code>/<code>NOTIFY</code> via een gepoolde verbinding</td><td>Werkt onbetrouwbaar of helemaal niet</td><td>Permanente, niet-gepoolde verbinding voor de luisteraar</td></tr>
+            <tr><td>Events verwijderen bij een verwijderingsverzoek</td><td>Schendt onveranderlijkheid, breekt projecties die op volledigheid rekenen</td><td>Crypto-shredding</td></tr>
+            <tr><td>De hele payload versleutelen, ook niet-persoonlijke velden</td><td>Onnodig verlies van voor analyse waardevolle, niet-gevoelige gegevens</td><td>Selectief versleutelen, per veld</td></tr>
+            <tr><td>Sleutels voor crypto-shredding zelf te lang bewaren in back-ups</td><td>Het verwijderingsverzoek wordt via een oude back-up ondermijnd</td><td>Sleutelbewaarbeleid consistent met deel 17</td></tr>
+            <tr><td>Event-schema's wijzigen zonder versionering</td><td>Oude events kunnen niet meer correct worden geïnterpreteerd</td><td>Expliciete <code>_version</code>, upcasting-functies</td></tr>
+            <tr><td>Testen alsof het een gewone CRUD-applicatie is</td><td>Mist de kracht van gegeven-wanneer-dan-tests op commando's</td><td>Testen op het niveau van commando's en verwachte events</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Kernbegrippen</h3>
+        <ul>
+          <li><strong>Command handler</strong> — logica die een commando valideert en, bij succes, een event vastlegt.</li>
+          <li><strong>Optimistic concurrency (in event sourcing)</strong> — het <code>volgnummer</code>-conflictmechanisme uit deel 27, hier met de bijbehorende retry-logica.</li>
+          <li><strong>Snapshot</strong> — een periodiek opgeslagen, herbouwbare tussenstand van een aggregaat.</li>
+          <li><strong><code>LISTEN</code>/<code>NOTIFY</code></strong> — PostgreSQL's ingebouwde publish-subscribe-mechanisme, hier gebruikt om projecties bijna-synchroon bij te werken.</li>
+          <li><strong>Recht op vergetelheid</strong> — de AVG-eis dat persoonsgegevens op verzoek verwijderbaar moeten zijn.</li>
+          <li><strong>Crypto-shredding</strong> — persoonsgegevens onleesbaar maken door de bijbehorende versleutelingssleutel te vernietigen, in plaats van de gegevens zelf te verwijderen.</li>
+          <li><strong>Event-schema-evolutie</strong> — het beheren van veranderingen in het formaat van een event-type over tijd.</li>
+          <li><strong>Upcasting</strong> — het vertalen van een ouder event-formaat naar het nieuwste formaat vóór verwerking.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 28, Opdracht 28.8 — het implementatieplan (modelantwoord, verkort)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Op welk getal is de voorgestelde snapshotstrategie voor Meridiaans aanspraakopbouw gebaseerd, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een actief dienstverband van dertig jaar genereert naar schatting enkele honderden events (jaarlijkse premie-events plus incidentele wijzigingen). Het modelantwoord snapshot daarom elke 200 events, of jaarlijks voor actieve aggregaten — ruim binnen de marge waarbij herberekening merkbaar traag zou worden.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Hoe sluit het AVG-ontwerp in het modelantwoord expliciet aan bij het back-upbeleid uit deel 17?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De sleutels voor crypto-shredding krijgen een eigen, kortere back-upbewaartermijn dan de event store zelf, zodat een verwijderingsverzoek niet alsnog via een oude back-up van de sleuteltabel kan worden ondermijnd — volgens de beoordelingspunten is dit het meest over het hoofd geziene punt.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 29</h3>
+      <p>Vandaag ging het over wát je vastlegt. Deel 29 keert de vraag terug naar waar — maar nu op de schaal van meerdere regio's en landsgrenzen, met alles wat dat aan latency, dataresidentie en AVG-complicaties met zich meebrengt: geo-distributie.</p>
+      <a class="btn" href="deel-29.html">Deel 29 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 28 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-3/deel-28-event-sourcing-in-de-praktijk/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_dbm28_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

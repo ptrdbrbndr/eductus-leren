@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 19 — Hoge beschikbaarheid | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 19 (EDB Professional, twee dagdelen): waarom split-brain consensus vereist, Patroni-architectuur met etcd, failover, fencing en switchover, en connection pooling met PgBouncer — inclusief chaos-testen en het meten van een echte RTO.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-19.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 19</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 19 van 30</p>
+  <h1>Hoge beschikbaarheid:<br>een systeem dat <em>zichzelf herstelt</em>.</h1>
+  <p class="hero__lead">Dit deel beslaat twee dagdelen (10 en 11 van 14). Dagdeel A behandelt waarom een server nooit alleen mag beslissen dat hij primary is — <strong>consensus</strong>, via etcd, is de eis — en hoe <strong>Patroni</strong> daarmee automatisch failover, <strong>fencing</strong> en geplande <strong>switchover</strong> orkestreert. Dagdeel B behandelt waarom connection pooling met <strong>PgBouncer</strong> een HA-onderwerp is en geen prestatiekwestie, wat er breekt in transaction-pooling, en hoe je het geheel met opzet stukmaakt — <strong>chaos-testen</strong> — om een echte RTO te meten in plaats van er een te schatten.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2 dagdelen</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>12</b><span>werkboekopdrachten</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering en uitdrukkelijk geen vervanging van het officiële EDB-examenmateriaal — studeer voor het examen altijd óók de officiële bron. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → <b>19 Hoge beschikbaarheid (hier)</b> → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Wat er nog ontbrak: het consensusprobleem</a></li>
+      <li><a href="#s3" data-target="s3">Consensus, quorum en de architectuur van Patroni</a></li>
+      <li><a href="#s4" data-target="s4">Een Patroni-cluster opzetten en failover meemaken</a></li>
+      <li><a href="#s5" data-target="s5">Fencing, switchover en wat Patroni niet oplost</a></li>
+      <li><a href="#s6" data-target="s6">Waarom pooling een HA-onderwerp is</a></li>
+      <li><a href="#s7" data-target="s7">Wat er breekt in transaction-pooling</a></li>
+      <li><a href="#s8" data-target="s8">Belastingverdeling, chaos-testen en RTO meten</a></li>
+      <li><a href="#s9" data-target="s9">Het geheel, veelgemaakte fouten en certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is het zwaarste deel van de cursus, verspreid over twee dagdelen. Na <strong>dagdeel A</strong> kun je: het split-brain-probleem uit deel 18 vertalen naar de eis van consensus; de architectuur van Patroni beschrijven; een Patroni-cluster opzetten; een failover meemaken; fencing toepassen om te voorkomen dat een oude primary weer meedoet; een geplande switchover uitvoeren; en de grenzen van geautomatiseerde failover benoemen.</p>
+        <p>Na <strong>dagdeel B</strong> kun je: uitleggen waarom connection pooling een HA-onderwerp is en niet alleen een prestatiemaatregel; de drie poolmodi van PgBouncer toepassen en hun beperkingen benoemen; PgBouncer configureren om automatisch de huidige Patroni-primary te volgen; leesverkeer routeren naar replica's; een cluster express laten falen om het te controleren; een RTO in de praktijk meten; en een compleet HA-ontwerp presenteren dat RPO, RTO, replicatie, consensus en pooling samenbrengt.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat er nog ontbrak: het consensusprobleem</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Aan het eind van deel 18 stond het expliciet in je eigen ontwerp: promotie is mogelijk, failover niet geregeld. Vier vragen bleven open: wie merkt dat de primary is uitgevallen? Wie beslist welke replica gepromoveerd wordt? Wie voorkomt dat de oude primary blijft meedoen (split-brain)? Wie vertelt de applicatie waar de nieuwe primary is?</p>
+        <p>Handmatig beantwoorden kost tijd — en tijd is precies wat je RTO opeet. Bij Meridiaan met een RTO-doelstelling van enkele uren (deel 17, opdracht 17.1) kan een mens die om drie uur 's nachts wordt gewekt, dat misschien net halen. Bij een RTO van minuten kan dat niet. <strong>Vandaag automatiseer je die vier beslissingen.</strong></p>
+        <h3>Het probleem dat elke oplossing moet aanpakken</h3>
+        <p>Stel je een simpele "automatische" aanpak voor: elke server controleert zelf of de primary nog leeft, en promoveert zichzelf als dat niet zo lijkt.</p>
+        <p><strong>Waarom dat faalt:</strong> een netwerkstoring die de replica van de primary afsnijdt, ziet er voor de replica <em>precies hetzelfde uit</em> als een primary die is uitgevallen. De replica kan het onderscheid niet maken. Promoveert hij zichzelf, terwijl de primary in werkelijkheid prima draait maar alleen tijdelijk onbereikbaar was — dan heb je split-brain, met <strong>twee</strong> actieve primaries die allebei schrijfopdrachten aannemen.</p>
+        <p>Dit heet het probleem van <strong>gedeeltelijke netwerkstoringen</strong> (partial network partitions), en het is de reden dat naïeve "elke node beslist zelf"-oplossingen in de praktijk gevaarlijker zijn dan geen automatisering.</p>
+        <div class="callout warn"><span class="lbl">De eis</span><p>De oplossing vereist consensus: een meerderheid van onafhankelijke waarnemers moet het eens zijn voordat er een beslissing wordt genomen. Eén node mag nooit alleen beslissen dat hij de nieuwe primary is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 1 — het probleem zelf ervaren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bedenk een regel die een server zou kunnen volgen om te beslissen of hij moet promoveren als hij de andere server niet meer ziet. Laat zien dat die regel faalt in het scenario waarin de connectie tussen de twee servers is verbroken, maar beide nog prima bereikbaar zijn voor cliënten.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een voor de hand liggende, foute regel: "als ik de andere server niet meer kan bereiken, promoveer ik mezelf." Bij een netwerkstoring <strong>tussen</strong> de twee servers, terwijl beide nog voor clients bereikbaar zijn: beide servers zien elkaar niet meer, en volgens de regel promoveren <strong>beide</strong> zichzelf. Nu zijn er twee primaries — split-brain, precies het probleem dat de regel had moeten voorkomen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het minimale aantal onafhankelijke waarnemers waarbij een meerderheid altijd eenduidig is, ook als er één uitvalt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Drie.</strong> Bij drie waarnemers vormen twee altijd een meerderheid, ook als één uitvalt. Bij twee waarnemers is er nooit een eenduidige meerderheid bij onenigheid (1-tegen-1).</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Consensus, quorum en de architectuur van Patroni</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Met twee servers (primary en replica) is er geen manier om een meerderheid te vormen — bij een netwerkstoring tussen hen zijn het altijd 1-tegen-1, en niemand kan zeggen wie er "gelijk" heeft.</p>
+        <p><strong>Met een oneven aantal onafhankelijke waarnemers</strong> (drie is het minimum in de praktijk) kan een meerderheid ontstaan, ook als een deel onbereikbaar is. Dit heet een <strong>quorum</strong>, en het principe erachter (Raft, of het oudere Paxos) is: een beslissing geldt pas als een meerderheid van de waarnemers hem bevestigt.</p>
+        <p><strong>Deze waarnemers hoeven geen PostgreSQL-servers te zijn</strong> — sterker, ze horen dat meestal niet te zijn. Ze vormen een apart, lichtgewicht consensussysteem dat de status van de database-cluster bijhoudt en waarop de database-servers vertrouwen. <strong>etcd</strong> (of Consul, of ZooKeeper) is de gangbare keuze: een gedistribueerde sleutel-waardeopslag die zelf al consensus (Raft) implementeert.</p>
+        <h3>Patroni: de architectuur</h3>
+        <p><strong>Patroni</strong> is geen consensussysteem zelf — het is een beheerlaag die op elke PostgreSQL-server draait en die het onderliggende consensussysteem (meestal etcd) gebruikt om te bepalen wie de primary mag zijn.</p>
+        <pre><code>┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│  Patroni +  │   │  Patroni +  │   │  Patroni +  │
+│  PostgreSQL │   │  PostgreSQL │   │  PostgreSQL │
+│  (primary)  │   │  (replica)  │   │  (replica)  │
+└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+       │                 │                 │
+       └────────┬────────┴────────┬────────┘
+                 │      etcd       │
+                 │  (3 knooppunten,│
+                 │   apart cluster)│
+                 └──────────────────┘</code></pre>
+        <p><strong>Wat Patroni op elke node doet:</strong> controleert continu of zijn eigen PostgreSQL-instantie gezond is; probeert periodiek een "leiderschapsslot" in etcd te vernieuwen (alleen de huidige primary mag dat); als de primary dat slot niet op tijd vernieuwt, verloopt het vanzelf in etcd; de replica's zien het slot vrijkomen en strijden — via etcd, dus met consensus — om wie het nieuwe slot mag claimen; de winnaar promoveert zichzelf, geholpen door Patroni.</p>
+        <p><strong>Waarom dit het gedeeltelijke-netwerkstoring-probleem oplost:</strong> een primary die is afgesneden van etcd kan zijn slot niet vernieuwen — ook al draait PostgreSQL zelf nog perfect. Patroni op die node ziet dat hij het slot kwijt is, en <strong>degradeert zichzelf actief</strong> (sectie 5) in plaats van te blijven doen alsof hij primary is. Dat actieve zelf-degraderen, niet alleen het detecteren door anderen, is de kern van hoe split-brain wordt voorkomen.</p>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Een Patroni-cluster opzetten en failover meemaken</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een minimale configuratie per node (<code>patroni.yml</code>):</p>
+        <pre><code>scope: meridiaan-cluster
+name: node1
+
+restapi:
+  listen: 0.0.0.0:8008
+
+etcd3:
+  hosts: etcd1:2379,etcd2:2379,etcd3:2379
+
+postgresql:
+  listen: 0.0.0.0:5432
+  data_dir: /var/lib/postgresql/data
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576</code></pre>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Parameter</th><th>Betekent</th></tr></thead>
+          <tbody>
+            <tr><td><code>ttl</code></td><td>Hoe lang een leiderschapsslot geldig blijft zonder vernieuwing</td></tr>
+            <tr><td><code>loop_wait</code></td><td>Hoe vaak Patroni de status controleert</td></tr>
+            <tr><td><code>maximum_lag_on_failover</code></td><td>Een replica met meer achterstand dan dit (in bytes) komt niet in aanmerking om te promoveren</td></tr>
+          </tbody>
+        </table></div>
+        <p>Die laatste is direct verbonden met deel 18: een replica die te ver achterloopt, mag Patroni niet promoveren, ook al is hij de enige beschikbare — beter een langere uitval dan een promotie die meer gegevens kost dan het RPO toestaat. Dit is een <strong>expliciete afweging tussen RTO en RPO</strong> die je in de configuratie vastlegt.</p>
+        <pre><code>patronictl -c patroni.yml list</code></pre>
+        <p>toont de clusterstatus: welke node primary is, welke replica's er zijn, en hun vertraging (rechtstreeks de <code>replay_lag</code> uit deel 18, nu door Patroni bewaakt).</p>
+        <h3>Failover meemaken</h3>
+        <p>Simuleer een uitval van de primary (bijvoorbeeld het proces hard stoppen, niet netjes afsluiten):</p>
+        <pre><code>patronictl -c patroni.yml list   # noteer wie primary is
+# op de primary-node:
+pkill -9 -f postgres</code></pre>
+        <p><strong>Wat er gebeurt, in volgorde:</strong> Patroni op de primary-node merkt dat zijn PostgreSQL niet meer reageert; binnen <code>ttl</code>-seconden vernieuwt hij het leiderschapsslot niet meer; het slot verloopt in etcd; de replica's zien dat, en de gezondste (met de minste <code>replay_lag</code>, binnen <code>maximum_lag_on_failover</code>) claimt het slot; Patroni op die node roept <code>pg_promote()</code> aan; <code>patronictl list</code> toont een nieuwe primary.</p>
+        <p>Meet: hoeveel tijd zat er tussen het stoppen van de oude primary en het moment waarop de nieuwe primary schrijfopdrachten accepteerde? <strong>Dat is je gemeten RTO voor dit scenario</strong> — vergelijk het met het handmatige traject dat je in deel 17 en 18 hebt doorlopen.</p>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Fencing, switchover en wat Patroni niet oplost</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Fencing: de oude primary onschadelijk maken</h3>
+        <p>Wat gebeurt er als de oude primary weer online komt, nietsvermoedend? <strong>Patroni's antwoord:</strong> wanneer die node weer met etcd kan praten en ontdekt dat een ander het leiderschapsslot heeft, <strong>degradeert hij zichzelf actief</strong> tot replica van de nieuwe primary. Dit heet <strong>fencing</strong>: het onschadelijk maken van een node die mogelijk nog denkt dat hij primary is.</p>
+        <p><strong>Het scenario waar dit echt op de proef wordt gesteld:</strong> de oude primary was niet gecrasht maar alleen tijdelijk <strong>netwerkmatig geïsoleerd</strong> — hij draaide door en accepteerde misschien zelfs nog schrijfopdrachten van clients die hem nog wisten te bereiken via een ander pad. De primary-rol vereist een geldig, <strong>vernieuwd</strong> leiderschapsslot. Kan een node niet met een meerderheid van etcd-knooppunten praten, dan kan hij het slot niet vernieuwen, ongeacht wat zijn eigen PostgreSQL-proces denkt te zijn.</p>
+        <div class="callout warn"><span class="lbl">Faalgebieden gescheiden houden</span><p>Een oneven aantal etcd-knooppunten, verspreid over onafhankelijke faalgebieden (andere stroomkring, ander netwerksegment, idealiter andere fysieke locatie), is essentieel. Staan alle drie de etcd-knooppunten op dezelfde stroomkring, dan valt bij een stroomstoring de hele consensuslaag tegelijk weg.</p></div>
+        <h3>Switchover: gepland, niet gedwongen</h3>
+        <p>Niet elke rolwisseling is een noodgeval. Voor een geplande servermigratie of een OS-patch bestaat een <strong>switchover</strong>: een gecontroleerde, geplande rolwisseling zonder dataverlies.</p>
+        <pre><code>patronictl -c patroni.yml switchover</code></pre>
+        <p>Patroni vraagt welke node de nieuwe primary moet worden, wacht tot die volledig is bijgewerkt (geen <code>replay_lag</code>), laat de huidige primary netjes stoppen met schrijven, en promoveert dan pas de nieuwe.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Failover</th><th>Switchover</th></tr></thead>
+          <tbody>
+            <tr><td>Aanleiding</td><td>Onverwachte uitval</td><td>Geplande wijziging</td></tr>
+            <tr><td>Snelheid</td><td>Zo snel mogelijk</td><td>Zo veilig mogelijk</td></tr>
+            <tr><td>Gegevensverlies-risico</td><td>Klein, begrensd door <code>maximum_lag_on_failover</code></td><td>Nul</td></tr>
+            <tr><td>Wie beslist</td><td>Consensus, automatisch</td><td>Een beheerder, expliciet</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Wat Patroni niet oplost</h3>
+        <p>Het lost geen applicatieprobleem op — de applicatie moet nog weten waar de huidige primary is (dagdeel B). Het beschermt niet tegen dataverlies binnen <code>maximum_lag_on_failover</code> — dat is een RPO-beslissing, geen bug. Het lost geen etcd-probleem op — verliest de consensuslaag zelf een meerderheid, dan gaat het hele cluster naar read-only totdat het quorum hersteld is: bewust en veilig. En het vervangt geen back-up: Patroni beschermt tegen het uitvallen van een machine, niet tegen een verkeerde <code>DROP TABLE</code>, die vrolijk meerepliceert naar elke node in het cluster.</p>
+        <div class="callout tip"><span class="lbl">Vijf dingen die blijven hangen uit dagdeel A</span><p>Eén node mag nooit alleen beslissen dat hij primary is. Patroni is geen consensussysteem, hij gebruikt er een. Fencing is net zo belangrijk als promotie. Switchover voor gepland onderhoud, failover voor het onverwachte. Patroni lost de databasekant op — de verbindingskant is dagdeel B.</p></div>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Waarom pooling een HA-onderwerp is</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Patroni lost op <em>welke server</em> de primary is. Maar de applicatie van Meridiaan heeft een connection string — een vast adres. Na een failover is de primary een andere machine. <strong>Wie vertelt de applicatie dat?</strong></p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Route</th><th>Hoe</th><th>Complexiteit</th></tr></thead>
+          <tbody>
+            <tr><td>Applicatie kent alle nodes</td><td>Retry-logica die zelf de nieuwe primary vindt</td><td>Hoog — elke applicatie moet dit implementeren</td></tr>
+            <tr><td>DNS/VIP-omleiding</td><td>Een naam wijst na failover naar de nieuwe primary</td><td>Middel</td></tr>
+            <tr><td><strong>Eén vast adres met tussenlaag</strong></td><td>De applicatie verbindt altijd met hetzelfde adres; de tussenlaag routeert door</td><td>Laag voor de applicatie</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>PgBouncer met Patroni-integratie is de derde route</strong>, en het is waarom pooling in dit deel staat in plaats van als losstaand onderwerp: het lost tegelijk het verbindingsprobleem uit deel 11 (te veel verbindingen) én het HA-verbindingsprobleem op.</p>
+        <h3>PgBouncer: de drie poolmodi</h3>
+        <pre><code>[databases]
+meridiaan = host=127.0.0.1 port=5432 dbname=meridiaan
+
+[pgbouncer]
+listen_port = 6432
+pool_mode = transaction
+max_client_conn = 1000
+default_pool_size = 25</code></pre>
+        <p>De applicatie verbindt met PgBouncer (poort 6432), niet rechtstreeks met PostgreSQL. PgBouncer houdt een klein aantal echte databaseverbindingen open en deelt ze.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Modus</th><th>Verbinding vrijgegeven</th><th>Efficiëntie</th><th>Compatibiliteit</th></tr></thead>
+          <tbody>
+            <tr><td><code>session</code></td><td>Bij sluiten van de clientverbinding</td><td>Laag</td><td>Volledig</td></tr>
+            <tr><td><code>transaction</code></td><td>Na elke transactie</td><td><strong>Hoog</strong></td><td>Beperkt (sectie 7)</td></tr>
+            <tr><td><code>statement</code></td><td>Na elke losse opdracht</td><td>Zeer hoog</td><td>Zeer beperkt</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong><code>transaction</code>-modus is de gangbare keuze voor een OLTP-werklast als het portaal van Meridiaan:</strong> honderden clients, korte transacties, veel verbindingen die het merendeel van de tijd niets doen. Met session-pooling zou je alsnog honderden echte databaseverbindingen nodig hebben; met transaction-pooling volstaan er 25.</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wat er breekt in transaction-pooling</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De prijs voor die efficiëntie: <strong>een "sessie" bestaat niet meer tussen transacties.</strong> Elke transactie kan op een andere onderliggende databaseverbinding terechtkomen. Dit is exact de lijst uit deel 15, nu met de volledige context waarom:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Werkt niet betrouwbaar</th><th>Waarom</th></tr></thead>
+          <tbody>
+            <tr><td><code>SET</code> op sessieniveau</td><td>De volgende transactie kan een andere verbinding treffen</td></tr>
+            <tr><td>Prepared statements over transacties heen</td><td>Ze bestaan op de achterliggende verbinding, niet de client</td></tr>
+            <tr><td><code>LISTEN</code>/<code>NOTIFY</code></td><td>Vereist een blijvende sessie</td></tr>
+            <tr><td>Sessie-advisory locks</td><td>Kunnen blijven hangen op een verbinding die teruggaat naar de pool</td></tr>
+            <tr><td>Tijdelijke tabellen over transacties heen</td><td>Verbonden aan de sessie, niet de client</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>De regel:</strong> gebruik <code>SET LOCAL</code> in plaats van <code>SET</code>, <code>pg_advisory_xact_lock</code> in plaats van de sessievariant, en vermijd prepared statements die over transacties heen moeten blijven bestaan.</p>
+        <p><strong>Voor Meridiaan's rapportagewerklast</strong> (lange, individuele query's, weinig gelijktijdigheid) is <code>session</code>-modus vaak beter passend — een aparte poolinstantie voor portaal (transaction) en rapportage (session), net als de rolgebonden <code>work_mem</code> uit deel 11.</p>
+        <h3>PgBouncer en Patroni samen</h3>
+        <p>Hoe weet PgBouncer wie de huidige primary is? Elke Patroni-node biedt een eindpunt dat aangeeft of hij primary is:</p>
+        <pre><code>curl http://node1:8008/primary   # 200 OK als primary, 503 anders</code></pre>
+        <p>Een load balancer (HAProxy) gebruikt dit als gezondheidscontrole en stuurt verkeer alleen naar de node die op dit moment <code>200</code> teruggeeft. Na een failover verandert welke node <code>200</code> teruggeeft; HAProxy merkt dat binnen zijn controle-interval en routeert nieuw verkeer naar de nieuwe primary. <strong>De applicatie hoeft niets te weten</strong> — hij verbindt altijd met hetzelfde PgBouncer-adres.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 8 — wat breekt in transaction-pooling</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom is <code>pg_advisory_lock(1)</code> gevolgd door <code>pg_advisory_unlock(1)</code> in een aparte opdracht gevaarlijk via PgBouncer in transaction-modus, terwijl <code>pg_advisory_xact_lock</code> binnen één expliciete transactie wel betrouwbaar is?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De sessievariant wordt genomen op een specifieke achterliggende verbinding; de latere <code>unlock</code>-opdracht kan op een andere achterliggende verbinding terechtkomen en de lock dus nooit vrijgeven vanuit dat pad — de lock blijft hangen op een verbinding die teruggaat naar de pool voor andere clients. Binnen één expliciete transactie blijft PgBouncer dezelfde achterliggende verbinding vasthouden totdat de transactie sluit, en <code>pg_advisory_xact_lock</code> valt bovendien vanzelf vrij bij het einde van diezelfde transactie.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de gemeenschappelijke oorzaak dat <code>SET</code> buiten een transactie, sessie-advisory-locks en <code>PREPARE</code> over transacties heen allemaal onbetrouwbaar zijn in transaction-pooling?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Transaction-pooling geeft de achterliggende verbinding vrij zodra de transactie sluit — alles wat aan "de sessie" is gebonden in plaats van aan "de transactie", overleeft dat niet.</strong></div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Belastingverdeling, chaos-testen en RTO meten</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 18: replica's kunnen leesverkeer bedienen. HAProxy kan dat faciliteren met een tweede controle-eindpunt (<code>/replica</code>): één frontend die naar de primary routeert (schrijfverkeer), één die naar een gezonde replica routeert (Karins rapportage). <strong>De applicatiekant moet dit onderscheid wél kennen</strong> — niet welke server, maar welk <em>soort</em> verkeer dit is; elke query moet gemarkeerd zijn als "moet naar de primary" of "mag naar een replica".</p>
+        <h3>Chaos: het systeem express breken</h3>
+        <p>De enige manier om te weten of dit alles werkt, is precies zoals in deel 17: <strong>het testen door het daadwerkelijk kapot te maken.</strong> Vier scenario's, in oplopende moeilijkheid:</p>
+        <ol>
+          <li><strong>Primary hard stoppen.</strong> Verwacht: failover binnen <code>ttl</code> plus wat marge.</li>
+          <li><strong>Eén etcd-node uitschakelen.</strong> Verwacht: geen enkel effect — twee van de drie vormen nog een meerderheid.</li>
+          <li><strong>Twee van de drie etcd-nodes uitschakelen.</strong> Verwacht: het cluster kan geen leiderschap meer vernieuwen of overdragen. De huidige primary blijft draaien, maar geen failover is meer mogelijk totdat het quorum herstelt. Bewust en veilig: beschikbaar maar niet meer beschermd.</li>
+          <li><strong>Netwerkpartitie: de primary geïsoleerd, maar zelf nog draaiend.</strong> Verwacht: de replica's promoveren een nieuwe primary; de oude primary degradeert zichzelf zodra hij merkt dat hij het slot niet kan vernieuwen — <strong>maar er is een venster waarin hij, nog onwetend, schrijfopdrachten van clients zou kunnen accepteren die hem nog bereiken.</strong> Meet hoe lang dat venster is.</li>
+        </ol>
+        <div class="callout warn"><span class="lbl">Het scenario dat er echt toe doet</span><p>Scenario 4 onderscheidt een goed geteste HA-opstelling van een die er alleen goed uitziet op een architectuurplaat.</p></div>
+        <h3>RTO in de praktijk meten</h3>
+        <p>Voor elk scenario, meet: <strong>detectietijd</strong> (hoe lang tot Patroni het probleem opmerkt), <strong>beslistijd</strong> (tot een nieuwe primary is gekozen), <strong>promotietijd</strong> (tot die schrijfbaar is), <strong>routeringstijd</strong> (tot HAProxy/PgBouncer verkeer daarheen stuurt), en het <strong>totaal</strong> — gemeten van begin tot eind, niet geschat.</p>
+        <p><strong>Vergelijk dit getal met de RTO-doelstelling uit deel 17.</strong> Als Meridiaan een RTO van twee uur nodig had en een handmatige procedure (deel 17-18) daar ruimschoots binnen bleef, was de investering in dit hele dagdeel misschien niet nodig geweest — <strong>dat is een eerlijke, legitieme conclusie.</strong> Automatische failover heeft eigen complexiteit en eigen faalmodi. Hij is het waard bij een laag RTO, een grote installatie, of frequent onderhoud dat anders telkens handmatig werk vraagt.</p>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Het geheel, veelgemaakte fouten en certificering</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De volledige keten die deel 17, 18 en 19 samen vormen:</p>
+        <pre><code>RPO/RTO-eisen (bedrijfsbeslissing, deel 17)
+        │
+        ▼
+Back-upstrategie (deel 17) ── vangnet voor fouten in de tijd
+        │
+        ▼
+Replicatietopologie (deel 18) ── synchroon/asynchroon per RPO
+        │
+        ▼
+Consensus en automatische failover (deel 19a) ── voor het RTO
+        │
+        ▼
+Connection pooling en routering (deel 19b) ── zodat de applicatie niets hoeft te weten</code></pre>
+        <p><strong>Geen van deze lagen vervangt een andere.</strong> Een organisatie met een uitstekende Patroni-opstelling en geen geteste back-up is nog steeds kwetsbaar voor een verkeerde <code>DROP TABLE</code>. Een organisatie met perfecte back-ups en geen replicatie heeft een RTO die wordt gemeten in uren, niet in seconden. Ze zijn complementair.</p>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Elke node laten zelf-detecteren en zelf-promoveren</td><td>Split-brain bij een netwerkstoring</td><td>Consensus via een onafhankelijke meerderheid</td></tr>
+            <tr><td>Etcd-knooppunten op dezelfde stroomkring/rack</td><td>De consensuslaag valt in zijn geheel weg</td><td>Fysiek gescheiden faalgebieden</td></tr>
+            <tr><td>Applicatie rechtstreeks naar een vast databaseadres</td><td>Werkt niet meer na failover</td><td>PgBouncer + HAProxy die Patroni volgen</td></tr>
+            <tr><td><code>transaction</code>-pooling zonder de beperkingen te kennen</td><td><code>SET</code>, advisory locks, prepared statements falen onvoorspelbaar</td><td><code>SET LOCAL</code>, <code>pg_advisory_xact_lock</code>, of <code>session</code>-modus waar nodig</td></tr>
+            <tr><td>Rapportage- en portaalverkeer door dezelfde pool</td><td>Verkeerde poolmodus voor minstens één werklast</td><td>Aparte pools per werklast</td></tr>
+            <tr><td>Failover nooit echt getest, alleen switchover</td><td>Onbekend gedrag bij een echte storing</td><td>Chaos-scenario's, inclusief netwerkpartitie</td></tr>
+            <tr><td><code>maximum_lag_on_failover</code> te ruim</td><td>Promotie van een te ver achterlopende replica</td><td>Instellen op basis van het werkelijke RPO</td></tr>
+            <tr><td>Automatische failover invoeren zonder RTO-onderbouwing</td><td>Complexiteit zonder aantoonbare noodzaak</td><td>Eerst meten of het handmatige traject al voldoet</td></tr>
+          </tbody>
+        </table></div>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: het split-brain-probleem en waarom consensus nodig is, de rol van etcd/Consul, Patroni's architectuur (leiderschapsslot, <code>ttl</code>, <code>maximum_lag_on_failover</code>), het verschil tussen failover en switchover, fencing, PgBouncer's drie poolmodi met hun beperkingen, de combinatie PgBouncer/HAProxy/Patroni, en het testen van HA met opzettelijke storingen inclusief netwerkpartities. Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 20</h3>
+      <p>Je hebt nu een systeem dat zichzelf herstelt. Deel 20 zorgt dat je het ook zíét gebeuren, vóórdat een gebruiker het meldt: monitoring, logging en pgaudit.</p>
+      <a class="btn" href="deel-20.html">Deel 20 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 19 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-19-hoge-beschikbaarheid/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm19_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

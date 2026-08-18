@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 15 — Concurrency en locking | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 15 (EDB Professional): vier dagdelen lang query's sneller gemaakt, en toch gaat het portaal onderuit — de lockwachtrij, diagnose met pg_blocking_pids, lock_timeout, deadlocks, isolatieniveaus, retry-logica en hotspots.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-15.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 15</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 15 van 30</p>
+  <h1>Concurrency<br><em>en locking</em>.</h1>
+  <p class="hero__lead">Vier delen lang heeft u query's sneller gemaakt. Dinsdagavond gaat het portaal alsnog onderuit. De query's zijn niet trager geworden — ze wachten. Dat is diagnostisch lastig, want alle gebruikelijke signalen blijven normaal: lage CPU, rustige schijf, geen uitschieters in pg_stat_statements. En toch reageert niets. Dit tweedelige deel behandelt locks, de lockwachtrij, isolatieniveaus en wat er gebeurt zodra honderdvijftig sessies tegelijk hetzelfde willen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±4,5u</b><span>leestijd + werkboek, 2 dagdelen</span></div>
+    <div class="stat"><b>7</b><span>controlevragen</span></div>
+    <div class="stat"><b>8</b><span>tabellocktypen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → <b>15 Concurrency en locking (hier)</b> → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Snelheid is niet het probleem</a></li>
+      <li><a href="#s3" data-target="s3">Het lockmodel en de lockwachtrij</a></li>
+      <li><a href="#s4" data-target="s4">Rijlocks en diagnose: wie blokkeert wie</a></li>
+      <li><a href="#s5" data-target="s5">Timeouts en deadlocks op schaal</a></li>
+      <li><a href="#s6" data-target="s6">Advisory locks en het veilige migratiepatroon</a></li>
+      <li><a href="#s7" data-target="s7">Isolatieniveaus en Serializable Snapshot Isolation</a></li>
+      <li><a href="#s8" data-target="s8">Retry-logica, wachtrijen en hotspots</a></li>
+      <li><a href="#s9" data-target="s9">Pooling, monitoring en de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit deel beslaat twee dagdelen. Dagdeel A (secties 2 tot en met 6) gaat over locks: wie wacht op wie, en waarom. Dagdeel B (secties 7 tot en met 9) gaat over isolatie en gelijktijdige werklast: correct blijven onder druk.</p>
+        <p>Na dagdeel A kunt u: de belangrijkste locktypen benoemen; uitleggen hoe de lockwachtrij werkt en waarom één wachtende opdracht alles erachter blokkeert; vaststellen wie wie blokkeert met <code>pg_locks</code> en <code>pg_blocking_pids</code>; <code>lock_timeout</code> gericht inzetten; deadlocks diagnosticeren en voorkomen; en een migratie zo uitvoeren dat hij productie niet plat legt.</p>
+        <p>Na dagdeel B kunt u: isolatieniveaus toepassen op een productiewerklast; uitleggen hoe Serializable Snapshot Isolation werkt; retry-logica ontwerpen; een wachtrijpatroon bouwen dat schaalt; hotspots herkennen en oplossen; en gelijktijdigheid monitoren.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Snelheid is niet het probleem</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vier delen lang heeft u query's sneller gemaakt. Dinsdagavond gaat het portaal alsnog onderuit. De query's zijn niet trager geworden. Ze wachten. Dat is een ander soort probleem, en het is diagnostisch lastiger, omdat alle gebruikelijke signalen normaal blijven: de CPU staat laag, de schijf is rustig, <code>pg_stat_statements</code> toont geen uitschieters. En toch reageert niets.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Verschijnsel</th><th>CPU</th><th>I/O</th><th>pg_stat_activity</th></tr></thead>
+          <tbody>
+            <tr><td>Trage query</td><td>Hoog</td><td>Hoog</td><td><code>state = active</code></td></tr>
+            <tr><td>Vergrendeling</td><td><strong>Laag</strong></td><td><strong>Laag</strong></td><td><code>wait_event_type = 'Lock'</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Uit deel 13: "alles is traag, ook inloggen" is vrijwel nooit een index. Dat is dit.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Het lockmodel en de lockwachtrij</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>PostgreSQL kent locks op verschillende niveaus. Acht tabellocks, van licht naar zwaar — <code>ACCESS SHARE</code> (door <code>SELECT</code>), <code>ROW SHARE</code>, <code>ROW EXCLUSIVE</code> (<code>INSERT</code>/<code>UPDATE</code>/<code>DELETE</code>), <code>SHARE UPDATE EXCLUSIVE</code> (<code>VACUUM</code>, <code>ANALYZE</code>, <code>CREATE INDEX CONCURRENTLY</code>), <code>SHARE</code>, <code>SHARE ROW EXCLUSIVE</code>, <code>EXCLUSIVE</code>, en <code>ACCESS EXCLUSIVE</code> (<code>ALTER TABLE</code>, <code>DROP</code>, <code>TRUNCATE</code>, <code>VACUUM FULL</code>, <code>REINDEX</code>).</p>
+        <figure><img src="figuren/figuur-15-1.png" alt="Conflictmatrix van de acht locktypen"><figcaption>Figuur 15-1 — conflictmatrix van de acht locktypen</figcaption></figure>
+        <p>Twee regels uit uw hoofd: <strong><code>ACCESS SHARE</code> en <code>ACCESS EXCLUSIVE</code> zijn elkaars tegenpolen</strong> — een gewone <code>SELECT</code> conflicteert met precies één ding, een <code>ALTER TABLE</code> of <code>DROP</code>. En <strong><code>SHARE UPDATE EXCLUSIVE</code> conflicteert met zichzelf</strong> — twee <code>VACUUM</code>-runs op dezelfde tabel wachten op elkaar, en een <code>CREATE INDEX CONCURRENTLY</code> wacht op een lopende <code>VACUUM</code>. Locks worden bovendien altijd vastgehouden tot het eind van de transactie — er is geen manier ze tussentijds vrij te geven, wat verklaart waarom transactieduur en vergrendeling hetzelfde onderwerp zijn.</p>
+        <h4>De lockwachtrij: het belangrijkste onderwerp van dit deel</h4>
+        <p>Wachtende locks vormen een rij, en die rij is ordelijk. Wie op een lock wacht, laat niemand voorbij die een conflicterende lock nodig heeft — ook niet als die persoon zelf niet met de blokkerende sessie in conflict zou zijn.</p>
+        <pre><code>09:00:00  Sessie A: SELECT ... FROM deelnemer;   (rapportage, duurt 20 minuten)
+                    → ACCESS SHARE, blijft vasthouden
+09:00:05  Sessie B: ALTER TABLE deelnemer ADD COLUMN ...;
+                    → wil ACCESS EXCLUSIVE → conflicteert met A → wachtrij
+09:00:06  Sessie C: SELECT * FROM deelnemer WHERE deelnemer_id = 42;
+                    → wil ACCESS SHARE → conflicteert NIET met A
+                    → maar staat achter B in de rij → WACHT</code></pre>
+        <p>Sessie C is een portaalquery van 0,3 milliseconden. Hij wacht twintig minuten — en elke volgende query op <code>deelnemer</code> doet hetzelfde. Binnen een minuut staan er honderden sessies te wachten, loopt de verbindingspool vol, en is het portaal onbereikbaar. De <code>ALTER TABLE</code> zelf heeft nog geen enkele rij aangeraakt; hij wacht ook, maar zijn plek in de rij legt de hele tabel stil.</p>
+        <div class="callout warn"><span class="lbl">De les</span><p>Niet de duur van de opdracht bepaalt de schade, maar de duur van het wachten. Een <code>ALTER TABLE</code> die volgens de log twee milliseconden duurde, kan een portaal twintig minuten platleggen — omdat hij twintig minuten in de wachtrij stond en ondertussen alles ophield.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.2 — de lockwachtrij</p>
+        <details class="q"><summary><span class="qn">1</span><span>Sessie 1 houdt een rapportagequery open (ACCESS SHARE). Sessie 2 wil ALTER TABLE ADD COLUMN (ACCESS EXCLUSIVE) en gaat wachten. Sessie 3 wil daarna alleen SELECT ... WHERE deelnemer_id = 42 (ACCESS SHARE). Wacht sessie 3, en waarom is dat verrassend?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ja, sessie 3 wacht ook — en dat is het verrassende, want ACCESS SHARE conflicteert niet met de ACCESS SHARE van sessie 1. Maar sessie 3 staat achter sessie 2 in de wachtrij, en de wachtrij is ordelijk: niemand gaat voorbij een wachtende conflicterende lock, ook niet als de eigen lock daar geen conflict mee heeft. Dat is de kern van de lockwachtrij: het gevaar zit niet in het conflict zelf, maar in de positie in de rij.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Rijlocks en diagnose: wie blokkeert wie</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Naast tabellocks bestaan er locks op rijniveau, uit deel 7 met de varianten erbij: <code>FOR UPDATE</code>, <code>FOR NO KEY UPDATE</code>, <code>FOR SHARE</code>, en <code>FOR KEY SHARE</code>. Dat laatste bestaat voor foreign key-controles: wanneer u een rij invoegt in <code>dienstverband</code>, controleert PostgreSQL of de bijbehorende <code>deelnemer</code> bestaat, en neemt daarvoor een lichte lock op die rij. Zonder <code>FOR KEY SHARE</code> zou elke invoeging in een kindtabel de ouderrij blokkeren voor updates — onwerkbaar op een tabel als <code>deelnemer</code>. Rijlocks staan niet in <code>pg_locks</code> zolang er geen conflict is; ze worden opgeslagen in de rij zelf (<code>xmax</code>, deel 12), en pas bij een conflict verschijnt er een wachtrecord.</p>
+        <h4>Diagnose: wie blokkeert wie</h4>
+        <pre><code class="language-sql">SELECT a.pid, a.usename, a.state,
+       now() - a.xact_start AS transactieduur,
+       a.wait_event_type, a.wait_event,
+       pg_blocking_pids(a.pid) AS wordt_geblokkeerd_door,
+       left(a.query, 100) AS query
+FROM pg_stat_activity a
+WHERE a.backend_type = 'client backend'
+ORDER BY a.xact_start;</code></pre>
+        <p><code>pg_blocking_pids()</code> is het gereedschap dat u zoekt: het geeft de proces-id's terug die deze sessie tegenhouden. De hoofdschuldige vinden: zoek de sessie waarvoor <code>pg_blocking_pids()</code> leeg is en die zelf anderen blokkeert — dat is de wortel van de boom.</p>
+        <p>Ingrijpen: probeer altijd eerst <code>pg_cancel_backend(pid)</code>, dat annuleert de lopende query zonder de sessie te sluiten. Bij een sessie in <code>idle in transaction</code> helpt dat niet — er draait geen query om te annuleren — en dan is <code>pg_terminate_backend(pid)</code> de enige optie. Wat u in de log wilt hebben: <code>log_lock_waits = on</code> met <code>deadlock_timeout = 1s</code> (deel 11), zodat elke sessie die langer dan die drempel wacht, gelogd wordt mét de blokkerende query — zonder deze instelling is een incident achteraf vrijwel niet te reconstrueren.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.3 — diagnose</p>
+        <details class="q"><summary><span class="qn">1</span><span>U vindt de blokkerende sessie en annuleert haar met pg_cancel_backend. De sessie blijkt daarna nog steeds te blokkeren, nu in de toestand idle in transaction. Wat is er gebeurd, en wat doet u vervolgens?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">pg_cancel_backend annuleert alleen de lopende query, niet de transactie zelf — de locks van die transactie blijven vastgehouden totdat de transactie zelf eindigt. De sessie ging van "actief met een query" naar "idle in transaction", en blokkeert nog steeds. Bij idle in transaction is er geen query meer om te annuleren, dus is pg_terminate_backend de enige optie — die beëindigt de hele sessie inclusief de transactie en geeft de locks vrij.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Timeouts en deadlocks op schaal</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vier timeouts, met elk een ander doel: <code>statement_timeout</code> beëindigt een query die te lang <strong>draait</strong>; <code>lock_timeout</code> beëindigt een query die te lang <strong>wacht op een lock</strong>; <code>idle_in_transaction_session_timeout</code> beëindigt een sessie met een openstaande transactie die niets doet; <code>transaction_timeout</code> is een harde bovengrens op de totale duur.</p>
+        <div class="callout tip"><span class="lbl">lock_timeout is de belangrijkste van dit deel</span><p>Hij lost het scenario uit sectie 3 op: <code>SET lock_timeout = '3s'; ALTER TABLE deelnemer ADD COLUMN e_mailadres text;</code> — krijgt de <code>ALTER TABLE</code> de lock niet binnen drie seconden, dan faalt hij met een foutmelding en gaat hij níét in de wachtrij staan waar hij alles achter zich ophoudt. Vuistregel: <strong>elke DDL op productie draait met <code>lock_timeout</code>, zonder uitzondering.</strong></p></div>
+        <h4>Deadlocks op schaal</h4>
+        <p>Uit deel 7: twee transacties die op elkaar wachten. PostgreSQL detecteert dit na <code>deadlock_timeout</code> en breekt er één af. Op productieschaal komen er drie dingen bij: deadlocks tussen meer dan twee sessies (de detectie werkt ook bij een cyclus van vier of vijf); deadlocks via foreign keys, waarbij twee sessies die verschillende kindrijen invoegen elkaar via <code>FOR KEY SHARE</code>-locks blokkeren, contra-intuïtief omdat geen van beide de ouderrij wijzigt; en deadlocks via indexen bij <code>INSERT</code> met dezelfde unieke sleutel.</p>
+        <p>De maatregelen, in volgorde van effectiviteit: een <strong>vaste benaderingsvolgorde</strong> — binnen een transactie rijen altijd in oplopende volgorde van hun primaire sleutel benaderen, verreweg de belangrijkste en een teamafspraak, geen instelling; korte transacties; batchbewerkingen sorteren; en retry-logica voor wat bij gelijktijdige belasting nooit volledig is uit te sluiten (sectie 8).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.5 — deadlocks op schaal</p>
+        <details class="q"><summary><span class="qn">1</span><span>Twee sessies voegen elk een kindrij in dienstverband in die naar een andere deelnemer verwijst, in tegengestelde volgorde, en raken verstrikt in een deadlock via FOR KEY SHARE-locks. Waarom is dit contra-intuïtief, en welke teamafspraak voorkomt het?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Contra-intuïtief omdat geen van beide sessies de ouderrij (de deelnemer) wijzigt — ze voegen alleen kindrijen in. De lock ontstaat door de referentiële-integriteitscontrole zelf, die de deelnemer moet vasthouden zodat hij niet tussentijds verdwijnt. Ontwikkelaars zoeken de oorzaak daarom vaak in de kindtabel en vinden hem niet. De teamafspraak die het voorkomt: rijen binnen een transactie altijd in oplopende volgorde van hun primaire sleutel benaderen — benaderen beide sessies in dezelfde volgorde, dan kan er geen cyclus ontstaan, hooguit wachttijd.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Advisory locks en het veilige migratiepatroon</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Soms wilt u coördineren over iets dat geen rij is: "slechts één proces mag de nachtelijke batch draaien". Daarvoor bestaan <strong>advisory locks</strong> — op een zelfgekozen getal, buiten de gegevens om. Sessieniveau (<code>pg_advisory_lock</code>) blijft tot u hem vrijgeeft of de sessie sluit; transactieniveau (<code>pg_advisory_xact_lock</code>) valt vanzelf vrij bij commit of rollback. <strong>Waarschuwing:</strong> een sessieniveau-lock valt <strong>niet</strong> vanzelf vrij bij een <code>ROLLBACK</code>, en in combinatie met connection pooling is dat gevaarlijk — de verbinding gaat terug naar de pool met de lock er nog op. Gebruik in gepoolde omgevingen daarom de <code>_xact_</code>-variant.</p>
+        <h4>DDL en locks</h4>
+        <p>Elke DDL-opdracht neemt een specifieke lock voor een specifieke duur: <code>CREATE INDEX</code> (zonder <code>CONCURRENTLY</code>) neemt <code>SHARE</code> voor de hele bouwtijd — schrijvers wachten; <code>CREATE INDEX CONCURRENTLY</code> neemt <code>SHARE UPDATE EXCLUSIVE</code>, lang maar niet blokkerend; <code>ALTER TABLE ADD COLUMN</code> (zonder volatile default) neemt <code>ACCESS EXCLUSIVE</code> zeer kort; <code>ALTER TABLE ALTER TYPE</code> neemt <code>ACCESS EXCLUSIVE</code> voor de <strong>hele herschrijving</strong>. Het patroon: een korte <code>ACCESS EXCLUSIVE</code>-lock is meestal acceptabel — als u hem krijgt. Een lange is dat nooit. En ook een korte lock is gevaarlijk als u erop moet wachten (sectie 3).</p>
+        <h4>Het veilige migratiepatroon</h4>
+        <p>Vooraf: controleer of er lange transacties lopen, kies een moment buiten de piek, en weet welke lock uw opdracht neemt. Tijdens: <code>SET lock_timeout = '3s'; SET statement_timeout = '0';</code>, dan de opdracht binnen <code>BEGIN … COMMIT</code>. Faalt hij op de lock, dan is er niets gebeurd — wacht een minuut en probeer opnieuw. <strong>Een migratie die vijf keer moet worden geprobeerd, is een geslaagde migratie</strong> — beter dan één poging die het portaal twintig minuten platlegt.</p>
+        <p>Voor een lange bewerking: opsplitsen. In plaats van één <code>ALTER TABLE ADD CONSTRAINT</code> die de hele tabel scant onder <code>ACCESS EXCLUSIVE</code>:</p>
+        <pre><code class="language-sql">-- Stap 1: kort ACCESS EXCLUSIVE, geen scan
+ALTER TABLE dienstverband
+    ADD CONSTRAINT dv_salaris_positief CHECK (jaarsalaris >= 0) NOT VALID;
+
+-- Stap 2: volledige scan, maar SHARE UPDATE EXCLUSIVE — schrijvers gaan door
+ALTER TABLE dienstverband VALIDATE CONSTRAINT dv_salaris_positief;</code></pre>
+        <p>Tussen stap 1 en 2 geldt de constraint al voor nieuwe rijen; stap 2 controleert de bestaande. Dit is het belangrijkste zero-downtime-patroon; het volledige repertoire komt in deel 22.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.8 — het veilige migratiepatroon</p>
+        <details class="q"><summary><span class="qn">1</span><span>U voegt een CHECK-constraint toe aan dienstverband (466.000 rijen) met de tweestapsaanpak (NOT VALID + VALIDATE) in plaats van in één ALTER TABLE ADD CONSTRAINT. Wat is precies het verschil in wat het portaal ervaart?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Met één ADD CONSTRAINT zonder NOT VALID zou de hele scan van 466.000 rijen onder een ACCESS EXCLUSIVE-lock plaatsvinden — enkele seconden waarin álles op die tabel stilstaat, plus alles wat achter die lock in de wachtrij komt. Met de tweestapsaanpak neemt stap 1 een ACCESS EXCLUSIVE-lock van minder dan 10 ms (geen scan, alleen de constraint registreren als NOT VALID), en stap 2 scant de tabel onder SHARE UPDATE EXCLUSIVE — een lock die schrijvers niet blokkeert. Het portaal merkt dan vrijwel niets, waar het bij de eenstapsvariant enkele seconden zou hebben stilgestaan.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Isolatieniveaus en Serializable Snapshot Isolation</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 7: read committed (standaard), repeatable read, serializable. Dagdeel B gaat over de vraag welk niveau waar hoort in een productiewerklast — niet "hoe belangrijk is dit", maar:</p>
+        <div class="callout tip"><span class="lbl">De vraag die de keuze bepaalt</span><p><em>Leest deze transactie iets waarop hij vervolgens een besluit baseert dat door een gelijktijdige transactie ongeldig kan worden gemaakt?</em> Bij het tonen van gegevens: nee, read committed volstaat. Bij optellende deeltotalen in een rapportage: ja, en dan is repeatable read genoeg — één momentopname. Bij "controleer of het saldo toereikend is en boek dan af": ja, en dan is een momentopname niet genoeg, want twee transacties kunnen elk vaststellen dat het saldo toereikend is.</p></div>
+        <h4>Serializable Snapshot Isolation</h4>
+        <p>PostgreSQL implementeert <code>SERIALIZABLE</code> met <strong>SSI</strong>, en doet dat zonder extra locks: er wordt niets geblokkeerd. In plaats daarvan houdt PostgreSQL bij welke afhankelijkheden er tussen transacties ontstaan, en breekt hij een transactie af zodra het patroon niet meer overeenkomt met enige seriële volgorde — met SQLSTATE <code>40001</code> en de hint dat de transactie bij een retry zou kunnen slagen.</p>
+        <p>Wat SSI geeft: de garantie dat het eindresultaat overeenkomt met een of andere volgorde waarin de transacties na elkaar waren uitgevoerd, zonder dat u zelf locks hoeft te bedenken. Wat het kost: <strong>retry-logica is verplicht</strong> (sectie 8); overhead, want PostgreSQL houdt per transactie de gelezen rijen bij (predicate locks); en valse afbrekingen, want SSI is conservatief en breekt soms transacties af die in werkelijkheid geen conflict hadden.</p>
+        <p>Praktische aanbevelingen: gebruik serializable voor de handelingen die het nodig hebben, niet voor alles; houd serializable-transacties kort en smal; en markeer leestransacties als <code>READ ONLY DEFERRABLE</code> — die wachten tot ze gegarandeerd niet meer kunnen falen, ideaal voor een lange rapportage die correct moet zijn maar geen haast heeft.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.9 en 15.10 — isolatieniveau kiezen en in de praktijk</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een nieuwe bedrijfsregel: "controleer of een deelnemer minder dan drie lopende dienstverbanden heeft en voeg er dan één toe." Onder READ COMMITTED tellen twee gelijktijdige sessies allebei twee dienstverbanden en voegen allebei toe — resultaat: vier. Waarom lost een FOR UPDATE op de geteld rijen dit niet op, en wat wel?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">FOR UPDATE vergrendelt bestaande rijen, maar hier is er geen rij om te vergrendelen — beide sessies lezen dezelfde twee bestaande rijen (die niet wijzigen) en voegen elk een nieuwe, verschillende rij toe. Er is geen gedeelde rij waarop een lock het conflict zou onderscheppen; het conflict zit in de afwezigheid van een derde rij op het moment van tellen. Alleen SERIALIZABLE (SSI) detecteert dit soort read/write-afhankelijkheid tussen transacties en breekt de tweede COMMIT af met SQLSTATE 40001 — precies de anomalie waarvoor SSI bestaat.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Retry-logica, wachtrijen en hotspots</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Zonder retry is serializable onbruikbaar en zijn deadlocks een storing; met retry zijn beide routine. Op te vangen: <code>40001</code> (serialisatie) en <code>40P01</code> (deadlock), altijd; <strong>niet</strong> op te vangen: <code>23505</code> (unieke sleutel) en <code>23503</code> (foreign key) — dat zijn bedrijfsregels, geen tijdelijke conflicten. Drie details die ertoe doen: de <strong>hele</strong> transactie opnieuw, niet alleen de mislukte opdracht, want de gegevens waarop het besluit was gebaseerd zijn veranderd; exponentieel oplopende wachttijd <strong>met spreiding</strong>, anders proberen alle afgebroken transacties het op hetzelfde moment opnieuw en botsen ze weer; en een bovengrens — na vijf pogingen geeft u op met een begrijpelijke melding. Wat u nooit doet: de fout onderdrukken en doorgaan, want een genegeerde serialisatiefout betekent dat een bedrijfshandeling niet is uitgevoerd terwijl de gebruiker denkt van wel.</p>
+        <h4>Wachtrijpatronen op schaal</h4>
+        <p>Uit deel 7: <code>SKIP LOCKED</code> voor de mutatieverwerking. Op schaal met vier verwerkers komen er details bij: <code>LIMIT 50</code> in plaats van 1 (minder overhead, maar niet te groot — hoe langer de transactie, hoe langer de locks); de partiële index uit deel 14, zonder welke elke verwerker de hele tabel scant; en <code>RETURNING</code> om de verwerkte rijen meteen terug te leveren. Vier valkuilen: te grote pakketten houden te veel rijen te lang vergrendeld; verwerking (zoals een externe aanroep) hoort <strong>buiten</strong> de transactie, anders houdt u locks vast terwijl u op een webservice wacht; een gifpakket dat altijd faalt wordt eindeloos opnieuw opgepakt zonder een pogingenteller; en <code>ORDER BY</code> garandeert geen verwerkvolgorde tussen verwerkers.</p>
+        <h4>Hotspots: als iedereen dezelfde rij wil</h4>
+        <p>Een teller die met <code>UPDATE teller SET aantal = aantal + 1</code> wordt bijgewerkt, gaat met vier verwerkers goed. Met honderdvijftig gelijktijdige sessies staat iedereen in de rij voor dezelfde rij, en de doorvoer wordt bepaald door hoe snel die ene rij kan worden bijgewerkt — ongeacht hoeveel cores u heeft. Dit heet <strong>lock contention op een hotspot</strong>, en het is niet op te lossen met een index, meer geheugen of snellere schijven. Drie oplossingen: opdelen in honderd tellerrijen (lezen wordt duurder); invoegen in plaats van bijwerken, met periodieke samenvatting (meer opslag, opruimen nodig — meestal de beste, want invoegingen concurreren niet met elkaar); of de teller buiten de database, in een cache (verlies bij een crash).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.13 — de hotspot</p>
+        <details class="q"><summary><span class="qn">1</span><span>Drie sessies werken tegelijk dezelfde tellerrij bij. Is de doorvoer drie keer zo hoog als met één sessie? En hoe herkent u een hotspot in de monitoring zonder te weten dat hij bestaat?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee — vaak nauwelijks sneller dan één sessie, soms langzamer. Alle drie de sessies willen dezelfde rij bijwerken en staan letterlijk in de rij voor die ene rij; meer sessies voegen alleen wachttijd toe, geen doorvoer. In de monitoring herkent u dit aan veel sessies met wait_event_type = 'Lock' en wait_event = 'transactionid', allemaal wachtend op dezelfde tabel, terwijl CPU en I/O laag blijven — en in pg_stat_user_tables aan een extreem hoge n_tup_upd op een tabel met weinig rijen.</div></details>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Pooling, monitoring en de certificering</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een vooruitwijzing naar deel 19. Connection pooling verandert de aannames over sessies: in een gepoolde omgeving is "uw" verbinding niet van u, hij komt uit een pool en gaat terug. Wat daardoor niet meer werkt zoals verwacht: <code>SET</code> op sessieniveau blijft hangen voor de volgende gebruiker; <code>pg_advisory_lock</code> (sessieniveau) valt niet vrij bij rollback; tijdelijke tabellen blijven bestaan; prepared statements werken niet in transaction-pooling modus. De regel: gebruik <code>SET LOCAL</code> in plaats van <code>SET</code>, en <code>pg_advisory_xact_lock</code> in plaats van <code>pg_advisory_lock</code> — beide vallen vanzelf vrij bij het eind van de transactie. Dit is een van de meest voorkomende oorzaken van fouten die "willekeurig" lijken: een instelling die van een vorige gebruiker is blijven staan.</p>
+        <h4>Monitoring van gelijktijdigheid</h4>
+        <p>Wat u in de gaten houdt: sessies per toestand en <code>wait_event_type</code>, de langste transactie, deadlocks sinds de laatste reset, en wachtende sessies met hun blokkeerder. Drempels om op te alarmeren: meer dan 5 sessies met <code>wait_event_type = 'Lock'</code> of langer dan 30 seconden; langste transactieduur boven 5 minuten; meer dan 2 sessies in <code>idle in transaction</code> of langer dan 1 minuut; meer dan 5 deadlocks per dag; en een verhouding actief/verbonden boven 50% — een vroeg signaal dat de server de grens nadert waarboven de doorvoer daalt (deel 11).</p>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: de acht tabellocktypen en de conflictmatrix; de werking van de lockwachtrij; <code>pg_locks</code>, <code>pg_blocking_pids()</code>, <code>pg_cancel_backend</code>, <code>pg_terminate_backend</code>; de vier timeouts; deadlockdetectie en -preventie; advisory locks op sessie- en transactieniveau; welke lock elke DDL-opdracht neemt; het <code>NOT VALID</code>/<code>VALIDATE</code>-patroon; de drie isolatieniveaus en SSI; en <code>SKIP LOCKED</code> met <code>RETURNING</code> in wachtrijpatronen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.6 — advisory locks</p>
+        <details class="q"><summary><span class="qn">1</span><span>U wilt garanderen dat de maandelijkse premienotarun maar één keer tegelijk draait, ook als iemand hem per ongeluk twee keer start, in een omgeving met connection pooling. Welke constructie gebruikt u, en waarom niet de andere varianten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>pg_try_advisory_xact_lock</code>: de <code>_xact_</code>-variant zodat de lock altijd vrijvalt bij het eind van de transactie (nodig in een gepoolde omgeving, waar een sessieniveau-lock met de verbinding mee terug de pool in zou gaan), en <code>try_</code> zodat een tweede, per ongeluk gestarte run meteen netjes <code>false</code> terugkrijgt en afhaakt in plaats van te wachten tot de eerste run klaar is.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 16</h3>
+      <p>U weet nu wat er gebeurt als honderdvijftig sessies tegelijk werken. Deel 16 maakt de grootste tabel hanteerbaar met partitionering — en dan blijkt dat het weggooien van oude gegevens ineens gratis wordt.</p>
+      <a class="btn" href="deel-16.html">Deel 16 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 15 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-15-concurrency-en-locking/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm15_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 22 — Zero-downtime migraties en capstone | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 22 (EDB Professional): het laatste deel van niveau 2 — het expand-contract-patroon voor kolomwijzigingen, tabelsplitsing, dubbel schrijven en logische replicatie zonder downtime, een migratiechecklist die het niveau samenvat, en de niveau-2-capstone die overgaat naar niveau 3.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-22.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 22</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 22 van 30</p>
+  <h1>Zero-downtime migraties<br>en de <em>capstone</em>.</h1>
+  <p class="hero__lead">Het laatste deel van niveau 2. Elke techniek hierin is al eerder aangeraakt — <code>NOT VALID</code>/<code>VALIDATE</code> uit deel 15, een nieuwe structuur naast de oude uit deel 16, logische replicatie uit deel 18, <code>CREATE INDEX CONCURRENTLY</code> uit deel 14. Vandaag worden die losse technieken één samenhangend repertoire: het <strong>expand-contract-patroon</strong> waarmee je élke structurele wijziging op een productiedatabase doorvoert zonder het portaal te raken. Daarna volgt de capstone: geen nieuwe stof, maar acht gebeurtenissen bij Meridiaan die niveau 2 in zijn geheel toetsen — precies zoals deel 10 dat deed voor niveau 1.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±1 dagdeel</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>8</b><span>capstone-gebeurtenissen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering en uitdrukkelijk geen vervanging van het officiële EDB-examenmateriaal — studeer voor het examen altijd óók de officiële bron. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → <b>22 Zero-downtime migraties en capstone (hier)</b></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Waarom dit het sluitstuk is: het expand-contract-patroon</a></li>
+      <li><a href="#s3" data-target="s3">Kolommen toevoegen, hernoemen en van type wijzigen</a></li>
+      <li><a href="#s4" data-target="s4">Een tabel splitsen en dubbel schrijven</a></li>
+      <li><a href="#s5" data-target="s5">Logische replicatie als migratiegereedschap en backfill in batches</a></li>
+      <li><a href="#s6" data-target="s6">Het omschakelmoment en terugdraaien</a></li>
+      <li><a href="#s7" data-target="s7">De migratiechecklist die alles samenbrengt</a></li>
+      <li><a href="#s8" data-target="s8">De niveau-2 capstone</a></li>
+      <li><a href="#s9" data-target="s9">Terugblik op niveau 2 en vooruitblik op niveau 3</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit dagdeel heeft twee helften. De eerste helft brengt de zero-downtime-migratiepatronen samen die impliciet al door de voorgaande delen liepen. De tweede helft is de capstone: geen nieuwe stof, maar een doorlopende operationele oefening die niveau 2 in zijn geheel test.</p>
+        <p>Aan het eind van dit deel kun je:</p>
+        <ul>
+          <li>het expand-contract-patroon toepassen op elke structurele wijziging;</li>
+          <li>een kolomtype wijzigen op een grote tabel zonder een lange exclusieve lock;</li>
+          <li>een tabel splitsen met dubbel schrijven of logische replicatie, en de twee aanpakken tegen elkaar afwegen;</li>
+          <li>een backfill uitvoeren die een grote tabel bijwerkt zonder productie te hinderen;</li>
+          <li>een omschakelmoment voorbereiden en uitvoeren met een expliciet terugvalplan;</li>
+          <li>een migratie beoordelen op basis van een volledige checklist die alle relevante delen van dit niveau samenbrengt;</li>
+          <li>de kennis van niveau 2 toepassen in een samenhangende eindopdracht.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Waarom dit het sluitstuk is: het expand-contract-patroon</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Elke techniek in dit deel is al eerder aangeraakt, in stukjes:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Waar het eerder langskwam</th><th>Wat</th></tr></thead>
+          <tbody>
+            <tr><td>Deel 15</td><td><code>NOT VALID</code> + <code>VALIDATE CONSTRAINT</code>, <code>lock_timeout</code></td></tr>
+            <tr><td>Deel 16</td><td>Een nieuwe gepartitioneerde structuur bouwen naast de oude</td></tr>
+            <tr><td>Deel 18</td><td>Logische replicatie als route voor een tabelmigratie</td></tr>
+            <tr><td>Deel 14</td><td><code>CREATE INDEX CONCURRENTLY</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Vandaag worden die losse technieken één samenhangend repertoire: het patroon waarmee je élke structurele wijziging op een productiedatabase doorvoert zonder het portaal te raken.</p>
+        <h3>Drie fasen</h3>
+        <p><strong>Expand</strong> — voeg de nieuwe structuur toe, náást de oude. Beide bestaan tegelijk. Niets van de oude structuur wordt weggehaald. <strong>Migrate</strong> — laat de applicatie geleidelijk overschakelen naar de nieuwe structuur, terwijl de oude nog bruikbaar blijft als terugvaloptie. <strong>Contract</strong> — pas als iedereen definitief op de nieuwe structuur draait, verwijder je de oude.</p>
+        <pre><code>Tijd →
+[oude structuur actief]
+       [nieuwe structuur toegevoegd — expand]
+              [beide in gebruik, geleidelijke overschakeling — migrate]
+                     [oude structuur verwijderd — contract]</code></pre>
+        <p><strong>Waarom dit werkt waar een directe wijziging niet werkt:</strong> een directe <code>ALTER TABLE</code> die kolom en gedrag in één stap verandert, dwingt alle gebruikers om op hetzelfde moment met de nieuwe structuur om te gaan — precies waar de risico's uit deel 15 (lockwachtrijen) zich concentreren. Expand-contract spreidt die overgang uit over tijd, met op elk moment een werkende toestand. Het <code>NOT VALID</code>/<code>VALIDATE</code>-patroon uit deel 15 is een miniatuurversie hiervan.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Kolommen toevoegen, hernoemen en van type wijzigen</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Een kolom toevoegen</strong> is sinds PostgreSQL 11 al licht, mits zonder volatiele default (deel 12, 15) — dit is al bijna "expand" in één stap. <strong>Een kolom hernoemen is gevaarlijker dan het lijkt</strong>, omdat elke query die de oude naam gebruikt meteen breekt: een nieuwe kolom naast de oude, gesynchroniseerd met een trigger, is het expand-contract-antwoord. Een view die de oude naam aanbiedt bovenop de nieuwe kolom is een lichter alternatief, maar vereist <code>INSTEAD OF</code>-logica zodra er ook geschreven moet worden.</p>
+        <h3>Kolomtype wijzigen: de lastigste van allemaal</h3>
+        <p>Uit deel 15: <code>ALTER TABLE ... ALTER COLUMN ... TYPE ...</code> neemt <code>ACCESS EXCLUSIVE</code> voor de <strong>volledige herschrijving</strong> van de tabel — bij 2,4 miljoen rijen in <code>mutatie</code> een lock van mogelijk minuten. Het expand-contract-patroon hiervoor is het meest gevraagde migratiepatroon in de praktijk:</p>
+        <pre><code>-- Expand: nieuwe kolom met het nieuwe type, gesynchroniseerd via trigger
+ALTER TABLE mutatie ADD COLUMN deelnemer_id_nieuw bigint;
+-- Backfill van bestaande rijen (paragraaf 5)
+-- Migrate: index op de nieuwe kolom, geleidelijke overschakeling
+CREATE INDEX CONCURRENTLY ON mutatie (deelnemer_id_nieuw);
+
+-- Omschakelmoment: korte transactie
+BEGIN;
+ALTER TABLE mutatie DROP COLUMN deelnemer_id;
+ALTER TABLE mutatie RENAME COLUMN deelnemer_id_nieuw TO deelnemer_id;
+COMMIT;</code></pre>
+        <p><strong>Waarom dit werkt waar de directe route niet werkt:</strong> de dure operatie (de volledige backfill van bestaande rijen) gebeurt <strong>buiten</strong> een enkele lange transactie, in behapbare stukken, terwijl productie doorgaat. Het omschakelmoment zelf is een metadata-only-operatie en dus vrijwel instantaan, ook al "voelt" het als een grote wijziging. <strong>De prijs:</strong> elke query die tussen expand en contract op de tabel draait, moet met de trigger-overhead leven, en het schema is tijdelijk lelijker.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 22, Opdracht 22.2 — kolomtype wijzigen zonder lange lock</p>
+        <details class="q"><summary><span class="qn">1</span><span>Hoe lang duurt een directe <code>ALTER COLUMN ... TYPE bigint</code> op 500.000 rijen, en hoe reageert een tweede sessie die tijdens de operatie probeert te lezen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Typisch enkele seconden tot langer, afhankelijk van hardware — en gedurende die tijd toont een tweede sessie die probeert te lezen een <strong>hangende</strong> query: <code>ACCESS EXCLUSIVE</code> blokkeert zelfs <code>SELECT</code>.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Hoe lang duurt het omschakelmoment (drop oude kolom + rename) bij het expand-contract-patroon, vergeleken met de directe route?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het omschakelmoment is een metadata-only-operatie: <strong>milliseconden</strong>, ongeacht het aantal rijen — een orde-van-grootte-verschil met de directe <code>ALTER COLUMN TYPE</code>, die bij 500.000 rijen al seconden tot langer kost.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Een tabel splitsen en dubbel schrijven</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een groeiende <code>koppelvlakbericht</code>-tabel (deel 14) moet gesplitst worden: de ruwe <code>jsonb</code>-inhoud blijft, maar veelgebruikte velden verhuizen naar eigen kolommen voor snellere query's. <strong>Expand:</strong> nieuwe kolommen, trigger die ze vult vanuit de <code>jsonb</code>. <strong>Migrate:</strong> backfill, indexen, rapportagequery's laten overstappen. <strong>Contract:</strong> in dit geval <strong>geen</strong> — de <code>jsonb</code>-kolom blijft, want die bevat het volledige ruwe bericht dat om audit-redenen (deel 20) bewaard moet blijven. Niet elke migratie hoeft te eindigen met het weghalen van de oude structuur.</p>
+        <h3>Dubbel schrijven: het patroon en zijn valkuilen</h3>
+        <p>Voor een migratie tussen twee <strong>volledig gescheiden</strong> tabellen (zoals de gepartitioneerde <code>mutatie</code>-structuur uit deel 16) is een trigger niet altijd praktisch. Het alternatief: de applicatie zelf schrijft naar beide tabellen. Vier valkuilen, in volgorde van hoe vaak ze voorkomen:</p>
+        <ol>
+          <li><strong>Gedeeltelijke schrijffout.</strong> Zonder een gezamenlijke transactie ontstaat inconsistentie tussen oude en nieuwe tabel.</li>
+          <li><strong>Vergeten schrijfpaden.</strong> Een batchproces dat rechtstreeks schrijft, buiten de hoofdapplicatie om, mist het dubbel-schrijven-patroon. Een trigger op databaseniveau is hiertegen robuuster.</li>
+          <li><strong>Race conditions tussen backfill en dubbel schrijven.</strong> Los op met een backfill-voorwaarde die alleen rijen raakt die de applicatie nog niet heeft aangeraakt.</li>
+          <li><strong>Vergeten dat lezen ook moet overschakelen.</strong> Dubbel schrijven lost het schrijven op; zonder een expliciet omschakelmoment blijft de applicatie voor altijd van de oude tabel lezen.</li>
+        </ol>
+        <p><strong>De les:</strong> dubbel schrijven op applicatieniveau is krachtig maar foutgevoelig. Waar een trigger kan, is die vaak de robuustere keuze — hij vangt automatisch alle schrijfpaden af, inclusief paden die de ontwikkelaar van de migratie niet kende.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 22, Opdracht 22.4 — dubbel schrijven en zijn valkuilen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij dubbel schrijven naar twee tabellen in twee losse transacties, waarbij de tweede bewust faalt: wat is de resulterende inconsistentie, en wat verandert er als beide schrijfacties binnen één transactie plaatsvinden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Met twee losse transacties: de eerste tabel heeft de nieuwe rij, de tweede niet — de twee tabellen zijn nu inconsistent, en niets in het systeem weet dat automatisch. Binnen één transactie: als de tweede schrijfactie faalt, rolt de <strong>hele</strong> transactie terug — ook de eerste schrijfactie. Beide tabellen blijven consistent (beide zonder de nieuwe rij), wat veel veiliger is dan gedeeltelijke inconsistentie.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Zou een trigger-gebaseerde aanpak in plaats van applicatielogica het vergeten-schrijfpad-probleem (een batchproces dat rechtstreeks schrijft) hebben voorkomen? Verklaar waarom.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ja. Een trigger draait op <strong>elke</strong> schrijfactie op de tabel, ongeacht via welk pad die binnenkomt (applicatie, batchproces, handmatige sessie) — hij zit op databaseniveau en kan niet worden "vergeten" door een tweede schrijfpad, in tegenstelling tot applicatielogica die per schrijfpad opnieuw geïmplementeerd zou moeten worden.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Logische replicatie als migratiegereedschap en backfill in batches</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 18, nu de volledige toepassing voor de gepartitioneerde <code>mutatie</code>-migratie uit deel 16. <strong>Wat dit oplost dat triggers en dubbel schrijven niet even elegant doen:</strong> logische replicatie werkt op WAL-niveau, dus hij vangt automatisch elk schrijfpad af. De initiële synchronisatie gebeurt bovendien automatisch bij het aanmaken van het abonnement. <strong>Wat je zelf moet regelen</strong> (herhaald uit deel 18): sequenties lopen niet automatisch mee, DDL wordt niet gerepliceerd, en de doeltabel heeft een unieke sleutel of <code>REPLICA IDENTITY</code> nodig.</p>
+        <p><strong>Wanneer logische replicatie de voorkeur heeft boven triggers/dubbel schrijven:</strong> bij een migratie naar een structureel andere tabel (andere kolomvolgorde, gepartitioneerd in plaats van niet, zelfs een andere server). Bij een kleinere, lokale wijziging is een trigger vaak eenvoudiger op te zetten en makkelijker te overzien.</p>
+        <h3>Backfill: oude rijen bijwerken zonder de tabel te blokkeren</h3>
+        <p>De trigger zorgt dat <strong>nieuwe</strong> rijen synchroon zijn. Bestaande rijen moeten nog worden bijgewerkt.</p>
+        <div class="callout warn"><span class="lbl">De verkeerde manier</span><p>Eén enorme <code>UPDATE</code> over 2,4 miljoen rijen: één enorme transactie, lang vastgehouden locks, een golf bloat (deel 12), en bij een fout halverwege alles terug naar af.</p></div>
+        <p><strong>De juiste manier:</strong> in kleine batches (bijvoorbeeld 5.000 rijen), elk zijn eigen transactie, met een korte <code>pg_sleep</code> als adempauze tussen batches. Elke batch is een korte transactie — de locks zijn kort en geven productieverkeer ruimte ertussen; een fout halverwege verliest alleen de laatste batch, niet het hele werk.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Het omschakelmoment en terugdraaien</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het punt waarop de applicatie definitief overstapt van oud naar nieuw. <strong>Kenmerken van een goed omschakelmoment:</strong> kort (bij voorkeur een enkele, snelle transactie), met <code>lock_timeout</code> (deel 15) als er alsnog een DDL-stap in zit, omkeerbaar of met een duidelijk terugvalpad, buiten de piek, en aangekondigd en gemeten — net als de restore-test uit deel 17 en de failover-test uit deel 19.</p>
+        <h3>Terugdraaien: het scenario dat je altijd voorbereidt</h3>
+        <p>De discipline uit deel 17 (test je back-up) en deel 19 (test je failover) geldt hier evengoed: test niet alleen of de migratie lukt, maar of het terugdraaien ervan ook lukt.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fase</th><th>Terugval</th></tr></thead>
+          <tbody>
+            <tr><td>Expand</td><td>Triviaal — verwijder de nieuwe, ongebruikte structuur</td></tr>
+            <tr><td>Migrate</td><td>Schakel de applicatie terug naar de oude structuur; de trigger houdt intussen beide gesynchroniseerd</td></tr>
+            <tr><td><strong>Contract</strong></td><td><strong>Het lastigste — de oude structuur is al weg</strong></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Dit is de reden dat contract de laatste stap is en pas gebeurt na een bewezen stabiele periode</strong> (dagen tot weken, niet uren) — niet omdat het "netjes" is om te wachten, maar omdat contract het enige punt is waarna terugdraaien niet meer triviaal is. Bij dubbel schrijven of logische replicatie ná contract is terugdraaien geen databasewijziging maar een herstelactie — je bent aangewezen op de back-up- en PITR-technieken uit deel 17.</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">De migratiechecklist die alles samenbrengt</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De vragen die je bij elke structurele wijziging op productie doorloopt, met verwijzing naar waar je het leerde:</p>
+        <ol>
+          <li><strong>Past dit in expand-contract, of is het al licht genoeg om direct te doen?</strong> (Deel 15)</li>
+          <li><strong>Welke lock neemt elke stap, en hoe lang?</strong> (Deel 15)</li>
+          <li><strong>Staat er <code>lock_timeout</code> op elke DDL-stap?</strong> (Deel 15)</li>
+          <li><strong>Is de backfill in batches, met adempauzes?</strong> (Vandaag, paragraaf 5)</li>
+          <li><strong>Zijn alle schrijfpaden gedekt</strong> — niet alleen de hoofdapplicatie, ook batchprocessen? (Vandaag, paragraaf 4)</li>
+          <li><strong>Is er een concreet terugvalplan per fase, getest of ten minste doordacht?</strong> (Vandaag, paragraaf 6)</li>
+          <li><strong>Is het omschakelmoment gemeten, niet alleen gepland?</strong> (Deel 17, 19)</li>
+          <li><strong>Blijven indexen, RLS-policies (deel 21) en rechten kloppen op de nieuwe structuur?</strong></li>
+          <li><strong>Is de bewaartermijn/AVG-impact opnieuw beoordeeld als er gegevens verhuizen?</strong> (Deel 9, 16, 17)</li>
+          <li><strong>Is er een periode van "bewezen stabiel" gepland vóór contract?</strong></li>
+        </ol>
+        <p>Deze tien vragen zijn de praktische samenvatting van het hele niveau, toegepast op het meest voorkomende werk van een DBA: dingen veranderen zonder dat iemand het merkt.</p>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">De niveau-2 capstone</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Zoals deel 10 niveau 1 afsloot, sluit een capstone niveau 2 af — nu niet met een presentatie voor vier rollen, maar met een <strong>doorlopende operationele oefening</strong>: een reeks gebeurtenissen bij Meridiaan, verspreid over een gesimuleerde periode, waar je telkens op moet reageren met de kennis van dit hele niveau. De rollen blijven dezelfde bekenden — Karin, Tarik, Ruud en Sanne — nu niet als beoordelaars van een eindpresentatie, maar als <strong>inzenders van de gebeurtenissen</strong> die je moet afhandelen.</p>
+        <h3>De opdracht</h3>
+        <p>Acht gebeurtenissen, die je na elkaar krijgt (volledig uitgewerkt in het werkboek). Voor elke gebeurtenis: diagnose, maatregel, en — waar relevant — een korte toelichting die je aan de afzender zou geven. Een voorbeeld:</p>
+        <div class="dialogue"><p>Ruud, 03:14 uur: "Het portaal reageert niet. Ik zie niks geks in de CPU-grafieken."</p></div>
+        <p>Je respons vereist de juiste eerste diagnosestap (deel 20), de juiste vervolgvraag, en een voorstel — allemaal binnen de kennis die je in delen 11 t/m 21 hebt opgebouwd. <strong>Het bijzondere aan deze vorm:</strong> in tegenstelling tot een losse opdracht per dagdeel, weet je bij de capstone niet vooraf welk deel van de stof een gebeurtenis raakt — precies zoals in een echte operationele rol. Dat is de eigenlijke toets: niet "kun je dit ene ding", maar "herken je uit een vage melding welk stuk kennis je nodig hebt".</p>
+        <h3>Beoordelingscriteria</h3>
+        <p>Voor elke gebeurtenis: een <strong>correcte eerste diagnosestap</strong> (begint de respons bij de juiste vraag — traag versus vergrendeld, structureel versus incidenteel?), <strong>gebruik van gemeten in plaats van aangenomen informatie</strong> (een concrete query of cijfer, geen "dat zou kunnen komen door…"), <strong>herkenning van de grens van de maatregel</strong> (de "wat dit niet oplost"-discipline die door het hele niveau loopt), en een <strong>passende toon naar de afzender</strong>. Over de acht gebeurtenissen samen geldt: raakt de reeks van je antwoorden minstens zes van de tien delen (11-21) aan? Zo niet, dan is er waarschijnlijk stof gemist in de voorbereiding.</p>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Terugblik op niveau 2 en vooruitblik op niveau 3</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Twaalf dagdelen, van "waarom is deze tabel groter dan de data erin" (deel 12) tot "hoe overtuig ik mezelf dat onze failover echt werkt" (deel 19). De rode draden die er doorheen liepen: <strong>meten in plaats van aannemen</strong> — bij elke maatregel de vraag "wat was het vóór en wat is het nu", van kolomvolgorde (deel 12) tot RTO (deel 17, 19); <strong>wat een maatregel niet oplost</strong> — indexen, partitionering, replicatie, HA, monitoring: elk krachtig gereedschap kreeg zijn eerlijke grens; <strong>bedrijfsbeslissingen blijven bedrijfsbeslissingen</strong> — bewaartermijnen, RPO/RTO, wie toegang krijgt: technisch werk voert uit, het besluit ligt elders; en <strong>alles hangt samen</strong> — <code>mutatie</code> als rode draad door bijna elk deel, en vandaag het besef dat elke afzonderlijke techniek een instantie is van hetzelfde onderliggende patroon: verander iets, zonder dat het merkbaar is voor wie er niet bij hoeft te zijn betrokken.</p>
+        <h3>Vooruit naar niveau 3</h3>
+        <p>Twaalf dagdelen niveau 2 vormden Karin, Tarik, Ruud en Sanne tot vaste metgezellen bij het beheren van <strong>één server (en zijn replica's)</strong> — fysiek ontwerp, indexering, concurrency, partitionering, back-up en herstel, replicatie, hoge beschikbaarheid, monitoring, security en, vandaag, zero-downtime migraties — voorbereiding op de EDB PostgreSQL Professional-certificering. Niveau 3 tilt de schaal op naar <strong>architectuur</strong>: de Pensioenfederatie-casus met meerdere aangesloten fondsen, sharding-fundamenten en Citus in de praktijk, foreign data wrappers en federatie, event sourcing, en geo-distributie — voorbereiding op de clustercertificering. Waar niveau 2 draaide om één server goed beheren, draait niveau 3 om systemen die uit meerdere, samenwerkende databases bestaan.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar niveau 3</h3>
+      <p>Niveau 2 sloot af met een DBA en consultant die één server (en zijn replica's) grondig kan beheren — van fysiek ontwerp tot hoge beschikbaarheid, monitoring en zero-downtime migraties, als voorbereiding op de EDB PostgreSQL Professional-certificering. Niveau 3 tilt de schaal op naar architectuur: de Pensioenfederatie-casus met meerdere aangesloten fondsen, sharding met Citus, foreign data wrappers en federatie, event sourcing, en geo-distributie — voorbereiding op de clustercertificering.</p>
+      <a class="btn" href="deel-23.html">Deel 23 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 22 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-22-zero-downtime-migraties-en-capstone/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm22_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

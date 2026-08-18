@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 24 — Sharding-fundamenten | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 24 (niveau 3: architect): waarom partitionering ooit niet meer volstaat, verticaal versus horizontaal schalen, de shardsleutel als belangrijkste keuze, en wat je verliest aan cross-shard-joins, -transacties en globale uniciteit — toegepast op de groeiende Pensioenfederatie.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-24.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 24</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 3 (architectcertificering) · Deel 24 van 30</p>
+  <h1>Een oplossing voor<br>een probleem dat je <em>niet hebt</em>.</h1>
+  <p class="hero__lead">Partitionering (deel 16) knipt een tabel op binnen dezelfde server; het lost niets op zodra de <strong>gecombineerde</strong> belasting van alle fondsen samen de capaciteit van die ene machine overschrijdt. Dit deel introduceert <strong>sharding</strong>: dezelfde tabel verdeeld over meerdere, onafhankelijke servers. De shardsleutel is de belangrijkste keuze — en de prijs is reëel: cross-shard-joins, cross-shard-transacties en globale uniciteit worden allemaal duurder. Toegepast, conceptueel, op een groeiende Pensioenfederatie.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±3,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>5</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>klassieke verliezen van sharding</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de architectgerichte clustercertificering van EDB (EnterpriseDB) en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele examenblauwdruk van EDB. Alle formuleringen, werkvormen en de Pensioenfederatie-casus in dit materiaal zijn van Ductus; PostgreSQL-versiedetails staan in de Toolbijlage, niet hier.</div>
+  <div class="trail">Niveau 3: 23 Architectuur voor meerdere fondsen → <b>24 Sharding-fundamenten (hier)</b> → 25 Citus in de praktijk → 26 Foreign data wrappers en federatie → 27 Event sourcing: fundamenten → 28 Event sourcing in de praktijk → 29 Geo-distributie → 30 Niveau-3-capstone en afsluiting</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Waarom partitionering ooit niet meer volstaat</a></li>
+      <li><a href="#s3" data-target="s3">Wat sharding is, en de shardsleutel</a></li>
+      <li><a href="#s4" data-target="s4">Wat je verliest: joins, transacties, uniciteit</a></li>
+      <li><a href="#s5" data-target="s5">Referentiedata en rebalancing</a></li>
+      <li><a href="#s6" data-target="s6">Bereik versus hash, en sharding naast niveau 2</a></li>
+      <li><a href="#s7" data-target="s7">Wanneer je niet moet shardenen</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 23 ging over het scheiden van fondsen op één technisch platform. Dit deel gaat over wat er gebeurt als één fonds — of de federatie als geheel — te groot wordt voor één server, ongeacht welk multi-tenant-patroon u koos.</p>
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>uitleggen waarom en wanneer partitionering (deel 16) niet meer volstaat;</li>
+          <li>het verschil tussen verticaal en horizontaal schalen toepassen op een concreet scenario;</li>
+          <li>een shardsleutel kiezen en de gevolgen van een slechte keuze benoemen;</li>
+          <li>de vier klassieke verliezen van sharding (cross-shard-joins, transacties, uniciteit, eenvoud) uitleggen;</li>
+          <li>referentiedata correct behandelen in een gesharde omgeving;</li>
+          <li>rebalancing conceptueel beschrijven en de risico's ervan benoemen;</li>
+          <li>bereik-gebaseerde en hash-gebaseerde sharding tegen elkaar afwegen;</li>
+          <li>beoordelen of sharding voor een gegeven situatie de juiste keuze is.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Waarom partitionering ooit niet meer volstaat</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 16 loste een echt probleem op: een tabel die te groot en te log wordt voor comfortabel onderhoud, opgeknipt in partities die elk <strong>binnen dezelfde server</strong> blijven. Autovacuum werkt per partitie, oude data verdwijnt met <code>DROP TABLE</code>, query's met de juiste voorwaarde raken maar één partitie.</p>
+        <p><strong>Wat partitionering niet oplost: de totale capaciteit van één machine.</strong> Alle partities delen nog steeds dezelfde CPU, hetzelfde geheugen, dezelfde schijf, dezelfde WAL. Als de <strong>gecombineerde</strong> belasting van alle partities samen de capaciteit van die ene machine overschrijdt, helpt een fijnere partitie-indeling niet meer — u verplaatst het probleem niet, u maakt het alleen overzichtelijker terwijl het even groot blijft.</p>
+        <p>Bij de Pensioenfederatie is dit geen abstract scenario. Stel dat de federatie op termijn tientallen fondsen bedient in plaats van drie, elk met hun eigen <code>mutatie</code>-tabel die op de manier van deel 16 is gepartitioneerd. Op een gegeven moment overschrijdt de <strong>som</strong> van alle fondsen samen wat één server, hoe goed geconfigureerd ook (deel 11), kan verwerken. Dat is het moment waarop u van verticaal naar horizontaal schalen moet.</p>
+        <h3>Verticaal versus horizontaal schalen</h3>
+        <p><strong>Verticaal schalen</strong> — een grotere machine. Meer CPU, meer geheugen, snellere schijven. Dit is wat u in niveau 2 impliciet deed: elke optimalisatie (indexen, <code>work_mem</code>, bloatbeheersing) haalde meer uit dezelfde machine, en de aanbeveling bij capaciteitsgebrek was steeds "een zwaardere server".</p>
+        <p><strong>Horizontaal schalen</strong> — meer machines, die samen de belasting dragen. Elke machine draagt een deel van de data en een deel van de belasting.</p>
+        <p>De grens van verticaal schalen is niet alleen technisch (er is een plafond aan wat één machine aankan) maar ook economisch: de kosten van steeds grotere machines stijgen niet lineair — een machine met twee keer zoveel geheugen kost vaak meer dan twee keer zoveel, en op een gegeven moment bestaat de gewenste machine simpelweg niet.</p>
+        <div class="callout tip"><span class="lbl">De ruil</span><p>De prijs van horizontaal schalen is dat u opgeeft wat één machine gratis geeft: alle data op één plek, met alle garanties van ACID (deel 7) die daarbij horen. Dat is de kern van dit deel — <strong>sharding is geen gratis extra capaciteit, het is een ruil.</strong></p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 1 — verticaal versus horizontaal</p>
+        <details class="q"><summary><span class="qn">1</span><span>Als één server tot ongeveer 50 miljoen mutatierijen comfortabel aankan, en de Pensioenfederatie groeit naar twintig fondsen met elk het volume van Meridiaan (2,4 miljoen mutaties), is er dan een probleem? Reken het uit.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Twintig fondsen × 2,4 miljoen = 48 miljoen mutatierijen — net onder de aangenomen grens van 50 miljoen. <strong>Nog geen probleem</strong>, maar wel dicht bij de grens, en dat is vóórdat rekening wordt gehouden met de andere tabellen (<code>deelnemer</code>, <code>dienstverband</code>, enzovoort) die evenredig meegroeien. Bij dit groeitempo zou rond de 20-21 fondsen de aangenomen grens overschreden worden — het exacte aantal hangt af van de werkelijke servercapaciteit en of niveau-2-technieken (partitionering, indexoptimalisatie) nog verdere hoofdruimte bieden.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Wat sharding is, en de shardsleutel</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Sharding</strong> is horizontaal schalen toegepast op een database: dezelfde tabel wordt verdeeld over meerdere, onafhankelijke database-servers (shards), elk verantwoordelijk voor een deel van de rijen — bijvoorbeeld de <code>mutatie</code>-tabel, gesplitst over drie shards op basis van een hash van <code>deelnemer_id</code>.</p>
+        <p>Het cruciale verschil met partitionering uit deel 16: partities leven op <strong>dezelfde server</strong>, delen dezelfde resources, en worden door één PostgreSQL-instantie beheerd. Shards leven op <strong>verschillende servers</strong>, hebben elk hun eigen resources, en worden gecoördineerd door een aparte laag (in deel 25: Citus) die weet welke shard welke rijen bevat.</p>
+        <p>Sharding en partitionering zijn complementair, niet concurrerend. Een shard is zelf vaak weer gepartitioneerd volgens de technieken uit deel 16 — de twee technieken werken op verschillende niveaus van hetzelfde probleem: partitionering binnen een server, sharding tussen servers.</p>
+        <h3>De shardsleutel: de belangrijkste keuze van dit deel</h3>
+        <p>De kolom waarop u verdeelt, bepaalt vrijwel alles wat volgt — vergelijkbaar met hoe de partitiesleutel in deel 16 de bruikbaarheid van pruning bepaalde, maar met veel grotere gevolgen bij een verkeerde keuze. Wat een goede shardsleutel kenmerkt:</p>
+        <ul>
+          <li><strong>Hoge cardinaliteit</strong> — genoeg verschillende waarden om evenredig te verdelen. <code>fonds_id</code> met drie waarden is te grof voor fijne verdeling over veel shards; <code>deelnemer_id</code> met honderdduizenden waarden is fijnmaziger.</li>
+          <li><strong>Gelijkmatige verdeling</strong> — geen "hotspot"-waarde die een onevenredig deel van de data of het verkeer trekt. Als Baken (met zijn hoge mutatievolume) een shardsleutel zou delen met de andere fondsen op een manier die zijn data ongelijk laat groeien, ontstaat een scheve verdeling.</li>
+          <li><strong>Aansluiting bij het toegangspatroon</strong> — de meeste query's zouden idealiter binnen één shard moeten kunnen worden beantwoord (co-locatie). Een query die informatie van veel shards tegelijk nodig heeft, is inherent duurder.</li>
+        </ul>
+        <p>Voor de Pensioenfederatie is <code>fonds_id</code> een voor de hand liggende eerste gedachte, maar problematisch: met slechts drie fondsen kunt u nooit verder verdelen dan drie shards, en de scheve verdeling (Baken heeft een ander profiel dan Meridiaan/Kompas) zou de shards ongelijk belasten. Een betere kandidaat: <code>deelnemer_id</code> — elke deelnemer hoort bij precies één fonds (deel 23) en bijna alle operationele query's (een deelnemer opzoeken, zijn mutaties tonen, zijn dienstverbanden) draaien om één deelnemer, precies het toegangspatroon dat co-locatie mogelijk maakt.</p>
+        <div class="callout tip"><span class="lbl">De les</span><p>Net als bij partitiesleutels in deel 16: kies op basis van het werkelijke toegangspatroon, met <code>pg_stat_statements</code>-achtig bewijs (deel 13) waar mogelijk, niet op basis van wat conceptueel het netst staat.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 2 — een shardsleutel kiezen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Van de kandidaat-shardsleutels <code>fonds_id</code>, <code>deelnemer_id</code>, <code>werkgever_id</code> en <code>aangemeld_op</code>: welke zou u aanraden, en welke twee zou u expliciet afraden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Aanraden: <code>deelnemer_id</code></strong> (eventueel met <code>fonds_id</code> erbij voor expliciete herkenbaarheid) — hoge cardinaliteit, gelijkmatige verdeling, sluit aan bij het dominante toegangspatroon. <strong>Afraden: <code>fonds_id</code></strong> alleen — lage cardinaliteit (3), zeer ongelijke verdeling (Baken versus de andere twee). <strong>Afraden: <code>aangemeld_op</code></strong> — goed voor partitionering binnen een shard, maar een slechte shardsleutel: een tijdgebaseerde sleutel concentreert nieuwe schrijfacties op de "nieuwste" shard bij bereik-gebaseerde verdeling. <code>werkgever_id</code> is bruikbaar als secundaire overweging, niet als primaire sleutel — middelmatige cardinaliteit, maar het toegangspatroon (rapportages per werkgever) is minder dominant dan deelnemer-gerichte query's.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Wat je verliest: joins, transacties, uniciteit</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Cross-shard-joins</h3>
+        <p>Binnen één server kan PostgreSQL elke join uitvoeren zonder dat u erover na hoeft te denken (deel 4, 8). Zodra twee tabellen op verschillende shards kunnen staan, verandert dat fundamenteel: als <code>deelnemer</code> en <code>mutatie</code> op dezelfde shard staan (co-locatie), blijft een join net zo snel als binnen één server; staan <code>werkgever</code> en <code>dienstverband</code> op verschillende shards, dan moet de coördinerende laag gegevens van meerdere servers ophalen en zelf samenvoegen — een <strong>distributed join</strong>, aanzienlijk duurder dan binnen één server.</p>
+        <p><strong>Co-locatie</strong> is het ontwerpprincipe dat dit verzacht: als u gerelateerde tabellen zo shardt dat rijen die vaak samen worden bevraagd, altijd op dezelfde shard belanden, blijven de meeste joins lokaal aan één shard. Wat co-locatie niet oplost: rapportagequery's die inherent over de hele dataset heen gaan (Karins kwartaaloverzicht, nu over alle fondsen heen in plaats van één). Die blijven een distributed query, vergelijkbaar met, maar duurder dan, een query die alle partities van een gepartitioneerde tabel moet doorzoeken (deel 16).</p>
+        <h3>Cross-shard-transacties</h3>
+        <p>Binnen één server garandeert PostgreSQL ACID (deel 7) voor elke transactie, ongeacht hoeveel tabellen of rijen die raakt. Zodra een transactie rijen op <strong>verschillende shards</strong> moet wijzigen, is die garantie niet meer gratis. Het klassieke probleem: een waardeoverdracht tussen twee deelnemers die door een ongelukkige shardsleutelkeuze op verschillende shards staan — als de ene shard slaagt en de andere faalt, is er geen lokale transactie die dat garandeert.</p>
+        <p>Oplossingen, met hun kosten:</p>
+        <ul>
+          <li><strong>Two-phase commit (2PC)</strong> — een coördinatieprotocol dat garandeert dat alle betrokken shards ofwel allemaal committen ofwel allemaal terugdraaien. Correct, maar traag (elke transactie vereist meerdere rondes netwerkverkeer) en kwetsbaar voor een coördinator die zelf uitvalt tijdens het proces.</li>
+          <li><strong>Saga-patroon</strong> — een reeks lokale transacties, elk met een gedefinieerde compensatie-actie als een latere stap faalt. Sneller dan 2PC, maar het systeem is tussentijds zichtbaar inconsistent — een afwijking van de klassieke ACID-garantie die expliciet geaccepteerd moet worden.</li>
+          <li><strong>Ontwerp het probleem weg</strong> — de sterkste oplossing: kies de shardsleutel zo dat transacties die atomair moeten zijn, altijd binnen één shard blijven.</li>
+        </ul>
+        <p>De volgorde van voorkeur: eerst proberen te ontwerpen zodat het probleem niet ontstaat; pas als dat structureel niet kan, een saga of 2PC overwegen — met het volle besef van de complexiteit die daarbij komt.</p>
+        <h3>Globale uniciteit</h3>
+        <p>Uit deel 16: een primaire sleutel op een gepartitioneerde tabel moet de partitiesleutel bevatten, omdat PostgreSQL uniciteit alleen per partitie kan afdwingen. Bij sharding is dat probleem groter: uniciteit kan alleen per shard worden afgedwongen, niet over shards heen, tenzij u er expliciet iets voor doet. Drie oplossingen: <strong>sequenties met een offset per shard</strong> (eenvoudig, maar het aantal shards moet vooraf min of meer vaststaan), <strong>UUID's</strong> (praktisch gegarandeerd uniek zonder coördinatie, maar groter dan een <code>bigint</code> — deel 6, 12 — en zonder de sorteer-op-invoegvolgorde-eigenschap die relevant is voor BRIN, deel 14), of <strong>een centrale ID-generator</strong> (correct, maar een nieuw, centraal onderdeel dat zelf weer beschikbaar moet blijven — een echo van de HA-vraag uit deel 19).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 4 — cross-shard-transacties</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij een zeldzaam maar kritiek cross-shard-scenario: waarom is "het probleem negeren en hopen dat het zelden voorkomt" gevaarlijker dan bij een probleem dat vaak voorkomt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat een zeldzaam probleem <strong>moeilijker te testen en te reproduceren</strong> is — het faalt onopgemerkt in productie, precies op het moment dat het optreedt, in plaats van vroeg in ontwikkeling aan het licht te komen. Dit is dezelfde les als "test uw back-up" (deel 17) en "test uw failover" (deel 19): onbeproefde paden falen wanneer u ze het minst kunt gebruiken.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Referentiedata en rebalancing</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Referentiedata: de uitzondering die je overal nodig hebt</h3>
+        <p>Sommige tabellen zijn klein, veranderen zelden, en worden door <strong>elke</strong> shard nodig — bijvoorbeeld een tabel met sectorcodes, of de lijst van aangesloten fondsen zelf. Deze consequent op één shard zetten zou van elke query naar die tabel een cross-shard-query maken, voor iets dat helemaal niet groot genoeg is om te shardten.</p>
+        <p>De oplossing: <strong>referentietabellen</strong> — een volledige kopie van deze kleine tabel op elke shard, gesynchroniseerd bij elke wijziging. Elke shard kan dan lokaal joinen tegen deze tabel zonder cross-shard-verkeer, ten koste van (verwaarloosbare) opslagredundantie en een iets duurdere schrijfactie bij een wijziging (die naar alle shards moet).</p>
+        <p>Bij de Pensioenfederatie: de tabel <code>fonds</code> zelf (drie tot enkele tientallen rijen, zelden gewijzigd) is de schoolvoorbeeld-kandidaat voor een referentietabel. Sectorcodes, valutacodes, en vergelijkbare kleine naslagtabellen eveneens. De vuistregel: klein en zelden gewijzigd → referentietabel; groot en/of vaak gewijzigd → shardten volgens de gekozen shardsleutel.</p>
+        <h3>Rebalancing: shards herverdelen zonder alles stil te leggen</h3>
+        <p>Naarmate de Pensioenfederatie groeit (meer fondsen, meer deelnemers), moet de verdeling over shards op een gegeven moment worden herzien — een nieuwe shard toevoegen, of de belasting anders verdelen omdat één shard onevenredig is gegroeid. Data verplaatsen tussen servers terwijl het systeem in gebruik blijft, is een operatie met een vergelijkbaar risicoprofiel als de zero-downtime-migraties uit deel 22 — alleen nu over servergrenzen heen in plaats van binnen één database.</p>
+        <p>Het patroon, in dezelfde geest als expand-contract: <strong>expand</strong> — de nieuwe shard wordt beschikbaar gemaakt, nog leeg of nog niet in gebruik voor nieuw verkeer; <strong>migrate</strong> — data wordt geleidelijk gekopieerd naar de nieuwe locatie (vaak met een mechanisme vergelijkbaar met logische replicatie, deel 18), terwijl schrijfacties dubbel worden bijgehouden of via een wachtrij worden verwerkt om niets te missen; <strong>contract</strong> — zodra de nieuwe verdeling compleet en geverifieerd is, wordt het verkeer omgeleid en de oude locatie van de verplaatste data opgeschoond.</p>
+        <div class="callout warn"><span class="lbl">Waarom dit zorgvuldig moet</span><p>Een rebalancing die halverwege faalt of een verkeerde route neemt, kan leiden tot rijen die op <strong>twee</strong> shards tegelijk lijken te bestaan, of — erger — op <strong>geen enkele</strong>. De verificatiestap (rijtellingen én inhoudelijke steekproef, dezelfde discipline als deel 6, 16, 22) is hier niet optioneel. In de praktijk wordt rebalancing zelden volledig handmatig gedaan; deel 25 laat zien hoe Citus dit grotendeels automatiseert — met het besef dat automatisering het risico verkleint, niet wegneemt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 5 — referentietabellen aanwijzen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Beoordeel voor <code>fonds</code>, <code>sector_code</code>, <code>mutatie</code>, <code>deelnemer</code>, <code>valuta_code</code> en <code>premienota</code>: welke zijn referentietabel-kandidaten, en welke niet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Referentietabel-kandidaten:</strong> <code>fonds</code>, <code>sector_code</code> en <code>valuta_code</code> — klein, zelden gewijzigd. <strong>Geen referentietabel, wel shardten:</strong> <code>mutatie</code> (groot, groeit continu), <code>deelnemer</code> (groot, groeit) en <code>premienota</code> (middelgroot, groeit).</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Bereik versus hash, en sharding naast niveau 2</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Consistente hashing versus bereik-gebaseerde sharding</h3>
+        <p>Twee manieren om te bepalen welke shard een gegeven rij krijgt.</p>
+        <p><strong>Bereik-gebaseerde sharding</strong> — vergelijkbaar met range-partitionering uit deel 16, maar dan over shards: shard 1 krijgt <code>deelnemer_id 1-500.000</code>, shard 2 krijgt <code>500.001-1.000.000</code>, enzovoort. Voordeel: eenvoudig te begrijpen, en bereikquery's blijven binnen één shard. Nadeel: nieuwe deelnemers concentreren zich op de "nieuwste" shard, wat tot een ongelijke verdeling van schrijfbelasting leidt — een hotspot, vergelijkbaar met het tellerrij-probleem uit deel 15, nu op shard-niveau.</p>
+        <p><strong>Hash-gebaseerde sharding</strong> — vergelijkbaar met hash-partitionering uit deel 16: een hash van de shardsleutel bepaalt de shard, wat een gelijkmatige verdeling geeft ongeacht de volgorde waarin rijen ontstaan. Voordeel: gelijkmatige verdeling van zowel opslag als schrijfbelasting — geen hotspot op de "nieuwste" shard. Nadeel: geen enkele relatie tussen naburige sleutelwaarden en hun shard, dus bereikquery's (zeldzaam bij <code>deelnemer_id</code>, maar wel relevant bij een sleutel als <code>aangemeld_op</code>) worden per definitie cross-shard.</p>
+        <p><strong>Consistente hashing</strong> is een verfijning die specifiek rebalancing goedkoper maakt: bij het toevoegen van een shard hoeft niet de hele verdeling opnieuw berekend te worden (zoals bij een simpele <code>hash(sleutel) mod aantal_shards</code>, waar het aantal shards wijzigen bijna alle toewijzingen verandert), maar slechts een klein deel van de data verschuift naar de nieuwe shard.</p>
+        <p>Voor de Pensioenfederatie: hash-gebaseerde sharding op <code>deelnemer_id</code> is de gangbare keuze — geen natuurlijk bereikpatroon dat verloren gaat, en een gelijkmatige verdeling die zowel Meridiaan/Kompas als het afwijkende profiel van Baken redelijk verdeelt.</p>
+        <h3>Sharding en de rest van niveau 2, samengevat</h3>
+        <p><strong>Partitionering (deel 16)</strong> blijft binnen elke shard relevant — een shard met een groot deel van <code>mutatie</code> heeft nog steeds baat bij maandelijkse partities. <strong>Indexen (deel 14)</strong> worden per shard apart onderhouden; een BRIN-index op een shard met hoge correlatie werkt net zo goed als op een ongesplitste tabel. <strong>Concurrency en locking (deel 15)</strong> gelden onverkort <strong>binnen</strong> een shard; over shards heen gelden ze niet — vandaar de noodzaak van 2PC of saga's voor cross-shard-transacties. <strong>Back-up, replicatie, HA (deel 17-19)</strong> moeten nu <strong>per shard</strong> worden ingericht — elke shard is in feite zijn eigen PostgreSQL-cluster met zijn eigen RPO/RTO-overwegingen, vermenigvuldigd met het aantal shards. <strong>Monitoring (deel 20)</strong> moet niet alleen per shard maar ook <strong>over shards heen</strong> kunnen aggregeren — is de verdeling nog gelijkmatig, loopt één shard achter, is er een hotspot ontstaan? <strong>Security (deel 21)</strong> moet consistent zijn over alle shards — een RLS-policy of rolrecht dat op de ene shard anders is geconfigureerd dan op de andere, is een potentieel lek, vergelijkbaar met schema-drift uit deel 23.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 6 — bereik versus hash</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij bereik-gebaseerde sharding op <code>deelnemer_id</code>, met shards die elk een aaneengesloten blok ID's krijgen: wat gebeurt er met nieuwe deelnemers die zich aanmelden, en welk alternatief zou u aanraden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nieuwe deelnemers krijgen (bij een oplopende <code>deelnemer_id</code>) allemaal de "hoogste" shard toegewezen — alle nieuwe schrijfacties concentreren zich op één server terwijl de andere shards relatief stil blijven. Een klassieke hotspot, vergelijkbaar met het tellerrij-probleem uit deel 15. <strong>Hash-gebaseerd</strong> is hier duidelijk te verkiezen: nieuwe deelnemers verdelen zich gelijkmatig over alle shards, ongeacht wanneer ze zich aanmelden.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wanneer je niet moet shardenen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De eerlijke tegenkant, in dezelfde geest als elk krachtig gereedschap in deze cursus.</p>
+        <p><strong>Als verticaal schalen nog ruimte heeft.</strong> Een zwaardere server is vrijwel altijd eenvoudiger dan sharding — minder architecturale complexiteit, geen cross-shard-problemen, geen nieuwe operationele laag. Controleer eerst of niveau 2's technieken (partitionering, indexoptimalisatie, replicatie voor leesbelasting) de capaciteitsnood al oplossen.</p>
+        <p><strong>Als de werklast veel cross-shard-joins of -transacties zou vereisen.</strong> Een datamodel met sterk verweven relaties die niet natuurlijk co-located kunnen worden, wordt door sharding trager en complexer in plaats van sneller.</p>
+        <p><strong>Als het team de operationele last niet aankan.</strong> Sharding vermenigvuldigt bijna elke niveau-2-taak met het aantal shards. Een team dat al moeite had met één cluster (deel 20), krijgt met sharding niet minder werk maar meer, verdeeld over meer systemen.</p>
+        <p><strong>Als de groei nog onzeker of ver weg is.</strong> Net als bij patroon 3 in deel 23: begin niet bij de zwaarste oplossing "voor de zekerheid". Een architectuur die begint bij verticaal schalen plus partitionering, met een doordacht pad naar sharding wanneer de cijfers dat rechtvaardigen, is vaak verstandiger dan vooraf shardten voor een groei die nog moet blijken.</p>
+        <div class="callout"><span class="lbl">De vraag die u stelt vóór u shardt</span><p><strong>Heb ik een gemeten, aangetoonde capaciteitsgrens die verticaal schalen niet meer oplost? Zo niet, is sharding een oplossing voor een probleem dat u nog niet heeft.</strong></p></div>
+        <h3>Een sharding-ontwerp voor de Pensioenfederatie, conceptueel</h3>
+        <p>Vooruitblikkend naar wat deel 25 concreet zal implementeren: <strong>shardsleutel</strong> <code>deelnemer_id</code>, hash-gebaseerd, voor de kerntabellen (<code>deelnemer</code>, <code>dienstverband</code>, <code>mutatie</code>, <code>aanspraak</code>); <strong>co-locatie</strong> voor alle tabellen die een <code>deelnemer_id</code> bevatten (direct of via een vreemde sleutel), zodat de meest voorkomende query's (alles over één deelnemer) binnen één shard blijven; <strong>referentietabellen</strong> voor <code>fonds</code>, sectorcodes en vergelijkbare kleine naslagtabellen, op elke shard gerepliceerd; en wat <strong>cross-shard blijft</strong>: rapportages die over de hele federatie of over een heel fonds aggregeren. Dit ontwerp wordt pas zinvol bij een concrete schaal die het rechtvaardigt — bij de huidige omvang van drie fondsen is dit een oefening in vooruitdenken, geen acute noodzaak.</p>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Shardsleutel kiezen op basis van wat conceptueel netjes lijkt (<code>fonds_id</code>)</td><td>Te grof, ongelijke verdeling, Baken als hotspot</td><td>Kiezen op werkelijk toegangspatroon (<code>deelnemer_id</code>)</td></tr>
+            <tr><td>Sharding invoeren zonder verticaal schalen te hebben uitgeput</td><td>Onnodige complexiteit voor een probleem dat niet bestond</td><td>Eerst niveau-2-technieken, dan pas sharding</td></tr>
+            <tr><td>Cross-shard-transacties negeren tot ze in productie fout gaan</td><td>Inconsistente data zonder ACID-garantie</td><td>Ontwerp co-locatie zodat kritieke transacties lokaal blijven</td></tr>
+            <tr><td>Globale uniciteit vergeten bij het ontwerp van sleutels</td><td>Sleutelbotsingen tussen shards</td><td>UUID's, offset-sequenties, of een centrale generator, vooraf gekozen</td></tr>
+            <tr><td>Referentietabellen vergeten en kleine naslagtabellen ook shardten</td><td>Onnodig cross-shard-verkeer voor iets triviaals</td><td>Kleine, zelden gewijzigde tabellen als referentietabel</td></tr>
+            <tr><td>Rebalancing zonder verificatie</td><td>Rijen op twee shards, of op geen enkele</td><td>Dezelfde verificatiediscipline als elke migratie (deel 6, 16, 22)</td></tr>
+            <tr><td>Bereik-gebaseerde sharding op een oplopende sleutel zonder de hotspot-consequentie te overzien</td><td>Nieuwe schrijfacties concentreren zich op één shard</td><td>Hash-gebaseerd waar geen natuurlijk bereikpatroon nodig is</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Vooruit naar deel 25.</strong> Vandaag de concepten, volgende keer de implementatie: distributed tables, reference tables, en het daadwerkelijk bouwen van de architectuur die vandaag conceptueel is geschetst — met Citus.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 25</h3>
+      <p>Vandaag de concepten, volgende keer de implementatie — distributed tables, reference tables, en het daadwerkelijk bouwen van de architectuur die vandaag conceptueel is geschetst, met Citus.</p>
+      <a class="btn" href="deel-25.html">Deel 25 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 24 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-3/deel-24-sharding-fundamenten/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_dbm24_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

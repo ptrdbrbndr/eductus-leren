@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Replicatie | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 18 (EDB Professional): streaming replicatie opzetten, synchroon versus asynchroon afwegen tegen RPO, vertraging en replicatieslots bewaken, hot standby voor leesverkeer, logische replicatie met publicaties en abonnementen, en waarom promotie geen failover is.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-18.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 18 van 30</p>
+  <h1>Replicatie:<br>de kopie die <em>meeloopt</em>.</h1>
+  <p class="hero__lead">Back-up beschermt tegen fouten in de tijd; replicatie beschermt tegen het uitvallen van een machine — en het een vervangt het ander niet: een verkeerde <code>DROP TABLE</code> repliceert gewoon mee. Dit deel behandelt <strong>streaming replicatie</strong> als doorlopend PITR-herstel, de afweging <strong>synchroon versus asynchroon</strong> tegen je RPO uit deel 17, replicatievertraging en replicatieslots, <strong>hot standby</strong> voor Karins rapportages, <strong>logische replicatie</strong> voor selectieve of cross-versie scenario's, en de grens tussen promotie en echte failover — dat laatste is voor deel 19.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±1 dagdeel</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>9</b><span>werkboekopdrachten</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering en uitdrukkelijk geen vervanging van het officiële EDB-examenmateriaal — studeer voor het examen altijd óók de officiële bron. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → <b>18 Replicatie (hier)</b> → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Wat replicatie wel en niet is</a></li>
+      <li><a href="#s3" data-target="s3">Fysieke replicatie en een streaming replica opzetten</a></li>
+      <li><a href="#s4" data-target="s4">Synchroon versus asynchroon</a></li>
+      <li><a href="#s5" data-target="s5">Vertraging meten en replicatieslots</a></li>
+      <li><a href="#s6" data-target="s6">Hot standby en conflicten op de replica</a></li>
+      <li><a href="#s7" data-target="s7">Logische replicatie: publicaties en abonnementen</a></li>
+      <li><a href="#s8" data-target="s8">Cascaderende replicatie en promotie</a></li>
+      <li><a href="#s9" data-target="s9">Replicatie in de cursus en veelgemaakte fouten</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is dagdeel 9 van 14 in niveau 2. Deel 17 gaf je een manier om te herstellen na een fout; dit deel geeft je een manier om uitvaltijd te voorkomen — twee verschillende problemen met, zoals je zult zien, twee verschillende oplossingen die elkaar niet vervangen.</p>
+        <p>Na dit deel kun je:</p>
+        <ul>
+          <li>het verschil tussen fysieke en logische replicatie toepassen en per situatie de juiste kiezen;</li>
+          <li>een streaming replica opzetten en de rol van <code>wal_level</code> en replicatieslots uitleggen;</li>
+          <li>synchrone en asynchrone replicatie tegen elkaar afwegen op basis van RPO;</li>
+          <li>replicatievertraging meten en de meest voorkomende oorzaken diagnosticeren;</li>
+          <li>een replica inzetten voor leesbelasting zonder productie te raken;</li>
+          <li>conflicten op een read-only replica herkennen en beperken;</li>
+          <li>logische replicatie opzetten voor selectieve, cross-versie of zero-downtime scenario's;</li>
+          <li>een replica promoveren tot nieuwe primary.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat replicatie wel en niet is</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 17: een back-up beschermt tegen dataverlies en menselijke fouten, maar het herstellen kost tijd — en die tijd hebben jullie zelf gemeten.</p>
+        <p><strong>Replicatie lost een ander probleem op: uitvaltijd.</strong> Een continu bijgewerkte tweede kopie van de database, op een andere machine, klaar om het over te nemen zonder dat er een herstelprocedure aan te pas komt.</p>
+        <p><strong>Wat replicatie niet is:</strong></p>
+        <ul>
+          <li><strong>Geen vervanging voor back-up.</strong> Een verkeerde <code>DROP TABLE</code> repliceert vrijwel realtime mee naar de replica. Je hebt nu twee databases zonder die tabel, niet één probleem minder.</li>
+          <li><strong>Geen bescherming tegen corruptie op applicatieniveau.</strong> Slechte data blijft slechte data, alleen nu op twee plekken.</li>
+          <li><strong>Geen automatische failover.</strong> Replicatie is het mechanisme dat de kopie actueel houdt; het overschakelen zelf — wie besluit, hoe snel, hoe de applicatie het merkt — is het onderwerp van deel 19.</li>
+        </ul>
+        <div class="callout tip"><span class="lbl">De vuistregel</span><p><strong>Back-up beschermt tegen fouten in de tijd. Replicatie beschermt tegen het uitvallen van een machine.</strong> Je hebt allebei nodig, en ze lossen niet elkaars probleem op.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Fysieke replicatie en een streaming replica opzetten</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 2 en 17: elke wijziging gaat eerst naar de WAL. <strong>Streaming replicatie</strong> stuurt die WAL-stroom continu naar een tweede server, die hem toepast zodra hij binnenkomt.</p>
+        <pre><code>Primary                              Replica
+  WAL-record geschreven    ──stream──→   WAL-record ontvangen
+                                          → toegepast op eigen bestanden</code></pre>
+        <p>De replica is dus <strong>byte-voor-byte</strong> een kopie van de primary, met een kleine vertraging. Hij kan niet zelf schrijven (behalve tijdelijke gegevens) — hij is per definitie een read-only volger.</p>
+        <p><strong>Vereisten op de primary:</strong></p>
+        <pre><code>wal_level = replica          # of hoger (logical)
+max_wal_senders = 10         # gelijktijdige replica's</code></pre>
+        <p>Dit zijn <code>postmaster</code>-parameters (deel 11) — een wijziging vereist een herstart, wat precies is waarom je dit vanaf het begin goed instelt in plaats van achteraf.</p>
+        <h3>Een streaming replica opzetten</h3>
+        <p>Het patroon bouwt rechtstreeks op deel 17 voort — een replica <em>is</em> in essentie een doorlopend herstellende back-up.</p>
+        <pre><code># Op de replica-server: begin met een fysieke basisback-up van de primary
+pg_basebackup -D /var/lib/postgresql/data -h primary_host \
+    -U replicatie_rol -R -X stream -P</code></pre>
+        <p>De <code>-R</code>-vlag schrijft automatisch de benodigde verbindingsinformatie (<code>primary_conninfo</code>) en maakt een <code>standby.signal</code>-bestand aan — het teken dat deze instantie een replica is en moet blijven volgen in plaats van na het inhalen te stoppen (het verschil met een eenmalig PITR-herstel uit deel 17).</p>
+        <pre><code># postgresql.auto.conf op de replica (door -R gegenereerd)
+primary_conninfo = 'host=primary_host user=replicatie_rol password=...'</code></pre>
+        <p>Start de replica. Hij haalt eerst de achterstand in door WAL af te spelen, en gaat daarna over op continu streamen. Controleren:</p>
+        <pre><code>-- Op de primary
+SELECT client_addr, state, sent_lsn, replay_lsn,
+       write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;
+
+-- Op de replica
+SELECT pg_is_in_recovery();   -- true
+SELECT now() - pg_last_xact_replay_timestamp() AS vertraging;</code></pre>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Synchroon versus asynchroon</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De belangrijkste keuze van dit deel, en direct gekoppeld aan het RPO uit deel 17.</p>
+        <p><strong>Asynchroon (standaard).</strong> De primary bevestigt een commit zodra hij zelf de WAL heeft weggeschreven, zonder te wachten op de replica. Snel, maar bij een crash van de primary vlak na een commit kan die laatste transactie nog niet op de replica staan — een klein, niet-nul RPO.</p>
+        <p><strong>Synchroon.</strong> De primary wacht met bevestigen tot (ten minste) de replica de WAL heeft ontvangen (of, met een strengere instelling, toegepast).</p>
+        <pre><code># Op de primary
+synchronous_standby_names = 'FIRST 1 (replica_a, replica_b)'</code></pre>
+        <pre><code>-- Per transactie te verfijnen
+SET synchronous_commit = 'on';           -- standaard: wacht op ontvangst
+SET synchronous_commit = 'remote_apply'; -- strengst: wacht tot toegepast
+SET synchronous_commit = 'local';        -- alleen lokaal, geen wachten op replica</code></pre>
+        <p><strong>De afruil, expliciet:</strong></p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Asynchroon</th><th>Synchroon</th></tr></thead>
+          <tbody>
+            <tr><td>RPO</td><td>Klein, niet nul</td><td><strong>Nul</strong> voor bevestigde transacties</td></tr>
+            <tr><td>Latency per commit</td><td>Laag</td><td>Hoger — wacht op het netwerk naar de replica</td></tr>
+            <tr><td>Beschikbaarheid bij replica-uitval</td><td>Primary blijft werken</td><td><strong>Primary kan blokkeren</strong> als de replica onbereikbaar is</td></tr>
+          </tbody>
+        </table></div>
+        <p>Dat laatste punt is waarom synchrone replicatie zelden op precies één replica wordt gezet zonder terugvalplan: valt die ene replica uit, dan wacht elke commit op een server die niet meer antwoordt. <code>synchronous_standby_names</code> met een lijst en een kworum (<code>FIRST 1 (a, b)</code> — wacht op de snelste van de twee) is de gangbare manier om dat te verzachten.</p>
+        <p><strong>Bij Meridiaan:</strong> koppel dit direct terug aan opdracht 17.1. Voor de mutatietabel met een RPO van vijf minuten is asynchrone replicatie ruim voldoende — vijf minuten is orders of magnitude groter dan normale replicatievertraging. Synchrone replicatie zou hier alleen latency toevoegen zonder een reëel risico te verkleinen. Was het RPO <strong>nul</strong> geweest (financiële afschrijving, bijvoorbeeld), dan was synchroon de juiste keuze geweest.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 3 — synchroon versus asynchroon</p>
+        <details class="q"><summary><span class="qn">1</span><span>Je zet <code>synchronous_standby_names</code> op de primary en stopt vervolgens de replica zonder de configuratie terug te draaien. Wat gebeurt er als je nu een <code>INSERT</code> op de primary probeert, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <code>INSERT</code> <strong>hangt</strong> — de primary wacht op een replica die niet meer reageert. Dit is een blokkade, geen foutmelding; de sessie lijkt vast te zitten. Dit is precies de derde rij van de afruil-tabel: synchrone replicatie zonder terugvalplan (bijvoorbeeld een kworum met meerdere replica's) betekent dat de <strong>beschikbaarheid van de primary afhangt van de replica</strong>.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Welke afweging zou je bij Meridiaan maken voor de mutatietabel (RPO: enkele minuten) versus een hypothetische financiële afschrijvingstabel (RPO: nul)?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">"Voor de mutatietabel met een RPO van vijf minuten voegt synchrone replicatie alleen latency toe zonder een reëel risico te verkleinen — vijf minuten is ordes van grootte groter dan normale replicatievertraging, dus asynchroon is ruim voldoende. Voor een hypothetische tabel met RPO nul (een financiële afschrijving die nooit verloren mag gaan) zou synchroon met een kworum van minimaal twee replica's de juiste keuze zijn, ondanks de latencykosten — daar weegt het risico zwaarder dan de snelheid."</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Vertraging meten en replicatieslots</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>SELECT client_addr,
+       pg_wal_lsn_diff(sent_lsn, replay_lsn) AS bytes_achter,
+       write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;</code></pre>
+        <p>Drie soorten vertraging, elk met een andere oorzaak:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Type</th><th>Betekent</th><th>Typische oorzaak</th></tr></thead>
+          <tbody>
+            <tr><td><code>write_lag</code></td><td>Tijd tot de replica de WAL ontving</td><td>Netwerk</td></tr>
+            <tr><td><code>flush_lag</code></td><td>Tijd tot hij hem duurzaam wegschreef</td><td>Trage schijf op de replica</td></tr>
+            <tr><td><code>replay_lag</code></td><td>Tijd tot hij hem daadwerkelijk <strong>toepaste</strong></td><td><strong>CPU/IO-belasting op de replica, of conflicten</strong></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong><code>replay_lag</code> is meestal de interessantste.</strong> Een replica die de WAL snel ontvangt maar traag toepast, is zelf de bottleneck — vaak omdat er op diezelfde replica ook zware rapportagequery's draaien (sectie 6) die om dezelfde resources concurreren.</p>
+        <p><strong>Wat een groeiende vertraging betekent voor je RPO:</strong> als de replica een uur achterloopt en de primary valt op dat moment uit, verlies je een uur — ongeacht wat je asynchrone RPO-doelstelling was. Vertraging is dus niet alleen een prestatiekwestie; het is een <strong>actuele RPO-schending in wording</strong>. Monitor het (deel 20) met dezelfde urgentie als de wraparound-teller uit deel 12.</p>
+        <h3>Replicatieslots</h3>
+        <p>Zonder aanvullende maatregel kan de primary een WAL-segment opruimen zodra hij denkt dat niemand het meer nodig heeft — ook als een trage replica het nog niet heeft ontvangen. Dat segment is dan onherstelbaar weg voor die replica, die daarna alleen nog met een nieuwe basisback-up verder kan.</p>
+        <p><strong>Een replicatieslot</strong> lost dat op: de primary houdt WAL vast totdat het gekoppelde slot bevestigt dat hij het niet meer nodig heeft.</p>
+        <pre><code>-- Op de primary
+SELECT pg_create_physical_replication_slot('replica_a_slot');</code></pre>
+        <pre><code># Op de replica
+primary_slot_name = 'replica_a_slot'</code></pre>
+        <div class="callout warn"><span class="lbl">De prijs</span><p>Een slot dat aan een uitgevallen of trage replica gekoppeld is, laat de primary WAL <strong>onbeperkt</strong> ophopen — precies het risico uit deel 17, nu veroorzaakt door een ander mechanisme. Een vergeten slot van een replica die drie maanden geleden is afgebroken, is een bekende oorzaak van een volle schijf op de primary.</p></div>
+        <pre><code>SELECT slot_name, active, pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS ophoping
+FROM pg_replication_slots;</code></pre>
+        <p>Een inactief slot (<code>active = false</code>) met een grote <code>ophoping</code> is een slot dat moet worden opgeruimd of waarvan de replica dringend weer online moet.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 5 — replicatieslots</p>
+        <details class="q"><summary><span class="qn">1</span><span>Je koppelt een replicatieslot aan je replica en stopt die vervolgens terwijl er op de primary flink wordt geschreven. Wat gebeurt er met <code>restart_lsn</code> in <code>pg_replication_slots</code>, en met <code>pg_wal/</code> op de primary?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>active = false</code> (de replica is gestopt), en <code>restart_lsn</code> blijft "achter" op het punt waar de replica stopte — de primary houdt alle WAL vanaf dat punt vast. <code>pg_wal/</code> groeit met elk segment sinds het stoppen van de replica, en blijft groeien zolang het slot inactief blijft en niemand ingrijpt.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat was het risico geweest als de replica nooit meer was teruggekomen, en hoe had je dat op tijd ontdekt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Zonder ingrijpen zou <code>pg_wal/</code> op de primary <strong>onbeperkt</strong> blijven groeien — uiteindelijk de schijf vullen en de primary tot stilstand brengen, ongeacht dat de replica zelf niets meer doet. Ontdekken vóór het een probleem wordt: monitoring op <code>pg_replication_slots</code> met een alarm bij <code>active = false</code> gedurende langer dan een ingestelde termijn, of bij een groeiende <code>ophoping</code>.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Hot standby en conflicten op de replica</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een replica is niet alleen een stille wachtpost — hij kan gelijktijdig <strong>leesverkeer</strong> bedienen.</p>
+        <pre><code>hot_standby = on   # standaard aan sinds versie 10</code></pre>
+        <pre><code>-- Verbind met de replica en:
+SELECT count(*) FROM meridiaan_prod.deelnemer;   -- werkt
+INSERT INTO ... ;                                 -- ERROR: cannot execute INSERT in a read-only transaction</code></pre>
+        <p><strong>Dit is exact het patroon waar in deel 11, 13 en 14 al naar werd vooruitgewezen:</strong> de rapportagefunctie (Karins maandoverzicht, de zware sorteringen) kan draaien op de replica, volledig gescheiden van het portaalverkeer op de primary. Twee directe voordelen: geen concurrentie om <code>work_mem</code>, cores of I/O met het portaal, en de mogelijkheid om indexen die alleen de rapportage nodig heeft apart te overwegen (al is dat met fysieke replicatie niet direct mogelijk — de replica is een exacte kopie inclusief indexen; dat scenario hoort bij logische replicatie, sectie 7).</p>
+        <div class="callout note"><span class="lbl">De valkuil uit deel 14 wordt hier concreet</span><p>Een index die alleen op de replica wordt gebruikt (via rapportagequery's) telt niet mee in <code>pg_stat_user_indexes</code> van de primary. Wie daar <code>idx_scan = 0</code> ziet en concludeert dat de index overbodig is, kijkt op de verkeerde server.</p></div>
+        <h3>Conflicten op een read-only replica</h3>
+        <p>Een replica moet soms een query afbreken die hij eigenlijk klaar had willen laten lopen — het <strong>replicatieconflict</strong>. Zo ontstaat het: de primary voert een <code>VACUUM</code> uit en ruimt een dode rijversie op die een lang lopende query op de replica nog nodig heeft (MVCC, deel 7 en 12 — maar nu over twee servers heen in plaats van binnen één). De replica moet kiezen: de inkomende WAL toepassen (en daarmee de rijversie die de query nodig heeft, laten verdwijnen) of de query laten wachten.</p>
+        <pre><code>max_standby_streaming_delay = 30s   # hoe lang de replica mag wachten met toepassen
+hot_standby_feedback = on           # vertel de primary welke query's nog lopen</code></pre>
+        <p><strong><code>hot_standby_feedback = on</code></strong> is de meest gebruikte oplossing: de replica informeert de primary over de oudste nog actieve query, en de primary stelt zijn vacuum uit tot die klaar is. <strong>De prijs:</strong> dit kan bloat op de <strong>primary</strong> veroorzaken als er op de replica structureel lang lopende rapportagequery's draaien.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Instelling</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>hot_standby_feedback = on</code></td><td>Rapportagequery's op de replica worden nooit afgebroken, maar kunnen vacuum op de primary vertragen</td></tr>
+            <tr><td><code>hot_standby_feedback = off</code> + ruime <code>max_standby_streaming_delay</code></td><td>Replica loopt soms wat verder achter, query's worden zelden afgebroken</td></tr>
+            <tr><td>Beide krap</td><td>Replicatie blijft actueel, maar lange rapportagequery's kunnen worden afgebroken met <code>ERROR: canceling statement due to conflict with recovery</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Voor Karins rapportagewerklast op een replica: <code>hot_standby_feedback = on</code>, gecombineerd met de autovacuum-instellingen uit deel 11 zodat de primary de extra druk kan verdragen zonder zelf in de problemen te komen.</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Logische replicatie: publicaties en abonnementen</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Fysieke replicatie kopieert <strong>bytes</strong> — alles, ongewijzigd, dezelfde PostgreSQL-versie, hetzelfde platform. <strong>Logische replicatie</strong> repliceert <strong>wijzigingen aan rijen</strong>, gedecodeerd uit de WAL en toegepast als gewone <code>INSERT</code>/<code>UPDATE</code>/<code>DELETE</code> op de doeltabel.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Fysiek</th><th>Logisch</th></tr></thead>
+          <tbody>
+            <tr><td>Granulariteit</td><td>Het hele cluster</td><td>Gekozen tabellen</td></tr>
+            <tr><td>Tussen versies</td><td>Nee, zelfde majorversie</td><td><strong>Ja</strong></td></tr>
+            <tr><td>Doeltabel beschrijfbaar</td><td>Nee</td><td><strong>Ja, ook lokaal</strong></td></tr>
+            <tr><td>Structuur hoeft gelijk te zijn</td><td>Ja</td><td><strong>Nee</strong> (kolomvolgorde mag verschillen)</td></tr>
+            <tr><td>Geschikt voor zero-downtime major-upgrade</td><td>Nee</td><td><strong>Ja</strong></td></tr>
+            <tr><td>Geschikt voor zero-downtime tabelmigratie</td><td>Nee</td><td><strong>Ja — het patroon uit deel 16</strong></td></tr>
+          </tbody>
+        </table></div>
+        <h3>Publicaties en abonnementen</h3>
+        <pre><code>-- Op de bron
+CREATE PUBLICATION mutatie_pub FOR TABLE meridiaan_prod.mutatie;
+
+-- Op het doel (een andere database, mogelijk andere server/versie)
+CREATE SUBSCRIPTION mutatie_sub
+    CONNECTION 'host=bron_host dbname=meridiaan user=repl_logisch'
+    PUBLICATION mutatie_pub;</code></pre>
+        <p>Vereist <code>wal_level = logical</code> op de bron (een stap strenger dan <code>replica</code>) en een aparte replicatie-rol met het <code>REPLICATION</code>-recht. Elke wijziging op <code>mutatie</code> in de bron wordt gedecodeerd en als gewone SQL toegepast op de doeltabel — die zelf ook gewoon beschrijfbaar blijft voor lokaal gebruik.</p>
+        <p><strong>Beperkingen om te kennen:</strong> sequenties worden <strong>niet</strong> meegenomen — een <code>GENERATED ALWAYS AS IDENTITY</code>-kolom op het doel loopt niet automatisch synchroon; DDL wordt niet gerepliceerd, een <code>ALTER TABLE</code> op de bron moet je handmatig ook op het doel uitvoeren; en de doeltabel heeft een primaire sleutel (of <code>REPLICA IDENTITY</code>) nodig om <code>UPDATE</code>/<code>DELETE</code> te kunnen toepassen.</p>
+        <h3>Wanneer logisch in plaats van fysiek</h3>
+        <p><strong>De zero-downtime tabelmigratie uit deel 16.</strong> In plaats van dubbel schrijven via applicatielogica: een publicatie op de oude tabel, een abonnement dat naar de nieuwe gepartitioneerde structuur schrijft, laten inlopen, controleren, omschakelen. Dit is het gereedschap dat in deel 16 werd aangekondigd als "logische replicatie, deel 18".</p>
+        <p><strong>Selectieve replicatie naar een analytische omgeving.</strong> Alleen <code>mutatie</code> en <code>premienota</code> naar een aparte database voor een BI-team, zonder de rest van het schema (en zonder de persoonsgegevens uit <code>deelnemer</code> — dataminimalisatie, deel 9).</p>
+        <p><strong>Cross-versie upgrades.</strong> Een major-versie-upgrade (bijvoorbeeld van 16 naar 18) via fysieke replicatie is niet mogelijk — replica's moeten dezelfde majorversie draaien. Met logische replicatie kan de nieuwe versie los worden opgebouwd, bijgewerkt houden via het abonnement, en pas bij omschakeling live gaan.</p>
+        <p><strong>Wanneer je bij fysiek blijft:</strong> hoge-beschikbaarheidsscenario's (deel 19) waarbij je een exacte, foutloze kopie nodig hebt inclusief alle indexen en structuur, met de laagst mogelijke overhead.</p>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Cascaderende replicatie en promotie</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een replica kan zelf weer bron zijn voor een andere replica:</p>
+        <pre><code>Primary → Replica A (regio 1) → Replica B (regio 1, backup van A)
+       → Replica C (regio 2)</code></pre>
+        <p>Dit verlicht de primary: hij hoeft niet elke replica individueel te bedienen. De vertraging stapelt wel — Replica B loopt (een beetje) verder achter dan A, want hij volgt een volger. Nuttig bij meerdere replica's over verschillende locaties, wat in niveau 3 relevanter wordt bij multi-site-architecturen.</p>
+        <h3>Promotie: van replica naar primary</h3>
+        <pre><code>pg_ctl promote -D /var/lib/postgresql/data
+# of
+SELECT pg_promote();</code></pre>
+        <p>De replica stopt met volgen, verwijdert <code>standby.signal</code>, en accepteert vanaf dat moment schrijfopdrachten — hij is nu een zelfstandige primary.</p>
+        <p><strong>Wat dit niet automatisch regelt:</strong></p>
+        <ul>
+          <li>Andere replica's die de oude primary volgden, blijven de oude primary volgen — ze moeten handmatig worden omgezet om de nieuwe primary te volgen (<code>pg_rewind</code>, of een nieuwe basisback-up).</li>
+          <li>De applicatie moet worden verteld dat er een nieuwe primary is — een DNS-wijziging, een connection string, of een pooler die dat regelt.</li>
+          <li>Als de oude primary nog draait (een <strong>split-brain</strong>-scenario: twee servers die allebei denken primary te zijn), kunnen beide schrijfopdrachten accepteren die elkaar tegenspreken. Dit is precies het probleem dat geautomatiseerde failover-oplossingen (deel 19, Patroni) moeten voorkomen met een consensusmechanisme.</li>
+        </ul>
+        <div class="callout warn"><span class="lbl">Onthoud dit onderscheid</span><p><strong>Promotie is het mechanische stukje van failover. Failover zelf — wanneer, door wie, hoe de applicatie het merkt — is het onderwerp van deel 19.</strong></p></div>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Replicatie in de cursus en veelgemaakte fouten</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Met deel 11 (configuratie):</strong> <code>wal_level</code>, <code>max_wal_senders</code> zijn <code>postmaster</code>-parameters. Zet ze vanaf het begin correct, niet achteraf met een onnodige herstart. <strong>Met deel 14 (indexen):</strong> ongebruikte-indexdetectie moet op elke server apart, want gebruik op een replica telt niet mee op de primary. <strong>Met deel 16 (partitionering):</strong> logische replicatie is het gereedschap voor de gefaseerde migratie die daar werd aangekondigd. <strong>Met deel 17 (back-up):</strong> een streaming replica is fysiek een doorlopend PITR-herstel. <strong>Met deel 7 en 12 (MVCC, vacuum):</strong> replicatieconflicten zijn MVCC-problemen die zich nu over twee servers uitstrekken.</p>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Replicatie als vervanging voor back-up zien</td><td>Een fout repliceert gewoon mee</td><td>Beide inzetten, voor verschillende risico's</td></tr>
+            <tr><td>Synchrone replicatie zonder terugvalplan</td><td>Primary blokkeert bij replica-uitval</td><td>Kworum over meerdere replica's</td></tr>
+            <tr><td>Replicatieslot van een verdwenen replica laten staan</td><td>WAL hoopt onbeperkt op</td><td>Periodiek controleren op inactieve slots</td></tr>
+            <tr><td><code>hot_standby_feedback</code> zonder de gevolgen te overzien</td><td>Bloat op de primary</td><td>Afwegen tegen autovacuum-capaciteit</td></tr>
+            <tr><td>Ongebruikte-index-conclusie trekken op de primary terwijl gebruik op een replica plaatsvindt</td><td>Een nodige index verwijderd</td><td>Per server controleren</td></tr>
+            <tr><td>Sequenties verwachten mee te lopen bij logische replicatie</td><td>Sleutelbotsingen op het doel</td><td>Expliciet beheren of vermijden</td></tr>
+            <tr><td>DDL alleen op de bron uitvoeren bij logische replicatie</td><td>Abonnement breekt</td><td>Handmatig synchroon houden</td></tr>
+            <tr><td>Promotie zonder de oude primary uit te schakelen</td><td>Split-brain</td><td>Eerst de oude primary isoleren</td></tr>
+            <tr><td>Replicatievertraging niet monitoren</td><td>Onbekende, groeiende RPO-schending</td><td>Alarm op <code>replay_lag</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: fysieke versus logische replicatie, <code>wal_level</code>/<code>max_wal_senders</code>/<code>primary_conninfo</code>/<code>standby.signal</code>, synchrone versus asynchrone replicatie en <code>synchronous_commit</code>-niveaus, <code>pg_stat_replication</code> en de drie lag-typen, replicatieslots, <code>hot_standby</code>, replicatieconflicten, publicaties en abonnementen, en promotie met het split-brain-risico. Raadpleeg de actuele EDB-blauwdruk; deze cursus is voorbereiding, geen vervanging van het officiële examenmateriaal.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>Je hebt nu een tweede kopie die continu meeloopt. Deel 19 bouwt het systeem dat automatisch besluit wanneer die kopie het moet overnemen — zonder dat iemand om drie uur 's nachts wakker hoeft te worden.</p>
+      <a class="btn" href="deel-19.html">Deel 19 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-18-replicatie/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

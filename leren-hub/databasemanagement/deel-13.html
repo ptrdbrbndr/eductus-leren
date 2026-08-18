@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 13 — Query-optimalisatie: EXPLAIN ANALYZE en de planner | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 13 (EDB Professional): met pg_stat_statements vaststellen welke query's er werkelijk toe doen, een plan lezen via vier vragen, de rij-estimatiefout herkennen, en query's herschrijven en meten in plaats van aannemen.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-13.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 13</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 13 van 30</p>
+  <h1>Query-optimalisatie: EXPLAIN<br><em>ANALYZE en de planner</em>.</h1>
+  <p class="hero__lead">Ruud belt: het portaal is traag op dinsdagavond. Karin belt: haar maandrapport duurt vier minuten. Wie heeft het dringendste probleem? Karins rapport kost vier minuten per maand; de portaalquery van 5 ms die twee miljoen keer draait, kost bijna drie uur. De query waarover geklaagd wordt, is zelden de query die ertoe doet — dit deel leert u meten in plaats van de telefoon te volgen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>vragen aan elk plan</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering van EnterpriseDB en uitdrukkelijk geen vervanging van het officiële examenmateriaal — raadpleeg altijd de actuele blauwdruk via enterprisedb.com. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → <b>13 Query-optimalisatie: EXPLAIN ANALYZE en de planner (hier)</b> → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → 17 Back-up en herstel → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De query waarover geklaagd wordt</a></li>
+      <li><a href="#s3" data-target="s3">Hoe de planner beslist</a></li>
+      <li><a href="#s4" data-target="s4">Een plan lezen: de vier vragen</a></li>
+      <li><a href="#s5" data-target="s5">De rij-estimatiefout en statistieken</a></li>
+      <li><a href="#s6" data-target="s6">Joinalgoritmen en parallelle query's</a></li>
+      <li><a href="#s7" data-target="s7">Plan-antipatronen en query's herschrijven</a></li>
+      <li><a href="#s8" data-target="s8">Prepared statements, auto_explain en de werkwijze</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>U heeft de server ingesteld (deel 11) en weet hoe gegevens fysiek liggen (deel 12). Dit deel leert u welke query's er werkelijk toe doen en waarom hun plannen zijn zoals ze zijn.</p>
+        <p>Aan het eind van dit deel kunt u: met <code>pg_stat_statements</code> vaststellen welke query's werkelijk de meeste tijd kosten; een plan lezen op productieschaal en de duurste knoop aanwijzen; de rij-estimatiefout herkennen en terugvoeren op de oorzaak; uitgebreide statistieken aanmaken voor kolommen die van elkaar afhangen; de zeven meest voorkomende plan-antipatronen herkennen; een query herschrijven zodat de planner beter werk kan doen; en <code>auto_explain</code> inzetten om trage query's in productie vast te leggen.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De query waarover geklaagd wordt</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Karins rapport duurt vier minuten en draait één keer per maand: totale belasting vier minuten per maand. De portaalquery die deelnemersgegevens ophaalt, duurt 5 milliseconden en draait twee miljoen keer per maand: totale belasting bijna drie uur.</p>
+        <div class="callout tip"><span class="lbl">De formule die dit deel draagt</span><p><strong>totale belasting = aantal aanroepen × gemiddelde tijd.</strong> Beide factoren tellen. Een query van 5 ms die twee miljoen keer draait, is een groter probleem dan een query van vier minuten die één keer draait — en hem tien procent sneller maken levert meer op dan Karins rapport halveren. Dat betekent niet dat u Karin negeert; het betekent dat u begint met meten in plaats van met de telefoon.</p></div>
+        <h4>pg_stat_statements: wat er werkelijk toe doet</h4>
+        <p>Deze extensie beantwoordt de vraag. Uit deel 11: hij moet in <code>shared_preload_libraries</code> staan, wat een herstart vereist. Hij normaliseert query's — <code>WHERE id = 42</code> en <code>WHERE id = 99</code> worden dezelfde regel met <code>WHERE id = $1</code> — zodat u patronen ziet in plaats van losse aanroepen.</p>
+        <pre><code class="language-sql">SELECT
+    substr(query, 1, 80) AS query,
+    calls,
+    round(total_exec_time::numeric, 0) AS totaal_ms,
+    round(mean_exec_time::numeric, 2)  AS gem_ms,
+    round(100 * total_exec_time / sum(total_exec_time) OVER (), 1) AS pct
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;</code></pre>
+        <p><strong>Sorteer op <code>total_exec_time</code>, niet op <code>mean_exec_time</code>.</strong> Het gemiddelde toont de query waarover geklaagd wordt, het totaal toont de query die de server belast. Andere invalshoeken: <code>calls</code> vindt query's die te vaak worden aangeroepen (vaak een applicatieprobleem), <code>shared_blks_read</code> vindt query's die veel van schijf lezen, en <code>stddev_exec_time</code> vindt query's met wisselvallige prestaties — vaak een plannerprobleem, zoals in sectie 8 blijkt. Reset voordat u meet met <code>SELECT pg_stat_statements_reset();</code>, anders kijkt u naar maanden geschiedenis.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.2 — wat doet er werkelijk toe</p>
+        <details class="q"><summary><span class="qn">1</span><span>Op <code>total_exec_time</code> staat een portaalquery bovenaan (3.000 aanroepen, elk snel); op <code>mean_exec_time</code> staat een eenmalige scan-query bovenaan (1 aanroep, traag). Welke van de twee noemt Ruud als hij belt over traagheid, en welke pakt u als eerste aan?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ruud noemt de scan-query — die voelt hij. U pakt de portaalquery aan — die kost de server het meest. Dat is geen theoretisch onderscheid: tien procent winst op de query die bovenaan <code>total_exec_time</code> staat, levert meer op dan de eenmalige query halveren. De formule uit deze sectie is precies waarom die twee antwoorden uiteenlopen.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Hoe de planner beslist</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voor elke query genereert de planner mogelijke uitvoeringsplannen en kiest het plan met de laagste geschatte kosten. Die kosten komen uit drie ingrediënten: kostenparameters (<code>seq_page_cost</code>, <code>random_page_cost</code> — deel 11), statistieken over de gegevens (bijgehouden door <code>ANALYZE</code> en autovacuum), en selectiviteit — welk deel van de rijen naar schatting aan de voorwaarde voldoet.</p>
+        <div class="callout warn"><span class="lbl">Waar het misgaat is bijna altijd bij selectiviteit</span><p>De kosten zijn juist berekend; de schatting van het aantal rijen was verkeerd. En een verkeerde rijschatting plant zich voort: als de planner denkt dat een join 100 rijen oplevert en het worden er een miljoen, dan is elke keuze daarboven ook fout. <strong>De belangrijkste vaardigheid van dit deel: in een plan de plek vinden waar de schatting voor het eerst uit de bocht vliegt.</strong></p></div>
+        <h4>EXPLAIN op productieschaal</h4>
+        <pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS, SETTINGS, VERBOSE) SELECT …;</code></pre>
+        <p><code>ANALYZE</code> voert de query werkelijk uit en toont werkelijke tijden en rijen; <code>BUFFERS</code> toont pagina's uit cache (<code>hit</code>), van schijf (<code>read</code>) en geschreven (<code>written</code>); <code>SETTINGS</code> toont welke planner-instellingen afwijken van de standaard — onderschat, want het is het antwoord op "waarom is dit plan op acceptatie anders" en bespaart een half uur zoeken. Bij een <code>UPDATE</code> of <code>DELETE</code> altijd binnen <code>BEGIN … ROLLBACK</code>, en gebruik voor een eerste indruk <code>EXPLAIN</code> zonder <code>ANALYZE</code> — dat kost niets en toont al of de planner iets geks van plan is.</p>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Een plan lezen: de vier vragen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een plan van dertig regels is overweldigend. Stel deze vier vragen, in deze volgorde.</p>
+        <p><strong>Vraag 1 — Waar gaat de tijd heen?</strong> Zoek de knoop met de grootste <code>actual time</code>. Let op: de tijd van een knoop is inclusief zijn kinderen, dus de echte kosten zijn zijn eigen tijd min die van zijn kinderen. En vergeet <code>loops</code> niet: <code>actual time</code> is per loop — staat er <code>loops=8000</code>, vermenigvuldig dan.</p>
+        <p><strong>Vraag 2 — Waar klopt de schatting niet?</strong> Vergelijk <code>rows=</code> (geschat) met <code>actual rows=</code>. Zoek de knoop waar het verschil voor het eerst een factor tien of meer wordt — dat is uw startpunt, niet de duurste knoop.</p>
+        <p><strong>Vraag 3 — Hoeveel wordt er weggegooid?</strong> <code>Rows Removed by Filter</code> toont hoeveel rijen zijn gelezen en niet gebruikt. Een hoog getal betekent dat het filter te laat wordt toegepast: een index of een andere joinvolgorde had dat voorkomen.</p>
+        <p><strong>Vraag 4 — Wat komt er van schijf?</strong> <code>Buffers: shared hit=1000 read=50000</code> — <code>read</code> is van schijf. Veel <code>read</code> betekent dat de werkset niet in de bufferpool past, en dat is een ander probleem dan een verkeerd plan.</p>
+        <figure><img src="figuren/figuur-13-1.png" alt="Een plan van vijftien regels met de vier vragen als aanwijzingen erbij"><figcaption>Figuur 13-1 — een plan van vijftien regels met de vier vragen als aanwijzingen erbij</figcaption></figure>
+        <p>Signalen die u direct herkent: <code>Sort Method: external merge Disk</code> betekent <code>work_mem</code> te laag; <code>Batches: 8</code> bij een Hash Join betekent dat de hashtabel niet in <code>work_mem</code> paste; <code>Heap Fetches: 987</code> bij een Index Only Scan betekent een verouderde visibility map (deel 12); en <code>loops=8000</code> bij een Nested Loop is vaak de oorzaak — controleer de rijschatting erboven.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.3 — vier vragen aan een plan</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een join tussen deelnemer en mutatie, gefilterd op woonplaats en kanaal, toont bij de scan op mutatie een Rows Removed by Filter van circa 1,9 miljoen op 2,4 miljoen rijen. Wat zegt dat, en wat zou u overwegen als maatregel — en welke nuance hoort daarbij?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het filter op <code>kanaal</code> raakt ongeveer 20% van de tabel en wordt pas na het lezen van de rij toegepast, dus 80% wordt gelezen en weggegooid. De voor de hand liggende maatregel is een index op <code>kanaal</code> of beter een samengestelde index die ook de join ondersteunt. De nuance: bij 20% selectiviteit is een index op <code>kanaal</code> alleen vaak juist géén verbetering (deel 8) — de planner zou hem negeren. De betere maatregel is een index die specifiek de join ondersteunt, niet het filter op zichzelf.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De rij-estimatiefout en statistieken</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het belangrijkste diagnosepatroon van dit deel: <code>rows=1</code> geschat, <code>actual rows=184302</code> werkelijk. Op basis van die ene rij koos de planner een Nested Loop — prima bij één rij, een ramp bij 184.302. De reparatie zit niet in de join maar in de schatting. Vijf mogelijke oorzaken, in volgorde van hoe vaak ze voorkomen: <strong>verouderde statistieken</strong> (draai <code>ANALYZE</code>, lost het merendeel op); <strong>afhankelijke kolommen</strong> (de planner neemt onafhankelijkheid aan en vermenigvuldigt selectiviteiten, wat bij <code>WHERE plaats = 'Utrecht' AND provincie = 'Utrecht'</code> een veel te laag getal oplevert); <strong>te lage statistiekresolutie</strong> (<code>ALTER TABLE … SET STATISTICS 1000</code>); <strong>een functie of expressie in de voorwaarde</strong> (een expressie-index levert meteen statistieken); en <strong>correlatie tussen tabellen</strong>, waar u de query moet herschrijven (sectie 7).</p>
+        <h4>Statistieken: wat de planner weet</h4>
+        <p>Alles staat in <code>pg_stats</code>: <code>n_distinct</code> (aantal verschillende waarden — negatief is een verhouding tot het aantal rijen), <code>null_frac</code>, <code>most_common_vals</code> met <code>most_common_freqs</code> (de MCV-lijst, waar scheve verdelingen zichtbaar worden), <code>histogram_bounds</code>, en <code>correlation</code> (deel 12). <code>n_distinct</code> is de statistiek die het vaakst verkeerd wordt geschat, omdat <code>ANALYZE</code> met een steekproef werkt; bij een kolom waarvan u het werkelijke aantal kent, kunt u hem vastzetten met <code>ALTER TABLE … ALTER COLUMN … SET (n_distinct = 5);</code> — een krachtig en een gevaarlijk middel tegelijk, want u overschrijft de werkelijkheid met een bewering.</p>
+        <h4>Uitgebreide statistieken</h4>
+        <p>Voor afhankelijke kolommen:</p>
+        <pre><code class="language-sql">CREATE STATISTICS mutatie_soort_kanaal (dependencies, ndistinct, mcv)
+    ON soort, kanaal FROM mutatie;
+ANALYZE mutatie;</code></pre>
+        <p>De drie soorten: <code>dependencies</code> lost functionele afhankelijkheid op (kolom A bepaalt kolom B), <code>ndistinct</code> het aantal verschillende combinaties, <code>mcv</code> de meest voorkomende combinaties. Nodig bij een <code>WHERE</code> met meerdere voorwaarden op kolommen die samenhangen — postcode en plaats, sector en cao. Herkenbaar aan een rijschatting die systematisch veel te laag is bij zulke combinaties. Dit is een van de weinige plaatsen waar u de planner werkelijk iets nieuws vertelt in plaats van hem alleen bij te werken.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.4 — de rij-estimatiefout</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij een tabel waarin plaats de provincie volledig bepaalt, schat de planner voor een query met beide voorwaarden 55.500 rijen; in werkelijkheid zijn het er 166.667 — een factor 3 te laag. Wat is de oorzaak, en hoe legt u dat uit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De planner gaat er standaard van uit dat kolommen onafhankelijk zijn en vermenigvuldigt daarom hun selectiviteiten. Als de tweede voorwaarde in werkelijkheid niets uitsluit — want elke plaats hoort bij precies één provincie — is die vermenigvuldiging een systematische onderschatting. Na <code>CREATE STATISTICS (dependencies, ndistinct, mcv) ON plaats, provincie</code> en een nieuwe <code>ANALYZE</code> klopt de schatting vrijwel exact, omdat de planner nu weet dat de kolommen samenhangen in plaats van dat aan te nemen op basis van losse kolomstatistieken.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Joinalgoritmen en parallelle query's</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 8, nu met de praktische signalen. <strong>Nested Loop:</strong> voor elke rij links, zoek rechts — goed bij weinig rijen links plus een index rechts. Signaal dat het misgaat: hoge <code>loops</code> gecombineerd met een rijschatting die veel te laag was, verreweg de meest voorkomende oorzaak van een query die van seconden naar minuten gaat. <strong>Hash Join:</strong> bouwt een hashtabel van de kleinste kant, goed bij grote verzamelingen. Signaal: <code>Batches: 8</code> betekent dat de hashtabel niet in <code>work_mem</code> paste. <strong>Merge Join:</strong> beide kanten gesorteerd doorlopen. Signaal: een <code>Sort</code>-knoop met <code>external merge Disk</code> eronder.</p>
+        <p>U kunt de planner tijdelijk sturen om te onderzoeken (<code>SET enable_nestloop = off;</code>), maar dat is een diagnosemiddel, geen oplossing — dezelfde waarschuwing als in deel 8. Als het uitzetten van een joinsoort de query tien keer sneller maakt, weet u dat de planner een verkeerde keuze maakte; de vervolgvraag is waarom, en het antwoord is vrijwel altijd de rijschatting.</p>
+        <h4>Parallelle query's</h4>
+        <p>PostgreSQL kan een query over meerdere processen verdelen (<code>Gather</code> met <code>workers planned</code>/<code>workers launched</code> in het plan). Nuttig bij grote sequentiële scans, aggregaties en joins — Karins rapportagewerk. Niet nuttig, en zelfs schadelijk, bij korte OLTP-query's: het opstarten van werkers kost tijd, en op een server met 150 gelijktijdige portaalsessies concurreren die werkers om dezelfde cores. Opnieuw het patroon uit deel 11:</p>
+        <pre><code class="language-sql">ALTER ROLE rapportage  SET max_parallel_workers_per_gather = 4;
+ALTER ROLE portaal_app SET max_parallel_workers_per_gather = 0;</code></pre>
+        <p>Let op <code>workers launched</code> in het plan: staat daar minder dan <code>workers planned</code>, dan waren er geen werkers beschikbaar en is uw meting niet representatief.</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Plan-antipatronen en query's herschrijven</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Zeven signalen die u direct herkent: een zeer hoge <code>Rows Removed by Filter</code> (filter te laat toegepast); een Nested Loop met hoge <code>loops</code> en foute schatting (rijschatting); <code>Sort Method: external merge Disk</code> of <code>Batches: n</code> bij een Hash Join (<code>work_mem</code> te laag); hoge <code>Heap Fetches</code> bij een Index Only Scan (visibility map verouderd, deel 12); een <code>Seq Scan</code> waar een index bestaat (soms terecht — controleer eerst of de query werkelijk een klein deel van de tabel raakt, vóór u naar een functie om de kolom of een typemismatch zoekt); en een subplan dat per rij draait (een gecorreleerde subquery die niet herschreven kon worden).</p>
+        <h4>Query's herschrijven</h4>
+        <p>Soms is het plan het beste dat de planner kan maken met de query die hij kreeg — dan is de query zelf aan de beurt. <strong>Filter zo vroeg mogelijk:</strong> hoe minder rijen de joins in gaan, hoe beter alles erboven wordt (deel 3, nu met een prestatiereden). <strong>Aggregeer voordat u joint:</strong> het CTE-patroon uit deel 4, dat fan-out voorkomt én tussenresultaten klein houdt. <strong><code>EXISTS</code> in plaats van <code>IN</code></strong> met een grote subquery: <code>EXISTS</code> kan stoppen bij de eerste treffer en is NULL-veilig. <strong><code>UNION ALL</code> in plaats van <code>UNION</code></strong> waar duplicaten niet erg zijn. <strong><code>LATERAL</code></strong> voor "de top n per groep", met een ondersteunende index veel goedkoper dan alle rijen sorteren.</p>
+        <div class="callout tip"><span class="lbl">Keyset-paginering in plaats van OFFSET</span><p><code>SELECT * FROM mutatie ORDER BY mutatie_id LIMIT 20 OFFSET 100000;</code> produceert 100.020 rijen om er 20 te tonen. <code>SELECT * FROM mutatie WHERE mutatie_id &gt; 100000 ORDER BY mutatie_id LIMIT 20;</code> gebruikt de index om meteen op de juiste plek te beginnen. Het verschil groeit met de paginanummers — de gebruiker die het diepst zoekt, wacht het langst.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.7 — herschrijven</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een gecorreleerde subquery die per werkgever de laatste betaaldatum ophaalt, presteert bij het meten minder slecht dan verwacht ten opzichte van een CTE-variant en een LATERAL-variant. Wat leert dat over de aanname "gecorreleerde subquery's zijn traag"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">PostgreSQL herschrijft gecorreleerde subquery's soms zelf naar een join, wat verklaart waarom de subquery-variant beter presteert dan de vuistregel doet vermoeden. "Gecorreleerde subquery's zijn traag" is dus prestatiefolklore, net als andere ongemeten vuistregels uit deel 8 — de juiste houding is meten, niet aannemen. Op vergelijkbare aantallen is het verschil tussen de drie varianten vaak klein, en wordt leesbaarheid het doorslaggevende criterium.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Prepared statements, auto_explain en de werkwijze</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een prepared statement wordt gepland en hergebruikt. PostgreSQL doet de eerste vijf uitvoeringen met een <strong>custom plan</strong> (opnieuw gepland met de werkelijke parameterwaarden), en schakelt daarna over op een <strong>generic plan</strong> als dat gemiddeld niet duurder lijkt. Bij een scheve verdeling gaat dat mis: een generiek plan moet één keuze maken voor alle gevallen, en die keuze is voor minstens één ervan verkeerd. Herkenbaar aan een query die soms snel en soms traag is zonder aanwijsbare reden — precies waar <code>stddev_exec_time</code> op wijst. Sturen kan met <code>SET plan_cache_mode = 'force_custom_plan';</code>, meestal per rol. Let op: veel applicatiekaders en ORM's gebruiken prepared statements zonder dat de ontwikkelaar het weet — als een query in <code>psql</code> snel is en in de applicatie traag, is dit een van de eerste dingen om te controleren.</p>
+        <h4>auto_explain</h4>
+        <p>Het probleem met trage query's in productie: als u erbij bent, zijn ze al voorbij. <code>auto_explain</code> legt het plan van elke trage query vast in de log, met <code>log_min_duration</code> als drempel. Gebruik <code>sample_rate</code> om maar een deel te meten — 10% geeft doorgaans een representatief beeld tegen een fractie van de kosten van <code>log_analyze</code> op elke query. Dit is de combinatie die u in productie wilt: <code>pg_stat_statements</code> vertelt welke query's ertoe doen, <code>auto_explain</code> vertelt waarom een specifieke uitvoering traag was.</p>
+        <h4>De werkwijze</h4>
+        <p>Reset en meet; kies één query — niet degene waarover geklaagd wordt, degene die bovenaan staat; draai <code>EXPLAIN (ANALYZE, BUFFERS, SETTINGS)</code>; stel de vier vragen uit sectie 4; zoek de eerste rij-estimatiefout, niet de duurste knoop; verander één ding; meet opnieuw en vergelijk; en ga terug naar stap 1, want de rangorde is veranderd. Stop als de query snel genoeg is voor wat hij moet doen, niet als hij zo snel mogelijk is — optimaliseren zonder doel is oneindig werk.</p>
+        <h4>Aansluiting op de certificering</h4>
+        <p>Voor de EDB PostgreSQL Professional-certificering paraat: <code>pg_stat_statements</code> en het onderscheid tussen totaal en gemiddelde; de opties van <code>EXPLAIN</code>; plannen lezen inclusief <code>loops</code>, <code>Rows Removed by Filter</code> en <code>Heap Fetches</code>; de rij-estimatiefout en de vijf oorzaken; <code>pg_stats</code>, in het bijzonder <code>n_distinct</code> en de MCV-lijst; <code>CREATE STATISTICS</code>; de drie joinalgoritmen; parallelle query's; custom versus generic plans; en <code>auto_explain</code>.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.9 — het optimalisatierapport</p>
+        <details class="q"><summary><span class="qn">1</span><span>In het modelantwoord voor Ruud en Karin staat de query waarover Ruud belt (kanaal = 'portaal', 20% selectiviteit) juist als "bewust niet geoptimaliseerd". Waarom is dat een sterker antwoord dan er toch een index op zetten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij 20% selectiviteit is een sequentiële scan de juiste keuze — een index zou door de planner genegeerd worden en alleen schrijfkosten toevoegen zonder leeswinst. De sterkte van het antwoord zit niet in het negeren van Ruuds klacht, maar in het uitleggen waarom deze specifieke query, ondanks dat er over geklaagd wordt, geen goede kandidaat is voor optimalisatie — en in het aandragen van een alternatief (een materialized view) voor het geval de telling structureel nodig blijkt. Dat toont het onderscheid tussen "kan sneller" en "is de moeite waard".</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 14</h3>
+      <p>U weet nu welke query's ertoe doen en waarom hun plannen zijn zoals ze zijn. Deel 14 bouwt de indexen die die plannen veranderen — inclusief de indextypes die geen B-tree zijn.</p>
+      <a class="btn" href="deel-14.html">Deel 14 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 13 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-13-query-optimalisatie-explain-analyze-en-de-planner/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm13_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

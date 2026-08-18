@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 4 — SQL verdieping: joins, subquery's en CTE's | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 4 (EDB Associate): INNER en LEFT JOIN, de klassieke LEFT JOIN-fout, fan-out, subquery's met EXISTS en NOT EXISTS, CTE's en vensterfuncties — toegepast op de Meridiaan-database.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-04.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+td code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 4</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 4 van 30</p>
+  <h1>SQL verdieping: joins,<br><em>subquery's en CTE's</em>.</h1>
+  <p class="hero__lead">Deel 5 gaat over normalisatie: gegevens bewust opsplitsen over tabellen. Joinen is de tegenbeweging — het weer samenbrengen van wat bewust is gescheiden. Dit deel behandelt de jointypen, de klassieke LEFT JOIN-fout die vrijwel iedereen één keer maakt, fan-out bij één-op-veel-relaties, subquery's met EXISTS, en CTE's — inclusief een eerste kennismaking met vensterfuncties.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>manieren om dezelfde vraag te stellen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap: waarom PostgreSQL → ➋ Het relationele model en de PostgreSQL-architectuur → ➌ SQL basis: SELECT, filteren, sorteren, aggregeren → <b>➍ SQL verdieping: joins, subquery's en CTE's (hier)</b> → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → ➑ Indexen en views → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat, en waarom joinen</a></li>
+      <li><a href="#s2" data-target="s2">INNER JOIN en LEFT JOIN</a></li>
+      <li><a href="#s3" data-target="s3">RIGHT, FULL, CROSS en joinvoorwaarden</a></li>
+      <li><a href="#s4" data-target="s4">De klassieke LEFT JOIN-fout</a></li>
+      <li><a href="#s5" data-target="s5">Self join, meer tabellen en fan-out</a></li>
+      <li><a href="#s6" data-target="s6">Verzamelingsoperatoren en subquery's</a></li>
+      <li><a href="#s7" data-target="s7">Afgeleide tabellen en CTE's</a></li>
+      <li><a href="#s8" data-target="s8">Vensterfuncties, en dezelfde vraag op vier manieren</a></li>
+      <li><a href="#s9" data-target="s9">Veelgemaakte fouten, en aansluiting op de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat, en waarom joinen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>gegevens uit meerdere tabellen combineren met de juiste soort join;</li>
+          <li>uitleggen wanneer <code>INNER</code> en wanneer <code>LEFT</code> het bedrijfsmatig juiste antwoord geeft;</li>
+          <li>de klassieke fout herkennen waarbij een <code>LEFT JOIN</code> stilzwijgend een <code>INNER JOIN</code> wordt;</li>
+          <li>een self join schrijven en toepassen;</li>
+          <li>verzamelingsoperatoren gebruiken en het verschil met joins uitleggen;</li>
+          <li>subquery's schrijven in de vorm van scalair, <code>IN</code>, <code>EXISTS</code> en gecorreleerd;</li>
+          <li>CTE's gebruiken om complexe query's leesbaar te maken, inclusief een recursieve;</li>
+          <li>een eenvoudige vensterfunctie toepassen.</li>
+        </ul>
+        <p>Deel 5 gaat over normalisatie: het opsplitsen van gegevens over tabellen zodat elk feit één keer wordt vastgelegd. Joinen is de tegenbeweging — het weer samenbrengen van wat bewust is gescheiden. Bij Meridiaan staat de naam van een werkgever in <code>werkgever</code> en de premie in <code>premienota</code>. Die scheiding is juist: de naam staat één keer, en een naamswijziging raakt één rij. Maar zodra iemand vraagt "welke werkgevers betalen te laat", heeft u beide nodig.</p>
+        <div class="callout tip"><span class="lbl">Denk in verzamelingen, niet in stappen</span><p>Een join is geen lus die per rij iets opzoekt; het is één bewerking op twee verzamelingen. Wie in lussen denkt, schrijft query's die werken op tien rijen en onbruikbaar zijn op tien miljoen.</p></div>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">INNER JOIN en LEFT JOIN</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>SELECT d.achternaam, w.naam AS werkgever
+FROM dienstverband dv
+JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id
+JOIN werkgever w ON w.werkgever_id = dv.werkgever_id;</code></pre>
+        <p><code>JOIN</code> zonder verdere aanduiding betekent <code>INNER JOIN</code>. Het resultaat bevat alleen rijen waarvoor aan beide kanten een match bestaat. Uit deel 2: <strong>een join is een cartesisch product met een filter.</strong> De komma-join (<code>FROM a, b WHERE a.id = b.a_id</code>) is verouderd — gebruik hem niet: vergeet u de <code>WHERE</code>, dan krijgt u stilzwijgend een cartesisch product. Aliassen zijn hier geen luxe: bij drie of meer tabellen wordt <code>dv.deelnemer_id</code> versus <code>d.deelnemer_id</code> de enige manier om te zien waar iets vandaan komt.</p>
+        <h4>LEFT JOIN — en waarom die vaak het juiste antwoord is</h4>
+        <pre><code>SELECT w.naam, count(dv.dienstverband_id) AS aantal_dienstverbanden
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.werkgever_id, w.naam
+ORDER BY aantal_dienstverbanden;</code></pre>
+        <p><code>LEFT JOIN</code> behoudt <strong>alle rijen uit de linkertabel</strong>, ook als er rechts geen match is; ontbrekende waarden worden NULL. In de casusdatabase zitten werkgevers zonder enkel dienstverband. Met een <code>INNER JOIN</code> verdwijnen die uit het overzicht — en juist die werkgevers zijn interessant: een aangesloten werkgever zonder deelnemers is óf een fout in de administratie, óf een werkgever die niets aanlevert.</p>
+        <div class="callout tip"><span class="lbl">De vuistregel</span><p><code>INNER JOIN</code> beantwoordt vragen over combinaties. <code>LEFT JOIN</code> beantwoordt vragen over de linkertabel, met aanvullende informatie. "Toon alle werkgevers met hun aantal deelnemers" is een vraag over werkgevers — dus <code>LEFT</code>.</p></div>
+        <p>Let op <code>count(dv.dienstverband_id)</code> in het voorbeeld: <code>count(*)</code> zou hier <strong>1</strong> tellen voor een werkgever zonder dienstverbanden, want er ís een rij (met NULL's erin). <code>count(kolom)</code> telt alleen niet-NULL waarden en levert correct 0 — de belangrijkste plek waar het <code>count</code>-onderscheid uit deel 2 en 3 werkelijk pijn doet.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.2c — count(*) na een LEFT JOIN</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij het tellen van dienstverbanden per werkgever met een LEFT JOIN gebruikt iemand <code>count(*)</code> in plaats van <code>count(dv.dienstverband_id)</code>. Wat gaat er mis, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>count(*)</code> telt rijen. Voor een werkgever zónder dienstverbanden bestaat er ná de <code>LEFT JOIN</code> één rij, gevuld met NULL's aan de rechterkant. <code>count(*)</code> telt die als <strong>1</strong>; <code>count(dv.dienstverband_id)</code> telt alleen niet-NULL en levert correct <strong>0</strong>. Dit is de belangrijkste praktische toepassing van het <code>count</code>-onderscheid uit deel 2 en 3.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">RIGHT, FULL, CROSS en joinvoorwaarden</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong><code>RIGHT JOIN</code></strong> doet hetzelfde als <code>LEFT</code>, maar dan de andere kant op. In de praktijk zelden gebruikt: het is leesbaarder om de tabellen om te draaien en <code>LEFT</code> te schrijven. Kom u het tegen in bestaande code, herschrijf het.</p>
+        <p><strong><code>FULL JOIN</code></strong> behoudt alle rijen van beide kanten. Nuttig bij het vergelijken van twee gegevensverzamelingen die zouden moeten overeenkomen — precies het gereedschap waarmee u bij Meridiaan zou onderzoeken waarom drie afdelingen op drie aantallen uitkwamen.</p>
+        <p><strong><code>CROSS JOIN</code></strong> levert elke combinatie. Zelden bedoeld, maar wél nuttig om een volledig raster te maken — bijvoorbeeld alle maanden van 2025 maal alle sectoren, zodat maanden zonder gegevens toch als rij verschijnen (met nul).</p>
+        <h4>Joinvoorwaarden: ON, USING, NATURAL</h4>
+        <pre><code>JOIN deelnemer d ON d.deelnemer_id = dv.deelnemer_id   -- expliciet
+JOIN deelnemer USING (deelnemer_id)                     -- korter, kolomnamen gelijk
+NATURAL JOIN deelnemer                                  -- joint op alle gelijknamige kolommen</code></pre>
+        <p><code>ON</code> is het meest expliciet en werkt altijd. <code>USING</code> is korter en levert bovendien één gecombineerde kolom in plaats van twee — prettig, en veilig zolang de kolomnamen bewust gelijk zijn.</p>
+        <div class="callout warn"><span class="lbl">NATURAL JOIN: gebruik niet</span><p>Het joint op álle gelijknamige kolommen, dus als iemand later een kolom <code>naam</code> toevoegt aan twee tabellen, verandert uw resultaat zonder dat uw query wijzigt. Dat is een bug die maanden later opduikt en waarvan de oorzaak nauwelijks te vinden is.</p></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De klassieke LEFT JOIN-fout</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deze verdient een eigen sectie, omdat vrijwel iedereen hem één keer maakt.</p>
+        <pre><code>-- Bedoeld: alle werkgevers, met hun onbetaalde nota's
+SELECT w.naam, count(p.premienota_id)
+FROM werkgever w
+LEFT JOIN premienota p ON p.werkgever_id = w.werkgever_id
+WHERE p.betaaldatum IS NULL          -- ← hier gaat het mis
+GROUP BY w.werkgever_id, w.naam;</code></pre>
+        <p>De <code>WHERE</code> wordt toegepast <strong>ná</strong> de join. Rijen van werkgevers zonder enkele nota hebben overal NULL, dus ook <code>p.betaaldatum IS NULL</code> — die blijven toevallig staan. Maar werkgevers die álles betaald hebben, verdwijnen volledig: hun rijen hebben een gevulde <code>betaaldatum</code> en worden weggefilterd. Uw <code>LEFT JOIN</code> is een <code>INNER JOIN</code> geworden, met een resultaat dat u niet vroeg.</p>
+        <figure><img src="figuren/figuur-4-1.png" alt="Twee identieke query's, één met de voorwaarde in ON en één in WHERE, met het verschil in resultaat ernaast"><figcaption>Figuur 4-1 — Twee identieke query's, één met de voorwaarde in ON en één in WHERE, met het verschil in resultaat ernaast</figcaption></figure>
+        <p>Correct is de voorwaarde in de join zetten:</p>
+        <pre><code>SELECT w.naam, count(p.premienota_id) AS onbetaald
+FROM werkgever w
+LEFT JOIN premienota p
+       ON p.werkgever_id = w.werkgever_id
+      AND p.betaaldatum IS NULL       -- ← onderdeel van de join
+GROUP BY w.werkgever_id, w.naam
+ORDER BY onbetaald DESC;</code></pre>
+        <div class="callout warn"><span class="lbl">De regel</span><p>Bij een <code>LEFT JOIN</code> horen voorwaarden over de rechtertabel in <code>ON</code>, niet in <code>WHERE</code>. Een voorwaarde over de rechtertabel in <code>WHERE</code> maakt van uw outer join een inner join — behalve als die voorwaarde <code>IS NULL</code> is, want dan doet u juist bewust een <em>anti-join</em> (sectie 6).</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.3b en 4.3c — de klassieke fout doorgronden</p>
+        <details class="q"><summary><span class="qn">1</span><span>In de foute query hierboven: welke werkgevers ontbreken in het resultaat, en waarom verdwijnen werkgevers zonder énige nota juist níét — terwijl u dat misschien wel zou verwachten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Werkgevers die al hun nota's hebben betaald, verdwijnen: hun samengevoegde rijen hebben allemaal een gevulde <code>betaaldatum</code>, dus <code>WHERE p.betaaldatum IS NULL</code> filtert ze allemaal weg — en daarmee de hele werkgever, want er blijft geen enkele rij over om te groeperen. Werkgevers zonder énige nota blijven wél staan: hun <code>LEFT JOIN</code>-rij heeft overal NULL, inclusief <code>p.betaaldatum</code>, dus de voorwaarde <code>IS NULL</code> is voor hen toevallig waar. Dit is verwarrend en dat is precies het punt: de query geeft een resultaat dat gedeeltelijk klopt, wat het opsporen van de fout lastiger maakt dan een schone foutmelding.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Self join, meer tabellen en fan-out</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>Self join</h4>
+        <p>Een tabel joinen met zichzelf, bijvoorbeeld om paren te vinden:</p>
+        <pre><code>-- Deelnemers die bij dezelfde werkgever werken
+SELECT a.deelnemer_id AS deelnemer_1,
+       b.deelnemer_id AS deelnemer_2,
+       a.werkgever_id
+FROM dienstverband a
+JOIN dienstverband b
+      ON a.werkgever_id = b.werkgever_id
+     AND a.deelnemer_id &lt; b.deelnemer_id;</code></pre>
+        <p>Twee dingen: aliassen zijn hier verplicht (anders is niet te zeggen welke kant u bedoelt), en <code>&lt;</code> in plaats van <code>&lt;&gt;</code> voorkomt dat u elk paar twee keer krijgt én dat iemand met zichzelf gepaard wordt.</p>
+        <h4>Joins met meer dan twee tabellen, en fan-out</h4>
+        <pre><code>SELECT w.sector,
+       count(DISTINCT d.deelnemer_id)    AS deelnemers,
+       round(avg(a.bedrag_jaarlijks), 2) AS gem_ouderdomsaanspraak
+FROM werkgever w
+JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+JOIN deelnemer d      ON d.deelnemer_id  = dv.deelnemer_id
+JOIN aanspraak a      ON a.deelnemer_id  = d.deelnemer_id
+                     AND a.soort = 'ouderdom'
+GROUP BY w.sector
+ORDER BY deelnemers DESC;</code></pre>
+        <p>Let op <code>count(DISTINCT d.deelnemer_id)</code>. Zonder <code>DISTINCT</code> telt u te hoog: een deelnemer met twee dienstverbanden verschijnt tweemaal, en na de join met <code>aanspraak</code> nog vaker. Dit is de <strong>fan-out</strong>: elke join met een één-op-veel-relatie vermenigvuldigt rijen.</p>
+        <div class="callout warn"><span class="lbl">Fan-out is de sluipmoordenaar van rapportages</span><p>Sommeert u <code>bedrag_jaarlijks</code> in bovenstaande query, dan telt u aanspraken meermaals mee zonder enige waarschuwing. De uitkomst ziet er plausibel uit en is structureel te hoog. Twee manieren om dat te voorkomen: <code>count(DISTINCT ...)</code> waar het om tellen gaat, of de aggregatie in een subquery of CTE doen vóór u joint — meestal de schonere aanpak (sectie 7).</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.4b — fan-out herkennen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een query telt per sector het totaal aan ouderdomsaanspraken door werkgever, dienstverband en aanspraak rechtstreeks aan elkaar te joinen en te sommeren. Waarom is dat fout, en valt het resultaat te hoog of te laag uit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Fan-out: een deelnemer met twee dienstverbanden verschijnt twee keer in het gejoinde resultaat, en zijn ouderdomsaanspraak wordt dus twee keer gesommeerd. Het resultaat is <strong>te hoog</strong>, en systematisch te hoog bij werkgevers in sectoren waar mensen vaker meerdere dienstverbanden hebben — zonder enige waarschuwing. De oplossing is de aanspraken per deelnemer eerst in een CTE te aggregeren, en pas daarna te joinen met de sector, zodat elke deelnemer maar één keer meetelt.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Verzamelingsoperatoren en subquery's</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Joins zetten tabellen <em>naast</em> elkaar; verzamelingsoperatoren zetten resultaten <em>onder</em> elkaar.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Operator</th><th>Doet</th></tr></thead>
+          <tbody>
+            <tr><td><code>UNION</code></td><td>Samenvoegen, <strong>duplicaten verwijderen</strong></td></tr>
+            <tr><td><code>UNION ALL</code></td><td>Samenvoegen, duplicaten behouden</td></tr>
+            <tr><td><code>INTERSECT</code></td><td>Alleen rijen die in beide voorkomen</td></tr>
+            <tr><td><code>EXCEPT</code></td><td>Rijen uit de eerste die niet in de tweede voorkomen</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Gebruik <code>UNION ALL</code> tenzij u echt wilt ontdubbelen.</strong> <code>UNION</code> moet sorteren of hashen om duplicaten te vinden, wat werk kost dat u vaak niet nodig heeft. <code>EXCEPT</code> is handig bij afstemming: welke deelnemers zitten wel in bron A en niet in bron B?</p>
+        <h4>Subquery's: scalair, IN, EXISTS</h4>
+        <p><strong>Scalaire subquery</strong> levert één waarde: <code>WHERE jaarsalaris &gt; (SELECT avg(jaarsalaris) FROM dienstverband)</code>. <strong><code>IN</code></strong> levert een lijst. <strong><code>EXISTS</code></strong> toetst bestaan:</p>
+        <pre><code>SELECT naam FROM werkgever w
+WHERE EXISTS (
+    SELECT 1 FROM premienota p
+    WHERE p.werkgever_id = w.werkgever_id AND p.betaaldatum IS NULL
+);</code></pre>
+        <p>En de tegenhanger, de <strong>anti-join</strong>:</p>
+        <pre><code>-- Werkgevers zonder enig dienstverband
+SELECT naam FROM werkgever w
+WHERE NOT EXISTS (
+    SELECT 1 FROM dienstverband dv WHERE dv.werkgever_id = w.werkgever_id
+);</code></pre>
+        <div class="callout warn"><span class="lbl">NOT IN versus NOT EXISTS</span><p>Herinner u deel 2: als de subquery ook maar één NULL oplevert, geeft <code>NOT IN</code> nooit rijen terug — zonder foutmelding. <code>NOT EXISTS</code> heeft dat probleem niet. Vuistregel voor de rest van uw loopbaan: <strong>gebruik <code>NOT EXISTS</code>, niet <code>NOT IN</code>.</strong></p></div>
+        <h4>Gecorreleerde subquery's</h4>
+        <p>Een subquery die verwijst naar de buitenste query, en dus per rij opnieuw wordt geëvalueerd — leesbaar en op kleine gegevensverzamelingen prima, maar het patroon schaalt slecht als de planner het niet kan herschrijven. De verzamelingsgerichte variant met een <code>LEFT JOIN</code> is meestal beter. Algemene neiging: <strong>schrijf verzamelingsgericht, tenzij de gecorreleerde vorm aantoonbaar leesbaarder is en de gegevens klein blijven.</strong> Meet het (deel 8).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.5f — de NOT IN-valkuil</p>
+        <details class="q"><summary><span class="qn">1</span><span>Deze twee query's lijken op elkaar, maar één ervan geeft een verrassend antwoord: <code>WHERE bsn NOT IN (SELECT bsn FROM deelnemer WHERE land &lt;&gt; 'NL')</code> tegenover een NOT IN op een NOT NULL-kolom. Wat gaat er mis, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><code>bsn</code> is nullable, en de subquery levert de BSN's van buitenlandse deelnemers — waaronder vrijwel zeker minstens één NULL. Zodra dat het geval is, geeft <code>NOT IN</code> <strong>nul rijen</strong>, ongeacht de data, zonder foutmelding of waarschuwing. De query op een gegarandeerd <code>NOT NULL</code>-kolom (zoals <code>werkgever_id</code> in <code>premienota</code>) heeft dit probleem niet. Repareer met <code>NOT EXISTS</code>: <code>WHERE NOT EXISTS (SELECT 1 FROM deelnemer x WHERE x.land &lt;&gt; 'NL' AND x.bsn = d.bsn)</code>.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Afgeleide tabellen en CTE's</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een subquery in de <code>FROM</code> is een <strong>afgeleide tabel</strong> — de standaardoplossing voor "een gemiddelde van een telling": eerst tellen per werkgever, dan middelen per sector. Een afgeleide tabel heeft in PostgreSQL een alias nodig, ook als u hem nergens gebruikt.</p>
+        <h4>CTE's met WITH</h4>
+        <p>Dezelfde query, leesbaarder:</p>
+        <pre><code>WITH per_werkgever AS (
+    SELECT w.sector, w.werkgever_id, count(dv.deelnemer_id) AS aantal
+    FROM werkgever w
+    LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+    GROUP BY w.sector, w.werkgever_id
+)
+SELECT sector, round(avg(aantal), 1) AS gem_deelnemers_per_werkgever
+FROM per_werkgever
+GROUP BY sector
+ORDER BY gem_deelnemers_per_werkgever DESC;</code></pre>
+        <p>Een <strong>CTE</strong> (common table expression, "WITH-query") is een benoemd tussenresultaat: van boven naar beneden leesbaar, meerdere keren bruikbaar, en makkelijk stap voor stap te testen. Meerdere CTE's mogen, en mogen naar elkaar verwijzen.</p>
+        <div class="callout note"><span class="lbl">Een prestatie-opmerking die u moet kennen</span><p>In oudere PostgreSQL-versies was een CTE altijd een <em>optimization fence</em>: hij werd afzonderlijk uitgevoerd en de planner mocht hem niet met de rest samenvoegen. Sinds versie 12 worden CTE's die één keer gebruikt worden standaard wél samengevoegd, tenzij u <code>MATERIALIZED</code> schrijft. "CTE's zijn traag" uit oudere bronnen is dus achterhaald — controleer welke versie u draait (Toolbijlage) voordat u iets aanneemt.</p></div>
+        <h4>Recursieve CTE's</h4>
+        <p>Voor hiërarchieën en reeksen: een <strong>ankerdeel</strong>, <code>UNION ALL</code>, en een <strong>recursief deel</strong> dat naar de CTE zelf verwijst — met een stopvoorwaarde.</p>
+        <pre><code>WITH RECURSIVE maanden AS (
+    SELECT DATE '2025-01-01' AS maand
+    UNION ALL
+    SELECT maand + INTERVAL '1 month'
+    FROM maanden
+    WHERE maand &lt; DATE '2025-12-01'
+)
+SELECT maand FROM maanden;</code></pre>
+        <div class="callout warn"><span class="lbl">Waarschuwing</span><p>Vergeet u de stopvoorwaarde, dan loopt de query oneindig door. Test recursieve CTE's altijd eerst met een harde <code>LIMIT</code>. Voor eenvoudige reeksen is <code>generate_series</code> overigens korter en veiliger — gebruik recursie voor echte hiërarchieën (organisatiestructuren, stuklijsten), niet voor reeksen.</p></div>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vensterfuncties, en dezelfde vraag op vier manieren</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een vensterfunctie rekent over een groep rijen <strong>zonder die rijen samen te vouwen</strong> — het verschil met een gewone aggregatie. Elke werkgever blijft een eigen rij, maar krijgt er bijvoorbeeld het sectortotaal naast:</p>
+        <pre><code>SELECT w.sector, w.naam,
+       count(dv.deelnemer_id)                                    AS deelnemers,
+       sum(count(dv.deelnemer_id)) OVER (PARTITION BY w.sector)  AS deelnemers_in_sector
+FROM werkgever w
+LEFT JOIN dienstverband dv ON dv.werkgever_id = w.werkgever_id
+GROUP BY w.sector, w.werkgever_id, w.naam;</code></pre>
+        <p>De meest bruikbare: <code>row_number()</code> (volgnummer binnen de partitie), <code>rank()</code>/<code>dense_rank()</code> (rangorde), <code>sum() OVER (…)</code> (lopend of groepstotaal), <code>lag()</code>/<code>lead()</code> (waarde uit de vorige/volgende rij). Het patroon dat u het vaakst nodig heeft — de meest recente rij per groep — filtert u op <code>rn = 1</code> in een <em>omhullende</em> query, want vensterfuncties worden pas in de <code>SELECT</code>-fase berekend en zijn in <code>WHERE</code> nog niet beschikbaar (opnieuw de uitvoeringsvolgorde uit deel 3). Dit is een kennismaking; vensterfuncties worden in niveau 2 volledig behandeld.</p>
+        <h4>Dezelfde vraag, vier manieren</h4>
+        <p><em>"Welke werkgevers hebben geen enkel dienstverband?"</em> — vier vormen geven hier hetzelfde antwoord: <strong>1. NOT EXISTS</strong> (anti-join, aanbevolen), <strong>2. LEFT JOIN met IS NULL</strong> (even goed, andere leesbaarheid), <strong>3. NOT IN</strong> (werkt hier, maar is een tijdbom zodra de kolom ooit NULL kan worden), <strong>4. EXCEPT</strong> (leesbaar bij het vergelijken van sleutelverzamelingen, onhandig zodra u er kolommen bij wilt).</p>
+        <div class="callout tip"><span class="lbl">Waarom dit werkt</span><p>Dat vier vormen hetzelfde antwoord geven, is geen toeval maar een gevolg van het relationele model uit deel 2: bewerkingen zijn gesloten en herschrijfbaar. De keuze gaat daarom bijna nooit over snelheid en bijna altijd over leesbaarheid en robuustheid. Meet als u twijfelt (deel 8); gok nooit.</p></div>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Veelgemaakte fouten, en aansluiting op de certificering</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Oplossing</th></tr></thead>
+          <tbody>
+            <tr><td><code>INNER</code> waar <code>LEFT</code> bedoeld is</td><td>Rijen ontbreken stil</td><td>Vraag: gaat de vraag over de linkertabel?</td></tr>
+            <tr><td>Voorwaarde over rechtertabel in <code>WHERE</code> bij <code>LEFT JOIN</code></td><td>Wordt een inner join</td><td>Voorwaarde in <code>ON</code></td></tr>
+            <tr><td><code>count(*)</code> na een <code>LEFT JOIN</code></td><td>Telt 1 voor "geen match"</td><td><code>count(kolom)</code></td></tr>
+            <tr><td>Fan-out bij één-op-veel</td><td>Totalen te hoog</td><td><code>count(DISTINCT …)</code> of eerst aggregeren in een CTE</td></tr>
+            <tr><td><code>NOT IN</code> met mogelijke NULL</td><td>Nooit rijen</td><td><code>NOT EXISTS</code></td></tr>
+            <tr><td><code>NATURAL JOIN</code></td><td>Breekt bij een nieuwe kolom</td><td><code>ON</code> of <code>USING</code></td></tr>
+            <tr><td>Recursieve CTE zonder stopvoorwaarde</td><td>Oneindige query</td><td>Stopvoorwaarde + <code>LIMIT</code> bij testen</td></tr>
+            <tr><td>Vensterfunctie in <code>WHERE</code></td><td>Foutmelding</td><td>Omhullende query met <code>WHERE rn = 1</code></td></tr>
+          </tbody>
+        </table></div>
+        <h4>Wat het examen hierover vraagt</h4>
+        <p>Paraat moet zijn: de jointypen en hun resultaat, inclusief het gedrag bij ontbrekende matches; het verschil tussen een voorwaarde in <code>ON</code> en in <code>WHERE</code> bij een outer join; <code>NOT IN</code> versus <code>NOT EXISTS</code> in aanwezigheid van NULL; de verzamelingsoperatoren en het verschil tussen <code>UNION</code> en <code>UNION ALL</code>; de opbouw van een CTE, inclusief het recursieve patroon; de basis van vensterfuncties.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>Inner join</strong> — alleen rijen met een match aan beide kanten. <strong>Outer join</strong> — behoudt rijen zonder match, aangevuld met NULL. <strong>Anti-join</strong> — rijen zonder tegenhanger; <code>NOT EXISTS</code> of <code>LEFT JOIN … IS NULL</code>. <strong>Fan-out</strong> — rijvermenigvuldiging door een join op een één-op-veel-relatie. <strong>Self join</strong> — een tabel met zichzelf joinen. <strong>Gecorreleerde subquery</strong> — subquery die per rij van de buitenste query wordt geëvalueerd. <strong>Afgeleide tabel</strong> — subquery in de <code>FROM</code>, met verplichte alias. <strong>CTE</strong> — benoemd tussenresultaat met <code>WITH</code>. <strong>Vensterfunctie</strong> — rekent over een groep rijen zonder ze samen te vouwen. <strong>Optimization fence</strong> — constructie die de planner belet te herschrijven.</p>
+        <p><strong>Vooruit naar deel 5.</strong> U gaat het model achter deze database beoordelen — inclusief de bewuste ontwerpfouten die erin zijn gelaten.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 5</h3>
+      <p>Deel 5 gaat over datamodellering en normalisatie: hoe de tabellen die u in dit deel joinde tot stand kwamen, en waarom ze bewust zo zijn opgesplitst.</p>
+      <a class="btn" href="deel-05.html">Deel 5 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 4 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-04-sql-verdieping-joins-subquery-s-en-cte-s/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm4_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 8 — Indexen en views | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 8 (EDB Associate): EXPLAIN en EXPLAIN ANALYZE lezen, scantypen, B-tree-, partiële en expressie-indexen, wanneer een index juist niet helpt, en views versus materialized views — meten in plaats van geloven.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-08.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+td code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 8</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 1 (EDB Associate) · Deel 8 van 30</p>
+  <h1>Indexen<br><em>en views</em>.</h1>
+  <p class="hero__lead">Ruud belt: "de database is traag." Dat kan van alles betekenen, en de eerste vraag is nooit "welke index moet erbij" maar "wat precies is er traag, en sinds wanneer". Dit deel leert u EXPLAIN en EXPLAIN ANALYZE lezen, de scantypen herkennen, indexen bewust aanmaken — en vooral: wanneer een sequentiële scan juist de beste keuze is. De houding die u meeneemt: meten in plaats van geloven.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>scantypen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Associate-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB (EDB) — raadpleeg altijd de actuele examenblauwdruk van EDB. PostgreSQL-versiedetails en klikpaden staan in de Toolbijlage, niet hier, zodat de reader bruikbaar blijft als versies opschuiven.</div>
+  <div class="trail">Niveau 1: ➊ Databases en het DBMS-landschap: waarom PostgreSQL → ➋ Het relationele model en de PostgreSQL-architectuur → ➌ SQL basis: SELECT, filteren, sorteren, aggregeren → ➍ SQL verdieping: joins, subquery's en CTE's → ➎ Datamodellering en normalisatie → ➏ DDL, datatypen en constraints → ➐ Transacties, ACID en MVCC → <b>➑ Indexen en views (hier)</b> → ➒ Rollen, rechten en security → ➓ Capstone: de Meridiaan-datalaag</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat: "traag" betekent zelden wat u denkt</a></li>
+      <li><a href="#s2" data-target="s2">Hoe een B-tree-index werkt</a></li>
+      <li><a href="#s3" data-target="s3">EXPLAIN en EXPLAIN ANALYZE lezen</a></li>
+      <li><a href="#s4" data-target="s4">De scantypen, en wanneer sequentieel goed is</a></li>
+      <li><a href="#s5" data-target="s5">Een index aanmaken, en de kolomvolgorde</a></li>
+      <li><a href="#s6" data-target="s6">Partiële, expressie- en covering indexen</a></li>
+      <li><a href="#s7" data-target="s7">Wat een index kost, en meten in plaats van geloven</a></li>
+      <li><a href="#s8" data-target="s8">Views en materialized views</a></li>
+      <li><a href="#s9" data-target="s9">Veelgemaakte fouten, en aansluiting op de certificering</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat: "traag" betekent zelden wat u denkt</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Na dit deel kunt u:</p>
+        <ul>
+          <li>een queryplan lezen en de belangrijkste knopen benoemen;</li>
+          <li>het verschil tussen <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code> toepassen en de getallen interpreteren;</li>
+          <li>de scantypen herkennen en uitleggen wanneer elk passend is;</li>
+          <li>beargumenteren waarom een sequentiële scan soms de beste keuze is;</li>
+          <li>indexen aanmaken, inclusief samengestelde, partiële en expressie-indexen;</li>
+          <li>de kosten van een index benoemen en ongebruikte indexen opsporen;</li>
+          <li>views en materialized views inzetten en het verschil motiveren.</li>
+        </ul>
+        <div class="callout tip"><span class="lbl">De houding die dit deel moet opleveren</span><p>Meten in plaats van geloven. Prestatiefolklore is in dit vakgebied hardnekkig, en vrijwel elke bewering die iemand niet zelf met <code>EXPLAIN ANALYZE</code> heeft gecontroleerd, is een gerucht.</p></div>
+        <p>Ruud belt: "de database is traag." Dat kan van alles betekenen — één query, alle query's, sinds vanochtend, sinds de laatste release, alleen voor één gebruiker — en die vijf hebben verschillende oorzaken en oplossingen. <strong>De eerste vraag is nooit "welke index moet erbij" maar "wat precies is er traag, en sinds wanneer".</strong> Vier oorzaken, in volgorde van hoe vaak ze voorkomen: een ontbrekende index, verouderde statistieken (deel 2: autovacuum), een query die meer opvraagt dan nodig (<code>SELECT *</code>, fan-out uit deel 4), of vergrendeling (deel 7: de query wacht, hij rekent niet). Alleen bij de eerste helpt een index — bij vergrendeling helpt hij niets, en dat is precies het geval waarin mensen er het vaakst een toevoegen.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Hoe een B-tree-index werkt</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De standaardindex in PostgreSQL is een <strong>B-tree</strong>: een gebalanceerde boom waarin de waarden gesorteerd staan. Zoeken werkt zoals in een telefoonboek: u slaat het in het midden open, kijkt of u te ver bent, en halveert. Bij acht miljoen rijen heeft u zo ongeveer drieëntwintig stappen nodig in plaats van acht miljoen.</p>
+        <p>Elk blad van de boom bevat de waarde plus een verwijzing (<code>ctid</code>) naar de fysieke plek van de rij in de tabel. De index kent dus de <em>waarde</em>, niet de hele rij — vandaar dat de database na het doorzoeken van de index meestal ook nog de tabel moet raadplegen.</p>
+        <figure><img src="figuren/figuur-8-1.png" alt="B-tree met wortel, tussenknopen en bladeren, met de verwijzing naar de tabelrij"><figcaption>Figuur 8-1 — B-tree met wortel, tussenknopen en bladeren, met de verwijzing naar de tabelrij</figcaption></figure>
+        <p>Waar een B-tree goed in is: <code>=</code>, <code>&lt;</code>/<code>&gt;</code>/<code>BETWEEN</code>, <code>IN (…)</code>, <code>ORDER BY</code> op dezelfde kolommen (de index is al gesorteerd), <code>LIKE 'abc%'</code>, <code>IS NULL</code>. Niet bruikbaar: <code>LIKE '%abc'</code> — geen begin om op te zoeken. Dat <code>ORDER BY</code> uit een index kan komen, is belangrijker dan het lijkt: het scheelt een sorteerslag, en bij <code>ORDER BY … LIMIT 10</code> kan de database stoppen na tien rijen in plaats van alles te sorteren.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">EXPLAIN en EXPLAIN ANALYZE lezen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>EXPLAIN SELECT * FROM deelnemer WHERE achternaam = 'Jansen';
+
+Seq Scan on deelnemer  (cost=0.00..205.00 rows=320 width=97)
+  Filter: (achternaam = 'Jansen'::text)</code></pre>
+        <p><strong><code>Seq Scan</code></strong> — het gekozen scantype. <strong><code>cost=0.00..205.00</code></strong> — geschatte kosten (opstart…totaal) in een willekeurige eenheid, niet in seconden — alleen de verhouding telt. <strong><code>rows=320</code></strong> — geschat aantal rijen. <strong><code>Filter</code></strong> — de voorwaarde die per rij wordt toegepast. <strong><code>EXPLAIN</code> voert de query niet uit</strong> — veilig en snel, ook bij een <code>UPDATE</code> of <code>DELETE</code>. Plannen leest u <strong>van binnen naar buiten en van onder naar boven</strong>: de diepst ingesprongen knopen draaien het eerst.</p>
+        <pre><code>EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM deelnemer WHERE achternaam = 'Jansen';
+
+Seq Scan on deelnemer  (cost=0.00..205.00 rows=320 width=97)
+                       (actual time=0.021..1.842 rows=298 loops=1)
+  Filter: (achternaam = 'Jansen'::text)
+  Rows Removed by Filter: 7702
+  Buffers: shared hit=105</code></pre>
+        <p>Nu staat er ook de werkelijkheid: <strong><code>actual time</code></strong> in echte milliseconden, <strong><code>rows=</code></strong> het werkelijke aantal, <strong><code>loops</code></strong> — let op: <code>actual time</code> en <code>rows</code> zijn <em>per loop</em>, staat er <code>loops=1000</code>, vermenigvuldig dan. <strong><code>Rows Removed by Filter</code></strong> — hoeveel rijen zijn gelezen en weggegooid; een hoog getal is het duidelijkste signaal van een ontbrekende index.</p>
+        <div class="callout tip"><span class="lbl">Het belangrijkste dat u in een plan zoekt</span><p>Het verschil tussen <code>rows=</code> (geschat) en <code>actual rows=</code>. Wijken die een factor tien of meer af, dan kloppen de statistieken niet en is elk plan dat daarop gebouwd is verdacht — het moment voor <code>ANALYZE</code>.</p></div>
+        <div class="callout warn"><span class="lbl">Waarschuwing</span><p><code>EXPLAIN ANALYZE</code> <strong>voert de query uit</strong>. Op een <code>UPDATE</code> of <code>DELETE</code> betekent dat: de wijziging vindt echt plaats. Wilt u een schrijvende query analyseren, zet hem dan in een transactie en draai terug: <code>BEGIN; EXPLAIN ANALYZE UPDATE …; ROLLBACK;</code> — precies waar deel 7 voor is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.1c en 8.1f — een plan interpreteren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Op 8.000 deelnemers met één achternaam toont EXPLAIN ANALYZE "Rows Removed by Filter: 7702". Wat zegt dat, en wat waarschuwt u een collega die EXPLAIN ANALYZE op een UPDATE in productie wil draaien?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ongeveer 7.700 van de 8.000 gelezen rijen (96%) zijn gelezen en weer weggegooid — het duidelijkste signaal van een ontbrekende index: de query leest bijna de hele tabel om er een handvol rijen uit te filteren. Voor de collega: <code>EXPLAIN ANALYZE</code> voert de query <strong>werkelijk uit</strong>. Op een <code>UPDATE</code> betekent dat dat de wijziging echt plaatsvindt. Waarschuw dat het in een transactie moet met <code>ROLLBACK</code> erachter, of gebruik gewoon <code>EXPLAIN</code> zonder <code>ANALYZE</code> als alleen het plan nodig is.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De scantypen, en wanneer sequentieel goed is</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong><code>Seq Scan</code></strong> — de hele tabel van begin tot eind; goedkoop per rij, duur in totaal. <strong><code>Index Scan</code></strong> — zoek in de index, haal per treffer de rij uit de tabel; optimaal bij weinig treffers. <strong><code>Index Only Scan</code></strong> — de index bevat alle gevraagde kolommen, de tabel hoeft niet geraadpleegd te worden; het snelst wat er is, vereist een actuele zichtbaarheidskaart (bijgewerkt door vacuum). <strong><code>Bitmap Heap Scan</code></strong> — eerst treffers verzamelen in een bitmap, dan de tabel één keer in fysieke volgorde doorlopen; efficiënt bij een middelgroot aantal treffers.</p>
+        <figure><img src="figuren/figuur-8-2.png" alt="De vier scantypen op één as van aantal treffers, met het omslagpunt tussen index en sequentieel"><figcaption>Figuur 8-2 — De vier scantypen op één as van "aantal treffers", met het omslagpunt tussen index en sequentieel</figcaption></figure>
+        <div class="callout warn"><span class="lbl">De belangrijkste correctie van dit deel</span><p>Deelnemers zien <code>Seq Scan</code> en denken meteen "fout". Een sequentiële scan is de <strong>beste</strong> keuze wanneer de tabel klein is, wanneer u een groot deel van de rijen nodig heeft (boven ruwweg 5-10% is sequentieel lezen sneller, want schijven zijn beter in achter elkaar lezen dan in springen), of wanneer u toch alles nodig heeft zoals bij <code>sum()</code> over de hele tabel. Zie u een <code>Seq Scan</code> waar u een index verwacht, is de vraag niet "hoe dwing ik een index af" maar <strong>"waarom denkt de planner dat dit goedkoper is, en heeft hij gelijk?"</strong> Meestal heeft hij gelijk.</p></div>
+        <h4>Joinalgoritmen</h4>
+        <p>Drie manieren om een join uit te voeren; de planner kiest. <strong>Nested Loop</strong> — voor elke rij links, zoek bijpassende rijen rechts; goed als links weinig rijen heeft en rechts een index, slecht als beide groot zijn. <strong>Hash Join</strong> — bouw een hashtabel van de kleinste kant; goed bij grote verzamelingen zonder bruikbare index, vereist <code>work_mem</code> — past de hashtabel er niet in, ziet u <code>Batches: 4</code> of hoger, een signaal. <strong>Merge Join</strong> — beide kanten gesorteerd doorlopen, goed als beide al gesorteerd zijn.</p>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Een index aanmaken, en de kolomvolgorde</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <pre><code>CREATE INDEX deelnemer_achternaam_idx ON deelnemer (achternaam);</code></pre>
+        <p>Naamgeving volgens de conventie uit deel 6: <code>&lt;tabel&gt;_&lt;kolom(men)&gt;_idx</code>. <strong>Automatisch aangemaakt</strong> worden indexen voor <code>PRIMARY KEY</code> en <code>UNIQUE</code>. <strong>Niet</strong> automatisch: de verwijzende kolom van een foreign key — de valkuil uit deel 6.</p>
+        <div class="callout note"><span class="lbl">Op productie</span><p><code>CREATE INDEX</code> neemt een lock die schrijvers blokkeert (deel 7). Gebruik daarom <code>CREATE INDEX CONCURRENTLY</code>: blokkeert geen schrijvers, maar duurt langer, kan niet in een transactie, en kan mislukken — dan blijft er een ongeldige index achter die u moet opruimen.</p></div>
+        <h4>Samengestelde indexen: de kolomvolgorde</h4>
+        <pre><code>CREATE INDEX premienota_wg_periode_idx
+    ON premienota (werkgever_id, periode_jaar, periode_maand);</code></pre>
+        <p>Een samengestelde index is bruikbaar voor een <strong>voorvoegsel</strong> van zijn kolommen: filteren op <code>werkgever_id</code> alleen, of <code>werkgever_id</code> + <code>periode_jaar</code>, gebruikt de index; filteren op alleen <code>periode_jaar</code> (de tweede kolom) niet. Vuistregel: <strong>zet de kolom waarop u altijd filtert vooraan, en gelijkheidsvoorwaarden vóór bereikvoorwaarden</strong> — voor <code>WHERE werkgever_id = 42 AND periode_jaar &gt;= 2024</code> is een index op <code>(werkgever_id, periode_jaar)</code> beter dan <code>(periode_jaar, werkgever_id)</code>, omdat de index dan direct naar werkgever 42 kan springen.</p>
+        <p><strong>Eén samengestelde index is vaak beter dan drie losse.</strong> Drie losse indexen kunnen via de bitmapmethode gecombineerd worden, maar dat is duurder dan één index die het in één keer afhandelt — en het kost drie keer zoveel onderhoud bij elke schrijfbewerking.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Partiële, expressie- en covering indexen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Partiële index</strong> — een index over een deel van de tabel: <code>CREATE INDEX mutatie_open_idx ON mutatie (aangemeld_op) WHERE verwerkt_op IS NULL;</code> In de casus is circa 12% van de mutaties onverwerkt — deze index is dus ongeveer een achtste van een volledige index, wordt alleen bijgewerkt als een rij aan de voorwaarde voldoet, en is precies wat de verwerkingsquery uit deel 7 nodig heeft. De voorwaarde in de index moet overeenkomen met wat er in de <code>WHERE</code> van uw query staat.</p>
+        <h4>Expressie-indexen</h4>
+        <pre><code>CREATE INDEX deelnemer_achternaam_lower_idx ON deelnemer (lower(achternaam));</code></pre>
+        <div class="callout warn"><span class="lbl">De klassieke fout die dit oplost</span><p>Zodra u een functie op een kolom loslaat in de <code>WHERE</code>, kan een gewone index niet meer gebruikt worden. <code>WHERE extract(year FROM geboortedatum) = 1960</code> gebruikt geen index op <code>geboortedatum</code>; <code>WHERE geboortedatum &gt;= DATE '1960-01-01' AND geboortedatum &lt; DATE '1961-01-01'</code> wel — precies de opmerking bij opdracht 3.3c uit deel 3. Vuistregel: <strong>herschrijf de query als dat kan, en maak pas een expressie-index als het niet kan.</strong> De herschrijving is gratis; de index kost onderhoud.</p></div>
+        <h4>Covering indexen met INCLUDE</h4>
+        <pre><code>CREATE INDEX dienstverband_deelnemer_incl_idx
+    ON dienstverband (deelnemer_id) INCLUDE (jaarsalaris);</code></pre>
+        <p>Kolommen achter <code>INCLUDE</code> staan in de index maar zijn niet doorzoekbaar. Nut: een query die alleen <code>deelnemer_id</code> en <code>jaarsalaris</code> nodig heeft, kan volledig uit de index beantwoord worden — een <code>Index Only Scan</code>, zonder de tabel aan te raken.</p>
+        <h4>De andere indextypen</h4>
+        <p>B-tree dekt vrijwel alles. <strong>GIN</strong> — zoeken binnen een waarde (<code>jsonb</code>, arrays, tekstzoeken). <strong>GiST</strong> — geometrie, bereiken, en de exclusion constraint uit deel 6 (u gebruikte al een GiST-index zonder het te weten). <strong>BRIN</strong> — zeer grote tabellen waarvan de fysieke volgorde overeenkomt met de waarde (tijdreeksen). <strong>Hash</strong> — alleen <code>=</code>, zelden nuttig.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.3b, 8.3c en 8.3e — een functie om de kolom repareren</p>
+        <details class="q"><summary><span class="qn">1</span><span>Er staat een index op geboortedatum, maar <code>WHERE extract(year FROM geboortedatum) = 1960</code> gebruikt hem niet. Wat is er mis, en welke van de twee mogelijke oplossingen verdient de voorkeur?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Er staat een functie (<code>extract</code>) om de kolom in de <code>WHERE</code>, waardoor de gewone index op de ruwe waarde onbruikbaar is — de planner kiest een <code>Seq Scan</code> met de functie als filter. Twee oplossingen: de query herschrijven naar <code>geboortedatum &gt;= DATE '1960-01-01' AND geboortedatum &lt; DATE '1961-01-01'</code>, of een expressie-index maken op <code>(extract(year FROM geboortedatum))</code>. <strong>De herschrijving verdient de voorkeur</strong>: hij is gratis (geen extra schijfruimte, geen extra onderhoud bij elke schrijfbewerking) en de bestaande index doet meteen het werk. Een expressie-index maakt u pas als herschrijven niet kan, bijvoorbeeld omdat de query uit pakketsoftware komt.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wat een index kost, en meten in plaats van geloven</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Indexen zijn niet gratis: <strong>schijfruimte</strong> (een index op een tekstkolom kan tientallen procenten van de tabelomvang zijn), <strong>schrijfsnelheid</strong> (elke <code>INSERT</code>/<code>UPDATE</code>/<code>DELETE</code> moet elke betrokken index bijwerken), <strong>onderhoud</strong> (indexen krijgen ook bloat, deel 7), en <strong>plannerwerk</strong>. De afweging: een index die één query per dag versnelt en duizend schrijfbewerkingen per uur vertraagt, is een verlies. Meet beide kanten.</p>
+        <h4>Wanneer een index niet gebruikt wordt</h4>
+        <p>Zeven mogelijke antwoorden, in volgorde: de tabel is te klein; de query raakt te veel rijen (boven 5-10%); er staat een functie om de kolom (sectie 6); typemismatch (impliciete casts); verouderde statistieken (draai <code>ANALYZE</code>); de kolomvolgorde in een samengestelde index klopt niet; of <code>LIKE '%iets'</code> zonder voorvoegsel. Voor onderzoek: <code>SET enable_seqscan = off;</code> — een <strong>diagnosemiddel, geen oplossing</strong>, nooit in productiecode.</p>
+        <h4>Ongebruikte indexen opsporen</h4>
+        <pre><code>SELECT relname, indexrelname, idx_scan
+FROM pg_stat_user_indexes ORDER BY idx_scan;</code></pre>
+        <div class="callout note"><span class="lbl">Drie voorbehouden voordat u gaat verwijderen</span><p>De teller loopt sinds de laatste herstart — kijk over een voldoende lange periode; een index voor de jaarafsluiting wordt elf maanden niet gebruikt en is toch nodig; een index die een <code>UNIQUE</code>-constraint afdwingt is niet overbodig, ook al wordt hij nooit voor zoeken gebruikt.</p></div>
+        <h4>Meten in plaats van geloven</h4>
+        <p>De werkwijze: stel vast wat traag is, draai <code>EXPLAIN (ANALYZE, BUFFERS)</code>, zoek de knoop met de meeste tijd, controleer schatting tegen werkelijkheid, verander <strong>één ding</strong>, meet opnieuw. Prestatiefolklore om te wantrouwen: "<code>count(1)</code> is sneller dan <code>count(*)</code>" (identiek), "meer indexen is beter" (nee), "CTE's zijn altijd traag" (niet meer sinds versie 12, deel 4).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.7 — diagnose van drie meldingen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Drie meldingen: A) "het portaal is sinds vanochtend traag, alles duurt lang, ook inloggen"; B) "dit rapport draaide vorige week in 2 seconden, nu in 4 minuten, de query is niet veranderd"; C) "deze ene query is altijd al traag geweest, maar nu klaagt de business erover". Voor welke is een nieuwe index waarschijnlijk het antwoord?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Alleen bij <strong>C</strong>. Bij A helpt een index niets — als álles traag is, inclusief eenvoudige handelingen zoals inloggen, is het vrijwel nooit een ontbrekende index (die zou maar één soort query raken); waarschijnlijker is vergrendeling of een resourceprobleem, te onderzoeken met <code>pg_stat_activity</code>. Bij B is de query ongewijzigd maar het gedrag wel — waarschijnlijkste oorzaak zijn verouderde statistieken waardoor de planner is omgeslagen naar een ander plan; oplossing is <code>ANALYZE</code>, niet per se een nieuwe index. Bij C is er een structureel ontbrekende index of een te brede query — dit is het geval waarin optimalisatie echt loont. De les: mensen voegen indexen toe bij melding A, waar die de minste kans van slagen hebben.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Views en materialized views</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>view</strong> is een opgeslagen query met een naam. De view slaat <strong>geen gegevens</strong> op — bij elke bevraging wordt de onderliggende query uitgevoerd (de rewriter-fase uit deel 2). Nuttig voor: een complexe query hergebruiken in plaats van hem op vijf plekken te kopiëren; <strong>begrippen vastleggen</strong> (wat "actieve deelnemer" betekent staat dan op één plek — precies wat er bij Meridiaan ontbrak toen drie afdelingen drie aantallen rapporteerden); toegang beperken (deel 9). Een view is bijwerkbaar als hij eenvoudig genoeg is (één tabel, geen aggregatie).</p>
+        <div class="callout note"><span class="lbl">Waarschuwing</span><p>Views op views op views: elke laag is leesbaar op zichzelf, maar het geheel is na drie lagen ondoorgrondelijk — vooral omdat het queryplan alle lagen tegelijk toont. Twee lagen is meestal het maximum dat u later nog kunt onderhouden.</p></div>
+        <h4>Materialized views</h4>
+        <p>Een materialized view <strong>slaat het resultaat wél op</strong>. Bevragen is snel, maar de gegevens zijn zo oud als de laatste verversing: <code>REFRESH MATERIALIZED VIEW … ;</code> (lockt lezers) of <code>REFRESH MATERIALIZED VIEW CONCURRENTLY …;</code> (lockt niet, vereist een unieke index op de view). Dit is de nette vorm van denormalisatie uit deel 5: expliciet afgeleid, met een ingebouwd verversmechanisme.</p>
+        <div class="callout warn"><span class="lbl">Wat u er zelf bij moet regelen</span><p>Hoe oud de gegevens mogen zijn, en wat er gebeurt als de verversing faalt. Een materialized view die stilletjes drie weken niet is ververst, ziet er precies hetzelfde uit als een actuele.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.9c en 8.9f — een materialized view voor Karin</p>
+        <details class="q"><summary><span class="qn">1</span><span>U meet het verschil tussen de live query voor Karins maandrapport en een materialized view op de casusomvang (8.000 deelnemers, 5.500 nota's). Wat is de belangrijkste bevinding, en wat hoort er sowieso in de toelichting aan Karin te staan?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Op de casusomvang is het verschil klein — enkele milliseconden tegen enkele milliseconden. <strong>Dat is zelf de bevinding:</strong> op deze schaal is een materialized view niet nodig; pas op productieomvang (miljoenen nota's) kantelt het. In de toelichting aan Karin hoort sowieso te staan: hoe oud de gegevens maximaal zijn, wanneer ze ververst worden, en wat er gebeurt als de verversing faalt — een materialized view die stilletjes stopt met verversen, ziet er identiek uit aan een actuele, dus dat risico moet expliciet benoemd en belegd zijn (bijvoorbeeld met een tijdstempel van de laatste verversing in de view zelf).</div></details>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Veelgemaakte fouten, en aansluiting op de certificering</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Oplossing</th></tr></thead>
+          <tbody>
+            <tr><td>Index toevoegen zonder te meten</td><td>Kosten zonder baten</td><td><code>EXPLAIN ANALYZE</code> vóór en ná</td></tr>
+            <tr><td><code>Seq Scan</code> als fout zien</td><td>Onnodige indexen</td><td>Kijk naar tabelgrootte en selectiviteit</td></tr>
+            <tr><td>Functie om de kolom in <code>WHERE</code></td><td>Index onbruikbaar</td><td>Query herschrijven of expressie-index</td></tr>
+            <tr><td>Drie losse indexen waar één samengestelde hoort</td><td>Duurder, trager schrijven</td><td>Eén index, juiste kolomvolgorde</td></tr>
+            <tr><td>Meerdere wijzigingen tegelijk</td><td>Je weet niet wat werkte</td><td>Eén ding per keer</td></tr>
+            <tr><td>Materialized view zonder bewaakte verversing</td><td>Verouderde cijfers die actueel ogen</td><td>Verversing monitoren</td></tr>
+            <tr><td>Views op views op views</td><td>Onleesbaar plan, onvindbare fouten</td><td>Maximaal twee lagen</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Wat het examen hierover vraagt</h4>
+        <p>Paraat moet zijn: de scantypen en wanneer elk gekozen wordt; het verschil tussen <code>EXPLAIN</code> en <code>EXPLAIN ANALYZE</code>; de betekenis van <code>cost</code>, <code>rows</code>, <code>actual time</code>, <code>loops</code> en <code>Rows Removed by Filter</code>; welke indexen automatisch ontstaan en welke niet (foreign keys!); samengestelde indexen en de voorvoegselregel; partiële en expressie-indexen; <code>CREATE INDEX CONCURRENTLY</code>; het verschil tussen een view en een materialized view.</p>
+        <h4>Kernbegrippen</h4>
+        <p><strong>B-tree</strong> — de standaardindexstructuur, gesorteerd en gebalanceerd. <strong>Selectiviteit</strong> — welk deel van de tabel aan een voorwaarde voldoet. <strong>Seq Scan/Index Scan/Index Only Scan/Bitmap Heap Scan</strong> — de vier scantypen. <strong>Nested Loop/Hash Join/Merge Join</strong> — de drie joinalgoritmen. <strong>Samengestelde index</strong> — bruikbaar voor een voorvoegsel. <strong>Partiële index</strong> — index over een deelverzameling van de rijen. <strong>Expressie-index</strong> — index op een berekening. <strong>Covering index</strong> — index die alle gevraagde kolommen bevat (<code>INCLUDE</code>). <strong>View</strong> — opgeslagen query, geen opgeslagen gegevens. <strong>Materialized view</strong> — opgeslagen resultaat, met verversing.</p>
+        <p><strong>Vooruit naar deel 9.</strong> Dan is het laatste van de zes problemen uit deel 1 opgelost — de stagiair die bij de burgerservicenummers kon.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 9</h3>
+      <p>Deel 9 gaat over rollen, rechten en security. Dat wordt door een andere sessie gemaakt — deze link is alvast klaar voor wanneer dat deel verschijnt.</p>
+      <a class="btn" href="deel-09.html">Deel 9 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 8 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-1/deel-08-indexen-en-views/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dbm8_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

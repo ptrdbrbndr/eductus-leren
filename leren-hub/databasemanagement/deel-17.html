@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 17 — Back-up en herstel | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 17 (EDB Professional): RPO en RTO als bedrijfsbeslissing, logische versus fysieke back-ups, continuous archiving en point-in-time recovery, en waarom een ongeteste back-up geen garantie is.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-17.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:.1em .4em}
+.prose pre{margin:16px 0;padding:16px 18px;background:var(--teal-deep);color:#eaf3f0;border-radius:12px;overflow-x:auto;box-shadow:var(--shadow)}
+.prose pre code{background:none;border:none;padding:0;font-size:14px;line-height:1.6;color:inherit}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 17</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 2 (EDB Professional) · Deel 17 van 30</p>
+  <h1>Back-up en <em>herstel</em>.</h1>
+  <p class="hero__lead">Iemand voert per ongeluk <code>DROP TABLE mutatie_2024_06;</code> uit — de verkeerde partitie, geen foutmelding, geen bevestigingsvraag. Dit deel beantwoordt niet de vraag hoe je dat voorkomt, maar of je het kunt terughalen, en hoe lang dat duurt. Met RPO en RTO als bedrijfsbeslissing, het onderscheid tussen logische en fysieke back-ups, continuous archiving en point-in-time recovery bouwt u een back-upstrategie die pas telt op het moment dat zij daadwerkelijk is getest.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>3</b><span>back-uptypen: vol/diff/incr</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op de EDB PostgreSQL Professional-certificering en uitdrukkelijk geen vervanging van het officiële examenmateriaal van EnterpriseDB. Alle formuleringen, casuïstiek en werkvormen in dit materiaal zijn van Ductus; raadpleeg voor het examen altijd óók de actuele EDB-blauwdruk.</div>
+  <div class="trail">Niveau 2: 11 Installatie, configuratie en tablespaces → 12 Fysiek ontwerp: pagina's, TOAST en bloat → 13 Query-optimalisatie: EXPLAIN ANALYZE en de planner → 14 Geavanceerde indexering → 15 Concurrency en locking → 16 Partitionering → <b>17 Back-up en herstel (hier)</b> → 18 Replicatie → 19 Hoge beschikbaarheid → 20 Monitoring, logging en pgaudit → 21 Security-verdieping en NoSQL in perspectief → 22 Zero-downtime migraties en capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">RPO en RTO: eerst de bedrijfsvraag</a></li>
+      <li><a href="#s3" data-target="s3">Logisch versus fysiek: pg_dump en pg_dumpall</a></li>
+      <li><a href="#s4" data-target="s4">pg_basebackup en continuous archiving</a></li>
+      <li><a href="#s5" data-target="s5">Point-in-time recovery en het herstelproces</a></li>
+      <li><a href="#s6" data-target="s6">pgBackRest, back-uptypen en tablespaces</a></li>
+      <li><a href="#s7" data-target="s7">Back-ups testen: de enige manier om het te weten</a></li>
+      <li><a href="#s8" data-target="s8">Bewaarbeleid, terughalen en veelgemaakte fouten</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Milliseconden, geen foutmelding, geen bevestigingsvraag: <code>DROP TABLE mutatie_2024_06;</code> — had 2023_06 moeten zijn. De partitie en alles erin is weg. De vraag die dit deel beantwoordt is niet "hoe voorkom ik dit" — mensen maken fouten, systemen crashen, schijven falen, en geen enkele voorzorgsmaatregel sluit dat volledig uit. De vraag is: kun je het terughalen, en hoe lang duurt dat?</p>
+        <p>Dat is het verschil tussen een back-up die <strong>bestaat</strong> en een back-up die <strong>werkt</strong>. Veel organisaties ontdekken het verschil op het moment dat het er het meest toe doet.</p>
+        <p>Aan het eind van dit deel kunt u:</p>
+        <ul>
+          <li>RPO en RTO vaststellen voor een gegeven werklast en daaruit een back-upstrategie afleiden;</li>
+          <li>het verschil tussen logische en fysieke back-ups toepassen en per situatie de juiste kiezen;</li>
+          <li><code>pg_dump</code>, <code>pg_dumpall</code> en <code>pg_basebackup</code> correct gebruiken, inclusief hun beperkingen;</li>
+          <li>continuous archiving inrichten en een database herstellen tot een specifiek moment in het verleden;</li>
+          <li>een back-up daadwerkelijk testen in plaats van aan te nemen dat hij werkt, en een bewaarbeleid opstellen dat aansluit op de AVG-eisen uit deel 9.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">RPO en RTO: eerst de bedrijfsvraag</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voordat je een tool kiest, beantwoord je twee vragen die niets met techniek te maken hebben.</p>
+        <p><strong>RPO — Recovery Point Objective.</strong> Hoeveel gegevensverlies is acceptabel, gemeten in tijd? "We mogen hoogstens vijf minuten aan mutaties kwijtraken."</p>
+        <p><strong>RTO — Recovery Time Objective.</strong> Hoe lang mag het herstel duren? "Het portaal moet binnen twee uur weer beschikbaar zijn."</p>
+        <p>Deze twee getallen bepalen de hele strategie, en ze zijn <strong>bedrijfsbeslissingen</strong>, geen technische keuzes — precies zoals de bewaartermijn uit deel 16 een beslissing was voor compliance en niet voor de DBA alleen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Antwoord van de business</th><th>Technische consequentie</th></tr></thead>
+          <tbody>
+            <tr><td>RPO = 24 uur</td><td>Eén nachtelijke <code>pg_dump</code> volstaat</td></tr>
+            <tr><td>RPO = 5 minuten</td><td>Continuous WAL-archivering nodig</td></tr>
+            <tr><td>RTO = 1 week</td><td>Een fysieke back-up die je rustig kunt terugzetten</td></tr>
+            <tr><td>RTO = 30 minuten</td><td>Een staande replica die je kunt promoveren (deel 18, 19)</td></tr>
+          </tbody>
+        </table></div>
+        <p>Bij Meridiaan moet de stuurgroep vaststellen wat een acceptabel verlies is voor mutatiegegevens (waarschijnlijk minuten, gezien de wettelijke context) en wat een acceptabele uitvalstijd is voor het portaal (waarschijnlijk uren) — die investering in een staande replica (deel 19) rechtvaardigt zich pas als RTO écht laag moet zijn.</p>
+        <div class="callout note"><span class="lbl">De vraag die dit scherp stelt</span><p>"Als de server nu in vlammen opgaat, hoeveel van vandaag mogen we kwijt zijn, en hoe laat moet Meridiaan morgenvroeg weer open zijn?" Beide antwoorden bepalen alles wat volgt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.1 — RPO en RTO vaststellen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Van de vier situaties bij Meridiaan (productiedata, onverwerkte mutaties, testomgeving, rapportagekopie): welke rechtvaardigt op basis van RTO alleen al een investering in een staande replica, vooruitwijzend naar deel 18/19?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De productiedata en de onverwerkte mutaties van vandaag rechtvaardigen dit op RTO-gronden, als het portaal en de verwerking geen uren stilstand mogen hebben. Dat is precies het argument voor een staande replica in deel 18/19, en het is een investering die al onderbouwd kan worden zonder de techniek zelf te kennen. De testomgeving en de rapportagekopie hebben een RTO van een dag of enkele uren en volstaan met periodieke volledige back-ups.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Logisch versus fysiek: pg_dump en pg_dumpall</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Logisch (<code>pg_dump</code>)</th><th>Fysiek (<code>pg_basebackup</code>, filesystem)</th></tr></thead>
+          <tbody>
+            <tr><td>Wat het bevat</td><td>SQL-opdrachten die de data reconstrueren</td><td>Exacte kopie van de datadirectory</td></tr>
+            <tr><td>Draagbaarheid</td><td>Werkt op elke PostgreSQL-versie en -platform</td><td>Alleen dezelfde majorversie, zelfde architectuur</td></tr>
+            <tr><td>Herstelsnelheid op grote data</td><td>Traag — alles wordt opnieuw ingevoegd en geïndexeerd</td><td>Snel — bestanden kopiëren</td></tr>
+            <tr><td>Geschikt voor PITR</td><td>Nee</td><td>Ja, in combinatie met WAL-archivering</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>De vuistregel:</strong> logisch voor kleine databases, migraties tussen versies, en het selectief terughalen van één object. Fysiek voor productieschaal, snelle hersteltijden, en point-in-time recovery. Bij Meridiaan met 600 MB tot enkele gigabytes is de grootte nog niet dwingend — maar de RTO-eis wel: een <code>pg_dump</code>-herstel van een tabel met 2,4 miljoen rijen kost aanzienlijk meer tijd dan bestanden terugkopiëren.</p>
+        <pre><code># Eén database, custom format — comprimeert, ondersteunt selectief herstel
+pg_dump -Fc -d meridiaan -f meridiaan.dump
+
+# Alleen schema, geen data
+pg_dump -Fc -s -d meridiaan -f schema.dump
+
+# Alle rollen en globale objecten (niet de data zelf per database)
+pg_dumpall --globals-only -f globals.sql
+
+pg_restore -d meridiaan_test -t mutatie meridiaan.dump
+pg_restore -l meridiaan.dump      # inhoudsopgave bekijken
+pg_restore -j 4 -d meridiaan_test meridiaan.dump   # parallel herstellen</code></pre>
+        <p><strong>Wat <code>pg_dump</code> niet meeneemt:</strong> rollen, tablespaces, en objecten buiten de gekozen database — vandaar <code>pg_dumpall --globals-only</code> als aanvulling, want de twee horen bij elkaar voor een volledig herstel. Wordt dat vergeten bij een herstel op een verse server, dan volgen foutmeldingen over onbekende eigenaren, of erger: objecten die stilzwijgend eigendom worden van de herstellende rol in plaats van de bedoelde rol.</p>
+        <p><code>pg_dump</code> draait in één transactie met een repeatable-read-achtige momentopname (deel 7): een database die tijdens het dumpen wordt gewijzigd, levert een consistente back-up op van het moment waarop de dump begon. Bij een RPO in minuten volstaat <code>pg_dump</code> echter niet — een dump van 03:00 betekent bij een storing om 14:00 het verlies van elf uur werk.</p>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">pg_basebackup en continuous archiving</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een fysieke kopie van het hele cluster, gemaakt terwijl de server draait:</p>
+        <pre><code>pg_basebackup -D /back-up/meridiaan_$(date +%Y%m%d) \
+    -Ft -z -Xs -P -h localhost -U replicatie_rol</code></pre>
+        <p><strong>Waarom <code>-Xs</code> niet optioneel is:</strong> een fysieke back-up kopieert bestanden terwijl de server erin schrijft. Zonder de WAL die tijdens het kopiëren is gegenereerd, is de kopie inconsistent — sommige pagina's zijn van vóór het kopiëren, andere van erna. <code>-Xs</code> streamt die WAL mee, zodat bij het herstellen alles naar hetzelfde consistente moment kan worden gebracht — dezelfde crash-recovery-logica uit deel 2, nu toegepast op een back-up in plaats van een crash. De uitvoerende rol heeft alleen het recht <code>REPLICATION</code> nodig, geen superuser — hetzelfde minimale-rechtenbeginsel als in deel 9.</p>
+        <h3>Continuous archiving: de sleutel tot een laag RPO</h3>
+        <p>Uit deel 2: elke wijziging wordt eerst naar de WAL geschreven. <strong>Continuous archiving</strong> bewaart die WAL-segmenten permanent, in plaats van ze na een checkpoint te laten hergebruiken.</p>
+        <pre><code># postgresql.conf
+wal_level = replica
+archive_mode = on
+archive_command = 'pgbackrest --stanza=meridiaan archive-push %p'</code></pre>
+        <p>Vanaf dat moment is er een doorlopende stroom: een basisback-up plus alle WAL-segmenten sindsdien. Samen kunnen ze de database naar <strong>elk moment</strong> tussen de basisback-up en nu reconstrueren — het RPO gaat zo van "sinds de laatste dump" naar een fractie van een seconde.</p>
+        <div class="callout warn"><span class="lbl">Waarschuwing</span><p>Als <code>archive_command</code> faalt en dat onopgemerkt blijft, stapelen WAL-segmenten zich op in <code>pg_wal/</code> totdat de schijf vol loopt — een andere, snellere route naar hetzelfde soort ramp als de wraparound-waarschuwing uit deel 12. Monitor dit (deel 20).</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.4 — continuous archiving inrichten</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom stapelen WAL-segmenten zich op in pg_wal/ als archive_command faalt, en wat is het uiteindelijke risico als niemand dat opmerkt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">PostgreSQL houdt WAL-segmenten vast totdat ze succesvol gearchiveerd zijn, want zonder dat zou een crash tussen twee back-ups een gat in de keten betekenen. Blijft archiveren mislukken, dan groeit <strong>pg_wal/</strong> onbegrensd. Uiteindelijk loopt de schijf vol — en een volle schijf bij de WAL-locatie brengt de hele database tot stilstand, want er kan dan niet eens meer worden gecommit.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Point-in-time recovery en het herstelproces</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De reden dat je dit allemaal opzet: herstellen naar een specifiek moment, niet alleen naar het moment van de laatste back-up. Scenario: om 14:32 voert iemand per ongeluk <code>DROP TABLE mutatie_2024_06;</code> uit. Je wilt terug naar 14:31.</p>
+        <pre><code># In postgresql.conf van de herstelde instantie, of via recovery.signal
+restore_command = 'pgbackrest --stanza=meridiaan archive-get %f "%p"'
+recovery_target_time = '2026-03-15 14:31:00+01'
+recovery_target_action = 'promote'</code></pre>
+        <p>PostgreSQL herstelt de basisback-up, speelt vervolgens WAL-segmenten af vanaf dat moment, en stopt precies bij het opgegeven tijdstip — vóór de <code>DROP TABLE</code>. De verwijderde partitie is er weer. Naast een tijdstip kan het hersteldoel ook een transactie-ID (<code>recovery_target_xid</code>), een exacte WAL-positie (<code>recovery_target_lsn</code>), of een vooraf gezette naam zijn:</p>
+        <pre><code class="language-sql">SELECT pg_create_restore_point('voor_migratie_2026_03_15');</code></pre>
+        <p>Dat laatste is nuttig vóór een risicovolle operatie: een expliciet, benoemd terugvalmoment in plaats van gokken op een tijdstip.</p>
+        <h3>Het herstellen, stap voor stap</h3>
+        <p>Nooit op de productieomgeving zelf oefenen — altijd naar een aparte locatie: kopieer de laatste basisback-up naar een nieuw datadirectory, zet <code>restore_command</code> en het hersteldoel, maak <code>recovery.signal</code> aan, start de server (hij herstelt automatisch en stopt bij het doel), en controleer inhoudelijk of alles klopt.</p>
+        <div class="callout tip"><span class="lbl">Gedeeltelijk herstel</span><p>Wil je alleen die ene tabel terug, niet de hele database vervangen: herstel naar een aparte instantie, exporteer daarvandaan de specifieke gegevens met <code>pg_dump -t</code>, en importeer die in productie. Trager dan een volledige omwisseling, maar veel minder risicovol als de rest van de database intussen is doorgegaan.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.5 — point-in-time recovery (kernopdracht)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij het reproduceren van het scenario ("ongeluk" om 14:32, herstel naar een aparte datadirectory): wat meet je precies om je gemeten RTO vast te stellen, en waarom is dat getal belangrijker dan een schatting op papier?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het gemeten getal omvat de tijd om de back-up te kopiëren/klaar te zetten, de tijd om WAL af te spelen tot het doelmoment, en de tijd om te verifiëren (rijtellingen, inhoudelijke steekproef). Dit getal, niet een schatting op papier, is de werkelijke RTO — precies het punt van sectie 7 hieronder: een RTO die nooit is gemeten, is een aanname.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">pgBackRest, back-uptypen en tablespaces</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>pgBackRest</strong> brengt de losse onderdelen (<code>pg_basebackup</code>, handmatige WAL-archivering, retentie) samen tot één beheerd systeem: parallelle overdracht, compressie en encryptie ingebouwd, checksumverificatie, automatisch retentiebeheer, en volledig, differentieel én incrementeel in één samenhangend systeem.</p>
+        <pre><code># Eenmalig: een stanza configureren
+pgbackrest --stanza=meridiaan --db1-path=/var/lib/postgresql/data stanza-create
+
+# Basisback-up
+pgbackrest --stanza=meridiaan --type=full backup
+
+# Herstellen naar een tijdstip
+pgbackrest --stanza=meridiaan --type=time \
+    --target="2026-03-15 14:31:00" restore</code></pre>
+        <p>Voor een productieomgeving is dit vrijwel altijd te verkiezen boven een handgeschreven <code>archive_command</code>-script. Het examen toetst de concepten; in de praktijk gebruik je hier zelden iets zelfgebouwds.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Type</th><th>Bevat</th><th>Herstel vereist</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Volledig</strong></td><td>Alles</td><td>Alleen zichzelf</td></tr>
+            <tr><td><strong>Differentieel</strong></td><td>Alles gewijzigd sinds de laatste volledige</td><td>De laatste volledige + deze</td></tr>
+            <tr><td><strong>Incrementeel</strong></td><td>Alles gewijzigd sinds de vorige back-up</td><td>De hele keten sindsdien</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>De afruil:</strong> incrementeel is het kleinst per back-up maar het kwetsbaarst — een beschadigde schakel breekt het herstel van alles erna. Differentieel is een tussenweg. Praktisch schema: wekelijks volledig, dagelijks incrementeel, continue WAL-archivering ertussen voor het laatste stuk RPO.</p>
+        <p><strong>Tablespaces (deel 11):</strong> met <code>pg_basebackup</code> en <code>pgBackRest</code> worden tablespaces automatisch meegenomen. Met een handmatige filesystem-kopie is een vergeten tablespace een onvolledige back-up die er compleet uitziet — de fout wordt pas zichtbaar bij het herstellen.</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Back-ups testen: de enige manier om het te weten</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is de belangrijkste sectie van dit deel. <strong>Een back-up die nooit is teruggezet, is een aanname, geen garantie.</strong> Bekende manieren waarop een back-up faalt zonder dat iemand het merkt:</p>
+        <ul>
+          <li><code>archive_command</code> faalt stilletjes; de laatste weken WAL ontbreken;</li>
+          <li>de back-up is technisch compleet maar de applicatie die hem zou moeten kunnen lezen, is intussen geüpgraded;</li>
+          <li>een schijf met bit-rot corrumpeert een deel van het archief, onopgemerkt tot het moment van herstel;</li>
+          <li>het script werkt, maar niemand heeft ooit gemeten hoe lang een volledig herstel duurt — en dat blijkt de RTO te overschrijden.</li>
+        </ul>
+        <p><strong>Het enige tegenmiddel: periodiek daadwerkelijk herstellen</strong>, naar een geïsoleerde omgeving, en controleren dat de gegevens kloppen — niet alleen dat het proces zonder foutmelding eindigt.</p>
+        <pre><code class="language-sql">-- Na een testherstel: vergelijk met wat je verwacht
+SELECT count(*) FROM meridiaan_prod.deelnemer;
+SELECT max(aangemeld_op) FROM meridiaan_prod.mutatie;
+-- en, zoals in deel 6 en 16: een inhoudelijke steekproef, niet alleen een telling</code></pre>
+        <p>Meet en documenteer bij elke test: hoe lang duurde het volledige herstel? Dat getal is je werkelijke RTO, niet de RTO die op papier staat. Aanbevolen frequentie: minimaal per kwartaal een volledig herstel op een test-omgeving, en na elke belangrijke wijziging aan de back-upconfiguratie zelf.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.7 — een back-up die niet werkt</p>
+        <details class="q"><summary><span class="qn">1</span><span>Formuleer in twee zinnen waarom "het back-upscript draait elke nacht zonder foutmelding" geen garantie is dat de back-up bruikbaar is.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een back-upscript dat zonder foutmelding eindigt, bewijst alleen dat het schrijfproces is gelukt — niet dat de resulterende bestanden compleet, consistent en leesbaar zijn. Corruptie door een schijffout, een onderbroken overdracht, of een verkeerd geconfigureerde tool laat het script vaak gewoon doorlopen, en het probleem wordt pas ontdekt op het moment van herstellen, niet op het moment van back-uppen.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Bewaarbeleid, terughalen en veelgemaakte fouten</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Bewaarbeleid</h3>
+        <p>Dezelfde vraag als bij partities (deel 16): hoe lang bewaar je een back-up, en wie beslist dat? Technisch: hoe verder terug, hoe meer opslag — een gangbaar schema is dagelijkse back-ups twee weken, wekelijkse een kwartaal, maandelijkse een jaar of langer.</p>
+        <div class="callout warn"><span class="lbl">AVG-overweging (deel 9)</span><p>Een back-up bevat <strong>alles</strong>, inclusief wat een deelnemer op verzoek uit productie is verwijderd. Een verwijderingsverzoek is dus niet compleet afgehandeld zolang de gegevens nog in oudere back-ups staan — een maximale bewaartermijn voor back-ups die korter is dan de wettelijke bewaarplicht voor de actieve gegevens zelf, zorgt dat oude back-ups vanzelf uitfaseren.</p></div>
+        <h3>Een verwijderde partitie terughalen — de volledige aanpak</h3>
+        <p>Terug naar het openingsscenario. Als je nog een losgekoppelde tabel hebt (deel 16: <code>DETACH</code> in plaats van direct <code>DROP</code>): niets aan de hand, gewoon opnieuw <code>ATTACH</code>en. Is de partitie echt verwijderd en is er geen recente logische dump: herstel de laatste basisback-up naar een aparte instantie, stel <code>recovery_target_time</code> in op vlak vóór de <code>DROP TABLE</code>, laat herstellen en promoveren, <code>pg_dump -t</code> die ene tabel, en herstel en koppel hem weer aan als partitie:</p>
+        <pre><code class="language-sql">ALTER TABLE mutatie ATTACH PARTITION mutatie_2024_06
+    FOR VALUES FROM ('2024-06-01') TO ('2024-07-01');</code></pre>
+        <p>Dit hele traject kost tijd — precies waarom RTO een vooraf beantwoorde vraag moet zijn, en waarom <code>DETACH</code> vóór <code>DROP</code> (deel 16) de eerste verdedigingslinie is, niet de back-up. De back-up is het vangnet voor wanneer die eerste linie is overgeslagen.</p>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Alleen <code>pg_dump</code>, geen continuous archiving</td><td>RPO = tijd sinds de laatste dump</td><td>WAL-archivering voor een laag RPO</td></tr>
+            <tr><td>Back-up nooit getest</td><td>Onbekende, mogelijk onbruikbare back-up</td><td>Periodiek daadwerkelijk herstellen</td></tr>
+            <tr><td>Herstellen oefenen op productie</td><td>Onnodig risico</td><td>Aparte, geïsoleerde omgeving</td></tr>
+            <tr><td>Geen bewaarbeleid</td><td>Onbegrensde opslagkosten én AVG-risico</td><td>Expliciet schema, afgestemd met compliance</td></tr>
+            <tr><td>RPO/RTO nooit vastgesteld</td><td>Strategie zonder doel</td><td>Eerst de bedrijfsvraag, dan de tool</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.8 — bewaarbeleid</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een deelnemer heeft een verwijderingsverzoek ingediend en is uit productie verwijderd, maar staat nog in back-ups van de laatste twee maanden. Is dat een probleem, en voor wie moet je die vraag beantwoorden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Ja, potentieel een probleem in AVG-termen: het verwijderingsverzoek is niet volledig afgehandeld zolang de gegevens nog ergens bestaan, ook al is dat "maar" een back-up. Dit is een vraag voor de privacyfunctionaris, niet iets wat een DBA zelfstandig beoordeelt. Zolang de bewaartermijn van back-ups korter is dan wat compliance acceptabel acht als maximale nasleep, is het probleem tijdelijk en begrensd — en dat moet expliciet worden afgestemd, niet stilzwijgend aangenomen.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 18</h3>
+      <p>U kunt nu herstellen na een fout. Deel 18 gaat over replicatie: een tweede, actuele kopie die continu meedraait, zodat een storing op de ene server niet eens hoeft te leiden tot een herstel.</p>
+      <a class="btn" href="deel-18.html">Deel 18 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 17 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-2/deel-17-back-up-en-herstel/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm17_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 29 — Geo-distributie | Eductus</title>
+<meta name="description" content="Cursus Databasemanagement, Deel 29 (EDB-architectuurcertificering): de drie triggers voor geo-distributie, de fysieke grens van latency, dataresidentie onder de AVG, drie geo-topologieën met hun conflictresolutiekosten, en geo-partitionering als ontwerp dat conflicten en dataresidentie tegelijk oplost.">
+<link rel="canonical" href="https://leren.eductus.nl/databasemanagement/deel-29.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Databasemanagement · Deel 29</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Databasemanagement · Niveau 3 (architectcertificering) · Deel 29 van 30</p>
+  <h1>De geografie<br>van je <em>data</em>.</h1>
+  <p class="hero__lead">Niveau 3 volgde tot nu toe de vraag "waar staat de data" tussen fondsen (deel 23), shards (deel 24-25) en zelfstandige databases (deel 26). Dit deel tilt die vraag naar een schaal die de hoge beschikbaarheid uit deel 19 nooit hoefde te behandelen: meerdere geografische regio's, met de fysica van latency en de juridische grenzen van dataresidentie als nieuwe spelers. Voor de Pensioenfederatie is dit vandaag een vooruitblik — geen van de drie triggers is nu acuut — maar onmisbaar zodra internationale uitbreiding wél aan de orde komt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±3,5u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>23</b><span>controlevragen</span></div>
+    <div class="stat"><b>9</b><span>kernbegrippen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de architectgerichte clustercertificering van EDB (EnterpriseDB) en is geen vervanging van officieel examenmateriaal. Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus.</div>
+  <div class="trail">Niveau 3: 23 Architectuur voor meerdere fondsen → 24 Sharding-fundamenten → 25 Citus in de praktijk → 26 Foreign data wrappers en federatie → 27 Event sourcing: fundamenten → 28 Event sourcing in de praktijk → <b>29 Geo-distributie (hier)</b> → 30 Niveau-3-capstone en afsluiting</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Terug naar waar, maar over regio's</a></li>
+      <li><a href="#s3" data-target="s3">Latency: de fysica die je niet kunt wegconfigureren</a></li>
+      <li><a href="#s4" data-target="s4">Dataresidentie en de AVG</a></li>
+      <li><a href="#s5" data-target="s5">Drie geo-topologieën</a></li>
+      <li><a href="#s6" data-target="s6">Wat actief-actief kost: conflictresolutie</a></li>
+      <li><a href="#s7" data-target="s7">Geo-partitionering: data bij de bron houden</a></li>
+      <li><a href="#s8" data-target="s8">Wanneer wél, wanneer niet — en het advies aan Femke</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Elke eerdere schaaltechniek in deze cursus — indexen, partitionering, sharding, zelfs Citus — loste een probleem op binnen infrastructuur die op vergelijkbare afstand van elkaar stond, met verbindingen van enkele milliseconden. Dit deel verlaat die aanname: het gaat over wat er gebeurt als de database niet meer in één datacenter-regio past, maar over meerdere geografische regio's verdeeld moet worden — mogelijk over landsgrenzen heen.</p>
+        <p>Na dit deel kun je:</p>
+        <ul>
+          <li>uitleggen wanneer één regio niet meer volstaat, los van pure capaciteit;</li>
+          <li>het effect van latency op cross-regio-communicatie kwantificeren en de gevolgen voor ontwerp benoemen;</li>
+          <li>dataresidentie-eisen plaatsen naast de AVG en de gevolgen daarvan voor architectuurkeuzes beschrijven;</li>
+          <li>drie geo-topologieën (read-replica's, actief-passief, actief-actief) tegen elkaar afwegen;</li>
+          <li>de kosten van conflictresolutie bij actief-actief-opzetten benoemen;</li>
+          <li>geo-partitionering toepassen als alternatief voor volledige replicatie tussen regio's;</li>
+          <li>beoordelen of geo-distributie voor een gegeven situatie nodig is.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Terug naar waar, maar over regio's</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Niveau 3 begon met een vraag over waar gegevens staan (deel 23: tussen fondsen), verlegde die naar horizontale capaciteit (deel 24-25: tussen shards) en naar federatie (deel 26: tussen zelfstandige databases). Deel 27-28 verlegde de aandacht naar wát je vastlegt. Dit deel keert terug naar waar — maar op een schaal die de hoge beschikbaarheid uit deel 19 nooit behandelde: meerdere geografische regio's. Patroni en synchrone replicatie losten uitval van één machine of datacenter op; dit deel gaat over een fundamenteel andere vraag: wat als de hele regio, of het hele land, niet meer het juiste antwoord is voor waar je data moet staan?</p>
+        <p>Er zijn drie, principieel verschillende redenen waarom één regio ooit niet meer volstaat, en ze mogen niet met elkaar verward worden:</p>
+        <ul>
+          <li><strong>Beschikbaarheid.</strong> Eén regio, hoe goed intern ook opgezet met Patroni en synchrone replicatie, blijft kwetsbaar voor een regio-brede storing — een wijdverbreide stroomstoring, een grote netwerkuitval. Voor sommige organisaties is dat risico onaanvaardbaar.</li>
+          <li><strong>Latency voor gebruikers.</strong> Een gebruiker in een andere regio dan de database ervaart onvermijdelijk extra vertraging (sectie 3) — voor sommige toepassingen acceptabel, voor andere niet.</li>
+          <li><strong>Dataresidentie.</strong> Wettelijke of contractuele eisen dat bepaalde gegevens binnen specifieke landsgrenzen moeten blijven (sectie 4) — een heel andere motivatie dan de eerste twee, die vaak juist <strong>tegen</strong> replicatie naar andere regio's pleit.</li>
+        </ul>
+        <div class="callout note"><span class="lbl">Voor de Pensioenfederatie, op dit moment</span><p>Geen van de drie is acuut. Nederlandse pensioenfondsen, Nederlandse deelnemers, geen internationale uitbreiding gepland. Dit deel is daarom, meer dan enig ander deel in niveau 3, een <strong>vooruitblik</strong> — kennis voor een scenario dat zich nog niet heeft voorgedaan, maar wel kan voordoen als de federatie ooit internationaal uitbreidt of als de continuïteitseisen verscherpen.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.1 (a-c) — De drie triggers herkennen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Noem de drie principieel verschillende redenen om over geo-distributie na te denken.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Beschikbaarheid (regio-brede uitval), latency voor gebruikers, dataresidentie.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Is er voor de Pensioenfederatie, vandaag, een van de drie aanwezig? Onderbouw.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Nee, geen van de drie.</strong> Eén regio (Nederland/EU) volstaat voor beschikbaarheid via de bestaande HA-opzet (deel 19), alle gebruikers zijn Nederlands (geen latency-probleem), en dataresidentie is triviaal binnen één land.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Bedenk een fictief toekomstscenario voor de Pensioenfederatie waarin één van de drie wél acuut zou worden.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bijvoorbeeld: een fusie met een buitenlands pensioenfonds, of Nederlandse deelnemers die structureel in het buitenland komen te wonen (bijvoorbeeld gepensioneerden die emigreren) en actief gebruik willen maken van een portaal met acceptabele snelheid.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Latency: de fysica die je niet kunt wegconfigureren</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Tussen geografische regio's speelt een grens die geen enkele eerdere schaaltechniek in deze cursus tegenkwam: licht — en dus ook een elektrisch signaal — heeft een fysieke ondergrens nodig om van de ene naar de andere kant van de wereld te reizen. Een verbinding tussen Europa en Azië kost realistisch <strong>100-150 milliseconden retourtijd</strong>, ongeacht hoe goed de infrastructuur is geoptimaliseerd. Dit is geen configuratieprobleem zoals <code>work_mem</code> kan zijn — het is een fysieke grens.</p>
+        <p>Voor synchrone replicatie betekent dit: een synchrone <code>COMMIT</code> die moet wachten tot een replica in een andere regio heeft bevestigd, kost per definitie die retourtijd erbij, bovenop de gewone verwerkingstijd. Voor Meridiaans huidige gebruik (schrijfacties enkele keren per seconde) zou dat een merkbare, maar misschien acceptabele vertraging zijn; voor een systeem met veel schrijfverkeer wordt dit al snel een knelpunt.</p>
+        <div class="callout warn"><span class="lbl">De vuistregel</span><p>Hoe verder de regio's uit elkaar liggen, hoe minder aantrekkelijk synchrone replicatie tussen hen wordt. Binnen Europa (enkele tientallen milliseconden) is synchrone cross-regio-replicatie voor sommige toepassingen nog haalbaar; tussen continenten wordt asynchrone replicatie — met het geaccepteerde risico op dataverlies bij een failover — vaak de enige praktische keuze.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.2 (a-c) — Latency doorrekenen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een synchrone COMMIT naar een replica in dezelfde regio kost ongeveer 1 ms retourtijd. Naar een replica op 100 ms retourtijd — wat is het effect op de doorvoer van een systeem dat honderd schrijftransacties per seconde synchroon zou willen bevestigen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij 100 ms retourtijd per synchrone bevestiging kan een enkele sessie niet meer dan ongeveer 10 transacties per seconde synchroon bevestigen (1000 ms / 100 ms) — voor honderd transacties per seconde zijn tien parallelle "in-flight" transacties nodig, wat aanzienlijk meer complexiteit in de applicatielaag vraagt dan bij lokale, milliseconde-synchrone bevestiging.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Waarom is dit geen probleem dat je met betere hardware of configuratie kunt oplossen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dit is een <strong>fysieke</strong> grens (de tijd die een signaal nodig heeft om de afstand te overbruggen), geen configuratieprobleem zoals <code>work_mem</code> of <code>shared_buffers</code> dat met de juiste instelling kan worden opgelost — geen enkele tuning-parameter verandert de afstand tussen twee continenten.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat zou je in plaats van synchrone cross-regio-replicatie aanraden voor een systeem met dit schrijfvolume?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Asynchrone replicatie naar de andere regio, met het geaccepteerde risico op een klein dataverlies bij een failover — de RPO/RTO-discipline, nu expliciet toegepast op de keuze voor asynchroon in plaats van synchroon.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Dataresidentie en de AVG</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Persoonsgegevens vallen onder de AVG — een minder besproken aspect tot nu toe is <strong>waar</strong> die gegevens fysiek mogen staan. De AVG staat gegevensoverdracht buiten de EU alleen toe onder specifieke voorwaarden (een adequaatheidsbesluit, passende waarborgen, of een uitzondering). Een replica van Meridiaans deelnemersgegevens op een server buiten de EU is niet zomaar toegestaan, ook al zou dat technisch en zelfs voor latency-redenen aantrekkelijk kunnen zijn.</p>
+        <p>Dat betekent dat de keuze van regio's niet alleen een technische of prestatie-afweging is, maar ook een <strong>juridische</strong> — en die twee kunnen tegenstrijdig zijn. Een regio die technisch de laagste latency zou geven, kan om dataresidentie-redenen simpelweg uitgesloten zijn. Voor sectorspecifieke gevoelige gegevens zoals pensioengegevens gelden vaak nog strengere eisen dan de AVG in algemene zin. Dit is een vraag die altijd met de eigen juridische en compliance-functie — Sanne, en bij een grensoverschrijdend vraagstuk mogelijk ook externe expertise — moet worden afgestemd: deze cursus geeft het technische kader, niet het laatste juridische woord.</p>
+        <h3>Waar de AVG en geo-distributie elkaar concreet raken</h3>
+        <p><strong>Dataminimalisatie over regio's heen.</strong> Een replica in een andere regio hoeft niet noodzakelijk alle kolommen te bevatten; als het doel puur leesprestatie voor een specifiek, beperkt gebruiksdoel is, kan een gefilterde replica — met logische replicatie, die selectief kolommen of rijen kan repliceren — het aantal plekken waar volledige persoonsgegevens staan, beperken.</p>
+        <p><strong>Het recht op vergetelheid over regio's heen.</strong> Bij crypto-shredding moet de sleutelvernietiging <strong>in elke regio</strong> waar een kopie van de versleutelde gegevens staat, consistent zijn doorgevoerd. Een verwijderingsverzoek dat alleen in de primary-regio is verwerkt, terwijl een read-replica in een andere regio de oude, nog-versleutelbare data behoudt, is tijdelijk inconsistent — maar uiteindelijk, na replicatie van de sleutelverwijdering zelf, correct. Dit vraagt expliciete aandacht bij het ontwerp: de sleuteltabel zelf moet meerepliceren zoals elke andere tabel.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.3 (a-c) — Dataresidentie toepassen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Meridiaan overweegt een replica in een cloudregio buiten de EU vanwege lagere kosten. Wat is het eerste dat gecontroleerd moet worden, vóór de technische implementatie?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De juridische toelaatbaarheid van gegevensoverdracht naar die specifieke regio onder de AVG (een adequaatheidsbesluit, passende waarborgen, of een uitzondering) — vóór er ook maar één technische stap wordt gezet.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Stel dat dataresidentie-eisen een bepaalde regio uitsluiten die technisch de laagste latency zou geven. Wat zegt dat over de afweging tussen sectie 3 en sectie 4?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het zegt dat dataresidentie-eisen <strong>kunnen prevaleren</strong> boven pure prestatie-optimalisatie — een technisch optimale keuze is niet per definitie een toegestane keuze, en de architectuur moet zich naar de wettelijke grens voegen, niet andersom.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wie binnen de Meridiaan/Pensioenfederatie-casus zou je hierover raadplegen, en waarom niet uitsluitend een technisch antwoord geven?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Sanne</strong> (privacyfunctionaris) primair, mogelijk met externe juridische expertise bij een complex grensoverschrijdend vraagstuk — dit is precies waarom dit deel het technische kader geeft, niet het laatste juridische woord.</div></details>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.7 (a-b) — AVG over regio's heen</p>
+        <details class="q"><summary><span class="qn">4</span><span>Een deelnemer in de NL-regio dient een verwijderingsverzoek in (crypto-shredding). Er bestaat een leesreplica in een andere EU-regio. Wat moet daar gebeuren, en wanneer?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De sleutelverwijdering moet <strong>ook naar die replica repliceren</strong> — de sleuteltabel is een gewone tabel die via dezelfde replicatiemechanismen meegaat als elke andere tabel, dus dit gebeurt automatisch zodra de replicatie zelf correct is opgezet, met de gebruikelijke replicatievertraging.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Wat zou er misgaan als de sleuteltabel zelf niet naar die replica repliceert?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De replica in de andere regio zou de oude sleutel <strong>voor altijd</strong> blijven bevatten — het verwijderingsverzoek zou daar nooit landen, wat een reëel compliance-risico is dat expliciet getest moet worden bij het opzetten van een geo-gedistribueerde architectuur.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Drie geo-topologieën</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Net als bij multi-tenancy is er geen "de" oplossing, maar een spectrum van patronen met een oplopende complexiteit en een oplopende garantie.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Topologie</th><th>Schrijven</th><th>Latency voor verre gebruikers</th><th>Complexiteit</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Read-replica's elders</strong></td><td>Eén regio</td><td>Laag voor lezen, hoog voor schrijven</td><td>Laag (uitbreiding van bestaande replicatie)</td></tr>
+            <tr><td><strong>Actief-passief</strong></td><td>Eén regio actief tegelijk</td><td>Hoog totdat een failover gebeurt</td><td>Middel</td></tr>
+            <tr><td><strong>Actief-actief</strong></td><td>Meerdere regio's tegelijk</td><td>Laag, overal</td><td>Hoog (conflictresolutie)</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Topologie 1 — primary in één regio, replica's elders (read-heavy)</h3>
+        <p>De eenvoudigste uitbreiding van wat je al kende: de primary blijft in één regio (bijvoorbeeld Nederland, om dataresidentie triviaal te houden), met asynchrone replica's in andere regio's specifiek voor <strong>lezen</strong>.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>Primary (Nederland, schrijven + lezen)
+    │ asynchrone replicatie
+    ▼
+Replica (andere EU-regio, alleen lezen)</code></pre>
+        <p><strong>Voordelen:</strong> relatief eenvoudig, lage latency voor lezende gebruikers in de andere regio, schrijfverkeer blijft eenvoudig. <strong>Nadelen:</strong> schrijfverkeer vanuit de verre regio moet nog steeds naar de primary reizen, en bij uitval van de primary-regio is een failover naar de replica-regio nodig, met een groter risico op dataverlies dan bij lokale replicatie.</p>
+        <h3>Topologie 2 — actief-passief tussen regio's</h3>
+        <p>Eén regio is op elk moment "actief" (ontvangt alle schrijfverkeer), de andere staat volledig klaar om over te nemen bij een regio-brede storing — een uitbreiding van Patroni's failover-principe naar regio-niveau in plaats van machine-niveau. Het verschil met topologie 1: hier is de bedoeling expliciet <strong>continuïteit bij een regio-brede ramp</strong>, niet primair latency-verbetering voor lezers.</p>
+        <p>De RTO/RPO-discipline keert hier terug, nu op regio-schaal: hoeveel dataverlies is acceptabel bij een regio-failover (RPO, bepaald door de replicatievertraging over de afstand heen), en hoe snel moet de omschakeling voltooid zijn (RTO). Een cross-regio-failover wordt vaak bewust <strong>niet</strong> volledig geautomatiseerd, om te voorkomen dat een tijdelijke netwerkstoring tussen regio's een onnodige, verstorende failover triggert.</p>
+        <h3>Topologie 3 — actief-actief tussen regio's</h3>
+        <p>Elke regio accepteert <strong>zowel lezen als schrijven</strong>, met voortdurende synchronisatie tussen de regio's.</p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>Regio A (schrijven + lezen)  ⇄  Regio B (schrijven + lezen)</code></pre>
+        <p>De belofte: lage latency voor zowel lezen als schrijven, in elke regio, zonder een enkel regionaal knelpunt. De prijs, direct en zwaar: als dezelfde rij in twee regio's tegelijk gewijzigd kan worden, wat gebeurt er als beide wijzigingen elkaar kruisen vóór ze elkaar hebben ingehaald? Dit heet een <strong>schrijfconflict</strong>, en het is het onderwerp van sectie 6.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.4 (a-d) — Topologieën toepassen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een fonds wil primair continuïteit garanderen bij een regio-brede stroomstoring, met acceptabele downtime van enkele minuten bij een daadwerkelijke ramp. Welke topologie past het beste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Actief-passief</strong> — de expliciete bedoeling is rampcontinuïteit, niet primair latency-verbetering, en enkele minuten downtime bij een daadwerkelijke ramp is acceptabel.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Een internationaal, snelgroeiend platform waarbij gebruikers in drie continenten allemaal lage latency verwachten voor zowel lezen als schrijven. Welke topologie past het beste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Actief-actief</strong>, met het volle besef van de conflictresolutiecomplexiteit die daarbij hoort — dit is het scenario waarvoor die complexiteit daadwerkelijk gerechtvaardigd is.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Een rapportagebehoefte vanuit een buitenlands kantoor dat alleen leest, nooit schrijft. Welke topologie past het beste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Read-replica's</strong> — een zuiver lezende behoefte vanuit een andere regio is precies het scenario waarvoor topologie 1 is ontworpen, zonder de complexiteit van de andere twee.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Een pensioenfonds met uitsluitend Nederlandse deelnemers overweegt uit te breiden naar België, met de intentie om Belgische en Nederlandse data strikt gescheiden te houden. Welke topologie past het beste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Geo-partitionering</strong> (sectie 7) — de expliciete wens tot strikte scheiding tussen NL- en BE-data sluit direct aan bij het partitioneren-naar-regio-patroon, dat toevallig ook conflicten voorkomt en dataresidentie regelt.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Wat actief-actief kost: conflictresolutie</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Bij een enkele PostgreSQL-primary is er precies één plek waar een schrijfconflict wordt opgelost: de lockwachtrij binnen die ene server, met ACID-garanties die het resultaat eenduidig maken. Bij actief-actief tussen twee regio's bestaat die ene, gezaghebbende plek niet meer. Twee gebruikers, in twee regio's, wijzigen dezelfde rij binnen de tijd die de netwerkvertraging tussen de regio's kost — en beide wijzigingen worden lokaal geaccepteerd vóór ze van elkaar weten.</p>
+        <p>Oplossingen, elk met hun eigen compromis:</p>
+        <ul>
+          <li><strong>Last-write-wins</strong>, gebaseerd op een tijdstempel — simpel, maar een van de twee wijzigingen gaat stilzwijgend verloren, met het risico dat klokken tussen regio's niet perfect gesynchroniseerd zijn.</li>
+          <li><strong>Applicatie-specifieke merge-logica</strong> — bijvoorbeeld: als twee regio's onafhankelijk een teller verhogen, tel de verhogingen bij elkaar op in plaats van de ene waarde te laten winnen. Correcter, maar vereist per situatie een doordachte, domeinspecifieke regel.</li>
+          <li><strong>Conflictvrije datastructuren (CRDT's)</strong> — datastructuren die wiskundig gegarandeerd op een consistente manier samenvoegen, ongeacht de volgorde waarin wijzigingen aankomen. Krachtig, maar niet elk datamodel laat zich natuurlijk in zo'n structuur gieten.</li>
+          <li><strong>Voorkomen in plaats van oplossen: schrijfrechten per regio verdelen</strong> — bijvoorbeeld: Nederlandse deelnemers worden altijd in de Nederlandse regio geschreven, nooit in een andere regio, ook al staat de data overal leesbaar. Dit maakt conflicten voor die specifieke rijen onmogelijk, ten koste van cross-regio-flexibiliteit.</li>
+        </ul>
+        <div class="callout tip"><span class="lbl">De volgorde van voorkeur</span><p>Eerst proberen het conflict te voorkomen door ontwerp (de laatste optie hierboven), pas als dat niet lukt een resolutiestrategie kiezen — met het volle besef van de complexiteit en het risico op stilzwijgend gegevensverlies die daarbij komt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.5 (a-d) — Conflictresolutie doordenken</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bedenk een concreet scenario bij de Pensioenfederatie waarin een schrijfconflict zou kunnen ontstaan bij een (hypothetische) actief-actief-opzet.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bijvoorbeeld (hypothetisch, bij een toekomstige internationale opzet): een deelnemer werkt zijn adresgegevens bij vanuit de Nederlandse regio, terwijl een klantenservicemedewerker in een andere regio tegelijkertijd een correctie op hetzelfde veld doorvoert.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Zou last-write-wins hier acceptabel zijn?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Niet acceptabel</strong> voor dit soort gegevens als de twee wijzigingen inhoudelijk verschillen — last-write-wins zou een van de twee, mogelijk de juiste, wijziging stilzwijgend laten verdwijnen zonder enige melding, wat bij persoonsgegevens en administratieve nauwkeurigheid problematisch is.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Zou een domeinspecifieke merge-regel hier werken? Schets er een.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bijvoorbeeld: bij een conflict geen van beide automatisch laten winnen, maar een taak aanmaken voor menselijke beoordeling — correcter dan automatisch kiezen, met de kosten van een extra proces.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Zou geo-partitionering dit scenario helemaal vermijden? Leg uit hoe.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ja, volledig</strong> — als elke deelnemer, op basis van zijn vaste regio, altijd in precies één regio wordt geschreven, kan het conflictscenario per ontwerp niet optreden: er is nooit een tweede regio die tegelijkertijd voor dezelfde deelnemer schrijft.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Geo-partitionering: data bij de bron houden</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een ontwerp dat actief-actief-conflicten grotendeels vermijdt en tegelijk dataresidentie-eisen natuurlijk oplost: <strong>partitioneer data naar de regio waar hij hoort, in plaats van hem overal te repliceren.</strong></p>
+        <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.5;margin:16px 0;"><code>-- Vergelijkbaar met range-partitionering, nu op regio in plaats van tijd
+CREATE TABLE deelnemer (
+    deelnemer_id integer,
+    regio        text NOT NULL,
+    ...
+) PARTITION BY LIST (regio);
+
+CREATE TABLE deelnemer_nl PARTITION OF deelnemer FOR VALUES IN ('NL');
+CREATE TABLE deelnemer_be PARTITION OF deelnemer FOR VALUES IN ('BE');</code></pre>
+        <p>Elke partitie leeft fysiek in de bijbehorende regio (of wordt daar met Citus expliciet naartoe gestuurd als shard). Een Nederlandse deelnemer wordt altijd in Nederland geschreven en gelezen, nooit elders — geen cross-regio-latency voor het gangbare geval, geen actief-actief-conflict mogelijk (er is maar één regio die ooit voor die specifieke rij schrijft), en dataresidentie is bij ontwerp gegarandeerd in plaats van achteraf gecontroleerd.</p>
+        <p>Wat dit niet oplost: een gebruiker die reist en tijdelijk vanuit een andere regio toegang zoekt tot zijn eigen, in Nederland gepartitioneerde gegevens, ervaart nog steeds cross-regio-latency voor die ene sessie — een acceptabele prijs voor een zeldzaam geval, in ruil voor eenvoud in het gangbare geval.</p>
+        <div class="callout"><span class="lbl">De sterkste aanbeveling van dit deel</span><p>Mocht internationale uitbreiding voor een organisatie als de Pensioenfederatie ooit acuut worden: geo-partitionering naar het land van de deelnemer, in plaats van actief-actief-replicatie met de bijbehorende conflictresolutiecomplexiteit.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.6 (a-c) — Geo-partitionering ontwerpen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Schrijf de CREATE TABLE ... PARTITION BY LIST (regio)-structuur voor een fictieve internationale uitbreiding van deelnemer.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dezelfde structuur als hierboven: <code>CREATE TABLE deelnemer (deelnemer_id integer, regio text NOT NULL, achternaam text, ...) PARTITION BY LIST (regio);</code> met partities <code>deelnemer_nl PARTITION OF deelnemer FOR VALUES IN ('NL')</code> en <code>deelnemer_be PARTITION OF deelnemer FOR VALUES IN ('BE')</code>.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat gebeurt er met een Nederlandse deelnemer die tijdelijk in het buitenland woont en het portaal vanuit een andere regio bevraagt? Is dat een probleem voor dit ontwerp?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Geen probleem voor het ontwerp zelf</strong> — de deelnemer blijft in de NL-partitie/regio, ongeacht waar hij fysiek is. Zijn sessie vanuit het buitenland ervaart wel de cross-regio-latency, maar dat is een acceptabele, zeldzame prijs, geen structureel ontwerpprobleem.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Combineer dit conceptueel met Citus: hoe zou je shard-plaatsing gebruiken om dit fysiek, niet alleen logisch, te realiseren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Met Citus zou je de shardsleutel op <code>regio</code> (of een combinatie met <code>deelnemer_id</code>) kunnen kiezen en de shards expliciet op workers plaatsen die fysiek in de juiste geografische regio staan — Citus' shard-plaatsingsmechanisme maakt dit mogelijk, wat de logische partitionering hierboven omzet in daadwerkelijke fysieke plaatsing.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Wanneer wél, wanneer niet — en het advies aan Femke</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Terug naar de rest van niveau 3</h3>
+        <p><strong>Multi-tenancy (deel 23):</strong> een fonds dat internationaal actief wordt, zou zijn eigen patroon-3-database natuurlijk kunnen combineren met geo-partitionering — de tenant-scheiding en de regio-scheiding zijn orthogonale beslissingen die elkaar niet in de weg zitten. <strong>Sharding (deel 24-25):</strong> Citus ondersteunt in gevorderde opzetten shard-plaatsing die rekening houdt met regio — in essentie geo-partitionering geïmplementeerd met Citus' gereedschap in plaats van handmatige partitionering. <strong>Federatie (deel 26):</strong> een federatieve rapportagelaag die gegevens uit meerdere regio's samenbrengt, moet zelf ook een bewuste keuze maken over waar hij staat. <strong>Event sourcing (deel 27-28):</strong> een event store die geo-gepartitioneerd is, is een natuurlijke combinatie — de aggregaat-identiteit sluit al aan bij "één deelnemer, één regio".</p>
+        <h3>Wanneer geo-distributie wél, wanneer niet</h3>
+        <p>Dezelfde discipline als elk krachtig patroon in deze cursus, hier misschien wel het scherpst — dit is het duurste en complexste patroon van heel niveau 3.</p>
+        <p><strong>Geo-distributie past goed bij:</strong> aantoonbare internationale uitbreiding met gebruikers in meerdere regio's die merkbaar last hebben van latency; wettelijke of contractuele continuïteitseisen die een regio-brede ramp expliciet moeten kunnen overleven; dataresidentie-eisen die sowieso al vereisen dat gegevens per land gescheiden worden.</p>
+        <p><strong>Geo-distributie past niet bij:</strong> een organisatie die, zoals de Pensioenfederatie vandaag, uitsluitend in één land actief is met gebruikers die geen merkbare latency ervaren. Actief-actief-topologieën specifiek passen niet bij domeinen waar conflictresolutie geen natuurlijke, domeinspecifieke oplossing heeft — financiële transacties, bijvoorbeeld, waar "laatste schrijver wint" onaanvaardbaar is.</p>
+        <div class="callout warn"><span class="lbl">De vraag vóór je begint</span><p>Heb ik gebruikers of wettelijke eisen in meerdere regio's, vandaag of aantoonbaar op korte termijn? Zo niet, is dit een oplossing voor een probleem dat nog niet bestaat — precies zoals sharding en patroon 3 dat konden zijn zonder gemeten noodzaak.</p></div>
+        <h3>Een geo-advies voor de Pensioenfederatie</h3>
+        <p><strong>Vandaag: geen geo-distributie nodig.</strong> Alle drie de fondsen, alle deelnemers, alle infrastructuur binnen Nederland (of in elk geval binnen de EU met dataresidentie-garanties) — geen van de drie triggers uit sectie 2 is aanwezig. <strong>Als de federatie ooit internationaal zou uitbreiden:</strong> begin met topologie 1 (read-replica's) voor rapportagebehoeften, overweeg geo-partitionering als schrijfverkeer vanuit een andere regio structureel wordt, en vermijd actief-actief tenzij een concrete, domeinspecifieke conflictresolutiestrategie is uitgewerkt en getest. <strong>Wat vandaag al waardevol is, ongeacht toekomstige geo-plannen:</strong> de discipline om dataresidentie als expliciete architectuurvraag te behandelen in plaats van als achteraf-compliance-check.</p>
+        <h3>Veelgemaakte fouten</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fout</th><th>Gevolg</th><th>Beter</th></tr></thead>
+          <tbody>
+            <tr><td>Latency behandelen als een configuratieprobleem</td><td>Onrealistische verwachtingen over cross-regio-prestaties</td><td>Latency als fysieke grens accepteren, ontwerp eromheen</td></tr>
+            <tr><td>Een replica in een andere regio zetten zonder dataresidentie te checken</td><td>Mogelijke AVG-schending</td><td>Juridische afstemming vóór de technische keuze</td></tr>
+            <tr><td>Direct voor actief-actief kiezen "voor de beste prestaties overal"</td><td>Onderschatte conflictresolutiecomplexiteit</td><td>Beginnen bij read-replica's of geo-partitionering</td></tr>
+            <tr><td>Last-write-wins toepassen op financieel-kritieke gegevens</td><td>Stilzwijgend verlies van een geldige wijziging</td><td>Domeinspecifieke merge-logica, of conflicten voorkomen via geo-partitionering</td></tr>
+            <tr><td>Sleutelverwijdering (crypto-shredding) niet consistent over regio's laten repliceren</td><td>Een read-replica "vergeet" het verwijderingsverzoek niet mee</td><td>De sleuteltabel behandelen als elke andere te repliceren tabel</td></tr>
+            <tr><td>Geo-distributie invoeren zonder aangetoonde internationale behoefte</td><td>Het duurste patroon van niveau 3, zonder noodzaak</td><td>Eerst de triggers uit sectie 2 aantonen</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Kernbegrippen</h3>
+        <ul>
+          <li><strong>Geo-distributie</strong> — een database-architectuur die gegevens of verkeer over meerdere geografische regio's verdeelt.</li>
+          <li><strong>Dataresidentie</strong> — de wettelijke of contractuele eis dat bepaalde gegevens binnen specifieke landsgrenzen blijven.</li>
+          <li><strong>Read-replica-topologie</strong> — één schrijfregio, meerdere leesregio's.</li>
+          <li><strong>Actief-passief</strong> — één actieve regio, een klaarstaande regio voor rampenherstel.</li>
+          <li><strong>Actief-actief</strong> — meerdere regio's die gelijktijdig lezen én schrijven.</li>
+          <li><strong>Schrijfconflict</strong> — twee gelijktijdige, onafhankelijke wijzigingen aan dezelfde rij in verschillende regio's.</li>
+          <li><strong>Last-write-wins</strong> — een eenvoudige, verlieslatende conflictresolutiestrategie op basis van tijdstempel.</li>
+          <li><strong>CRDT (conflictvrije datastructuur)</strong> — een datastructuur die wiskundig gegarandeerd consistent samenvoegt.</li>
+          <li><strong>Geo-partitionering</strong> — data naar de regio partitioneren waar hij hoort, in plaats van hem overal te repliceren.</li>
+        </ul>
+        <p><strong>Vooruit naar deel 30.</strong> Deel 30 is de niveau-3-capstone én de afsluiting van de hele cursus Databasemanagement: acht delen niveau 3, van multi-tenancy tot geo-distributie, komen samen in een afsluitende architectuuropdracht voor de Pensioenfederatie, met een terugblik op alle dertig delen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.8 — Het geo-advies (hoofdopdracht, drietallen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Lever een geo-advies voor de Pensioenfederatie, maximaal anderhalve A4, gericht aan Femke: (1) is geo-distributie nu nodig, (2) welke topologie als eerste stap bij toekomstige uitbreiding, (3) wanneer actief-actief pas overwogen zou worden, (4) één concreet dataresidentie-risico dat vandaag al relevant is.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Modelantwoord (verkort): <strong>(1)</strong> Nee — geen van de drie triggers is vandaag aanwezig; binnen de bestaande HA-opzet valt beschikbaarheid al binnen acceptabele grenzen. <strong>(2)</strong> Read-replica's (topologie 1) voor eventuele buitenlandse rapportagebehoeften — de lichtste, minst complexe uitbreiding, met vrijwel geen conflictresolutierisico. <strong>(3)</strong> Alleen als schrijfverkeer structureel vanuit meerdere regio's ontstaat <strong>en</strong> een uitgewerkte, geteste conflictresolutiestrategie bestaat (bij voorkeur geo-partitionering die conflicten voorkomt, niet last-write-wins die ze toedekt) — zonder die voorwaarde niet overwegen, ongeacht de latency-winst die het zou beloven. <strong>(4)</strong> Bijvoorbeeld: als de huidige of een toekomstige cloudleverancier back-ups of infrastructuur buiten de EU host zonder dat expliciet te hebben gecontroleerd, kan dat een onopgemerkte AVG-schending zijn — aanbeveling: een expliciete controle van waar alle huidige infrastructuur, inclusief back-ups en logdiensten van derden, daadwerkelijk fysiek staat. Beoordeeld wordt op een eerlijk "nu niet nodig", read-replica's (niet actief-actief) als eerste stap, een concrete voorwaarde in punt 3, en een echt herkenbaar risico in punt 4.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 30</h3>
+      <p>Deel 30 is de niveau-3-capstone en tegelijk de afsluiting van de hele cursus Databasemanagement: acht delen niveau 3 komen samen in een afsluitende architectuuropdracht voor de Pensioenfederatie, met een terugblik op alle dertig delen.</p>
+      <a class="btn" href="deel-30.html">Deel 30 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Databasemanagement · Deel 29 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/databasemanagement/niveau-3/deel-29-geo-distributie/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dbm29_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
