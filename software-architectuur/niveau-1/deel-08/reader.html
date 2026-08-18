@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 8 — Cross-cutting concepten — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 8 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 8 — Cross-cutting concepten</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 1 (CPSA-F) · Deel 8 van 10</p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op iSAQB® CPSA-F. Geen vervanging van het officiële curriculum en examenmateriaal van het iSAQB. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool. Zelfstandig leesbaar; kruisverwijzingen naar de Ductus-cursus Business &amp; Enterprise Architectuur zijn aangeduid met <strong>↗ EA</strong>.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>uitleggen wat een cross-cutting concept is en waarom het niet met een hoofdindeling op te lossen valt;</li>
+<li>de belangrijkste concepten voor een bedrijfssysteem benoemen en per stuk vastleggen;</li>
+<li>een foutafhandelingsconcept ontwerpen met onderscheid naar foutsoort;</li>
+<li>een logging- en traceringsconcept ontwerpen dat een storing over componentgrenzen volgbaar maakt;</li>
+<li>een autorisatieconcept ontwerpen inclusief functiescheiding;</li>
+<li>het tijd- en datumconcept vastleggen dat in administratieve systemen de meeste stille fouten voorkomt;</li>
+<li>bevinding B7 uit de post-mortem Mutatie 1.0 sluiten.</li>
+</ol>
+<p><strong>Dekking CPSA-F:</strong> dit deel dekt de leerdoelen over cross-cutting concepten en technische concepten die het hele systeem raken; het vult arc42 hoofdstuk 8.</p>
+<hr>
+<h2>8.1 De bevinding en de openstaande wijziging</h2>
+<p><strong>B7 luidde:</strong> foutafhandeling, logging, autorisatie en het omgaan met tijdzones en peildatums zijn in de elf services op verschillende manieren geïmplementeerd. Gevolg: een storing is niet over servicegrenzen heen te volgen, en een autorisatiewijziging vergt elf aanpassingen.</p>
+<p>Er staat nog iets open. In deel 3 rekende u drie wijzigingen door tegen twee indelingen. De derde — <em>alle correspondentie moet voortaan ook in het Engels beschikbaar zijn</em> — liep langs geen van beide assen. Bij een lagenindeling raakte hij alle lagen, bij een domeinindeling alle mutatiesoorten. Dat was geen fout in uw indeling.</p>
+<p><strong>Dat is de definitie van een cross-cutting concept: iets dat overal geldt en dus door geen enkele hoofdindeling wordt gevangen.</strong> Elke indeling maakt sommige wijzigingen goedkoop en andere duur; de dure zijn niet toevallig maar structureel, en zij moeten apart geregeld worden.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-8-1-cross-cutting-concepten.png" alt="Een domeinindeling met zes mutatiesoortmodules, met daaroverheen vier gearceerde banen — foutafhandeling, logging, autorisatie, tijd — die alle modules doorsnijden" loading="lazy"><figcaption>Figuur 8-1 — Een domeinindeling met zes mutatiesoortmodules, met daaroverheen vier gearceerde banen — foutafhandeling, logging, autorisatie, tijd — die alle modules doorsnijden</figcaption></figure>
+<p><strong>Waarom dit zo vaak misgaat.</strong> Een cross-cutting concept heeft geen natuurlijke eigenaar. Elk team komt hem tegen, elk team lost hem lokaal op, en elke lokale oplossing is op zichzelf redelijk. Pas als geheel is het onwerkbaar. Dit is precies de conceptual-integrity-eigenschap uit deel 3: <strong>niet lokaal te verdedigen, dus alleen door iemand die over de componenten heen kijkt.</strong></p>
+<hr>
+<h2>8.2 Welke concepten legt u vast?</h2>
+<p>Voor een bedrijfssysteem als Mutatie 2.0:</p>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Kernvraag</th>
+<th>Prioriteit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Foutafhandeling</td>
+<td>Hoe reageren we op fouten, en wie ziet wat?</td>
+<td>Hoog</td>
+</tr>
+<tr>
+<td>Logging en tracering</td>
+<td>Hoe volgen we wat er gebeurd is?</td>
+<td>Hoog</td>
+</tr>
+<tr>
+<td>Autorisatie</td>
+<td>Wie mag wat, en hoe weten we dat?</td>
+<td>Hoog</td>
+</tr>
+<tr>
+<td>Tijd en datums</td>
+<td>Welke datum bedoelen we, en in welke zone?</td>
+<td>Hoog</td>
+</tr>
+<tr>
+<td>Transacties en consistentie</td>
+<td>Wat gebeurt er samen, wat niet?</td>
+<td>Hoog</td>
+</tr>
+<tr>
+<td>Validatie</td>
+<td>Waar valideren we wat, en hoe melden we het?</td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>Configuratie</td>
+<td>Wat is instelbaar, waar staat het, wie wijzigt het?</td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>Meertaligheid</td>
+<td>Waar leeft tekst, en hoe wordt hij gekozen?</td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>Testen</td>
+<td>Wat wordt waar getest, met welke gegevens?</td>
+<td>Midden</td>
+</tr>
+<tr>
+<td>Persistentie</td>
+<td>Hoe slaan we op, en wie mag bij wat?</td>
+<td>Midden</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Niet alles hoeft even zwaar.</strong> Wat u vastlegt, hangt af van wat werkelijk overal geldt en wat werkelijk verschil maakt. De toets: <em>als twee teams dit ieder voor zich oplossen, hebben we dan een probleem?</em> Is het antwoord nee, dan is het geen cross-cutting concept maar een implementatiekeuze.</p>
+<p><strong>Vorm.</strong> Een concept legt u vast in arc42 hoofdstuk 8, per stuk in ongeveer één pagina: de regel, de reden, een voorbeeld, en wat er gebeurt bij afwijking. Meer dan een pagina wordt niet gelezen; minder dan een regel is niet handhaafbaar.</p>
+<hr>
+<h2>8.3 Foutafhandeling</h2>
+<p>Het meest verwaarloosde concept en het meest zichtbare bij een storing.</p>
+<p><strong>Begin met een indeling naar foutsoort</strong>, want de reactie verschilt fundamenteel:</p>
+<table>
+<thead>
+<tr>
+<th>Soort</th>
+<th>Voorbeeld</th>
+<th>Reactie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Invoerfout</strong></td>
+<td>Ongeldige postcode</td>
+<td>Melden aan de indiener in begrijpelijke taal; niet loggen als fout</td>
+</tr>
+<tr>
+<td><strong>Bedrijfsregelfout</strong></td>
+<td>Scheidingsdatum ligt na de peildatum</td>
+<td>Melden met de regel erbij; vastleggen als gebeurtenis, want zij hoort in de mutatiegeschiedenis</td>
+</tr>
+<tr>
+<td><strong>Tijdelijke technische fout</strong></td>
+<td>Kernadministratie onbereikbaar</td>
+<td>Niet melden aan de indiener; herpogen, vasthouden, en zichtbaar maken voor beheer</td>
+</tr>
+<tr>
+<td><strong>Blijvende technische fout</strong></td>
+<td>Ongeldige configuratie, programmeerfout</td>
+<td>Snel falen, luid loggen, en niet doorgaan alsof er niets is</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De fout die in Mutatie 1.0 werd gemaakt</strong> is dat deze vier soorten niet werden onderscheiden. Een onbereikbare kernadministratie leverde de deelnemer een foutmelding op; een ongeldige postcode belandde in het foutlogboek tussen de echte storingen. Het gevolg is dubbel: gebruikers krijgen meldingen waar zij niets mee kunnen, en beheer kan door de ruis de echte fouten niet vinden.</p>
+<p><strong>Vier regels om vast te leggen:</strong></p>
+<ol>
+<li><strong>Wie ziet wat.</strong> De deelnemer ziet begrijpelijke taal zonder technische details; de behandelaar ziet de bedrijfsregel; beheer ziet de technische oorzaak. Drie verschillende teksten voor dezelfde gebeurtenis is normaal, geen verspilling.</li>
+<li><strong>Wat is herstelbaar en wat niet.</strong> Een tijdelijke fout wordt herpoogd, een blijvende niet. Herpogen op een blijvende fout is de meest voorkomende oorzaak van een storing die zichzelf versterkt.</li>
+<li><strong>Wat gebeurt er met het werk.</strong> Gaat de mutatie verloren, wordt zij vastgehouden, of gaat zij naar een uitvalbak? Dit is de vraag uit deel 4 (foutstrategie in de pipeline), nu voor het hele systeem.</li>
+<li><strong>Wie wordt gewaarschuwd, en wanneer.</strong> Niet elke fout is een melding waard. Wat wel: blijvende technische fouten, en het overschrijden van een drempel op tijdelijke fouten.</li>
+</ol>
+<p><strong>Wat u niet doet:</strong> een generieke foutklasse waarin alles terechtkomt, of het onderdrukken van fouten om het scherm rustig te houden. Beide zijn in Mutatie 1.0 aangetroffen.</p>
+<hr>
+<h2>8.4 Logging en tracering</h2>
+<p>Het concept dat B7 rechtstreeks adresseert: <em>een storing is niet over servicegrenzen heen te volgen.</em></p>
+<p><strong>Correlatie-identificatie.</strong> Elke inkomende opdracht krijgt bij binnenkomst een identificatie die wordt meegegeven aan alles wat eruit voortkomt — synchrone aanroepen, gebeurtenissen, batchregels, en de doorgifte naar de kernadministratie. Zonder deze ene afspraak is een storing niet te volgen, en met haar is een storing bijna altijd te volgen.</p>
+<p>In een modulith met één logbestand lijkt dit minder urgent. Dat is bedrog: zodra er asynchrone verwerking is — en die is er, want de doorgifte is asynchroon — valt de samenhang uit elkaar. Een mutatie die om 10:03 wordt bevestigd en om 10:47 wordt doorgegeven, is zonder correlatie niet als één gebeurtenis te herkennen.</p>
+<p><strong>Wat u logt.</strong> Op elke betekenisvolle stap: wat, wanneer, voor wie, met welk resultaat, en de correlatie-identificatie. Wat u níét logt: persoonsgegevens die er niet toe doen, wachtwoorden, en volledige berichten waarin toevallig persoonsgegevens zitten. Dat laatste is een veelvoorkomende AVG-fout die pas bij een audit boven water komt.</p>
+<p><strong>Logniveaus met betekenis.</strong> Leg vast wat elk niveau betekent en wanneer u het gebruikt. Zonder afspraak logt de een op waarschuwingsniveau wat de ander op foutniveau logt, en is het niveau als filter waardeloos.</p>
+<p><strong>Onderscheid drie soorten vastlegging</strong> — dit wordt vaak verward en heeft verschillende bewaartermijnen en verschillende lezers:</p>
+<ul>
+<li><strong>Technische logging</strong> — voor beheer, dagen tot weken bewaard, mag ruis bevatten.</li>
+<li><strong>Gebeurtenissen</strong> — de mutatiegeschiedenis, de bron uit deel 5, zeven jaar bewaard, onveranderlijk.</li>
+<li><strong>Audittrail voor toezicht</strong> — een gerichte selectie van gebeurtenissen met een eigen bewaar- en toegangsregime.</li>
+</ul>
+<p>Wie deze drie in één voorziening propt, krijgt of te veel bewaard (kosten en AVG-risico) of te weinig (QS-4 niet haalbaar).</p>
+<hr>
+<h2>8.5 Autorisatie</h2>
+<p><strong>De vraag is niet “wie mag inloggen” maar “wie mag welke handeling verrichten op welk gegeven”.</strong></p>
+<p>Voor Mutatie 2.0 zijn er vier soorten actoren met verschillende regimes: de deelnemer (mag alleen zijn eigen gegevens, alleen bepaalde mutaties), de mutatiebehandelaar (mag veel deelnemers, met beperkingen per mutatiesoort), het werkgeverssysteem (mag alleen de eigen deelnemers, alleen via batch), en beheer (mag technische handelingen, uitdrukkelijk geen inhoudelijke).</p>
+<p><strong>Centraal beslissen, lokaal afdwingen.</strong> Het autorisatiemodel — welke rol mag welke handeling — hoort op één plaats. De handhaving hoort bij de handeling zelf, want dat is de enige plek waar zeker is dat er niets omheen gaat. In Mutatie 1.0 was het omgekeerd: elke service had zijn eigen model, en een wijziging kostte elf aanpassingen.</p>
+<p><strong>Functiescheiding hoort in het domein.</strong> Uit deel 2 en 6: de zorg van de security officer was dat een medewerker een adres wijzigt en vervolgens zelf de uitkeringsopdracht goedkeurt. Dat is geen rollenkwestie maar een regel over opeenvolgende handelingen op hetzelfde dossier. Zulke regels kunnen niet in een generieke autorisatielaag leven, want die kent de geschiedenis van het dossier niet.</p>
+<p><strong>Leg vast wat er gebeurt bij weigering.</strong> Ziet de gebruiker dat iets bestaat maar verboden is, of ziet hij het helemaal niet? Voor persoonsgegevens is dat verschil wezenlijk: “u mag het dossier van deze deelnemer niet inzien” bevestigt dat de deelnemer bestaat.</p>
+<hr>
+<h2>8.6 Tijd en datums</h2>
+<p>Voor een pensioensysteem is dit het concept met de hoogste opbrengst, en het staat in de meeste architecturen niet.</p>
+<p><strong>Drie soorten datums die op elkaar lijken en niet hetzelfde zijn:</strong></p>
+<ul>
+<li><strong>Ingangsdatum</strong> — vanaf wanneer geldt de verandering in de werkelijkheid? Een verhuizing per 1 juni.</li>
+<li><strong>Verwerkingsdatum</strong> — wanneer hebben wij het vastgelegd? De melding kwam op 14 juni.</li>
+<li><strong>Peildatum</strong> — naar welk moment kijken wij bij een berekening? Bijvoorbeeld de stand per 31 december.</li>
+</ul>
+<p>Een adreswijziging met ingangsdatum 1 juni, verwerkt op 14 juni, met een uitkeringsberekening op peildatum 1 juni, is een normale situatie — en zij is alleen correct af te handelen als deze drie apart worden bijgehouden. In deel 3 zagen we dat mutatieverwerking en statusoverzicht verschillende dingen bedoelden met een leeg datumveld; dat is de goedkope versie van dit probleem.</p>
+<p><strong>Terugwerkende kracht.</strong> Administratieve systemen krijgen mutaties met terugwerkende kracht — een scheiding die twee jaar geleden is uitgesproken, een overlijden dat laat gemeld wordt. Dat betekent dat een berekening die vorig jaar klopte, vandaag anders uitvalt. Het concept moet vastleggen: kunnen we de toestand op een willekeurig moment reconstrueren (dat kan alleen met de gebeurtenissenaanpak uit deel 5), en hoe gaan we om met reeds verzonden berichten die achteraf onjuist blijken?</p>
+<p><strong>Vier regels om vast te leggen:</strong></p>
+<ol>
+<li><strong>Eén tijdzone in de opslag</strong> (UTC), omzetting naar lokale tijd uitsluitend bij weergave. Nederland kent twee zomertijdovergangen per jaar; een batch die om 02:30 draait, draait één nacht per jaar twee keer en één nacht helemaal niet.</li>
+<li><strong>Datum zonder tijd waar het om een kalenderdag gaat.</strong> Een ingangsdatum is een dag, geen tijdstip. Er als tijdstip mee rekenen levert fouten op bij middernachtgrenzen.</li>
+<li><strong>Systeemtijd niet rechtstreeks lezen.</strong> Dit was de “tijdpoort” uit deel 4: het domein vraagt de peildatum op via een poort, zodat peildatumlogica testbaar is zonder de klok te manipuleren.</li>
+<li><strong>Vastleggen welke datum leidend is</strong> per soort berekening, en dat in de begrippenlijst (arc42 hoofdstuk 12) opnemen.</li>
+</ol>
+<p><strong>↗ EA</strong> — Op landschapsniveau is dit hetzelfde probleem als de gegevensdefinitie-afstemming die de EA-cursus behandelt: verschillende systemen die hetzelfde begrip net anders invullen. De schade is hier alleen directer zichtbaar, omdat het om berekende rechten gaat.</p>
+<hr>
+<h2>8.7 De overige concepten, kort</h2>
+<p><strong>Transacties en consistentie.</strong> Leg vast wat samen gebeurt en wat niet. In een modulith kan het meeste in één transactie; het uitzonderlijke — de asynchrone doorgifte — moet expliciet zijn, inclusief het venster en de manier waarop dat zichtbaar wordt.</p>
+<p><strong>Validatie.</strong> Drie plaatsen: aan de rand (formaat en volledigheid), in het domein (bedrijfsregels), en bij opslag (integriteit). Leg vast wat waar hoort, anders staan dezelfde regels op drie plekken en lopen ze uiteen. In deel 3 was dat de kern van de adresvalidatiefout.</p>
+<p><strong>Meertaligheid.</strong> Dit was de wijziging waarop u in deel 3 vastliep. De regel: tekst leeft niet in de logica. Alle voor gebruikers zichtbare tekst komt uit één voorziening, met een sleutel per tekst en een taalkeuze per ontvanger. Wie dat vanaf het begin doet, kost het niets; wie het achteraf invoert, raakt elke module.</p>
+<p><strong>Configuratie.</strong> Leg vast wat instelbaar is en wie het mag wijzigen. De reglementsparameters per werkgever uit deel 4 zijn hier het lastige geval: zij zijn geen technische configuratie maar bedrijfsgegevens, en zij horen dus in beheer bij de administratie, met versiehistorie — want een parameterwijziging verandert berekende rechten.</p>
+<p><strong>Testen.</strong> Leg vast wat waar getest wordt en met welke gegevens. Voor deze doelgroep relevant: testgegevens met echte persoonsgegevens zijn geen optie, en gefingeerde gegevens moeten toch realistisch genoeg zijn om peildatumgedrag te toetsen.</p>
+<hr>
+<h2>8.8 Hoe u concepten laat leven</h2>
+<p>Een vastgelegd concept dat niemand toepast, is een document. Vier maatregelen, van sterk naar zwak — dezelfde ordening als bij de modulegrenzen in deel 5:</p>
+<ol>
+<li><strong>Onvermijdelijk maken.</strong> Als correlatie-identificatie automatisch wordt meegegeven door de infrastructuur die iedereen gebruikt, kan niemand hem vergeten. Dit is verreweg de sterkste maatregel: het concept is geen regel maar de weg van de minste weerstand.</li>
+<li><strong>Controleerbaar maken.</strong> Een bouwstraatcontrole die faalt bij het rechtstreeks lezen van de systeemklok, of bij een logregel zonder correlatie.</li>
+<li><strong>Voorbeeldig maken.</strong> Eén module die het goed doet en waarnaar iedereen kijkt. Werkt goed bij nieuwe teamleden, minder bij tijdsdruk.</li>
+<li><strong>Afspreken.</strong> Het concept staat in hoofdstuk 8 en iedereen heeft het gelezen. De zwakste vorm, en de enige die beschikbaar is voor concepten die zich niet laten automatiseren — bijvoorbeeld welke datum leidend is.</li>
+</ol>
+<p><strong>De praktische consequentie:</strong> kies bij het ontwerpen van een concept bewust hoe u het handhaaft, en geef de voorkeur aan concepten die zichzelf afdwingen. Een concept dat alleen in een document staat, is over twee jaar elf keer verschillend geïmplementeerd — dat is precies wat er gebeurd is.</p>
+<hr>
+<h2>8.9 B7 gesloten</h2>
+<p>Bevinding B7 sluit met drie dingen samen:</p>
+<ol>
+<li><strong>De concepten zijn vastgelegd</strong> in arc42 hoofdstuk 8, per stuk ongeveer één pagina, met regel, reden, voorbeeld en gedrag bij afwijking.</li>
+<li><strong>De belangrijkste concepten zijn onvermijdelijk of controleerbaar gemaakt</strong> — niet alleen afgesproken.</li>
+<li><strong>Er is een eigenaar.</strong> Een cross-cutting concept heeft geen natuurlijke eigenaar en krijgt er dus een toegewezen: de architect, of het gremium dat in deel 9 aan de orde komt.</li>
+</ol>
+<p><strong>Wat B7 niet is.</strong> Het is geen technisch probleem. Elk van de elf teams in Mutatie 1.0 had een redelijke oplossing voor foutafhandeling. De schade ontstond doordat er elf redelijke oplossingen waren en niemand de bevoegdheid had om er één van te maken. Dat is een organisatorisch probleem met een technische verschijningsvorm — en het is de reden dat deel 9 over governance en evaluatie gaat.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Een cross-cutting concept geldt overal en wordt daarom door geen enkele hoofdindeling gevangen. Elke indeling maakt sommige wijzigingen duur; die zijn niet toevallig maar structureel.</li>
+<li>Cross-cutting concepten hebben geen natuurlijke eigenaar. Elk team lost ze lokaal en redelijk op; het geheel is dan onwerkbaar.</li>
+<li>Toets of iets een concept is: als twee teams dit ieder voor zich oplossen, hebben we dan een probleem?</li>
+<li>Foutafhandeling begint met een indeling naar foutsoort — invoerfout, bedrijfsregelfout, tijdelijke en blijvende technische fout — want de reactie verschilt fundamenteel. Drie verschillende teksten voor dezelfde gebeurtenis is normaal.</li>
+<li>Correlatie-identificatie is de ene afspraak die een storing volgbaar maakt. Onderscheid technische logging, gebeurtenissen en audittrail: verschillende lezers, verschillende bewaartermijnen.</li>
+<li>Autorisatie: centraal beslissen, lokaal afdwingen. Functiescheiding hoort in het domein, want die kent de geschiedenis van het dossier.</li>
+<li>Tijd en datums leveren in administratieve systemen de meeste stille fouten. Onderscheid ingangs-, verwerkings- en peildatum; sla op in UTC; lees de klok niet rechtstreeks.</li>
+<li>Concepten laat u leven door ze onvermijdelijk of controleerbaar te maken. Een concept dat alleen in een document staat, is over twee jaar elf keer verschillend geïmplementeerd.</li>
+<li>B7 is geen technisch probleem: er waren elf redelijke oplossingen en niemand met de bevoegdheid er één van te maken.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Cross-cutting concept</strong> — een oplossing die overal in het systeem geldt en niet door de hoofdindeling wordt gevangen.</p>
+<p><strong>Correlatie-identificatie</strong> — een identificatie die bij binnenkomst wordt toegekend en wordt meegegeven aan alles wat uit een opdracht voortkomt.</p>
+<p><strong>Ingangsdatum / verwerkingsdatum / peildatum</strong> — respectievelijk: vanaf wanneer iets geldt, wanneer wij het vastlegden, en naar welk moment een berekening kijkt.</p>
+<p><strong>Terugwerkende kracht</strong> — een mutatie met een ingangsdatum in het verleden, waardoor eerdere berekeningen anders uitvallen.</p>
+<p><strong>Functiescheiding</strong> — de regel dat bepaalde opeenvolgende handelingen op hetzelfde dossier niet door dezelfde persoon mogen worden verricht.</p>
+<p><strong>Onvermijdelijk maken</strong> — een concept zo inrichten dat het toepassen ervan de weg van de minste weerstand is.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>iSAQB, <em>Curriculum CPSA-Foundation Level</em> — hoofdstuk 4, technische en cross-cutting concepten.</li>
+<li>arc42.org — hoofdstuk 8, met een uitgebreide lijst mogelijke concepten en voorbeelden.</li>
+<li>Fowler, <em>Patterns of Enterprise Application Architecture</em> — de patronen rond temporele gegevens en audittrails; gedateerd in techniek, actueel in probleemstelling.</li>
+<li>Snodgrass, <em>Developing Time-Oriented Database Applications</em> — voor wie het datumprobleem grondig wil begrijpen.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 1, deel 8 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">847 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">1.2 MB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-07/reader.html">&larr; Deel 7 — Deel 7 — Architectuurdocumentatie</a><a class="swa-prevnext next" href="../deel-09/reader.html">Deel 9 — Deel 9 — Architectuurevaluatie en kwaliteitsborging &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

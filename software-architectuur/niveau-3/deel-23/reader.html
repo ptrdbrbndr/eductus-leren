@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 23 — Architectuur op schaal: multi-tenancy — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 3 &rsaquo; Deel 23 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 23 — Architectuur op schaal: multi-tenancy</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 3 (CPSA-A certificeringstraject) · Deel 23 van 28</p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Niveau 3 begeleidt het CPSA-A-certificeringstraject. Deze cursus is geen geaccrediteerde training en levert geen credit points; raadpleeg isaqb.org voor de actuele voorwaarden.</p>
+<p><strong>Twee sporen.</strong> Het casusspoor behandelt de multi-tenancyvraag van Meridiaan. Het eigen spoor betreft uw certificeringsopdracht — de opdrachten aan het eind van dit deel werken daaraan door.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>de drie hoofdvormen van multi-tenancy beschrijven met hun kosten, en de tussenvormen herkennen;</li>
+<li>bepalen hoe hard de scheiding tussen partijen moet zijn, en op welke gronden;</li>
+<li>onderscheid maken tussen scheiding van gegevens, van gedrag en van verantwoording;</li>
+<li>multi-tenancy invoeren in een systeem dat er niet op is ontworpen;</li>
+<li>de gevolgen voor gebeurtenisopslag, aggregaten en koppelvlakken benoemen;</li>
+<li>de valkuilen herkennen die pas na de tweede tenant zichtbaar worden.</li>
+</ol>
+<hr>
+<h2>23.1 De vraag</h2>
+<p>Meridiaan neemt de uitvoering over van een tweede fonds: 85.000 deelnemers, eigen reglementen, eigen werkgevers, dertig jaar administratieve geschiedenis.</p>
+<p><strong>Wat er moet gebeuren:</strong> beide fondsen worden bediend vanuit één systeem, met gescheiden gegevens, gescheiden reglementen en gescheiden verantwoording. Twee systemen beheren is onbetaalbaar — dat was de businesscase van de overname.</p>
+<p><strong>De vraag die de architect moet beantwoorden:</strong> <em>hoe hard scheidt u, waar, en wat kost dat?</em></p>
+<p><strong>Wat de vraag zwaar maakt</strong> is dat het systeem er niet op is ontworpen. Er was één fonds; de aanname “één reglementenstelsel” zit in het gebeurtenismodel, in de aggregaten en in het aanleverformaat. Alle drie zijn in deel 17 als onomkeerbaar gemarkeerd.</p>
+<p><strong>Dat is geen ontwerpfout.</strong> In deel 9 van niveau 1 leerde u het onderscheid: een ontwerpfout is een beslissing die met de toenmalige informatie beter had gekund. Er wás één fonds; ontwerpen voor meerdere zou speculatief zijn geweest. Dit is een gerealiseerd risico — en de maatregel is dus niet schuld bekennen maar hanteren.</p>
+<hr>
+<h2>23.2 Drie vormen van multi-tenancy</h2>
+<p>De vormen verschillen in waar de scheiding wordt gelegd, en zij verschillen ordes van grootte in kosten.</p>
+<h3>Vorm 1 — gescheiden installaties</h3>
+<p>Elke tenant krijgt een eigen draaiende instantie met eigen opslag. Eén codebase, meerdere installaties.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Scheiding</strong></td>
+<td>Volledig, en aantoonbaar zonder uitleg</td>
+</tr>
+<tr>
+<td><strong>Kosten</strong></td>
+<td>Lineair met het aantal tenants: infrastructuur, uitrol, bewaking, patchen</td>
+</tr>
+<tr>
+<td><strong>Wijzigbaarheid</strong></td>
+<td>Elke wijziging moet naar elke installatie; versies lopen uiteen</td>
+</tr>
+<tr>
+<td><strong>Wanneer</strong></td>
+<td>Weinig tenants, harde scheidingseisen, of tenants die zelf over hun uitrolmoment gaan</td>
+</tr>
+</tbody>
+</table>
+<h3>Vorm 2 — gedeelde toepassing, gescheiden opslag</h3>
+<p>Eén draaiende toepassing bedient alle tenants; elke tenant heeft een eigen database of schema.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Scheiding</strong></td>
+<td>Sterk voor gegevens, gedeeld voor gedrag</td>
+</tr>
+<tr>
+<td><strong>Kosten</strong></td>
+<td>Beperkt lineair: opslag per tenant, maar één uitrol en één bewakingsopzet</td>
+</tr>
+<tr>
+<td><strong>Wijzigbaarheid</strong></td>
+<td>Eén uitrol voor iedereen — wat een voordeel is en een risico</td>
+</tr>
+<tr>
+<td><strong>Wanneer</strong></td>
+<td>Middelgrote aantallen, gegevensscheiding is de harde eis, gedrag mag gedeeld</td>
+</tr>
+</tbody>
+</table>
+<h3>Vorm 3 — volledig gedeeld</h3>
+<p>Eén toepassing, één opslag, met een tenantaanduiding op elke rij en filtering in elke query.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Scheiding</strong></td>
+<td>Uitsluitend logisch; de correctheid van elke query is de scheiding</td>
+</tr>
+<tr>
+<td><strong>Kosten</strong></td>
+<td>Laagst per tenant; schaalt naar duizenden</td>
+</tr>
+<tr>
+<td><strong>Wijzigbaarheid</strong></td>
+<td>Eén uitrol; geen versiedivergentie</td>
+</tr>
+<tr>
+<td><strong>Wanneer</strong></td>
+<td>Veel tenants, lage marge per tenant, geen harde scheidingseis</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De tussenvormen zijn in de praktijk het interessantst.</strong> Gedeelde toepassing met gedeelde opslag voor het merendeel, en gescheiden opslag voor de gegevens waarop een harde eis rust. Of: gedeeld, met één tenant apart omdat die het contractueel eist.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-23-1-drie-vormen-multitenancy.png" alt="De drie vormen naast elkaar — scheidingsniveau, kosten per tenant, en het aantal tenants waarbij elk vorm zinvol wordt — met de positie van Meridiaan" loading="lazy"><figcaption>Figuur 23-1 — De drie vormen naast elkaar — scheidingsniveau, kosten per tenant, en het aantal tenants waarbij elk vorm zinvol wordt — met de positie van Meridiaan</figcaption></figure>
+<hr>
+<h2>23.3 Hoe hard moet de scheiding zijn?</h2>
+<p>Dit is de kernvraag, en zij is niet technisch.</p>
+<p><strong>Vier gronden waarop de hardheid wordt bepaald:</strong></p>
+<p><strong>1. Wettelijk en toezichtsgerelateerd.</strong> Voor pensioenuitvoering geldt dat het vermogen van fondsen gescheiden is en dat de verantwoording per fonds sluitend moet zijn. Wat dat precies betekent voor gegevensopslag, is een juridische vraag — en de architect stelt hem, hij beantwoordt hem niet.</p>
+<p><strong>2. Contractueel.</strong> Een fondsbestuur kan eisen dat gegevens fysiek gescheiden zijn, ongeacht of dat wettelijk moet. Dat is onderhandelbaar en het kost geld; die afweging hoort bij de directie.</p>
+<p><strong>3. Operationeel.</strong> Mag een fout bij fonds A het uitvoeringsproces van fonds B raken? Bij volledig gedeeld is het antwoord ja, en dat is bij de conversie van dertig jaar administratie een reëel risico.</p>
+<p><strong>4. Beheersbaarheid.</strong> Hoeveel tenants verwacht u? Bij twee is de lineaire kostenstijging van vorm 1 draaglijk; bij twintig niet.</p>
+<p><strong>Voor Meridiaan</strong> ligt de uitkomst niet vast en de afweging is de opdracht van dit deel. Wat wel vaststaat: de scheiding van <strong>verantwoording</strong> is hard — de jaarrekening per fonds moet sluitend zijn en aantoonbaar. Of dat gescheiden opslag vereist, is de vraag.</p>
+<p><strong>De valkuil is de hardheid overschatten.</strong> Volledige fysieke scheiding klinkt veilig en zij kost bij elke wijziging tijd, bij elke storing dubbele analyse, en bij elke uitrol coördinatie. Wie zonder grond voor vorm 1 kiest, betaalt jarenlang voor een zekerheid die niemand vroeg.</p>
+<p><strong>De valkuil is de hardheid ook onderschatten.</strong> Bij vorm 3 is de scheiding de correctheid van elke query. Eén vergeten filter en fonds A ziet gegevens van fonds B — en dat is bij persoonsgegevens een meldplichtig incident.</p>
+<hr>
+<h2>23.4 Drie soorten scheiding</h2>
+<p>Deze worden door elkaar gehaald en zij hebben verschillende oplossingen.</p>
+<p><strong>Scheiding van gegevens.</strong> Wie ziet wat. Op te lossen met opslagscheiding (vorm 1 of 2) of met filtering (vorm 3).</p>
+<p><strong>Scheiding van gedrag.</strong> Fonds A heeft andere reglementen dan fonds B. Een scheidingsmutatie verloopt anders, de ingangsdatumberekening verschilt, en de goedkeuringsregels wijken af.</p>
+<p><strong>Dit is voor Meridiaan de zwaarste</strong>, en zij is met opslagscheiding niet opgelost. Twee routes:</p>
+<ul>
+<li><strong>Parametriseren.</strong> Het gedrag is hetzelfde, de waarden verschillen. Werkt zolang de verschillen in getallen en termijnen zitten.</li>
+<li><strong>Uitbreidingspunten.</strong> Het gedrag zelf verschilt. Werkt, en het is de route waarlangs een systeem onbegrijpelijk wordt als u hem te vaak neemt.</li>
+</ul>
+<p><strong>De praktische lijn:</strong> parametriseren waar het kan, uitbreidingspunten waar het moet, en <strong>elke uitbreiding vastleggen met de reden</strong>. Een systeem met veertig uitbreidingspunten waarvan niemand weet waarom zij bestaan, is de moderne variant van de gedistribueerde modderbal.</p>
+<p><strong>Scheiding van verantwoording.</strong> De jaarrekening, de toezichtrapportage en de deelnemersinformatie moeten per fonds sluitend zijn en herleidbaar. Dit is grotendeels een gegevensvraag — elke gebeurtenis en elke boeking moet aan één fonds toewijsbaar zijn — en het is de eis die het gebeurtenismodel raakt.</p>
+<hr>
+<h2>23.5 Invoeren in een bestaand systeem</h2>
+<p>Het systeem kent geen fondsbegrip. Dat moet erin, en de volgorde is bepalend.</p>
+<p><strong>Stap 1 — het fondsbegrip introduceren.</strong> Een tenantaanduiding als domeinbegrip, niet als technisch veld. In de taal van het domein: elk dossier, elke mutatie, elke gebeurtenis hoort bij precies één fonds.</p>
+<p><strong>Stap 2 — de bestaande gegevens toewijzen.</strong> Alles wat er is, hoort bij fonds A. Dat is een migratie en zij is eenmalig — maar zij raakt de gebeurtenisopslag, en die is onveranderlijk.</p>
+<p><strong>Hier zit het scherpste probleem van dit deel.</strong> U kunt bestaande gebeurtenissen niet wijzigen om er een fondsaanduiding aan toe te voegen. Drie routes:</p>
+<ul>
+<li><strong>Afleiden bij lezen.</strong> Gebeurtenissen zonder fondsaanduiding horen per definitie bij fonds A. Werkt, en het is een regel die u zeven jaar moet onthouden en in elke lezer moet implementeren.</li>
+<li><strong>Een nieuw gebeurtenistype.</strong> Vanaf datum D bevatten gebeurtenissen een fondsaanduiding; daarvoor niet. Dat is de versiëringsaanpak uit deel 14, en zij is de zuiverste.</li>
+<li><strong>Een aparte toewijzingstabel.</strong> Een naast de gebeurtenissen liggende registratie die elk dossier aan een fonds koppelt. Werkt, en zij introduceert een tweede bron van waarheid.</li>
+</ul>
+<p><strong>De tweede route is doorgaans de juiste</strong>, en zij illustreert waarom gebeurtenisversiëring in deel 14 zoveel aandacht kreeg: dit is precies het geval waarvoor die regels bestaan.</p>
+<p><strong>Stap 3 — filtering afdwingen.</strong> Bij vorm 2 en 3 moet elke query op fonds filteren. <strong>Dit is niet met discipline te doen</strong> — het is de fitness function-situatie uit deel 17 in zijn scherpste vorm. Eén vergeten filter is een datalek.</p>
+<p>De maatregel: filtering onvermijdelijk maken, niet controleerbaar. Een gegevenstoegangslaag waarin de fondsfilter niet is over te slaan, is de enige vorm die standhoudt. Een bouwstraatcontrole is de tweede keus en zij vindt alleen wat zij herkent.</p>
+<p><strong>Stap 4 — koppelvlakken.</strong> Het aanleverformaat is afgestemd op de werkgevers van fonds A. Fonds B heeft eigen werkgevers met eigen systemen. Uit deel 13: het formaat is een published language en de migratietermijn wordt bepaald door de traagste afnemer.</p>
+<p><strong>De verstandige keuze</strong> is doorgaans het bestaande formaat uitbreiden met een fondsaanduiding en de werkgevers van fonds B daarop aansluiten, in plaats van twee formaten te onderhouden. Dat kost de werkgevers van fonds A een wijziging, en dat is onderhandelbaar.</p>
+<hr>
+<h2>23.6 Wat er misgaat na de tweede tenant</h2>
+<p>Multi-tenancy die met twee tenants werkt, breekt regelmatig bij de derde. Vier patronen die dan zichtbaar worden.</p>
+<p><strong>De verstopte aanname.</strong> Ergens in het systeem staat nog een aanname over één fonds — een rapportage die alle dossiers telt, een batch die zonder filter draait, een cache die tenantonafhankelijk is gevuld. Bij twee tenants valt het op; bij één tenant per definitie niet.</p>
+<p><strong>De gedeelde stamgegevens.</strong> Iets wat u als generiek beschouwde, blijkt fondsspecifiek: een lijst met redenen, een set statussen, een tekstsjabloon. Elke keer is het een kleine wijziging, en samen zijn zij de reden dat het derde fonds duurder is dan het tweede.</p>
+<p><strong>De prestatievermenging.</strong> Een zware batch van fonds B vertraagt het portaal van fonds A. Dit is dezelfde isolatievraag als in deel 13, nu tussen tenants in plaats van tussen diensten — en het is een reden om bij vorm 3 alsnog te scheiden op verwerkingsniveau.</p>
+<p><strong>De verantwoordingsvraag die niemand stelde.</strong> Bij de jaarafsluiting blijkt dat een gedeelde voorziening — bijvoorbeeld de berichtenverzending — kosten maakt die aan één fonds worden toegerekend terwijl beide ervan profiteren. Dat is geen technisch probleem en het komt wel uit de architectuur voort.</p>
+<p><strong>Wat u eraan doet:</strong> de derde tenant plannen terwijl u de tweede bouwt. Niet door hem te bouwen, maar door bij elke keuze de vraag te stellen: <em>wat gebeurt er hier bij tenant drie?</em> Dat kost weinig en het maakt de verstopte aannames zichtbaar op het moment dat zij goedkoop te repareren zijn.</p>
+<hr>
+<h2>23.7 De afweging voor Meridiaan</h2>
+<p><strong>De verdedigbare uitkomst</strong> — en zij is niet de enige:</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Keuze</th>
+<th>Grond</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hoofdvorm</td>
+<td><strong>Vorm 2</strong>: gedeelde toepassing, gescheiden opslag per fonds</td>
+<td>Verantwoording moet sluitend en aantoonbaar zijn; twee tenants maakt de opslagkosten draaglijk</td>
+</tr>
+<tr>
+<td>Gedrag</td>
+<td>Parametriseren waar mogelijk, uitbreidingspunten waar nodig, elk met vastgelegde reden</td>
+<td>Reglementsverschillen zitten grotendeels in waarden</td>
+</tr>
+<tr>
+<td>Gebeurtenissen</td>
+<td>Nieuw gebeurtenistype vanaf datum D, met fondsaanduiding</td>
+<td>Deel 14: onveranderlijkheid, versiëring, leescode zeven jaar</td>
+</tr>
+<tr>
+<td>Filtering</td>
+<td>Onvermijdelijk in de gegevenstoegangslaag</td>
+<td>Eén vergeten filter is een meldplichtig incident</td>
+</tr>
+<tr>
+<td>Koppelvlak</td>
+<td>Bestaand formaat uitbreiden, niet dupliceren</td>
+<td>Deel 13: één published language, migratietermijn onderhandelen</td>
+</tr>
+<tr>
+<td>Prestatie-isolatie</td>
+<td>Conversiebatch van fonds B gescheiden verwerken</td>
+<td>Deel 13: dezelfde isolatiegrond als de conversiedienst</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De herzieningsgrens</strong> (deel 2): deze keuze wordt heroverwogen bij een derde fonds, of zodra een fondsbestuur fysieke scheiding contractueel eist. Bij meer dan vier fondsen verschuift de afweging richting vorm 3 met versterkte isolatie.</p>
+<p><strong>Wat deze keuze duur maakt</strong>, en dat hoort erbij: elke wijziging raakt beide fondsen tegelijk, dus elke uitrol vraagt afstemming met twee fondsbesturen. Dat is de prijs van gedeeld gedrag, en zij wordt betaald door de operatie en niet door de bouwers.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Drie hoofdvormen: gescheiden installaties, gedeelde toepassing met gescheiden opslag, en volledig gedeeld. Zij verschillen ordes van grootte in kosten, en de tussenvormen zijn in de praktijk het interessantst.</li>
+<li>Hoe hard de scheiding moet zijn, wordt bepaald door wettelijke, contractuele, operationele en beheersbaarheidsgronden — en de eerste twee zijn geen architectuurvragen.</li>
+<li>Overschat de hardheid niet: onnodige fysieke scheiding kost jarenlang. Onderschat haar ook niet: bij volledig gedeeld is één vergeten filter een meldplichtig incident.</li>
+<li>Drie soorten scheiding: gegevens, gedrag en verantwoording. Gedrag is de zwaarste en wordt niet opgelost met opslagscheiding.</li>
+<li>Parametriseren waar het kan, uitbreidingspunten waar het moet, elk met vastgelegde reden.</li>
+<li>Bij invoering in een bestaand systeem is de gebeurtenisopslag het scherpste probleem: bestaande gebeurtenissen zijn onveranderlijk. Een nieuw gebeurtenistype vanaf een datum is doorgaans de zuiverste route.</li>
+<li>Filtering moet onvermijdelijk zijn, niet controleerbaar. Dit is de fitness function-situatie in haar scherpste vorm.</li>
+<li>Wat breekt bij de derde tenant: verstopte aannames, gedeelde stamgegevens die fondsspecifiek blijken, prestatievermenging, en toerekeningsvragen. Plan de derde terwijl u de tweede bouwt.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Multi-tenancy</strong> — meerdere gescheiden partijen bedienen vanuit één systeem.</p>
+<p><strong>Tenant</strong> — een partij met eigen gegevens, gedrag en verantwoording; bij Meridiaan een fonds.</p>
+<p><strong>Scheiding van gegevens, gedrag en verantwoording</strong> — respectievelijk wie wat ziet, welke regels gelden, en hoe wordt verantwoord.</p>
+<p><strong>Parametriseren tegenover uitbreidingspunt</strong> — verschillen in waarden, tegenover verschillen in gedrag.</p>
+<p><strong>Verstopte aanname</strong> — een niet-vastgelegde veronderstelling over één tenant die pas bij de tweede of derde zichtbaar wordt.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Ford, Richards e.a., <em>Software Architecture: The Hard Parts</em> — de hoofdstukken over gegevensscheiding en gedeelde diensten.</li>
+<li>Literatuur over meerdere-mandanten-architectuur in uw eigen technologiestapel; de invulling is stapelspecifiek.</li>
+<li>Deel 14 van deze cursus over gebeurtenisversiëring, en deel 17 over onomkeerbaarheid.</li>
+<li>Uw eigen sectorkaders over vermogensscheiding en verantwoording per fonds; die zijn leidend.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 3, deel 23 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">223 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">106 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">564 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-22/reader.html">&larr; Deel 22 — Deel 22 — De certificeringsopdracht</a><a class="swa-prevnext next" href="../deel-24/reader.html">Deel 24 — Deel 24 — Migratie en modernisering &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

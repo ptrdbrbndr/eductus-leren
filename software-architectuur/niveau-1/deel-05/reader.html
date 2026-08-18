@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 5 — Architectuurstijlen II — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 5 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 5 — Architectuurstijlen II</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 1 (CPSA-F) · Deel 5 van 10</p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op iSAQB® CPSA-F. Geen vervanging van het officiële curriculum en examenmateriaal van het iSAQB. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool. Zelfstandig leesbaar; kruisverwijzingen naar de Ductus-cursus Business &amp; Enterprise Architectuur zijn aangeduid met <strong>↗ EA</strong>.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>het onderscheid maken tussen modulariteit en distributie, en uitleggen waarom die twee vragen los van elkaar beantwoord moeten worden;</li>
+<li>monoliet, modulith en microservices beschrijven met hun werkelijke kosten en baten;</li>
+<li>de vier drijvers benoemen die een echt argument voor distributie vormen, en de argumenten herkennen die dat niet zijn;</li>
+<li>de gevolgen van distributie voor consistentie, foutafhandeling en waarneembaarheid benoemen;</li>
+<li>event-driven architectuur beschrijven, met het onderscheid tussen gebeurtenismelding en gebeurtenisgedreven statusoverdracht;</li>
+<li>het onderscheid maken tussen orkestratie en choreografie en een keuze daartussen verdedigen;</li>
+<li>bevinding B4 uit de post-mortem Mutatie 1.0 sluiten.</li>
+</ol>
+<p><strong>Dekking CPSA-F:</strong> dit deel dekt de leerdoelen over gedistribueerde architectuurstijlen en hun eigenschappen, en legt de basis voor de verdiepende modules in niveau 2 (deel 13 en 14).</p>
+<hr>
+<h2>5.1 De vraag die vandaag aan de orde is</h2>
+<p>Deel 4 ging over structuur: hoe is het systeem van binnen ingedeeld, waar zit de logica, welke kant wijzen de afhankelijkheden. De uitkomst was hexagonaal, met de mutatiesoort als indelingsas en de integratie afgezonderd.</p>
+<p>Vandaag gaat het over iets anders: <strong>in hoeveel afzonderlijk uitrolbare eenheden valt dat systeem uiteen?</strong></p>
+<p>Dat is een andere vraag, met andere kosten en andere baten. U kunt een uitstekend gemoduleerd systeem in één uitrolbare eenheid hebben, en u kunt elf uitrolbare eenheden hebben die van binnen volstrekt verweven zijn. In Mutatie 1.0 was het tweede het geval.</p>
+<p><strong>Twee assen, vier hoeken:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Slecht gemoduleerd</th>
+<th>Goed gemoduleerd</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Eén uitrolbare eenheid</strong></td>
+<td>Grote modderbal — moeilijk, maar goedkoop te repareren</td>
+<td>Modulith — voor de meeste systemen het beste punt</td>
+</tr>
+<tr>
+<td><strong>Veel uitrolbare eenheden</strong></td>
+<td><strong>Gedistribueerde modderbal — Mutatie 1.0</strong></td>
+<td>Microservices — duur, en soms nodig</td>
+</tr>
+</tbody>
+</table>
+<p>De gedistribueerde modderbal is de slechtste van de vier, en het is geen zeldzaamheid maar de meest voorkomende uitkomst van een ondoordachte distributiebeslissing. U hebt dan alle kosten van het netwerk (latentie, gedeeltelijke uitval, gedistribueerde transacties, elf pijplijnen) én alle kosten van verwevenheid (een wijziging raakt meerdere eenheden), zonder de baten van een van beide.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-5-1-kwadrant-modulariteit-distributie.png" alt="De vier kwadranten van modulariteit tegen distributie, met de vier archetypen en de positie van Mutatie 1.0 gemarkeerd; pijlen die aangeven welke verplaatsingen goedkoop zijn en welke niet" loading="lazy"><figcaption>Figuur 5-1 — De vier kwadranten van modulariteit tegen distributie, met de vier archetypen en de positie van Mutatie 1.0 gemarkeerd; pijlen die aangeven welke verplaatsingen goedkoop zijn en welke niet</figcaption></figure>
+<p><strong>De belangrijkste les uit dit kwadrant:</strong> de weg van linksonder naar rechtsboven loopt via linksboven, niet rechtstreeks. Eerst moduleren, dan pas distribueren. Wie distribueert wat nog niet gemoduleerd is, bevriest de verwevenheid in netwerkkoppelvlakken en maakt haar duurder om op te lossen.</p>
+<hr>
+<h2>5.2 De monoliet</h2>
+<p>Een <strong>monoliet</strong> is een systeem dat als één eenheid wordt gebouwd, uitgerold en gedraaid.</p>
+<p>Het woord heeft een slechte klank die het niet verdient. De klank komt van de <em>grote modderbal</em>: een monoliet zonder interne structuur, waarin alles alles aanroept. Maar dat is een modulariteitsprobleem, geen distributieprobleem, en het wordt niet opgelost door de bal op te delen in netwerkverbonden stukken.</p>
+<p><strong>Wat een monoliet u geeft:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Voordeel</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eenvoudige aanroepen</td>
+<td>Een functieaanroep faalt niet halverwege, kost geen milliseconden en heeft geen herpogingsbeleid nodig</td>
+</tr>
+<tr>
+<td>Echte transacties</td>
+<td>Een mutatie en haar audittrail worden samen vastgelegd of samen niet — een garantie die u gedistribueerd niet gratis krijgt</td>
+</tr>
+<tr>
+<td>Eenvoudig testen</td>
+<td>Het hele systeem draait op één machine</td>
+</tr>
+<tr>
+<td>Eenvoudig waarnemen</td>
+<td>Eén logbestand, één stacktrace bij een fout</td>
+</tr>
+<tr>
+<td>Goedkope refactoring</td>
+<td>Een grens verleggen is een verplaatsing in de code, niet een migratie van koppelvlakken</td>
+</tr>
+</tbody>
+</table>
+<p>Dat laatste is het onderschatte punt. <strong>In een monoliet zijn uw modulegrenzen goedkoop te corrigeren.</strong> Zodra ze netwerkkoppelvlakken zijn geworden, kost een grensverlegging een migratieproject. Wie zijn grenzen nog niet zeker weet — en dat is aan het begin van elk project het geval — heeft in een monoliet de goedkoopste leeromgeving.</p>
+<p><strong>Wat een monoliet u kost:</strong> één deploymoment voor iedereen, één technologiestapel, één schaaleenheid, en een teamgrootte-plafond. Bij twee teams zijn geen van deze vier bindend; bij twintig teams is de eerste dat wel.</p>
+<hr>
+<h2>5.3 De modulith</h2>
+<p>Een <strong>modulith</strong> is een monoliet met afgedwongen interne modulegrenzen: één uitrolbare eenheid, met daarbinnen modules die uitsluitend via expliciete koppelvlakken communiceren en die hun eigen gegevens bezitten.</p>
+<p>Dit is voor de meeste bedrijfssystemen het beste punt op de kaart, en het is het minst besproken. De reden is dat het geen mode is: er valt geen conferentielezing over te geven.</p>
+<p><strong>Wat het toevoegt aan de monoliet:</strong></p>
+<ul>
+<li><strong>Modulegrenzen die worden gehandhaafd</strong>, niet alleen bedoeld. Handhaving kan met taalmiddelen (pakketstructuur, zichtbaarheid), met bouwstraatcontroles die een verboden afhankelijkheid laten falen, of met een expliciete moduleafbakening in de gebruikte omgeving. Welk middel u kiest is minder belangrijk dan dát het geautomatiseerd is: een grens die alleen in reviews wordt bewaakt, verdwijnt onder deadlinedruk.</li>
+<li><strong>Eigen gegevens per module.</strong> Geen gedeelde tabellen tussen modules; wie iets van een andere module nodig heeft, vraagt het via haar koppelvlak. Dit is de moeilijkste en de belangrijkste regel, want juist via de database ontstaat verwevenheid die geen enkel diagram toont.</li>
+<li><strong>Een migratiepad.</strong> Een module die zijn eigen gegevens bezit en alleen via een koppelvlak bereikbaar is, is precies wat u later als aparte service kunt uitrollen, als daar aanleiding voor komt. De modulith houdt die deur open zonder de prijs nu te betalen.</li>
+</ul>
+<p><strong>Voor Mutatie 2.0</strong> ligt dit voor de hand: de mutatiesoorten uit deel 3 worden modules, de integratie met de kernadministratie wordt een module, en de gebeurtenisopslag ook. Alles in één uitrolbare eenheid, met bewaakte grenzen.</p>
+<p><strong>↗ EA</strong> — Op landschapsniveau is dit dezelfde afweging als tussen een geïntegreerd pakket en een verzameling gekoppelde applicaties. De EA-cursus behandelt hem als integratie- versus autonomiekeuze; de kostenstructuur is verwant.</p>
+<hr>
+<h2>5.4 Microservices</h2>
+<p><strong>Grondvorm.</strong> Het systeem bestaat uit kleine, onafhankelijk uitrolbare diensten, elk met eigen gegevens, elk door één team beheerd, communicerend over het netwerk.</p>
+<h3>De vier echte drijvers</h3>
+<p>Er zijn precies vier argumenten die distributie rechtvaardigen. Alle andere zijn afgeleiden of vergissingen.</p>
+<p><strong>1. Onafhankelijk uitrollen.</strong> Delen van het systeem moeten in een eigen ritme in productie kunnen, zonder coördinatie met andere teams. Dit is de sterkste drijver en in de praktijk de enige die op zichzelf voldoende is.</p>
+<p><strong>2. Onafhankelijk schalen.</strong> Een deel van het systeem heeft een schaalprofiel dat wezenlijk afwijkt van de rest — bijvoorbeeld een rekenintensieve component die honderd keer zoveel capaciteit vraagt dan de rest.</p>
+<p><strong>3. Onafhankelijk falen.</strong> Een deel mag uitvallen zonder de rest mee te nemen, en die isolatie is met andere middelen niet te bereiken.</p>
+<p><strong>4. Onafhankelijke technologie.</strong> Een deel vraagt een fundamenteel andere technologie — een rekenbibliotheek die alleen in een andere taal bestaat.</p>
+<p><strong>Toets voor Mutatie 2.0.</strong> Twee teams zonder groei, één deploymoment per twee weken (de deployfrequentie is een organisatorische keuze, geen technische beperking), geen enkel deel met afwijkend schaalprofiel, geen isolatiebehoefte die niet met een wachtrij op te lossen is, één technologiestapel. <strong>Nul van de vier.</strong></p>
+<p>Dat is de kern van bevinding B4: er zijn elf services gebouwd zonder dat één van de vier drijvers aanwezig was, met als motivering dat de leverancier microservices als standaard hanteert.</p>
+<h3>De argumenten die geen drijver zijn</h3>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Waarom het niet werkt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>“Het is beter gemoduleerd”</td>
+<td>Modulariteit krijgt u met moduleg­renzen, niet met netwerkkoppelvlakken. Een modulith geeft hetzelfde zonder de netwerkkosten</td>
+</tr>
+<tr>
+<td>“Het is moderner”</td>
+<td>Dit is de motivering uit Mutatie 1.0, letterlijk</td>
+</tr>
+<tr>
+<td>“Teams kunnen dan onafhankelijk werken”</td>
+<td>Alleen waar als de grenzen goed liggen. Liggen ze verkeerd, dan overleggen teams méér dan voorheen, want nu over koppelvlakken</td>
+</tr>
+<tr>
+<td>“Het is beter herbruikbaar”</td>
+<td>Hergebruik verhoogt afferente koppeling (deel 3); over het netwerk is dat duurder, niet goedkoper</td>
+</tr>
+<tr>
+<td>“We kunnen dan per service opnieuw beginnen”</td>
+<td>Zelden waar; de gegevens en de koppelvlakken blijven</td>
+</tr>
+</tbody>
+</table>
+<h3>Wat distributie werkelijk kost</h3>
+<p>De kosten zijn niet gelijkmatig verdeeld — sommige zijn eenmalig, andere permanent.</p>
+<p><strong>Het netwerk is niet betrouwbaar.</strong> Elke aanroep kan traag zijn, falen, of erger: slagen zonder dat u het antwoord ontvangt. Dat laatste geval — u weet niet of het gelukt is — bestaat binnen één proces niet en is de bron van de meeste gedistribueerde fouten. Het antwoord erop is idempotentie: elke bewerking moet veilig herhaalbaar zijn. Dat is ontwerpwerk in elke dienst, niet één keer centraal.</p>
+<p><strong>Transacties verdwijnen.</strong> Binnen één database legt u een mutatie en haar audittrail samen vast, of geen van beide. Over twee diensten heen bestaat die garantie niet. U moet dan werken met patronen als outbox (een gebeurtenis in dezelfde transactie wegschrijven en apart verzenden) of saga (een reeks stappen met compenserende acties). Beide werken, beide zijn ontwerpwerk, en beide maken de foutpaden ingewikkelder dan het gelukkige pad.</p>
+<p>Voor Meridiaan is dit geen theoretisch punt. QS-4 vraagt dat een mutatie zeven jaar reconstrueerbaar is inclusief goedkeurder. Als mutatie en audittrail in verschillende diensten leven, moet u aantonen dat ze niet uit elkaar kunnen lopen — en dat bewijs is duurder dan de transactie die u opgaf.</p>
+<p><strong>Consistentie wordt uitgesteld.</strong> Wat in één database onmiddellijk klopt, klopt gedistribueerd pas na enige tijd. Dat is werkbaar, mits het zichtbaar is voor wie ermee werkt. Onzichtbare uitgestelde consistentie levert de meldingen op die niemand kan verklaren: “ik heb het ingevoerd maar mijn collega ziet het niet”.</p>
+<p><strong>Waarneembaarheid moet gebouwd worden.</strong> Eén stacktrace wordt elf logbestanden. Zonder gecorreleerde traceringen is een storing niet te volgen — bevinding B7, die in Mutatie 1.0 precies dit gevolg had. Dit is een investering vooraf, niet iets wat u later toevoegt.</p>
+<p><strong>Operationele last vermenigvuldigt.</strong> Elf pijplijnen, elf versiebeheerlijnen, elf keer omgevingsconfiguratie, en koppelvlakversies die u niet mag breken omdat de andere kant zelfstandig uitrolt. Met twee teams en een beheerafdeling zonder nachtbezetting (randvoorwaarde uit deel 2) is dat een reële belasting.</p>
+<h3>Wanneer het wél de juiste keuze is</h3>
+<p>Om het beeld eerlijk te houden: microservices zijn niet fout, ze zijn duur. Waar de vier drijvers aanwezig zijn, betaalt die prijs zichzelf terug — bij veel teams die elkaar in de weg zitten, bij sterk uiteenlopende schaalprofielen, bij delen die een eigen beschikbaarheidsregime nodig hebben. Meridiaan heeft die situatie niet. Een landelijke uitvoerder met veertig teams zou hem kunnen hebben.</p>
+<hr>
+<h2>5.5 Event-driven architectuur</h2>
+<p><strong>Grondvorm.</strong> Componenten communiceren door gebeurtenissen te publiceren en erop te reageren, in plaats van elkaar rechtstreeks aan te roepen. De publicerende partij weet niet wie luistert.</p>
+<p>Dit is een andere as dan monoliet-versus-microservices: u kunt gebeurtenisgedreven werken binnen één uitrolbare eenheid. Het gaat om de communicatievorm, niet om de verpakking.</p>
+<h3>Twee vormen die vaak verward worden</h3>
+<p><strong>Gebeurtenismelding.</strong> Een korte melding dat er iets is gebeurd: <em>adresmutatie 12345 is goedgekeurd</em>. Wie meer wil weten, vraagt het na. Voordeel: kleine berichten, één bron van waarheid. Nadeel: elke geïnteresseerde doet een terugvraag, wat de koppeling terugbrengt die u wilde vermijden.</p>
+<p><strong>Gebeurtenisgedreven statusoverdracht.</strong> De gebeurtenis bevat alle gegevens die een ontvanger nodig heeft. Voordeel: geen terugvragen, ontvangers zijn onafhankelijk. Nadeel: gegevens worden gedupliceerd, en u moet een antwoord hebben op de vraag welke kopie geldt.</p>
+<p>Het onderscheid is belangrijk omdat de tweede vorm precies de fout uit sprint 4 van Mutatie 1.0 dicht bij komt: elke service een eigen kopie. Het verschil zit erin dat een gebeurtenisstroom de kopieën binnen seconden bijwerkt en de volgorde vastlegt, terwijl een nachtelijke export dat niet doet. De vorm is verwant; de eigenschappen zijn onvergelijkbaar. Dat is een nuttige waarschuwing tegen het beoordelen van een ontwerp op zijn vorm.</p>
+<h3>Gebeurtenissen als geheugen</h3>
+<p>De sterkste toepassing voor deze casus is niet de communicatie maar de vastlegging. Wanneer u elke betekenisvolle verandering vastlegt als een onveranderlijke gebeurtenis — <em>mutatie ingediend</em>, <em>aanvullende gegevens opgevraagd</em>, <em>goedgekeurd door medewerker X</em>, <em>doorgegeven aan kernadministratie</em> — dan is de mutatiegeschiedenis geen bijproduct maar de bron zelf.</p>
+<p>Dat dient QS-4 rechtstreeks: zeven jaar reconstrueerbaar, inclusief goedkeurder, is dan geen aparte voorziening maar een eigenschap van de opslag. Het is ook wat in Mutatie 1.0 ontbrak: daar werd de eindtoestand bewaard, waardoor de vraag “waarom kreeg deze deelnemer op deze datum dit bedrag” achteraf niet volledig te beantwoorden was.</p>
+<p>De prijs is reëel en hoort in de afweging: de opslag groeit, het lezen van een actuele toestand vraagt een afgeleid leesmodel, en het model is voor ontwikkelaars ongewoon. De volledige uitwerking hiervan — event sourcing en CQRS — hoort in niveau 2 (deel 14). Wat u op dit niveau moet kunnen, is de afweging benoemen: <strong>eindtoestand is eenvoudiger, gebeurtenissen zijn aantoonbaar.</strong></p>
+<h3>Orkestratie of choreografie</h3>
+<p>Bij samengestelde processen — een scheidingsmutatie raakt meerdere partijen en loopt over weken — zijn er twee coördinatievormen:</p>
+<p><strong>Orkestratie.</strong> Eén component stuurt het proces aan en kent de volgorde. Voordeel: het proces is op één plek zichtbaar, de status is opvraagbaar, fouten hebben een eigenaar. Nadeel: de orkestrator wordt een centraal punt dat bij elke procesuitbreiding wijzigt.</p>
+<p><strong>Choreografie.</strong> Elke component reageert op gebeurtenissen en niemand kent het geheel. Voordeel: componenten toevoegen zonder een centrale plek te wijzigen. Nadeel: het proces bestaat nergens in beschrijfbare vorm; de vraag “waar staat deze scheiding nu?” is alleen te beantwoorden door de gebeurtenissen van vijf componenten te reconstrueren.</p>
+<p><strong>Voor Meridiaan is orkestratie de verdedigbare keuze,</strong> en de reden is niet technisch. Een van de drie programmadoelen is <em>één statusbeeld</em> met controleerbare doorlooptijden, en de toezichthouder moet kunnen zien waar een dossier staat. Een proces dat nergens beschreven staat, is niet aantoonbaar. Choreografie is elegant waar niemand het geheel hoeft te overzien; hier moet iemand dat juist wel.</p>
+<hr>
+<h2>5.6 De beslissing voor Mutatie 2.0</h2>
+<p>Alles bij elkaar:</p>
+<table>
+<thead>
+<tr>
+<th>Vraag</th>
+<th>Keuze</th>
+<th>Grond</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interne structuur</td>
+<td>Hexagonaal, ingedeeld naar mutatiesoort</td>
+<td>Deel 3 en 4</td>
+</tr>
+<tr>
+<td>Distributie</td>
+<td><strong>Eén uitrolbare eenheid — modulith</strong></td>
+<td>Nul van de vier drijvers aanwezig; twee teams; beheer zonder nachtbezetting</td>
+</tr>
+<tr>
+<td>Modulegrenzen</td>
+<td>Geautomatiseerd gehandhaafd, eigen gegevens per module</td>
+<td>Houdt latere splitsing open zonder de prijs nu te betalen</td>
+</tr>
+<tr>
+<td>Vastlegging</td>
+<td>Gebeurtenissen als bron voor de mutatiegeschiedenis</td>
+<td>QS-4; het gebrek in Mutatie 1.0</td>
+</tr>
+<tr>
+<td>Coördinatie</td>
+<td>Orkestratie voor samengestelde mutaties</td>
+<td>Eén statusbeeld, aantoonbaarheid richting toezicht</td>
+</tr>
+<tr>
+<td>Doorgifte kernadministratie</td>
+<td>Asynchroon, via de aangedreven poort uit deel 4, met idempotente doorgifte</td>
+<td>QS-1 tegen de limiet van 20 aanroepen per seconde</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De herzieningsgrens</strong> (deel 2) hoort erbij: deze distributiekeuze wordt heroverwogen zodra het aantal teams boven de vier komt, of zodra een module aantoonbaar een afwijkend schaal- of beschikbaarheidsprofiel krijgt. Dat is niet waarschijnlijk binnen de programmaperiode, en het is precies daarom dat de keuze nu verdedigbaar is.</p>
+<hr>
+<h2>5.7 B4 gesloten</h2>
+<p>Bevinding B4 luidde: <em>de gekozen architectuurstijl past niet bij het probleem.</em> Met deel 4 en 5 samen is die te sluiten, en het loont de fout precies te benoemen — hij is namelijk niet “microservices”.</p>
+<p><strong>De fout was in drie stappen:</strong></p>
+<ol>
+<li><strong>De vraag is niet gesteld.</strong> Er is nooit onderzocht welke drijvers aanwezig waren. Was dat wel gebeurd, dan was de uitkomst nul van vier geweest, en dat is een gesprek van een middag.</li>
+<li><strong>Twee vragen zijn samengevoegd.</strong> De distributiebeslissing is genomen als structuurbeslissing. Daardoor ontstond distributie zonder modularisering: de gedistribueerde modderbal.</li>
+<li><strong>De kosten zijn wel betaald.</strong> Elf pijplijnen, netwerkfouten, geen transactie tussen mutatie en audittrail, en storingen die over elf logbestanden niet te volgen waren — dat is B7 en het is een rechtstreeks gevolg van deze beslissing.</li>
+</ol>
+<p><strong>Wat de bevinding niet zegt.</strong> Zij zegt niet dat microservices verkeerd zijn, en zij zegt niet dat de leverancier incompetent was. Zij zegt dat een stijl is toegepast zonder de vraag te stellen waarop hij het antwoord is. Diezelfde fout is met een modulith even goed te maken: wie vandaag de modulith kiest omdat deze reader hem aanbeveelt, in plaats van omdat nul van de vier drijvers aanwezig is, heeft niets geleerd — alleen een andere mode overgenomen.</p>
+<p>Dat is de eigenlijke inhoud van B4, en het is de reden dat deze twee delen samen genomen worden.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Modulariteit en distributie zijn twee onafhankelijke assen. De gedistribueerde modderbal — slecht gemoduleerd én verdeeld — is de duurste hoek, en de meest voorkomende uitkomst van een ondoordachte distributiebeslissing.</li>
+<li>Eerst moduleren, dan pas distribueren. In een monoliet zijn grenzen goedkoop te corrigeren; als netwerkkoppelvlak kost een grensverlegging een migratieproject.</li>
+<li>De monoliet geeft eenvoudige aanroepen, echte transacties, eenvoudige waarneming en goedkope refactoring. Zijn slechte naam komt van de grote modderbal, wat een modulariteitsprobleem is.</li>
+<li>De modulith — één uitrolbare eenheid met geautomatiseerd gehandhaafde modulegrenzen en eigen gegevens per module — is voor de meeste bedrijfssystemen het beste punt, en houdt latere splitsing open.</li>
+<li>Er zijn vier echte drijvers voor distributie: onafhankelijk uitrollen, schalen, falen en technologie kiezen. Mutatie 2.0 heeft er nul.</li>
+<li>Distributie kost onbetrouwbare aanroepen, verdwenen transacties, uitgestelde consistentie, gebouwde waarneembaarheid en vermenigvuldigde operationele last.</li>
+<li>Gebeurtenisgedreven werken is een communicatievorm, geen verpakkingsvorm. De sterkste toepassing hier is vastlegging: eindtoestand is eenvoudiger, gebeurtenissen zijn aantoonbaar.</li>
+<li>Orkestratie boven choreografie waar iemand het geheel moet kunnen overzien — bij aantoonbaarheid richting toezicht is dat het geval.</li>
+<li>B4 gaat niet over microservices. Hij gaat over een stijl toepassen zonder de vraag te stellen waarop hij het antwoord is.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Modulariteit versus distributie</strong> — respectievelijk de interne indeling in modules met grenzen, en het aantal afzonderlijk uitrolbare eenheden.</p>
+<p><strong>Gedistribueerde modderbal</strong> — een systeem dat over meerdere uitrolbare eenheden is verdeeld zonder dat de interne verwevenheid is opgelost.</p>
+<p><strong>Modulith</strong> — één uitrolbare eenheid met afgedwongen modulegrenzen en eigen gegevens per module.</p>
+<p><strong>Idempotentie</strong> — de eigenschap dat een bewerking veilig herhaald kan worden; noodzakelijk zodra een aanroep kan slagen zonder dat de aanroeper het antwoord ontvangt.</p>
+<p><strong>Outbox</strong> — patroon waarbij een gebeurtenis in dezelfde transactie als de gegevenswijziging wordt vastgelegd en apart wordt verzonden.</p>
+<p><strong>Saga</strong> — een reeks stappen over meerdere diensten met compenserende acties in plaats van een gedeelde transactie.</p>
+<p><strong>Gebeurtenismelding / gebeurtenisgedreven statusoverdracht</strong> — respectievelijk een korte melding waarna ontvangers navragen, of een gebeurtenis die alle benodigde gegevens meedraagt.</p>
+<p><strong>Orkestratie / choreografie</strong> — coördinatie door één sturende component, respectievelijk door onderling reagerende componenten zonder centraal overzicht.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>iSAQB, <em>Curriculum CPSA-Foundation Level</em> — hoofdstuk 4, gedistribueerde stijlen.</li>
+<li>Richards &amp; Ford, <em>Fundamentals of Software Architecture</em> — de hoofdstukken over service-based, microservices en event-driven architecture.</li>
+<li>Fowler, <em>What do you mean by “Event-Driven”?</em> — kort en verhelderend over de vormen van gebeurtenisgebruik.</li>
+<li>Newman, <em>Building Microservices</em> (2e druk) — hoofdstuk 1 en 3, met name over wanneer níét.</li>
+<li>Documentatie over modulith-benaderingen in uw eigen technologiestapel; het begrip is stapelspecifiek ingevuld.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 1, deel 5 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">271 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">20 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">730 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-04/reader.html">&larr; Deel 4 — Deel 4 — Architectuurstijlen I</a><a class="swa-prevnext next" href="../deel-06/reader.html">Deel 6 — Deel 6 — Kwaliteitstactieken &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

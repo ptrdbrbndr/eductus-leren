@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 14 — Event sourcing en CQRS — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 14 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 14 — Event sourcing en CQRS</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 14 van 28
+<em>Competentiegebied: technologisch</em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal; arc42 + C4 als referentienotatie.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>het onderscheid maken tussen gebeurtenissen publiceren en gebeurtenissen als bron van waarheid gebruiken;</li>
+<li>event sourcing beschrijven, inclusief opbouw van toestand, momentopnamen en versiebeheer van gebeurtenissen;</li>
+<li>CQRS toepassen en de leeskant van de schrijfkant scheiden waar dat loont;</li>
+<li>de gevolgen voor uitgestelde consistentie benoemen en zichtbaar maken;</li>
+<li>omgaan met correcties, terugwerkende kracht en het verwijderrecht in een onveranderlijke opslag;</li>
+<li>beoordelen wanneer event sourcing niet loont, en welke lichtere alternatieven er zijn.</li>
+</ol>
+<hr>
+<h2>14.1 De aanleiding: de reconstructieproef</h2>
+<p>Uit het meetplan van deel 6 van niveau 1: <em>week 12 — reconstructie van een testdossier door iemand die het niet gebouwd heeft.</em> Die proef is uitgevoerd en zij is mislukt.</p>
+<p>De opdracht luidde: reconstrueer waarom deelnemer 88123 op 14 maart een uitkering van € 1.240,50 ontving. Wat de tester aantrof:</p>
+<ul>
+<li>de actuele toestand van het dossier, met de huidige gegevens;</li>
+<li>een audittabel met wie wat wanneer had gewijzigd, met per regel de nieuwe waarde;</li>
+<li>geen manier om vast te stellen welke <strong>reglementparameters</strong> op 14 maart golden, want die tabel wordt bijgewerkt zonder historie;</li>
+<li>geen manier om vast te stellen of de berekening op dat moment op geverifieerde adresgegevens berustte.</li>
+</ul>
+<p>De reconstructie kwam tot ongeveer 70% en strandde daar. De conclusie van de proef: <em>QS-4 wordt met de huidige opzet niet gehaald.</em></p>
+<p><strong>Dat is een geslaagde meting.</strong> Zij vond plaats in week 12 in plaats van in week 58, en zij liet zien dat de eindtoestand-met-audittabel niet volstaat voor wat de toezichthouder vraagt. In deel 5 van niveau 1 was de keuze al gemaakt — gebeurtenissen als bron — maar zij was niet gebouwd. Vandaag bouwen we hem.</p>
+<hr>
+<h2>14.2 Drie niveaus van gebeurtenisgebruik</h2>
+<p>Deze drie worden door elkaar gehaald en zij hebben verschillende kosten.</p>
+<p><strong>Niveau 1 — gebeurtenissen als bericht.</strong> Componenten publiceren wat er is gebeurd; anderen reageren. De toestand wordt gewoon opgeslagen als eindtoestand. Dit is wat deel 13 opleverde, en het is voor de meeste systemen genoeg.</p>
+<p><strong>Niveau 2 — gebeurtenissen als geschiedenis.</strong> De gebeurtenissen worden bewaard als volledige, onveranderlijke geschiedenis, naast de eindtoestand. U kunt terugkijken; de toestand komt nog steeds uit de gewone opslag.</p>
+<p><strong>Niveau 3 — event sourcing.</strong> De gebeurtenissen zijn de <strong>enige</strong> bron van waarheid. De toestand bestaat niet zelfstandig; zij wordt afgeleid door de gebeurtenissen opnieuw af te spelen.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Terugkijken</th>
+<th>Toestand</th>
+<th>Kosten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bericht</td>
+<td>Nee</td>
+<td>Zelfstandig opgeslagen</td>
+<td>Laag</td>
+</tr>
+<tr>
+<td>Geschiedenis</td>
+<td>Ja</td>
+<td>Zelfstandig opgeslagen</td>
+<td>Middel</td>
+</tr>
+<tr>
+<td>Event sourcing</td>
+<td>Ja, volledig</td>
+<td>Afgeleid</td>
+<td>Hoog</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Niveau 2 wordt onderschat.</strong> Voor veel systemen die “event sourcing willen” is niveau 2 genoeg: een onveranderlijke gebeurtenissenreeks naast de gewone opslag geeft de aantoonbaarheid zonder dat de hele toestandsopbouw op zijn kop gaat.</p>
+<p><strong>Voor Meridiaan is niveau 3 verdedigbaar in het kerndomein</strong> — mutatieverwerking en rechtenbepaling — en overdreven daarbuiten. Dat is dezelfde investeringsredenering als bij de subdomeinen in deel 11.</p>
+<hr>
+<h2>14.3 Event sourcing</h2>
+<p><strong>Het principe.</strong> In plaats van <em>“deelnemer 88123 heeft adres X”</em> slaat u op: <em>“adres gewijzigd naar X op datum D, gemeld door M, met ingangsdatum I”</em>. De actuele toestand krijgt u door alle gebeurtenissen vanaf het begin toe te passen.</p>
+<p><strong>Wat u daarmee wint:</strong></p>
+<ul>
+<li><strong>Volledige reconstrueerbaarheid.</strong> De vraag uit de reconstructieproef wordt beantwoordbaar: u speelt de gebeurtenissen af tot 14 maart en ziet de toestand van dat moment.</li>
+<li><strong>De reden staat erin.</strong> Een eindtoestand zegt wat er is; een gebeurtenis zegt wat er is gebeurd en waarom. <em>Adres gewijzigd wegens verhuizing</em> verschilt van <em>adres gecorrigeerd wegens invoerfout</em> — administratief zijn dat twee verschillende dingen met verschillende gevolgen.</li>
+<li><strong>Nieuwe vragen op oude gegevens.</strong> Een leesmodel dat u volgend jaar bedenkt, kunt u vullen door de geschiedenis opnieuw af te spelen. Bij eindtoestandopslag is de informatie er dan simpelweg niet.</li>
+</ul>
+<p>Dat laatste is voor pensioenuitvoering zeer waardevol: toezichtvragen zijn niet te voorzien, en de vraag van 2029 stelt u niet in 2026.</p>
+<h3>Momentopnamen</h3>
+<p>Vijftig gebeurtenissen afspelen is snel; vijftigduizend niet. Een <strong>momentopname</strong> legt de toestand op een bepaald punt vast, zodat u alleen de gebeurtenissen daarna hoeft af te spelen.</p>
+<p>Twee regels: een momentopname is altijd <strong>afgeleid en herbouwbaar</strong> — nooit de bron — en u moet hem kunnen weggooien en opnieuw maken zonder informatieverlies. Zodra iemand een momentopname rechtstreeks bijwerkt, hebt u event sourcing verlaten zonder het te merken.</p>
+<h3>Gebeurtenissen versieren</h3>
+<p>Gebeurtenissen leven zeven jaar; uw code niet. Over drie jaar wilt u een veld toevoegen aan <code>MutatieGoedgekeurd</code> — en de gebeurtenissen van vandaag hebben dat niet.</p>
+<p><strong>De regels:</strong></p>
+<ul>
+<li><strong>Gebeurtenissen zijn onveranderlijk.</strong> U herschrijft de geschiedenis niet.</li>
+<li><strong>Nieuwe velden zijn optioneel</strong>, met een gedefinieerde betekenis bij afwezigheid.</li>
+<li><strong>Bij een echte betekeniswijziging maakt u een nieuw gebeurtenistype</strong>, en de code kan beide.</li>
+<li><strong>U bewaart de leescode voor oude versies</strong> zolang die gebeurtenissen bestaan — dus zeven jaar.</li>
+</ul>
+<p>Dat laatste is een reële last die zelden vooraf wordt benoemd: uw code moet gebeurtenissen kunnen lezen die zijn geschreven door een versie van uzelf die u niet meer herkent.</p>
+<hr>
+<h2>14.4 CQRS</h2>
+<p><strong>Command Query Responsibility Segregation</strong> scheidt het model waarmee u wijzigt van het model waarmee u leest.</p>
+<p>De aanleiding is dat die twee verschillende eisen hebben. Het schrijfmodel moet invarianten bewaken en is daarom genormaliseerd en klein — het aggregaat uit deel 12. Het leesmodel moet snel de juiste gegevens tonen in de vorm die het scherm nodig heeft, en dat is een andere vorm.</p>
+<p><strong>Voor het behandelaarsscherm</strong> is dat concreet: één scherm toont deelnemersgegevens, lopende mutaties, statusgeschiedenis en openstaande acties. In het schrijfmodel zijn dat drie aggregaten; als leesmodel is het één record.</p>
+<p><strong>CQRS is geen event sourcing.</strong> U kunt CQRS toepassen op een gewone database — een gedenormaliseerde leestabel naast de genormaliseerde schrijftabellen. En u kunt event sourcing toepassen zonder CQRS, al is dat ongebruikelijk omdat het lezen dan onhandig wordt.</p>
+<p><strong>De combinatie ligt voor de hand:</strong> de gebeurtenissen zijn de bron, en de leesmodellen zijn geprojecteerde weergaven die uit die gebeurtenissen worden gevuld. Een nieuw leesmodel maakt u door een projectie te schrijven en de geschiedenis af te spelen.</p>
+<h3>De prijs: uitgestelde consistentie</h3>
+<p>Het leesmodel loopt achter op het schrijfmodel — normaal milliseconden tot seconden.</p>
+<p><strong>Dat is precies het venster uit ADR-014</strong>, nu intern in plaats van richting de kernadministratie. En het is precies het scenario dat de mutatiebehandelaar in de evaluatie van deel 9 aandroeg: <em>“ik zie het, mijn collega niet — is dat normaal of een storing?”</em></p>
+<p><strong>Drie maatregelen die werken:</strong></p>
+<ol>
+<li><strong>Toon het.</strong> Een tijdstempel “bijgewerkt tot” op het scherm neemt de meeste onzekerheid weg.</li>
+<li><strong>Lees uw eigen schrijfacties consistent.</strong> Na een handeling toont u de gebruiker het resultaat uit het schrijfmodel of wacht u kort op de projectie — zodat niemand zijn eigen wijziging mist.</li>
+<li><strong>Bewaak de achterstand.</strong> Loopt een projectie meer dan X seconden achter, dan is dat een signaal — en een stilstaande projectie is de stille stilstand uit deel 6 van niveau 1.</li>
+</ol>
+<p>Maatregel 2 is de belangrijkste. Gebruikers accepteren dat anderen iets later zien; zij accepteren niet dat hun eigen handeling lijkt te zijn mislukt.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-14-1-schrijf-leeskant.png" alt="De schrijf- en leeskant naast elkaar — aggregaten en gebeurtenissenopslag links, drie projecties rechts (behandelaarsscherm, deelnemersoverzicht, werkgeversrapportage), met het achterstandsvenster gemarkeerd" loading="lazy"><figcaption>Figuur 14-1 — De schrijf- en leeskant naast elkaar — aggregaten en gebeurtenissenopslag links, drie projecties rechts (behandelaarsscherm, deelnemersoverzicht, werkgeversrapportage), met het achterstandsvenster gemarkeerd</figcaption></figure>
+<hr>
+<h2>14.5 Correcties, terugwerkende kracht en verwijderen</h2>
+<p>Dit is het onderdeel waar administratieve systemen zich onderscheiden van de voorbeelden in de literatuur.</p>
+<h3>Correcties</h3>
+<p>Een gebeurtenis blijkt onjuist: een verkeerde ingangsdatum. U mag haar niet wijzigen. U voegt een <strong>correctiegebeurtenis</strong> toe: <em>ingangsdatum gecorrigeerd van I1 naar I2, wegens R, door M op D</em>.</p>
+<p><strong>Dat is niet alleen technische hygiëne — het is administratief juist.</strong> Dat er een correctie is geweest, is zelf informatie die de toezichthouder mag willen zien. Een systeem dat corrigeert door de oorspronkelijke waarde te overschrijven, wist het feit dat er een fout is gemaakt.</p>
+<h3>Terugwerkende kracht</h3>
+<p>Uit deel 8 van niveau 1: terugwerkende kracht is geen randgeval maar normaal gedrag. Event sourcing maakt het hanteerbaar, mits u twee tijdlijnen bijhoudt:</p>
+<ul>
+<li><strong>wanneer iets is vastgelegd</strong> (de volgorde van de gebeurtenissen);</li>
+<li><strong>wanneer iets geldt</strong> (de ingangsdatum in de gebeurtenis).</li>
+</ul>
+<p>Met beide kunt u twee verschillende vragen beantwoorden: <em>wat wisten wij op 14 maart</em> en <em>wat gold er feitelijk op 14 maart</em>. Bij een geschil met een deelnemer is de eerste vraag doorgaans de relevante — u kunt niet worden afgerekend op informatie die u niet had.</p>
+<p><strong>Zonder beide tijdlijnen is die vraag onbeantwoordbaar</strong>, en dat is een van de sterkste argumenten voor event sourcing in deze sector.</p>
+<h3>Het verwijderrecht</h3>
+<p>Het scenario dat compliance in de evaluatie van deel 9 inbracht: een deelnemer vraagt verwijdering van zijn gegevens, terwijl er een bewaarplicht ligt en de gebeurtenissenopslag onveranderlijk is.</p>
+<p><strong>Het is geen contradictie maar een afweging tussen twee juridische grondslagen.</strong> Waar een bewaarplicht geldt, gaat die voor; waar zij niet geldt, moet verwijdering mogelijk zijn.</p>
+<p><strong>Het architectuurpatroon:</strong> persoonsgegevens worden niet in de gebeurtenis zelf opgeslagen maar in een aparte, wél wijzigbare voorziening, waarnaar de gebeurtenis verwijst. Verwijderen betekent dan het onleesbaar maken van die gegevens, terwijl de gebeurtenisstructuur — dát er iets gebeurde, wanneer, en met welk gevolg — intact blijft.</p>
+<p>De gevolgen zijn reëel: de reconstructie is daarna onvolledig voor die persoon, en dat moet zijn vastgelegd. <strong>Dit is bij uitstek een beslissing die niet door de architect alleen wordt genomen</strong> — juridische zaken bepaalt welke gegevens onder welke grondslag vallen. Uw taak is het patroon aan te reiken en de gevolgen te benoemen.</p>
+<hr>
+<h2>14.6 Wanneer het niet loont</h2>
+<p>Event sourcing is duur en het rendement is ongelijk verdeeld.</p>
+<p><strong>Het loont niet:</strong></p>
+<ul>
+<li><strong>bij eenvoudige gegevensverwerking.</strong> Voorkeursinstellingen hebben geen geschiedenis nodig.</li>
+<li><strong>wanneer niemand ooit terugkijkt.</strong> De hele opbrengst zit in reconstrueerbaarheid; als niemand die vraagt, betaalt u alleen kosten.</li>
+<li><strong>wanneer het team het niet kent.</strong> De denkwijze is ongewoon, de fouten zijn subtiel, en een half toegepaste event sourcing is slechter dan geen — de halfheidsvraag uit deel 4 van niveau 1.</li>
+<li><strong>wanneer u het over het hele systeem uitrolt.</strong> Dit is de meest voorkomende fout: event sourcing hoort in het kerndomein, niet in correspondentiesjablonen.</li>
+</ul>
+<p><strong>De lichtere alternatieven, in volgorde van kosten:</strong></p>
+<ol>
+<li><strong>Een audittabel</strong> met oude en nieuwe waarde, tijdstip en actor. Goedkoop, en genoeg voor “wie wijzigde wat”.</li>
+<li><strong>Niveau 2</strong> — een onveranderlijke gebeurtenissenreeks naast de gewone opslag. Geeft reconstrueerbaarheid zonder de toestandsopbouw te veranderen. <strong>Voor veel organisaties het juiste antwoord.</strong></li>
+<li><strong>Temporele tabellen</strong> — geldigheidsperioden per record. Beantwoordt “wat gold wanneer” maar niet “waarom”.</li>
+<li><strong>Volledige event sourcing.</strong></li>
+</ol>
+<p><strong>Voor Meridiaan</strong> is de verdedigbare keuze: niveau 3 in mutatieverwerking en rechtenbepaling, niveau 2 in de werkgeversaanlevering, en niveau 1 elders.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>De reconstructieproef in week 12 mislukte op 70%: reglementparameters zonder historie en niet-vastgelegde verificatiestatus. Dat is een geslaagde meting op het juiste moment.</li>
+<li>Drie niveaus: gebeurtenissen als bericht, als geschiedenis, als bron van waarheid. Niveau 2 wordt onderschat en is voor veel organisaties genoeg.</li>
+<li>Event sourcing geeft reconstrueerbaarheid, de reden achter een wijziging, en de mogelijkheid nieuwe vragen op oude gegevens te beantwoorden — waardevol omdat toezichtvragen niet te voorzien zijn.</li>
+<li>Momentopnamen zijn altijd afgeleid en herbouwbaar. Wie er rechtstreeks in schrijft, heeft event sourcing verlaten zonder het te merken.</li>
+<li>Gebeurtenissen leven zeven jaar en uw code niet: nieuwe velden optioneel, betekeniswijziging is een nieuw type, en u bewaart leescode voor oude versies.</li>
+<li>CQRS scheidt het schrijfmodel (invarianten, klein) van leesmodellen (schermvorm). Het is niet hetzelfde als event sourcing, al combineren ze goed.</li>
+<li>De prijs is uitgestelde consistentie. Toon de achterstand, laat gebruikers hun eigen wijziging altijd zien, en bewaak stilstaande projecties.</li>
+<li>Correcties zijn nieuwe gebeurtenissen: dát er is gecorrigeerd, is zelf informatie.</li>
+<li>Twee tijdlijnen — wanneer vastgelegd, wanneer geldig — maken de vraag “wat wisten wij toen” beantwoordbaar. Dat is een van de sterkste argumenten in deze sector.</li>
+<li>Het verwijderrecht lost u op door persoonsgegevens buiten de gebeurtenis te houden; de afweging tussen grondslagen is juridisch, niet architectonisch.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Event sourcing</strong> — gebeurtenissen als enige bron van waarheid; toestand wordt afgeleid.</p>
+<p><strong>Momentopname (snapshot)</strong> — afgeleide, herbouwbare toestandsvastlegging om afspelen te versnellen.</p>
+<p><strong>Projectie / leesmodel</strong> — een uit gebeurtenissen opgebouwde weergave, geoptimaliseerd voor lezen.</p>
+<p><strong>CQRS</strong> — scheiding van het model voor wijzigen en het model voor lezen.</p>
+<p><strong>Correctiegebeurtenis</strong> — een nieuwe gebeurtenis die een eerdere corrigeert, met reden en actor.</p>
+<p><strong>Twee tijdlijnen</strong> — vastleggingsvolgorde tegenover geldigheidsdatum; nodig voor “wat wisten wij toen”.</p>
+<p><strong>Achterstand (lag)</strong> — de vertraging tussen schrijfmodel en projectie.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Young, <em>CQRS Documents</em> — kort en van de bron.</li>
+<li>Fowler, <em>Event Sourcing</em> en <em>CQRS</em> — beide korte artikelen; lees vooral de waarschuwingen.</li>
+<li>Vernon, <em>Implementing Domain-Driven Design</em> — het hoofdstuk over gebeurtenissen.</li>
+<li>Snodgrass, <em>Developing Time-Oriented Database Applications</em> — voor de twee tijdlijnen; nog altijd het grondigste werk.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 14 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">166 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">520 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-13/reader.html">&larr; Deel 13 — Deel 13 — Microservicesarchitectuur</a><a class="swa-prevnext next" href="../deel-15/reader.html">Deel 15 — Deel 15 — Cloud-, infrastructuur- en uitrolarchitectuur &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

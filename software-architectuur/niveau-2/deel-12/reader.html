@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 12 — Tactisch domeingedreven ontwerp en de modulith — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 12 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 12 — Tactisch domeingedreven ontwerp en de modulith</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 12 van 28
+<em>Competentiegebieden: methodisch en technologisch</em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>entiteiten en waardeobjecten onderscheiden en de gevolgen van die keuze benoemen;</li>
+<li>aggregaten afbakenen met de consistentiegrens als criterium;</li>
+<li>de vier aggregaatregels toepassen en beargumenteren waarom zij bestaan;</li>
+<li>domeinservices, repositories en fabrieken op hun plaats zetten;</li>
+<li>domeingebeurtenissen gebruiken om aggregaten te koppelen zonder ze te vergroten;</li>
+<li>tactisch DDD vertalen naar de modulestructuur van een modulith, inclusief de handhaving daarvan;</li>
+<li>het bloedarmoedige domeinmodel herkennen en benoemen wanneer het een probleem is en wanneer niet.</li>
+</ol>
+<hr>
+<h2>12.1 Van grenzen naar inhoud</h2>
+<p>Deel 11 bepaalde waar de contextgrenzen liggen. Vandaag kijken we binnen één grens: de mutatieverwerkingscontext, waar het bouwteam nu werkt.</p>
+<p>De vraag die daar op tafel ligt, komt uit sprint 5 en luidt in de woorden van het team: <em>“waar begint en eindigt een transactie?”</em></p>
+<p>De aanleiding is concreet. Een scheidingsmutatie bevat de mutatie zelf, de gegevens van beide ex-partners, een reeks bijlagen, een goedkeuringsstap, en een berekende vereveningsuitkomst. Het team heeft dat gebouwd als één samenhangend geheel dat in één keer wordt opgeslagen. Bij de eerste belastingtest bleek dat twee behandelaars die tegelijk aan hetzelfde dossier werken, elkaars wijzigingen overschrijven — en bij het toevoegen van de zesde mutatiesoort bleek dat het opslaan van één adreswijziging inmiddels acht tabellen raakte.</p>
+<p><strong>De ontbrekende begrippen zijn: waardeobject en aggregaat.</strong></p>
+<hr>
+<h2>12.2 Entiteit en waardeobject</h2>
+<p><strong>Een entiteit</strong> heeft een identiteit die losstaat van haar eigenschappen. Een deelnemer blijft dezelfde deelnemer na een naamswijziging, een verhuizing en een scheiding. U volgt haar door de tijd.</p>
+<p><strong>Een waardeobject</strong> heeft geen eigen identiteit; het <em>is</em> zijn waarde. Een bedrag van € 1.240,50 is uitwisselbaar met elk ander bedrag van € 1.240,50. Een adres, een periode, een percentage, een peildatum.</p>
+<p><strong>Waarom dit onderscheid ertoe doet — drie gevolgen:</strong></p>
+<p><strong>1. Waardeobjecten zijn onveranderlijk.</strong> U wijzigt ze niet; u vervangt ze. Dat lijkt een detail en het lost een categorie fouten volledig op: gedeelde veranderlijke waarden die op één plek worden gewijzigd en op een andere onverwacht meeveranderen.</p>
+<p><strong>2. Waardeobjecten dragen hun eigen regels.</strong> Een <code>Periode</code> weet dat een einddatum niet vóór een begindatum ligt. Een <code>Peildatum</code> weet dat zij een kalenderdag is en geen tijdstip — precies het datumconcept uit deel 8, nu afdwingbaar in plaats van afgesproken.</p>
+<p>Dit is een belangrijke winst: in niveau 1 was het datumconcept het enige cross-cutting concept dat niet te automatiseren viel. Met waardeobjecten verschuift een deel ervan van “afgesproken” naar “onvermijdelijk” — de sterkste borgingslaag uit deel 9. Wie <code>Peildatum</code> als eigen type heeft, kan haar niet per ongeluk met een verwerkingsdatum verwisselen; de compiler weigert.</p>
+<p><strong>3. Waardeobjecten zijn goedkoop.</strong> Geen identiteit betekent geen levensduurbeheer, geen sleutel, geen gelijktijdigheidsvraagstuk.</p>
+<p><strong>De praktische fout</strong> is te veel entiteiten. Teams maken van elk begrip een entiteit met een identificatie, omdat het gegevensmodel dat suggereert. De toets: <em>doet het ertoe wélke van twee gelijke exemplaren dit is?</em> Bij twee adressen met dezelfde inhoud: nee — waardeobject. Bij twee mutaties met dezelfde inhoud: ja, want het zijn twee gebeurtenissen in de tijd — entiteit.</p>
+<p>Voor Meridiaan zijn goede waardeobjecten: <code>Peildatum</code>, <code>Periode</code>, <code>Bedrag</code>, <code>Percentage</code>, <code>Adres</code>, <code>Burgerservicenummer</code>, <code>Vereveningsuitkomst</code>, <code>ReglementparameterSet</code>.</p>
+<hr>
+<h2>12.3 Het aggregaat</h2>
+<p><strong>Een aggregaat is een cluster van entiteiten en waardeobjecten dat als één geheel wordt gewijzigd, met één entiteit als toegangspunt: de aggregaatwortel.</strong></p>
+<p>De essentie zit in de vraag die het beantwoordt: <strong>waarbinnen moet een regel op elk moment kloppen?</strong></p>
+<p>Dat is een consistentievraag, geen structuurvraag. Een aggregaat is de eenheid waarbinnen u <em>onmiddellijke</em> consistentie garandeert; alles daarbuiten wordt <em>uiteindelijk</em> consistent, via gebeurtenissen.</p>
+<h3>De vier regels</h3>
+<p><strong>1. Alleen de wortel is van buiten bereikbaar.</strong> Andere onderdelen bereikt u via de wortel. Zo weet u zeker dat er geen wijziging plaatsvindt die de regels van het aggregaat omzeilt.</p>
+<p><strong>2. Eén aggregaat, één transactie.</strong> Per bewerking wijzigt u precies één aggregaat. Moet u er twee wijzigen, dan is dat een aanwijzing dat de grens verkeerd ligt — of dat de tweede wijziging uiteindelijk-consistent mag zijn.</p>
+<p><strong>3. Verwijzen naar andere aggregaten gebeurt met identiteit, niet met objecten.</strong> Een mutatie verwijst naar een deelnemer met een deelnemersnummer, niet met een deelnemersobject. Dit voorkomt dat aggregaten aan elkaar groeien tot alles met alles samenhangt — de gedistribueerde variant van B3 uit niveau 1.</p>
+<p><strong>4. Buiten de grens: uiteindelijke consistentie via gebeurtenissen.</strong> Als het goedkeuren van een mutatie de deelnemersstatus moet bijwerken, gebeurt dat door een domeingebeurtenis, niet in dezelfde transactie.</p>
+<h3>Hoe u de grens bepaalt</h3>
+<p>De bruikbare vraag is niet “wat hoort bij elkaar” maar: <strong>welke regel moet op elk moment kloppen, en welke mag een seconde later kloppen?</strong></p>
+<p>Voor de scheidingsmutatie uit sprint 5:</p>
+<table>
+<thead>
+<tr>
+<th>Regel</th>
+<th>Onmiddellijk of uiteindelijk?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Een mutatie kan niet worden goedgekeurd door de indiener</td>
+<td><strong>Onmiddellijk</strong> — anders is functiescheiding niet gegarandeerd</td>
+</tr>
+<tr>
+<td>Een goedgekeurde mutatie heeft alle vereiste bijlagen</td>
+<td><strong>Onmiddellijk</strong> — de controle heeft anders geen betekenis</td>
+</tr>
+<tr>
+<td>De vereveningsuitkomst hoort bij de gegevens waarop zij is berekend</td>
+<td><strong>Onmiddellijk</strong> binnen de berekening</td>
+</tr>
+<tr>
+<td>Het deelnemersdossier toont de laatste mutatiestatus</td>
+<td>Uiteindelijk — seconden vertraging is werkbaar</td>
+</tr>
+<tr>
+<td>De kernadministratie kent de mutatie</td>
+<td>Uiteindelijk — dat was ADR-014</td>
+</tr>
+<tr>
+<td>Het maandoverzicht voor de werkgever klopt</td>
+<td>Uiteindelijk</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Daaruit volgt de aggregaatindeling:</strong> de mutatie met haar bijlagen, goedkeuring en statusovergangen is één aggregaat. De deelnemer is een ander aggregaat. De vereveningsberekening is een derde. Zij verwijzen naar elkaar met identiteiten en communiceren met gebeurtenissen.</p>
+<p><strong>Wat het team in sprint 5 had gebouwd</strong>, was één groot aggregaat waarin mutatie, deelnemer, partners, bijlagen en berekening samen zaten. Dat verklaart beide problemen: twee behandelaars die tegelijk werken botsen op hetzelfde aggregaat, en één adreswijziging raakt acht tabellen omdat het hele cluster wordt opgeslagen.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-12-1-aggregaat-voor-na.png" alt="Het aggregaat uit sprint 5 tegenover de nieuwe indeling — links één cluster met alles erin, rechts drie aggregaten met identiteitsverwijzingen en twee domeingebeurtenissen ertussen" loading="lazy"><figcaption>Figuur 12-1 — Het aggregaat uit sprint 5 tegenover de nieuwe indeling — links één cluster met alles erin, rechts drie aggregaten met identiteitsverwijzingen en twee domeingebeurtenissen ertussen</figcaption></figure>
+<h3>Klein houden</h3>
+<p><strong>De vuistregel is: aggregaten zo klein als de consistentieregels toelaten.</strong> Grote aggregaten geven drie problemen tegelijk: gelijktijdigheidsconflicten (twee behandelaars), prestatieproblemen (alles laden om iets kleins te wijzigen), en verwevenheid.</p>
+<p>De verleiding om groot te maken komt van de wens alles onmiddellijk consistent te hebben. Die wens is begrijpelijk en zelden gerechtvaardigd. <strong>De toets die werkt:</strong> <em>als dit een seconde later klopt, wat gaat er dan mis, en voor wie?</em> Bij het deelnemersdossier is het antwoord “niets ernstigs”; bij functiescheiding is het antwoord “dan is de controle omzeilbaar”.</p>
+<hr>
+<h2>12.4 De overige bouwstenen</h2>
+<p><strong>Domeinservice.</strong> Voor domeinlogica die niet natuurlijk bij één entiteit of waardeobject hoort. De vereveningsberekening gebruikt gegevens van twee deelnemers en de reglementparameters van een werkgever; die hoort niet in één van drieën thuis.</p>
+<p><em>Valkuil:</em> alles wordt een service, en de entiteiten worden lege gegevenshouders. Zie 12.6.</p>
+<p><strong>Repository.</strong> Een verzamelingachtig toegangspunt tot aggregaten — één repository per aggregaat, nooit per tabel. Een repository die deelaggregaten teruggeeft, doorbreekt regel 1.</p>
+<p><strong>Fabriek.</strong> Voor het maken van complexe aggregaten met invarianten die vanaf het begin moeten gelden. Een scheidingsmutatie kan niet bestaan zonder twee partijen en een grondslag; een fabriek dwingt dat af in plaats van het over te laten aan de aanroeper.</p>
+<p><strong>Domeingebeurtenis.</strong> Iets betekenisvols dat in het domein is gebeurd, in voltooide vorm benoemd: <em>mutatie goedgekeurd</em>, <em>verevening berekend</em>, <em>mutatie doorgegeven</em>.</p>
+<p>Domeingebeurtenissen doen drie dingen tegelijk, en dat maakt ze de belangrijkste bouwsteen van dit deel:</p>
+<ol>
+<li><strong>Zij koppelen aggregaten</strong> zonder ze te vergroten (regel 4).</li>
+<li><strong>Zij zijn de vastlegging</strong> die QS-4 vraagt — de mutatiegeschiedenis als bron, uit deel 5 van niveau 1.</li>
+<li><strong>Zij zijn de taal</strong> waarin domeindeskundigen het proces beschrijven. De gebeurtenissen uit de werksessie van deel 11 zijn precies deze gebeurtenissen.</li>
+</ol>
+<p><strong>Let op het verschil met technische berichten.</strong> Een domeingebeurtenis is geformuleerd in de taal van het domein en beschrijft iets wat betekenis heeft voor een domeindeskundige. <em><code>MutatieRecordUpdated</code></em> is geen domeingebeurtenis; <em><code>MutatieGoedgekeurd</code></em> wel.</p>
+<hr>
+<h2>12.5 Van aggregaten naar modules</h2>
+<p>Hier komt de modulith uit deel 5 terug. De vertaling is directer dan u misschien verwacht:</p>
+<table>
+<thead>
+<tr>
+<th>DDD-begrip</th>
+<th>In de modulith</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bounded context</td>
+<td>Een groep modules met een gedeelde taal en een expliciete buitengrens</td>
+</tr>
+<tr>
+<td>Aggregaat</td>
+<td>Het hart van een module; bepaalt de transactiegrens</td>
+</tr>
+<tr>
+<td>Repository</td>
+<td>De toegang tot de eigen gegevens van de module</td>
+</tr>
+<tr>
+<td>Domeingebeurtenis</td>
+<td>Het communicatiemiddel tussen modules</td>
+</tr>
+<tr>
+<td>Anticorruption layer</td>
+<td>De integratiemodule</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Drie regels die hieruit volgen</strong> en die u kunt handhaven:</p>
+<p><strong>1. Een module bezit haar eigen aggregaten en hun gegevens.</strong> Geen andere module leest rechtstreeks in die tabellen. Dit is de regel uit deel 5, nu met een reden: de invarianten van een aggregaat zijn niet te garanderen als iemand anders eraan kan schrijven.</p>
+<p><strong>2. Modules verwijzen naar elkaar met identiteiten.</strong> Regel 3 van aggregaten, op moduleniveau. De mutatiemodule kent het deelnemersnummer, niet het deelnemersobject van de deelnemersmodule.</p>
+<p><strong>3. Wijzigingen over modulegrenzen verlopen via gebeurtenissen.</strong> Regel 2 en 4 samen: één transactie raakt één module.</p>
+<p><strong>Handhaving.</strong> Uit deel 9 kent u de ladder. Voor deze drie regels:</p>
+<table>
+<thead>
+<tr>
+<th>Regel</th>
+<th>Handhaving</th>
+<th>Middel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eigen gegevens</td>
+<td>Onvermijdelijk</td>
+<td>Gescheiden databaseschema’s met rechten per module</td>
+</tr>
+<tr>
+<td>Verwijzen met identiteiten</td>
+<td>Controleerbaar</td>
+<td>Bouwstraatcontrole op typegebruik over modulegrenzen</td>
+</tr>
+<tr>
+<td>Wijzigingen via gebeurtenissen</td>
+<td>Controleerbaar</td>
+<td>Bouwstraatcontrole op transacties die twee modules raken</td>
+</tr>
+<tr>
+<td>Aggregaatgrenzen zelf</td>
+<td>Beoordeeld</td>
+<td>Reviewpunt; niet te automatiseren</td>
+</tr>
+</tbody>
+</table>
+<p>De laatste regel is de zwakste, en dat is bekend terrein: net als het datumconcept in niveau 1 is de aggregaatafbakening een betekeniskwestie en dus niet machinaal te toetsen. Zij hoort daarom expliciet op de agenda van het gremium.</p>
+<hr>
+<h2>12.6 Het bloedarmoedige domeinmodel</h2>
+<p>Een <strong>bloedarmoedig domeinmodel</strong> bestaat uit objecten met alleen gegevens en zonder gedrag, met alle logica in services eromheen. Het is de meest voorkomende uitkomst van “wij doen DDD”.</p>
+<p><strong>Waarom het als probleem geldt.</strong> De regels van het domein zitten dan verspreid over services, en niets belet een service om een object in een ongeldige toestand te brengen. Een <code>Mutatie</code> met alleen velden kan door service A worden goedgekeurd zonder dat de bijlagencontrole van service B is gedraaid — de invariant bestaat alleen zolang iedereen dezelfde volgorde aanhoudt.</p>
+<p>Met gedrag in het aggregaat is dat onmogelijk: <code>mutatie.keurGoed(medewerker)</code> weigert als de indiener en de goedkeurder dezelfde zijn. <strong>De regel staat dan op de plek waar hij niet te omzeilen is</strong> — dezelfde redenering als de borgingsladder uit deel 9, nu binnen de code.</p>
+<p><strong>Wanneer het géén probleem is,</strong> en dit hoort erbij:</p>
+<ul>
+<li><strong>Bij een generiek of ondersteunend subdomein</strong> (deel 11). Voor correspondentiesjablonen is een gegevensobject met een service prima; er zijn nauwelijks invarianten.</li>
+<li><strong>Bij eenvoudige gegevensverwerking</strong> — lezen, tonen, doorgeven zonder regels.</li>
+<li><strong>Bij een leesmodel.</strong> Een leesmodel is per definitie bloedarmoedig en hoort dat te zijn; het heeft geen invarianten te bewaken. Dat is de opmaat naar CQRS in deel 14.</li>
+</ul>
+<p><strong>De praktische lijn voor Mutatie 2.0:</strong> rijk model in de kernsubdomeinen (mutatieverwerking, rechtenbepaling), pragmatisch elders. Dat is dezelfde investeringsredenering als bij de subdomeinen — u besteedt modelleerinspanning waar de complexiteit zit die u onderscheidt.</p>
+<hr>
+<h2>12.7 De opbrengst voor sprint 5</h2>
+<p>Terug naar de twee problemen:</p>
+<p><strong>Twee behandelaars overschrijven elkaars werk.</strong> Met de nieuwe indeling botsen zij nog steeds op hetzelfde mutatieaggregaat als zij dezelfde mutatie bewerken — en dat is correct: dat <em>is</em> een conflict. Wat verdwijnt, is het onterechte conflict tussen twee behandelaars die aan verschillende mutaties op dezelfde deelnemer werken.</p>
+<p>Het echte conflict lost u op met een gelijktijdigheidsmechanisme op het aggregaat (bijvoorbeeld een versienummer dat bij opslag wordt gecontroleerd) plus het zichtbaar maken dat een collega het dossier open heeft — het scenario dat in deel 2 van niveau 1 uit het rollenspel met de mutatiebehandelaar kwam.</p>
+<p><strong>Eén adreswijziging raakt acht tabellen.</strong> Met kleinere aggregaten raakt een adreswijziging het adresmutatieaggregaat en verder niets; de rest volgt uit gebeurtenissen. Dat dient QS-1 rechtstreeks.</p>
+<p><strong>Wat het kost.</strong> Uiteindelijke consistentie tussen aggregaten betekent dat het deelnemersdossier de laatste mutatiestatus met vertraging toont. Dat is het afwijkingsvenster uit ADR-014, nu ook intern. Het moet zichtbaar zijn — en dat is precies de scenariovraag die de mutatiebehandelaar in de evaluatie van deel 9 stelde: <em>“ik zie het, mijn collega niet — is dat normaal of een storing?”</em></p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Een entiteit heeft identiteit door de tijd; een waardeobject <em>is</em> zijn waarde. Waardeobjecten zijn onveranderlijk, dragen hun eigen regels en zijn goedkoop.</li>
+<li>Waardeobjecten verschuiven een deel van het datumconcept uit deel 8 van “afgesproken” naar “onvermijdelijk”: een eigen <code>Peildatum</code>-type is niet te verwisselen met een verwerkingsdatum.</li>
+<li>Een aggregaat is de eenheid waarbinnen consistentie onmiddellijk geldt. De vier regels: alleen de wortel is bereikbaar, één aggregaat per transactie, verwijzen met identiteiten, en uiteindelijke consistentie daarbuiten.</li>
+<li>De grens bepaalt u met de vraag welke regel op elk moment moet kloppen — niet met de vraag wat bij elkaar hoort.</li>
+<li>Houd aggregaten klein. De toets: als dit een seconde later klopt, wat gaat er dan mis en voor wie?</li>
+<li>Domeingebeurtenissen koppelen aggregaten zonder ze te vergroten, vormen de vastlegging die QS-4 vraagt, en zijn de taal waarin het domein zichzelf beschrijft.</li>
+<li>In de modulith: een module bezit haar aggregaten en gegevens, verwijst met identiteiten, en communiceert over grenzen met gebeurtenissen. De eerste twee zijn te handhaven; de aggregaatafbakening zelf is een reviewpunt.</li>
+<li>Een bloedarmoedig model is een probleem in kernsubdomeinen en volstrekt normaal in leesmodellen en generieke subdomeinen.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Entiteit</strong> — object met een identiteit die losstaat van zijn eigenschappen.</p>
+<p><strong>Waardeobject</strong> — onveranderlijk object zonder eigen identiteit, dat zijn eigen geldigheidsregels draagt.</p>
+<p><strong>Aggregaat / aggregaatwortel</strong> — cluster dat als geheel wijzigt binnen één consistentiegrens, met één entiteit als toegangspunt.</p>
+<p><strong>Onmiddellijke versus uiteindelijke consistentie</strong> — binnen respectievelijk buiten de aggregaatgrens.</p>
+<p><strong>Domeinservice</strong> — domeinlogica die niet natuurlijk bij één entiteit of waardeobject hoort.</p>
+<p><strong>Repository</strong> — toegangspunt tot aggregaten; één per aggregaat, nooit per tabel.</p>
+<p><strong>Domeingebeurtenis</strong> — iets betekenisvols dat in het domein is gebeurd, benoemd in domeintaal en in voltooide vorm.</p>
+<p><strong>Bloedarmoedig domeinmodel</strong> — gegevensobjecten zonder gedrag, met alle logica in omliggende services.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Evans, <em>Domain-Driven Design</em> — deel II en III.</li>
+<li>Vernon, <em>Implementing Domain-Driven Design</em> — hoofdstuk 5 t/m 10; de aggregaathoofdstukken zijn de beste beschikbare behandeling.</li>
+<li>Vernon, <em>Effective Aggregate Design</em> — drie korte artikelen, vrij beschikbaar; lees deze als u weinig tijd hebt.</li>
+<li>Fowler, <em>AnemicDomainModel</em> — kort, en lees het kritisch: de scherpte is nuttig, de absoluutheid niet.</li>
+<li>Documentatie over modulith-benaderingen in uw eigen technologiestapel.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 12 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">183 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">563 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-11/reader.html">&larr; Deel 11 — Deel 11 — Strategisch domeingedreven ontwerp</a><a class="swa-prevnext next" href="../deel-13/reader.html">Deel 13 — Deel 13 — Microservicesarchitectuur &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

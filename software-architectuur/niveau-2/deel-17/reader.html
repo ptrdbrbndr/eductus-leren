@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 17 — Evolutionaire architectuur — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 17 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 17 — Evolutionaire architectuur</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 17 van 28
+<em>Competentiegebied: methodisch</em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>uitleggen wat architectuurerosie is en waarom zij niet met discipline te bestrijden is;</li>
+<li>fitness functions ontwerpen: geautomatiseerde toetsen die bewaken of uw architectuur nog is wat u bedoelde;</li>
+<li>onderscheid maken tussen atomaire en holistische, en tussen doorlopende en periodieke fitness functions;</li>
+<li>bepalen welke architectuureigenschappen wel en niet meetbaar zijn, en wat u doet met de laatste;</li>
+<li>een architectuur zo ontwerpen dat verandering goedkoop blijft: laatste verantwoorde moment, omkeerbaarheid, en experimenteerruimte;</li>
+<li>technische schuld benoemen en verantwoorden zonder in een verlanglijst te vervallen.</li>
+</ol>
+<hr>
+<h2>17.1 De aanleiding: sprint 22</h2>
+<p>Het platform draait inmiddels in productie voor adres- en e-mailmutaties. Er zijn drie teams, zes modules, en een afgesplitste conversiedienst.</p>
+<p>In sprint 22 doet iemand een routinecontrole en constateert drie dingen:</p>
+<ul>
+<li><strong>Twee modules lezen rechtstreeks in elkaars databaseschema.</strong> Dat mag niet sinds deel 5; de rechten waren nooit ingesteld, alleen afgesproken.</li>
+<li><strong>Er staan vier plaatsen in de code waar de systeemklok rechtstreeks wordt gelezen.</strong> Alle vier toegevoegd in de afgelopen drie maanden, alle vier door mensen die de tijdpoort niet kenden.</li>
+<li><strong>De correlatie-identificatie ontbreekt in de outbox-regel.</strong> Precies de plek waar deel 15 waarschuwde dat de keten breekt.</li>
+</ul>
+<p>Geen van deze drie is met kwade wil ontstaan. Zij zijn ontstaan door verloop, tijdsdruk en onbekendheid — en in elk van de drie gevallen bestond de regel, stond zij in de documentatie, en was zij besproken.</p>
+<p><strong>Dat is architectuurerosie, en zij is de normale toestand.</strong> Een architectuur die niet actief wordt bewaakt, drijft af — niet met sprongen maar met kleine, lokaal verdedigbare stappen. Precies zoals in Mutatie 1.0, waar het uiteindelijk elf verschillende oplossingen voor hetzelfde probleem opleverde.</p>
+<p><strong>De vraag van dit deel:</strong> hoe zorgt u dat uw architectuur over drie jaar nog is wat u bedoelde — zonder dat het van oplettendheid afhangt?</p>
+<hr>
+<h2>17.2 Waarom discipline niet werkt</h2>
+<p>De eerste reflex is dezelfde als altijd: meer aandacht, betere reviews, duidelijker documentatie. Die maatregelen zijn nuttig en zij lossen dit niet op, en het loont te begrijpen waarom.</p>
+<p><strong>Discipline schaalt niet met verloop.</strong> De vier klokaanroepen zijn toegevoegd door mensen die de regel niet kenden. Zij hebben niets fout gedaan naar hun eigen maatstaf; zij wisten niet dat er een maatstaf was.</p>
+<p><strong>Discipline is de eerste die wijkt onder druk.</strong> Uit deel 9: reviews sneuvelen bij een deadline, en juist dan worden de snelle oplossingen gekozen.</p>
+<p><strong>Discipline maakt de architect tot flessenhals.</strong> Wie elke wijziging moet zien om erosie te voorkomen, wordt omzeild.</p>
+<p><strong>De oplossing is bekend en het is de borgingsladder uit deel 9</strong>, nu systematisch toegepast: wat automatisch afgedwongen kan worden, wordt automatisch afgedwongen; wat dat niet kan, wordt geautomatiseerd <em>getoetst</em>; en wat ook dat niet kan, krijgt een expliciet beoordelingsmoment.</p>
+<p>De naam voor die geautomatiseerde toetsen is <strong>fitness function</strong>.</p>
+<hr>
+<h2>17.3 Wat een fitness function is</h2>
+<p>Een <strong>fitness function</strong> is een geautomatiseerde, objectieve toets die vaststelt of uw systeem nog voldoet aan een architectuureigenschap die u belangrijk vindt.</p>
+<p>Het begrip komt uit de evolutionaire biologie en de metafoor is bruikbaar: uw architectuur verandert voortdurend, en de fitness function bepaalt of de veranderingen nog in de richting gaan die u wilt.</p>
+<p><strong>Drie eigenschappen die een toets tot fitness function maken:</strong></p>
+<ol>
+<li><strong>Zij is objectief.</strong> Slagen of falen, geen oordeel.</li>
+<li><strong>Zij is geautomatiseerd.</strong> Zij draait zonder dat iemand eraan denkt.</li>
+<li><strong>Zij hoort bij een expliciet benoemde eigenschap.</strong> Zonder die eigenschap is het een willekeurige controle.</li>
+</ol>
+<p>Dat derde punt is de verbinding met deel 2 van niveau 1: <strong>een fitness function zonder kwaliteitsscenario is smaak, precies zoals een ontwerpprincipe zonder scenario dat is.</strong></p>
+<h3>Twee indelingen</h3>
+<p><strong>Atomair of holistisch.</strong> Een atomaire toets meet één eigenschap in isolatie — bijvoorbeeld: geen module leest in andermans schema. Een holistische toets meet een combinatie onder realistische omstandigheden — bijvoorbeeld: de bevestiging blijft binnen 2 seconden bij vijftig gelijktijdige gebruikers terwijl de conversiebatch draait.</p>
+<p>Holistische toetsen zijn zeldzamer, duurder en waardevoller, want zij vinden wat atomaire toetsen per definitie missen: het samenspel.</p>
+<p><strong>Doorlopend of periodiek.</strong> Doorlopende toetsen draaien bij elke wijziging in de uitrolstraat. Periodieke toetsen draaien op een ritme — dagelijks, wekelijks, per kwartaal — omdat zij te traag zijn of een andere omgeving vragen.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Doorlopend</th>
+<th>Periodiek</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Atomair</strong></td>
+<td>Modulegrenzen, klokaanroepen, correlatie in logregels</td>
+<td>Inventaris van afhankelijkheden en hun kwetsbaarheden</td>
+</tr>
+<tr>
+<td><strong>Holistisch</strong></td>
+<td>Doorlooptijd op een vaste dataset</td>
+<td>Belastingtest met conversie; herstelproef; <strong>de wijzigbaarheidsproef</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17.4 De fitness functions voor Mutatie 2.0</h2>
+<p>De regels die u in zeventien delen hebt vastgelegd, met hun toets:</p>
+<table>
+<thead>
+<tr>
+<th>Eigenschap</th>
+<th>Bron</th>
+<th>Toets</th>
+<th>Ritme</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Modules bezitten eigen gegevens</td>
+<td>Deel 5, 12</td>
+<td>Schemarechten per module; controle op query’s over schemagrenzen</td>
+<td>Onvermijdelijk + doorlopend</td>
+</tr>
+<tr>
+<td>Afhankelijkheden wijzen naar binnen</td>
+<td>Deel 4</td>
+<td>Controle op uitgaande afhankelijkheden vanuit de domeinkern</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>Verwijzen met identiteiten</td>
+<td>Deel 12</td>
+<td>Controle op typegebruik over modulegrenzen</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>Eén transactie, één module</td>
+<td>Deel 12</td>
+<td>Controle op transacties over twee schema’s</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>Klok niet rechtstreeks lezen</td>
+<td>Deel 8, 12</td>
+<td>Controle op klokaanroepen buiten de tijdadapter</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>Correlatie in elke logregel en outbox-regel</td>
+<td>Deel 8, 15</td>
+<td>Controle op ontbrekende correlatie</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>Geen persoonsgegevens in logs</td>
+<td>Deel 16</td>
+<td>Controle op gemarkeerde typen in logaanroepen</td>
+<td>Doorlopend</td>
+</tr>
+<tr>
+<td>QS-1 doorlooptijd</td>
+<td>Deel 2, 6</td>
+<td>Belastingtest op vaste dataset</td>
+<td>Doorlopend (klein) + periodiek (volledig)</td>
+</tr>
+<tr>
+<td>QS-2 doorwerken bij storing</td>
+<td>Deel 2, 6</td>
+<td>Storingsproef in acceptatie</td>
+<td>Periodiek, maandelijks</td>
+</tr>
+<tr>
+<td>QS-4 reconstrueerbaarheid</td>
+<td>Deel 2, 14</td>
+<td><strong>Reconstructieproef door een buitenstaander</strong></td>
+<td>Periodiek, per kwartaal</td>
+</tr>
+<tr>
+<td>QS-3 wijzigbaarheid</td>
+<td>Deel 2, 6</td>
+<td><strong>Een mutatiesoort bouwen en klokken</strong></td>
+<td>Periodiek, bij elke nieuwe soort</td>
+</tr>
+<tr>
+<td>Kwetsbare afhankelijkheden</td>
+<td>Deel 16</td>
+<td>Signalering op de inventaris</td>
+<td>Doorlopend</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Twee van deze twaalf zijn geen software.</strong> De reconstructieproef en de wijzigbaarheidsproef vragen een mens, en dat was in deel 6 al vastgesteld. Zij zijn daarom niet minder waardevol — zij zijn juist de twee die de belangrijkste eigenschappen meten.</p>
+<p><strong>Dat is het eerlijke beeld:</strong> fitness functions zijn overwegend geautomatiseerd en niet uitsluitend. Wie alleen automatiseerbare eigenschappen bewaakt, bewaakt de eigenschappen die het makkelijkst te meten zijn en niet de belangrijkste.</p>
+<p class="swa-figure-missing"><em>[Figuur 17-1 ontbreekt: De twaalf fitness functions in de vier kwadranten atomair/holistisch tegen doorlopend/periodiek, met de twee handmatige proeven gemarkeerd]</em></p>
+<hr>
+<h2>17.5 Fitness functions ontwerpen</h2>
+<p><strong>Begin bij de eigenschap, niet bij de toets.</strong> De vraag is: welke eigenschap wil ik behouden, en hoe merk ik dat zij verdwijnt?</p>
+<p><strong>Vier ontwerpregels:</strong></p>
+<p><strong>1. De toets faalt om één reden.</strong> Een toets die om zes redenen kan falen, levert een foutmelding op waar niemand iets mee kan. Splits.</p>
+<p><strong>2. De foutmelding benoemt de regel en het alternatief.</strong> Uit deel 15: dat verschil bepaalt of de toets over een jaar nog aanstaat. <code>Module A benadert schema van B; gebruik het koppelvlak</code> werkt; <code>constraint violation in check 14</code> niet.</p>
+<p><strong>3. Een nieuwe toets begint met de bestaande situatie als uitgangspunt.</strong> Als u vandaag zestien overtredingen hebt, faalt uw toets meteen en wordt hij uitgezet. Leg de huidige toestand vast als tijdelijk aanvaard, laat de toets falen op <em>nieuwe</em> overtredingen, en werk de lijst af met een termijn en een eigenaar.</p>
+<p>Dit is de belangrijkste praktische regel en zij wordt het vaakst gemist. Zonder haar kunt u fitness functions alleen invoeren op nieuwe systemen.</p>
+<p><strong>4. Elke toets heeft een eigenaar.</strong> Wie repareert hem als hij faalt en niemand weet waarom? Zonder eigenaar volgt de opruimregel uit deel 15: hij wordt genegeerd en daarna uitgezet.</p>
+<h3>Wat u niet meet</h3>
+<p>Sommige architectuureigenschappen zijn niet objectief te toetsen:</p>
+<ul>
+<li><strong>Of een aggregaatgrens goed gekozen is</strong> (deel 12) — een betekeniskwestie.</li>
+<li><strong>Of een abstractie een beslissing verbergt</strong> (deel 3) — vraagt een oordeel over de toekomst.</li>
+<li><strong>Of de ubiquitous language nog klopt</strong> (deel 11) — vraagt een domeindeskundige.</li>
+</ul>
+<p><strong>Wat u daarmee doet, is niet niets.</strong> Deze eigenschappen krijgen een beoordelingsmoment met een objectieve <em>aanleiding</em>: bij elke nieuwe module de vraag “welke regels moeten hier onmiddellijk kloppen”, bij elke nieuwe abstractie de vraag “welke verandering wordt hierdoor goedkoper”, en bij elk nieuw domeinbegrip een controle tegen de begrippenlijst.</p>
+<p><strong>De aanleiding is automatiseerbaar ook als het oordeel dat niet is.</strong> Een controle die faalt wanneer er een nieuwe module is toegevoegd zonder bijbehorende ADR, dwingt het gesprek af zonder het gesprek te voeren. Dat is de sterkste vorm die voor deze categorie beschikbaar is.</p>
+<hr>
+<h2>17.6 Ontwerpen voor verandering</h2>
+<p>Fitness functions bewaken wat er is. Evolutionaire architectuur gaat ook over het goedkoop houden van verandering.</p>
+<p><strong>Het laatste verantwoorde moment.</strong> Neem een beslissing niet eerder dan nodig, en niet later dan verantwoord. Vroeg beslissen kost opties; laat beslissen kost herstelwerk. De vraag is telkens: <em>wat weet ik over drie maanden dat ik nu niet weet, en wat kost het om tot dan open te houden?</em></p>
+<p>Voor Meridiaan was dat zichtbaar bij de distributiekeuze: in deel 5 was de keuze een modulith met bewaakte grenzen, wat de splitsing in deel 13 goedkoop maakte. <strong>Openhouden kostte iets — de grenshandhaving — en dat is de prijs die u bewust betaalt.</strong></p>
+<p><strong>Omkeerbaarheid.</strong> Uit deel 1: het significantiecriterium bevat “duur om terug te draaien”. Een architectuur die verandering goedkoop houdt, maakt zoveel mogelijk beslissingen omkeerbaar en concentreert de onomkeerbare op zo min mogelijk plaatsen.</p>
+<p>De onomkeerbare beslissingen in Mutatie 2.0 zijn er drie: het gebeurtenismodel (zeven jaar historie), het aanleverformaat richting elf werkgevers, en de gegevensmodellen van de aggregaten in productie. <strong>Bij die drie hoort meer zorgvuldigheid vooraf dan bij alle andere samen.</strong></p>
+<p><strong>Experimenteerruimte.</strong> Niet elke beslissing hoeft doordacht te worden; sommige kunnen worden geprobeerd. Dat vraagt dat het proberen goedkoop is en dat het terugdraaien werkt — precies de uitrolstrategieën uit deel 15.</p>
+<p><strong>Wat evolutionaire architectuur níét betekent:</strong> dat u niet vooruit ontwerpt. De onomkeerbare beslissingen vragen juist meer vooruitdenken, niet minder. Het idee dat “de architectuur wel emergeert” is de bewering die in Mutatie 1.0 tot elf services leidde.</p>
+<hr>
+<h2>17.7 Technische schuld</h2>
+<p><strong>Technische schuld</strong> is de toekomstige kostenpost van een keuze die vandaag sneller ging dan de betere oplossing.</p>
+<p>De metafoor is nuttig en zij wordt slecht toegepast. Twee onderscheiden die het bruikbaar maken:</p>
+<p><strong>Bewust of onbewust.</strong> Bewuste schuld is een beslissing: wij doen het nu zo, wetend dat het later duurder wordt, om een reden. Onbewuste schuld is iets wat u ontdekt. <strong>Alleen de eerste is schuld in de nuttige zin</strong>; de tweede is gewoon een probleem.</p>
+<p><strong>Met of zonder rente.</strong> Sommige schuld kost elke maand geld: elke wijziging in dat gebied duurt langer. Andere schuld kost niets tot u die plek raakt. Schuld zonder rente aflossen is verspilling — en het is waar veel opschoonvoorstellen op stranden.</p>
+<p><strong>Hoe u het opschrijft.</strong> In arc42 hoofdstuk 11, met per post: wat, waarom toen zo gekozen, wat het nu kost, wat aflossen kost, en wat de aanleiding zou zijn om af te lossen.</p>
+<p><strong>Wat het niet is:</strong> een verlanglijst. “Wij willen naar het nieuwe raamwerk” is geen schuld maar een wens. De toets: <strong>kunt u aanwijzen wat het vandaag kost?</strong> Zo nee, dan staat het op de verkeerde lijst.</p>
+<p><strong>De verbinding met dit deel.</strong> Erosie produceert schuld. De drie bevindingen uit sprint 22 zijn schuld met rente: de klokaanroepen maken peildatumlogica ontestbaar, en dat kost bij elke wijziging in dat gebied. <strong>Fitness functions voorkomen dat nieuwe schuld ongemerkt ontstaat; zij lossen de bestaande niet af.</strong> Dat blijft werk met een eigenaar en een termijn.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Architectuurerosie is de normale toestand: kleine, lokaal verdedigbare stappen door verloop, tijdsdruk en onbekendheid. Alle drie bevindingen uit sprint 22 betroffen regels die bestonden, gedocumenteerd waren en besproken.</li>
+<li>Discipline lost het niet op: zij schaalt niet met verloop, wijkt onder druk, en maakt de architect tot flessenhals.</li>
+<li>Een fitness function is objectief, geautomatiseerd, en hoort bij een expliciet benoemde eigenschap. Zonder scenario is zij smaak.</li>
+<li>Atomair tegenover holistisch, doorlopend tegenover periodiek. Holistische toetsen zijn zeldzamer, duurder en vinden wat atomaire per definitie missen.</li>
+<li>Twee van de twaalf toetsen voor Mutatie 2.0 vragen een mens — en dat zijn juist de twee die de belangrijkste eigenschappen meten. Wie alleen automatiseerbare eigenschappen bewaakt, bewaakt de makkelijkst meetbare.</li>
+<li>Ontwerpregels: faal om één reden, benoem regel én alternatief in de melding, begin met de bestaande situatie als aanvaard uitgangspunt, en geef elke toets een eigenaar.</li>
+<li>Voor wat niet meetbaar is, automatiseert u de <em>aanleiding</em> tot het gesprek, ook al is het oordeel menselijk.</li>
+<li>Ontwerpen voor verandering: beslis op het laatste verantwoorde moment, houd beslissingen omkeerbaar, en concentreer de onomkeerbare. Bij Mutatie 2.0 zijn dat er drie.</li>
+<li>Evolutionaire architectuur betekent niet dat u niet vooruit ontwerpt. De onomkeerbare beslissingen vragen juist meer vooruitdenken.</li>
+<li>Technische schuld is nuttig als begrip wanneer zij bewust is en rente draagt. De toets: kunt u aanwijzen wat het vandaag kost?</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Architectuurerosie</strong> — het geleidelijk afdrijven van een systeem van zijn bedoelde architectuur.</p>
+<p><strong>Fitness function</strong> — objectieve, geautomatiseerde toets op een expliciet benoemde architectuureigenschap.</p>
+<p><strong>Atomair / holistisch</strong> — meet één eigenschap in isolatie, respectievelijk een combinatie onder realistische omstandigheden.</p>
+<p><strong>Laatste verantwoorde moment</strong> — het punt waarop uitstel van een beslissing meer kost dan het aan opties oplevert.</p>
+<p><strong>Omkeerbaarheid</strong> — de mate waarin een beslissing tegen aanvaardbare kosten kan worden teruggedraaid.</p>
+<p><strong>Technische schuld</strong> — toekomstige kostenpost van een snellere keuze van vandaag; nuttig als begrip wanneer zij bewust is en rente draagt.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Ford, Parsons &amp; Kua, <em>Building Evolutionary Architectures</em> — de bron van het fitness-functionbegrip.</li>
+<li>Ford, Richards e.a., <em>Software Architecture: The Hard Parts</em> — over omkeerbaarheid en het uitstellen van beslissingen.</li>
+<li>Fowler, <em>TechnicalDebtQuadrant</em> — kort, en het maakt het bewust/onbewust-onderscheid scherp.</li>
+<li>Poppendieck, <em>Lean Software Development</em> — voor het laatste verantwoorde moment.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 17 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">358 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-16/reader.html">&larr; Deel 16 — Deel 16 — Securityarchitectuur</a><a class="swa-prevnext next" href="../deel-18/reader.html">Deel 18 — Deel 18 — Architectuurevaluatie gevorderd &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

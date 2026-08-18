@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 3 — Ontwerpprincipes — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 1 &rsaquo; Deel 3 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 3 — Ontwerpprincipes</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 1 (CPSA-F) · Deel 3 van 10</p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op iSAQB® CPSA-F. Geen vervanging van het officiële curriculum en examenmateriaal van het iSAQB. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool. Zelfstandig leesbaar; kruisverwijzingen naar de Ductus-cursus Business &amp; Enterprise Architectuur zijn aangeduid met <strong>↗ EA</strong>.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>koppeling en cohesie definiëren, de soorten ervan onderscheiden en op een concreet ontwerp toepassen;</li>
+<li>uitleggen waarom lage koppeling en hoge cohesie geen doelen op zich zijn maar middelen voor wijzigbaarheid;</li>
+<li>information hiding toepassen: bepalen wat een component verbergt en wat het belooft;</li>
+<li>het principe van scheiding van verantwoordelijkheden gebruiken om componentgrenzen te trekken, en drie concurrerende indelingscriteria tegen elkaar afwegen;</li>
+<li>conceptual integrity herkennen en benoemen waarom die in de praktijk het eerst sneuvelt;</li>
+<li>de klassieke principes (SOLID, DRY, KISS, YAGNI) op architectuurniveau plaatsen én hun grenzen benoemen;</li>
+<li>bevinding B3 uit de post-mortem Mutatie 1.0 sluiten.</li>
+</ol>
+<p><strong>Dekking CPSA-F:</strong> dit deel dekt de leerdoelen over ontwerpprincipes, modularisering en abstractie, en levert het vocabulaire voor de stijlbehandeling in deel 4 en 5.</p>
+<hr>
+<h2>3.1 De bevinding: alles hangt met alles samen</h2>
+<p>In maand elf van Mutatie 1.0 werd een ogenschijnlijk kleine wijziging gevraagd: bij een adreswijziging naar een buitenlands adres moet voortaan een extra controle plaatsvinden op het land van bestemming, in verband met verdragsstatus voor de loonheffing.</p>
+<p>De wijziging kostte vijf weken en brak drie andere functies:</p>
+<ul>
+<li>het <strong>overlijdensbericht</strong> werkte niet meer, omdat de adresvalidatie werd hergebruikt bij het vaststellen van het correspondentieadres van de nabestaande;</li>
+<li>de <strong>werkgeversbatch</strong> viel om bij ongeldige postcodes, waar hij die eerder overslak, omdat de validatieroutine gedeeld werd en het foutgedrag was aangescherpt;</li>
+<li>het <strong>statusoverzicht</strong> toonde bij enkele mutaties een lege datum, omdat de validatie een veld vulde waar het statusoverzicht van afhankelijk bleek te zijn.</li>
+</ul>
+<p>Geen van deze drie functies heeft iets met buitenlandse adressen te maken. De schade is niet ontstaan doordat iemand iets fout deed, maar doordat de wijziging zich verspreidde langs verbindingen die niemand bewust had aangelegd.</p>
+<p><strong>Dat is bevinding B3. Dit deel sluit hem.</strong></p>
+<figure class="swa-figure"><img src="../../figuren/figuur-3-1-verspreiding-wijziging.png" alt="Verspreiding van de wijziging in maand elf — de adresvalidatie in het midden, met uitgaande afhankelijkheden naar overlijdensverwerking, werkgeversbatch en statusoverzicht; de drie getroffen functies gemarkeerd" loading="lazy"><figcaption>Figuur 3-1 — Verspreiding van de wijziging in maand elf — de adresvalidatie in het midden, met uitgaande afhankelijkheden naar overlijdensverwerking, werkgeversbatch en statusoverzicht; de drie getroffen functies gemarkeerd</figcaption></figure>
+<p>De vraag van dit deel is: <strong>hoe trekt u grenzen in een systeem zodat een wijziging blijft waar hij hoort?</strong></p>
+<hr>
+<h2>3.2 Koppeling</h2>
+<p><strong>Koppeling</strong> is de mate waarin twee componenten van elkaar afhankelijk zijn. Preciezer, en bruikbaarder: de mate waarin een wijziging in het ene component een wijziging in het andere afdwingt.</p>
+<p>Die tweede formulering is de werkbare. Koppeling is geen eigenschap van een diagram maar van uw werkweek: als u A wijzigt en B moet mee, zijn ze gekoppeld — ongeacht hoe netjes de pijlen staan.</p>
+<h3>Soorten koppeling</h3>
+<p>Niet alle koppeling is gelijk. Van hanteerbaar naar giftig:</p>
+<table>
+<thead>
+<tr>
+<th>Soort</th>
+<th>Wat het is</th>
+<th>Voorbeeld uit de casus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Data</strong></td>
+<td>A geeft B eenvoudige gegevens door; B kent alleen die gegevens</td>
+<td>De mutatieverwerking geeft een postcode en huisnummer door aan de adresvalidatie</td>
+</tr>
+<tr>
+<td><strong>Stempel</strong></td>
+<td>A geeft B een hele structuur door terwijl B er maar een deel van nodig heeft</td>
+<td>Het volledige deelnemersobject wordt doorgegeven aan de postcodecontrole</td>
+</tr>
+<tr>
+<td><strong>Besturing</strong></td>
+<td>A vertelt B wat B moet doen via een vlag of schakelaar</td>
+<td><code>valideerAdres(adres, strikt: true)</code> — de aanroeper stuurt het gedrag van de aangeroepene</td>
+</tr>
+<tr>
+<td><strong>Gemeenschappelijk</strong></td>
+<td>A en B delen een globale toestand</td>
+<td>De gedeelde configuratietabel waarin het foutgedrag van de validatie stond</td>
+</tr>
+<tr>
+<td><strong>Inhoud</strong></td>
+<td>A grijpt in de binnenwereld van B</td>
+<td>Het statusoverzicht las een veld dat de validatie intern vulde</td>
+</tr>
+</tbody>
+</table>
+<p>De laatste twee zijn precies wat er in maand elf gebeurde. Merk op dat het statusoverzicht helemaal geen aanroep deed naar de validatie — het las alleen een veld dat toevallig gevuld werd. Dat is de meest verraderlijke koppeling die er is, omdat zij in geen enkel diagram staat en in geen enkele importlijst.</p>
+<h3>Afferente en efferente koppeling</h3>
+<p>Twee richtingen, met verschillende betekenis:</p>
+<ul>
+<li><strong>Efferente koppeling (uitgaand)</strong> — van hoeveel andere componenten hangt dit component af? Hoog betekent: dit component is kwetsbaar, want het breekt als een van de vele afhankelijkheden verandert.</li>
+<li><strong>Afferente koppeling (inkomend)</strong> — hoeveel componenten hangen van dít component af? Hoog betekent: dit component is star, want elke wijziging erin raakt veel anderen.</li>
+</ul>
+<p>De adresvalidatie in Mutatie 1.0 had een hoge afferente koppeling: zeven componenten gebruikten haar. Dat is op zichzelf geen fout — hergebruik is doorgaans goed. De fout zat erin dat de zeven gebruikers <strong>verschillende dingen</strong> van haar wilden, en dat de validatie daardoor niet gewijzigd kon worden zonder ten minste één van hen te schaden.</p>
+<p><strong>Dit is het inzicht dat het vaakst gemist wordt:</strong> hergebruik verhoogt afferente koppeling, en afferente koppeling verlaagt wijzigbaarheid. Hergebruik is dus niet gratis. Wie een gedeelde component maakt, ruilt schrijfwerk in voor gebondenheid.</p>
+<p><strong>↗ EA</strong> — Op landschapsniveau is dit dezelfde afweging die de EA-cursus bespreekt bij gedeelde diensten: één centrale klantgegevensdienst bespaart implementaties en maakt elke wijziging tot een landschapsbrede aangelegenheid.</p>
+<h3>Tijdelijke en semantische koppeling</h3>
+<p>Twee vormen die geen enkele codeanalyse zichtbaar maakt:</p>
+<p><strong>Temporele koppeling</strong> — A moet vóór B draaien, zonder dat dat ergens is vastgelegd. De nachtelijke export in Mutatie 1.0 moest klaar zijn voordat de ochtendbatch startte. Dat stond in niemands ontwerp; het stond in het hoofd van de beheerder, en toen de export door volumegroei uitliep, brak de ochtendbatch.</p>
+<p><strong>Semantische koppeling</strong> — A en B delen een aanname over de betekenis van iets. Wanneer de mutatieverwerking en het statusoverzicht beide aannemen dat een lege einddatum “loopt nog” betekent, en één van beide gaat dat interpreteren als “onbekend”, ontstaat een fout die nergens in de code te zien is. In pensioenuitvoering is dit de meest voorkomende bron van stille fouten, omdat begrippen als <em>peildatum</em>, <em>ingangsdatum</em> en <em>verwerkingsdatum</em> op elkaar lijken en niet hetzelfde zijn.</p>
+<hr>
+<h2>3.3 Cohesie</h2>
+<p><strong>Cohesie</strong> is de mate waarin de onderdelen binnen één component bij elkaar horen. De bruikbare formulering: de mate waarin de onderdelen van een component om dezelfde reden veranderen.</p>
+<p>Van zwak naar sterk:</p>
+<table>
+<thead>
+<tr>
+<th>Soort</th>
+<th>Grondslag van de samenhang</th>
+<th>Oordeel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Toevallig</strong></td>
+<td>Niets; het is een verzamelbak (<code>Utils</code>, <code>Helpers</code>, <code>Common</code>)</td>
+<td>Slecht</td>
+</tr>
+<tr>
+<td><strong>Logisch</strong></td>
+<td>Dingen die op elkaar lijken (alle validaties bij elkaar)</td>
+<td>Zwak — dit is wat in Mutatie 1.0 gebeurde</td>
+</tr>
+<tr>
+<td><strong>Temporeel</strong></td>
+<td>Dingen die op hetzelfde moment gebeuren (alles bij opstarten)</td>
+<td>Zwak</td>
+</tr>
+<tr>
+<td><strong>Procedureel</strong></td>
+<td>Stappen in dezelfde volgorde</td>
+<td>Matig</td>
+</tr>
+<tr>
+<td><strong>Communicatief</strong></td>
+<td>Werkt op dezelfde gegevens</td>
+<td>Redelijk</td>
+</tr>
+<tr>
+<td><strong>Functioneel</strong></td>
+<td>Draagt bij aan precies één taak</td>
+<td>Sterk</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Het interessantste geval is “logische cohesie”, want het voelt goed.</strong> In Mutatie 1.0 zat alle validatielogica in één component, met als redenering: “validatie hoort bij validatie”. Maar adresvalidatie voor een deelnemersmutatie verandert om andere redenen dan adresvalidatie voor een werkgeversbatch: de eerste verandert als het correspondentiebeleid wijzigt, de tweede als het aanleverformaat wijzigt. Ze lijken op elkaar en horen niet bij elkaar.</p>
+<p><strong>De toets die u kunt toepassen:</strong> <em>veranderen deze onderdelen om dezelfde reden, op verzoek van dezelfde partij?</em> Zo nee, dan is het logische cohesie en zult u er last van krijgen.</p>
+<p>Dit is dezelfde gedachte die in het Single Responsibility Principle wordt uitgedrukt als “één reden om te veranderen”, en op grotere schaal terugkomt bij bounded contexts in domeingedreven ontwerp (niveau 2, deel 11).</p>
+<hr>
+<h2>3.4 Waarom lage koppeling en hoge cohesie geen doelen zijn</h2>
+<p>Elke cursus zegt “streef naar lage koppeling en hoge cohesie”. Op zichzelf is dat een lege aansporing, en het is nuttig te weten waarom.</p>
+<p>Ten eerste: <strong>koppeling nul bestaat niet en is niet wenselijk.</strong> Componenten die niets van elkaar weten, doen ook niets samen. Het doel is niet minimale koppeling maar <em>koppeling op de juiste plaatsen en van de juiste soort</em>.</p>
+<p>Ten tweede: <strong>lage koppeling is te koop, en de prijs is complexiteit.</strong> U kunt elke afhankelijkheid wegabstraheren met een interface, een gebeurtenis of een laag ertussen. Elke abstractie kost begrijpelijkheid. Een systeem met nul directe afhankelijkheden en veertig indirecties is niet wijzigbaar maar ondoorgrondelijk. Dit is een echte trade-off in de zin van deel 2, en hij hoort expliciet gemaakt te worden.</p>
+<p>Ten derde, en dit is het belangrijkste: <strong>koppeling en cohesie zijn middelen voor wijzigbaarheid, en wijzigbaarheid is altijd wijzigbaarheid ergens.</strong> De vraag is niet “is dit systeem wijzigbaar”, maar “welke wijzigingen willen we goedkoop houden, en welke mogen duur zijn?” Dat kunt u niet weten zonder QS-3 uit deel 2: <em>een nieuwe mutatiesoort binnen tien werkdagen, zonder wijziging in bestaande mutatiesoorten.</em></p>
+<p>Die eis vertelt u waarlangs u moet snijden. Als “een nieuwe mutatiesoort toevoegen” de goedkope wijziging moet zijn, dan moeten de mutatiesoorten van elkaar gescheiden zijn — ook als dat betekent dat er iets wordt gedupliceerd. Dat is de directe tegenspraak met DRY die in 3.8 aan de orde komt.</p>
+<p><strong>De regel:</strong> ontwerpprincipes zonder kwaliteitsscenario zijn smaak. Met een scenario worden ze een keuze die u kunt verdedigen.</p>
+<hr>
+<h2>3.5 Information hiding</h2>
+<p>Information hiding is de oudste en de sterkste van de principes uit dit deel. Het idee, in de oorspronkelijke formulering van Parnas: <strong>een component verbergt een beslissing die waarschijnlijk gaat veranderen.</strong></p>
+<p>Let op de formulering. Niet “een component verbergt zijn gegevens”, en niet “maak velden privé”. De vraag is: <em>welke beslissing zit hierin opgesloten, en wie mag daar last van krijgen als hij verandert?</em></p>
+<p>Praktisch onderscheidt u twee dingen:</p>
+<ul>
+<li><strong>Het contract</strong> — wat het component belooft: welke bewerkingen, met welke betekenis, met welke garanties bij fouten.</li>
+<li><strong>De implementatie</strong> — hoe die belofte wordt waargemaakt, inclusief elke keuze die u later wilt kunnen wijzigen.</li>
+</ul>
+<p><strong>Toepassing op de casus.</strong> De koppeling met de kernadministratie is de plaats waar dit het meest oplevert. Wat verbergen we?</p>
+<ul>
+<li>dat het koppelvlak SOAP is (een technische keuze die kan wijzigen);</li>
+<li>dat het maximaal 20 aanroepen per seconde aankan (een limiet die kan opschuiven);</li>
+<li>dat sommige velden alleen in hoofdletters worden geaccepteerd (een eigenaardigheid);</li>
+<li>dat een mislukte aanroep drie keer opnieuw geprobeerd moet worden met oplopende wachttijd.</li>
+</ul>
+<p>Wat beloven we? Dat een mutatie <em>uiteindelijk en precies één keer</em> wordt doorgegeven, en dat de aanroeper te weten komt wanneer dat is gelukt. Niets over SOAP, niets over 20 per seconde.</p>
+<p>De winst hiervan is direct zichtbaar in QS-2 en in de “toekomstvast”-eis uit deel 2: als de kernadministratie over vier jaar wordt vervangen, raakt dat uitsluitend deze component.</p>
+<h3>Wat er misgaat</h3>
+<p>Twee klassieke fouten:</p>
+<p><strong>Het lekkende contract.</strong> Het contract belooft iets abstracts maar laat de implementatie doorschemeren — bijvoorbeeld door een SOAP-foutcode door te geven aan de aanroeper. Zodra één aanroeper op die foutcode gaat reageren, is de implementatiekeuze alsnog vastgelegd, en is de abstractie schijn.</p>
+<p><strong>De abstractie zonder beslissing.</strong> Een interface om een interface, die geen enkele beslissing verbergt omdat er maar één implementatie is en die nooit zal wijzigen. Dat is kostbare leegte. De toets: <em>welke verandering wordt hierdoor goedkoper?</em> Is er geen antwoord, verwijder de abstractie.</p>
+<hr>
+<h2>3.6 Verantwoordelijkheden verdelen: waarlangs snijdt u?</h2>
+<p>Dit is de kern van het architectenwerk, en er is geen algoritme voor. Wel zijn er drie concurrerende indelingscriteria, en het is nuttig ze expliciet tegen elkaar af te wegen.</p>
+<h3>Criterium 1 — technische laag</h3>
+<p>Indelen naar technische aard: presentatie, logica, gegevenstoegang. Vertrouwd, en het is wat vrijwel elk team spontaan doet.</p>
+<p><em>Wanneer goed:</em> bij kleine systemen; wanneer technische expertise de schaarse factor is.
+<em>Wanneer slecht:</em> wanneer functionele wijzigingen de norm zijn. Een nieuwe mutatiesoort raakt dan alle lagen — precies wat QS-3 duur maakt.</p>
+<h3>Criterium 2 — functionaliteit of domein</h3>
+<p>Indelen naar wat het systeem doet: adresmutatie, scheidingsmutatie, overlijdensmutatie, werkgeversaanlevering.</p>
+<p><em>Wanneer goed:</em> wanneer wijzigingen functioneel van aard zijn en per functie binnenkomen — de normale situatie bij administratieve systemen.
+<em>Wanneer slecht:</em> wanneer de functies veel gemeenschappelijke logica hebben en die logica vaak wijzigt; u krijgt dan verspreide duplicatie.</p>
+<h3>Criterium 3 — verandersnelheid of eigenaar</h3>
+<p>Indelen naar wie wijzigingen aanvraagt en hoe vaak. Wat maandelijks verandert op verzoek van productmanagement, hoort niet in hetzelfde component als wat eens per vijf jaar verandert op verzoek van de toezichthouder.</p>
+<p><em>Wanneer goed:</em> bij systemen met sterk uiteenlopende verandersnelheden — vrijwel altijd het geval in pensioenuitvoering, waar reglementslogica en berichtenopmaak volstrekt verschillende ritmes hebben.
+<em>Wanneer slecht:</em> moeilijk uit te leggen aan teams die gewend zijn aan technische indeling; vraagt discipline.</p>
+<h3>De afweging voor Mutatie 2.0</h3>
+<p>QS-3 is de drijver: een nieuwe mutatiesoort binnen tien werkdagen zonder bestaande soorten te raken. Dat wijst dwingend naar criterium 2 als hoofdindeling — de mutatiesoort is de as waarlangs wijzigingen binnenkomen.</p>
+<p>Maar criterium 3 doet mee, want er zit een tweede as in het probleem: <strong>de integratie met de kernadministratie verandert om een heel andere reden en in een heel ander tempo dan de mutatielogica.</strong> Dat is de reden dat de integratie een eigen component wordt met een eigen contract (3.5), en niet per mutatiesoort wordt herhaald.</p>
+<p>Criterium 1 blijft bestaan, maar <strong>binnen</strong> de componenten, niet erboven. Een mutatiesoortcomponent heeft van binnen gerust een laagindeling; de hoofdindeling is dat niet.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-3-2-twee-indelingen.png" alt="Twee indelingen van hetzelfde systeem naast elkaar — links technische lagen met een nieuwe mutatiesoort die alle lagen doorsnijdt, rechts een domeinindeling met de nieuwe mutatiesoort als toegevoegd blok; de kosten van QS-3 zichtbaar in beide" loading="lazy"><figcaption>Figuur 3-2 — Twee indelingen van hetzelfde systeem naast elkaar — links technische lagen met een nieuwe mutatiesoort die alle lagen doorsnijdt, rechts een domeinindeling met de nieuwe mutatiesoort als toegevoegd blok; de kosten van QS-3 zichtbaar in beide</figcaption></figure>
+<p><strong>Waarschuwing.</strong> Deze afweging is nu makkelijk omdat u de drijvers kent. In de praktijk komt de indeling meestal tot stand voordat de drijvers scherp zijn — en dat is niet per se fout, want u moet ergens beginnen. Het onderscheid tussen een goede en een slechte architect zit niet in de eerste indeling maar in de bereidheid haar te herzien wanneer de drijvers scherper worden. Deel 17 in niveau 2 (evolutionaire architectuur) gaat hierop door.</p>
+<hr>
+<h2>3.7 Conceptual integrity</h2>
+<p><strong>Conceptual integrity</strong> is de eigenschap dat een systeem overal op dezelfde manier werkt: dezelfde soorten problemen worden op dezelfde manier opgelost, dezelfde begrippen betekenen overal hetzelfde, en wie één deel begrijpt kan het volgende deel voorspellen.</p>
+<p>Fred Brooks noemde dit de belangrijkste enkele eigenschap van een systeemontwerp, en stelde dat het beter is één samenhangend ontwerp te hebben met gebreken dan een verzameling losse goede ideeën. Dat klinkt overdreven tot u een systeem beheert waarin fouten op vier manieren worden afgehandeld.</p>
+<p>In Mutatie 1.0 was conceptual integrity afwezig, en dat is bevinding B7 (cross-cutting concerns per team verschillend opgelost, deel 8). Maar het probleem is breder dan de cross-cutting zaken alleen: er waren twee manieren om een mutatie te valideren, drie manieren om een fout terug te geven, en twee begrippen voor hetzelfde (“dossier” en “zaak”, door verschillende teams gebruikt, met net iets verschillende betekenis).</p>
+<p><strong>Waarom het als eerste sneuvelt.</strong> Conceptual integrity is de enige eigenschap in dit deel die niet lokaal te verdedigen is. Koppeling en cohesie kan een team binnen zijn eigen component bewaken. Consistentie tussen componenten kan alleen bewaakt worden door iemand die over de componenten heen kijkt — en dat is precies de rol die in Mutatie 1.0 niet bestond. <strong>Conceptual integrity is de eigenschap die het bestaan van een architect rechtvaardigt.</strong></p>
+<p>Praktisch bewaakt u het met drie middelen: een begrippenlijst die klopt en gebruikt wordt (arc42 hoofdstuk 12), vastgelegde cross-cutting concepten (deel 8), en een gremium of reviewpraktijk dat afwijkingen signaleert vóórdat ze gewoonte worden (deel 9).</p>
+<hr>
+<h2>3.8 De klassieke principes op architectuurniveau</h2>
+<p>SOLID, DRY, KISS en YAGNI zijn geformuleerd voor code. Op architectuurniveau zijn ze deels bruikbaar en deels misleidend. De grenzen zijn belangrijker dan de principes zelf, omdat iedereen ze kent en bijna niemand hun grenzen bespreekt.</p>
+<p><strong>Single Responsibility</strong> — bruikbaar en belangrijk, mits u “verantwoordelijkheid” leest als “reden om te veranderen, gezien vanuit één belanghebbende”. Zo gelezen is het dezelfde toets als bij cohesie in 3.3.</p>
+<p><strong>Open/Closed</strong> — bruikbaar als richting: nieuwe mutatiesoorten toevoegen zonder bestaande te wijzigen is letterlijk QS-3. Gevaarlijk als doel op zich: uitbreidingspunten bouwen voor uitbreidingen die nooit komen, is de duurste vorm van gelijk willen hebben.</p>
+<p><strong>Liskov, Interface Segregation, Dependency Inversion</strong> — vooral relevant op componentniveau. Dependency inversion is de belangrijkste van de drie op architectuurniveau: de mutatielogica mag niet afhangen van de kernadministratie-integratie, maar van een contract dat de mutatielogica zelf definieert. Dat is precies wat hexagonale architectuur formaliseert (deel 4).</p>
+<p><strong>DRY</strong> — het gevaarlijkste principe in dit deel, omdat het zo aantrekkelijk is. DRY gaat over het vermijden van dubbele <em>kennis</em>, niet van dubbele <em>tekst</em>. Twee stukken code die er hetzelfde uitzien maar om verschillende redenen veranderen, mogen niet worden samengevoegd. De adresvalidatie in Mutatie 1.0 is precies deze fout: één routine voor deelnemersmutaties en werkgeversbatches, omdat ze op elkaar leken.</p>
+<blockquote>
+<p><strong>Vuistregel:</strong> duplicatie is goedkoper dan de verkeerde abstractie. Duplicatie kost schrijfwerk; een verkeerde abstractie kost wijzigbaarheid, en dat kost maanden.</p>
+</blockquote>
+<p><strong>KISS</strong> — bruikbaar, mits u “eenvoudig” niet verwart met “weinig onderdelen”. Een monoliet met verstrengelde verantwoordelijkheden heeft weinig onderdelen en is niet eenvoudig. Eenvoud is: het aantal dingen dat u tegelijk moet begrijpen om een wijziging te kunnen doen.</p>
+<p><strong>YAGNI</strong> — bruikbaar tegen speculatieve functionaliteit, en misleidend bij architectuurbeslissingen. Het verschil zit in de omkeerbaarheid, precies zoals in deel 1: een functie die u later toevoegt, is een sprint werk; een systeemgrens die u later invoegt, is een verbouwing. YAGNI geldt voor het goedkoop terug te draaien deel van uw ontwerp, en niet voor de rest.</p>
+<hr>
+<h2>3.9 Terug naar B3</h2>
+<p>Wat had de wijziging van maand elf beperkt gehouden?</p>
+<ul>
+<li><strong>Cohesie op verandering, niet op gelijkenis.</strong> Adresvalidatie voor deelnemersmutaties en voor werkgeversbatches veranderen om verschillende redenen en horen dus niet in één component, hoe erg ze ook op elkaar lijken.</li>
+<li><strong>Information hiding op de validatie.</strong> Het statusoverzicht las een veld dat de validatie intern vulde. Met een gesloten contract was die inhoudskoppeling onmogelijk geweest.</li>
+<li><strong>Indeling langs de mutatiesoort.</strong> De overlijdensverwerking had niet afhankelijk hoeven zijn van een component die primair voor adresmutaties bestond.</li>
+<li><strong>Een begrippenlijst.</strong> De gedeelde aanname over de betekenis van een leeg datumveld was semantische koppeling, en die is alleen met expliciete afspraken te bestrijden.</li>
+</ul>
+<p>Wat ook hier geldt: geen van deze maatregelen maakt wijzigingen gratis. Ze zorgen ervoor dat de kosten van een wijziging <strong>voorspelbaar</strong> en <strong>begrensd</strong> zijn. Vijf weken voor een buitenlandcontrole was niet duur omdat de wijziging moeilijk was, maar omdat niemand van tevoren wist waar hij zou uitkomen.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Koppeling is de mate waarin een wijziging in A een wijziging in B afdwingt. Inhouds- en gemeenschappelijke koppeling zijn het schadelijkst, en temporele en semantische koppeling zijn het moeilijkst zichtbaar te maken.</li>
+<li>Hergebruik verhoogt afferente koppeling en verlaagt daarmee wijzigbaarheid. Hergebruik is niet gratis.</li>
+<li>Cohesie is de mate waarin onderdelen om dezelfde reden veranderen. Logische cohesie — samen omdat het op elkaar lijkt — voelt goed en is zwak.</li>
+<li>Lage koppeling en hoge cohesie zijn geen doelen maar middelen voor wijzigbaarheid, en wijzigbaarheid is altijd wijzigbaarheid ergens. Zonder kwaliteitsscenario zijn ontwerpprincipes smaak.</li>
+<li>Information hiding: een component verbergt een beslissing die waarschijnlijk verandert. Toets elke abstractie met “welke verandering wordt hierdoor goedkoper?”</li>
+<li>Er zijn drie concurrerende indelingscriteria — technische laag, domein, verandersnelheid. De drijvers bepalen welke bovenaan staat; voor Mutatie 2.0 is dat het domein, met de integratie apart vanwege haar afwijkende verandersnelheid.</li>
+<li>Conceptual integrity is de eigenschap die niet lokaal te verdedigen is, en daarmee de eigenschap die het bestaan van een architect rechtvaardigt.</li>
+<li>DRY gaat over dubbele kennis, niet dubbele tekst. Duplicatie is goedkoper dan de verkeerde abstractie.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Koppeling</strong> — de mate waarin een wijziging in het ene component een wijziging in het andere afdwingt. Soorten: data, stempel, besturing, gemeenschappelijk, inhoud.</p>
+<p><strong>Afferente / efferente koppeling</strong> — inkomende respectievelijk uitgaande afhankelijkheden; hoge afferente koppeling maakt star, hoge efferente koppeling maakt kwetsbaar.</p>
+<p><strong>Temporele koppeling</strong> — een niet-vastgelegde volgorde-afhankelijkheid.</p>
+<p><strong>Semantische koppeling</strong> — een gedeelde, ongedocumenteerde aanname over de betekenis van gegevens.</p>
+<p><strong>Cohesie</strong> — de mate waarin onderdelen van een component om dezelfde reden veranderen.</p>
+<p><strong>Information hiding</strong> — het principe dat een component een waarschijnlijk veranderende beslissing verbergt achter een stabiel contract.</p>
+<p><strong>Conceptual integrity</strong> — de eigenschap dat een systeem overal volgens dezelfde concepten en conventies werkt.</p>
+<p><strong>Verkeerde abstractie</strong> — een samenvoeging van dingen die op elkaar lijken maar om verschillende redenen veranderen.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>iSAQB, <em>Curriculum CPSA-Foundation Level</em> — hoofdstuk 3.</li>
+<li>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (1972) — vijftien pagina’s, nog altijd het beste stuk over dit onderwerp.</li>
+<li>Brooks, <em>The Mythical Man-Month</em>, hoofdstuk 4 over conceptual integrity.</li>
+<li>Martin, <em>Clean Architecture</em> — deel III en IV, over componentprincipes; lees kritisch.</li>
+<li>Ford, Richards e.a., <em>Fundamentals of Software Architecture</em> — hoofdstukken over koppeling, cohesie en modulariteit.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 1, deel 3 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">292 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">21 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">18 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">742 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-02/reader.html">&larr; Deel 2 — Deel 2 — Van eisen naar architectuur</a><a class="swa-prevnext next" href="../deel-04/reader.html">Deel 4 — Deel 4 — Architectuurstijlen I &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

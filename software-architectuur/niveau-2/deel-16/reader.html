@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 16 — Securityarchitectuur — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 16 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 16 — Securityarchitectuur</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 16 van 28
+<em>Competentiegebied: technologisch</em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal.</p>
+<p><strong>Afbakening.</strong> Dit deel gaat over security als ontwerpvraag: waar zitten uw grenzen, wie mag wat, en welke maatregelen horen in de architectuur. Het gaat niet over aanvalstechnieken, penetratietesten of het uitvoeren van beveiligingsonderzoek. Waar u die kennis nodig hebt, hoort daar een specialist bij.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>dreigingsmodellering uitvoeren op een architectuurbeeld en de uitkomsten prioriteren;</li>
+<li>vertrouwensgrenzen aanwijzen in uw ontwerp en bepalen wat er op elke grens gebeurt;</li>
+<li>authenticatie, autorisatie en functiescheiding op de juiste plaats beleggen;</li>
+<li>beveiliging van gegevens in rust, onderweg en in gebruik onderscheiden en toepassen;</li>
+<li>de securitygevolgen van de uitrolstraat en de toeleveringsketen benoemen;</li>
+<li>security inbouwen in het ontwikkelproces zonder poortwachter te worden;</li>
+<li>de afweging tussen beveiliging en bruikbaarheid expliciet maken en aan de juiste partij voorleggen.</li>
+</ol>
+<hr>
+<h2>16.1 De aanleiding: drie dingen tegelijk</h2>
+<p>Na deel 15 heeft het platform drie eigenschappen die elk een securitygevolg hebben dat niemand heeft doordacht:</p>
+<ol>
+<li><strong>Er draaien meer plaatsen.</strong> De conversiedienst is afgesplitst, er zijn meerdere instanties, er is gedeelde opslag voor bijlagen. Elk daarvan is een toegangspunt.</li>
+<li><strong>Er is een geautomatiseerde uitrolstraat.</strong> Wie de straat beheerst, beheerst het systeem — zonder ooit productie aan te raken.</li>
+<li><strong>Er zijn waarneembaarheidsgegevens.</strong> Logging en tracering bevatten precies wat een aanvaller wil weten: welke systemen bestaan, hoe zij heten, en waar het misgaat.</li>
+</ol>
+<p>Daarnaast staat er sinds deel 2 van niveau 1 een eis open die nooit is uitgewerkt. De security officer zei toen <em>“alles moet uiteraard veilig”</em>, en na doorvragen bleek zijn werkelijke zorg specifiek:</p>
+<blockquote>
+<p><em>Dat een medewerker het adres van een deelnemer wijzigt naar zijn eigen adres en vervolgens zelf de uitkeringsopdracht goedkeurt.</em></p>
+</blockquote>
+<p>Die zorg is in deel 6 en 8 benoemd als functiescheiding en als domeinregel. Vandaag bouwen we hem.</p>
+<hr>
+<h2>16.2 Dreigingsmodellering</h2>
+<p><strong>Dreigingsmodellering</strong> is het systematisch doorlopen van een architectuurbeeld met de vraag: wat kan hier misgaan door toedoen van iemand die dat wil?</p>
+<p>Het is geen beveiligingsonderzoek en het vraagt geen aanvalskennis. Het vraagt uw architectuurbeeld, een gestructureerde vragenlijst en twee uur met de juiste mensen.</p>
+<p><strong>De opzet:</strong></p>
+<ol>
+<li><strong>Neem een beeld</strong> — C4-niveau 2 of 3 uit deel 7, met de gegevensstromen erin.</li>
+<li><strong>Teken de vertrouwensgrenzen</strong> — zie 16.3.</li>
+<li><strong>Loop elk element en elke stroom langs</strong> met een categorieënlijst.</li>
+<li><strong>Noteer wat u vindt</strong>, met een inschatting van waarschijnlijkheid en gevolg.</li>
+<li><strong>Prioriteer en wijs eigenaren toe</strong> — anders is het een gesprek en geen model.</li>
+</ol>
+<p><strong>De categorieën</strong> die gangbaar zijn en die volstaan:</p>
+<table>
+<thead>
+<tr>
+<th>Categorie</th>
+<th>De vraag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Identiteitsmisbruik</strong></td>
+<td>Kan iemand zich voordoen als een ander?</td>
+</tr>
+<tr>
+<td><strong>Manipulatie</strong></td>
+<td>Kan iemand gegevens wijzigen die hij niet mag wijzigen?</td>
+</tr>
+<tr>
+<td><strong>Ontkenning</strong></td>
+<td>Kan iemand achteraf ontkennen dat hij iets deed?</td>
+</tr>
+<tr>
+<td><strong>Informatielekkage</strong></td>
+<td>Kan iemand gegevens zien die hij niet mag zien?</td>
+</tr>
+<tr>
+<td><strong>Verstoring</strong></td>
+<td>Kan iemand de dienst onbruikbaar maken?</td>
+</tr>
+<tr>
+<td><strong>Rechtenverhoging</strong></td>
+<td>Kan iemand meer rechten krijgen dan toegekend?</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Voor Mutatie 2.0</strong> levert dit een korte, scherpe lijst op. De vier zwaarste:</p>
+<ul>
+<li><strong>Ontkenning:</strong> kan een behandelaar achteraf ontkennen dat zij een mutatie goedkeurde? Dit is QS-4 vanuit de andere kant bekeken — de audittrail is niet alleen een reconstructiemiddel maar een onweerlegbaarheidsmaatregel.</li>
+<li><strong>Rechtenverhoging:</strong> kan een medewerker met mutatierechten zichzelf goedkeuringsrechten geven? Dit is de zorg van de security officer, en het antwoord ligt in het autorisatiemodel én in functiescheiding.</li>
+<li><strong>Informatielekkage via waarneembaarheid:</strong> staan er persoonsgegevens in tracering die de brede beheergroep kan lezen?</li>
+<li><strong>Manipulatie via de uitrolstraat:</strong> kan iemand code in productie krijgen zonder review?</li>
+</ul>
+<p><strong>De belangrijkste eigenschap van deze werkvorm</strong> is dat zij architectuurgericht is. Zij levert geen lijst van kwetsbaarheden in code op — daar zijn andere middelen voor — maar een lijst van plekken waar uw ontwerp een aanname doet over vertrouwen die niet is afgedwongen.</p>
+<hr>
+<h2>16.3 Vertrouwensgrenzen</h2>
+<p>Een <strong>vertrouwensgrens</strong> is een plaats waar gegevens of aanroepen overgaan tussen partijen met verschillend vertrouwensniveau. Op elke grens hoort iets te gebeuren: vaststellen wie er aanroept, controleren wat er binnenkomt, en vastleggen dat het gebeurde.</p>
+<p><strong>De grenzen in Mutatie 2.0:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Grens</th>
+<th>Wat er overgaat</th>
+<th>Wat er moet gebeuren</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deelnemer → portaal</td>
+<td>Zelfbediening</td>
+<td>Authenticatie; strikte invoercontrole</td>
+</tr>
+<tr>
+<td>Behandelaar → applicatie</td>
+<td>Interne bediening</td>
+<td>Authenticatie; rol en mandaat vaststellen</td>
+</tr>
+<tr>
+<td>Werkgeverssysteem → platform</td>
+<td>Batchaanlevering</td>
+<td>Systeemidentiteit; formaatcontrole; volumebegrenzing</td>
+</tr>
+<tr>
+<td>Platform → kernadministratie</td>
+<td>Doorgifte</td>
+<td>Wederzijdse identiteit; vastlegging</td>
+</tr>
+<tr>
+<td>Platform → postcodedienst</td>
+<td>Externe dienst</td>
+<td>Uitgaande beperking; geen persoonsgegevens meer dan nodig</td>
+</tr>
+<tr>
+<td>Modulith → conversiedienst</td>
+<td>Interne aanroep</td>
+<td><strong>Zie hieronder</strong></td>
+</tr>
+<tr>
+<td>Uitrolstraat → productie</td>
+<td>Artefacten</td>
+<td>Herkomst en integriteit vaststellen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De grens tussen modulith en conversiedienst verdient uitleg.</strong> Sinds de splitsing in deel 13 is dat een netwerkgrens, en de verleiding is groot haar als “intern en dus vertrouwd” te behandelen.</p>
+<p>Dat is de aanname die in de praktijk het duurst uitpakt. Wie eenmaal binnen is — via een lek in een willekeurige component — kan zich dan vrij bewegen. <strong>Het uitgangspunt dat werkt: elke aanroep bewijst wie hij is, ook binnen uw eigen systeem.</strong> Dat kost weinig als u het vanaf het begin doet en veel als u het achteraf invoegt.</p>
+<p><strong>Wat u op elke grens doet:</strong></p>
+<ul>
+<li><strong>Vaststellen wie aanroept</strong> — niet op basis van netwerkpositie.</li>
+<li><strong>Valideren wat binnenkomt</strong> — op de grens, niet dieper. Uit deel 8: validatie aan de rand betreft formaat en volledigheid, in het domein de bedrijfsregels.</li>
+<li><strong>Begrenzen</strong> — een aanroeper mag niet onbeperkt vragen. Dit beschermt tegen misbruik én tegen de conversiedienst die per ongeluk de kernadministratie overspoelt (deel 15).</li>
+<li><strong>Vastleggen</strong> — wie deed wat, wanneer, met welk resultaat.</li>
+</ul>
+<hr>
+<h2>16.4 Authenticatie, autorisatie en functiescheiding</h2>
+<p>Deze drie worden door elkaar gehaald en zij horen op verschillende plaatsen.</p>
+<p><strong>Authenticatie — wie bent u?</strong> Generiek subdomein (deel 11): kopen, niet bouwen. Voor deelnemers en medewerkers gelden verschillende regimes en verschillende sterkte-eisen.</p>
+<p><strong>Autorisatie — wat mag u?</strong> Uit deel 8: centraal beslissen, lokaal afdwingen. Het model — welke rol mag welke handeling — hoort op één plaats; de handhaving hoort bij de handeling zelf, want dat is de enige plek waar zeker is dat er niets omheen gaat.</p>
+<p><strong>Functiescheiding — wat mag u niet meer, gegeven wat u al deed?</strong> Dit is de derde en zij is fundamenteel anders: zij hangt af van de geschiedenis van het dossier.</p>
+<p><strong>Waarom dat ertoe doet.</strong> Een generiek toegangsproduct kent rollen en rechten. Het kent niet de vraag <em>heeft deze medewerker eerder vandaag het adres van deze deelnemer gewijzigd?</em> — daarvoor moet u de mutatiegeschiedenis raadplegen, en die leeft in uw domein.</p>
+<p><strong>Dat is precies waarom de regel in het aggregaat hoort</strong>, zoals in deel 12 vastgesteld:</p>
+<blockquote>
+<p><code>mutatie.keurGoed(medewerker)</code> weigert wanneer de indiener en de goedkeurder dezelfde persoon zijn.</p>
+</blockquote>
+<p>En breder, in de vorm die de security officer bedoelde: wie een adreswijziging op een deelnemer heeft ingediend, mag geen uitkeringsopdracht op diezelfde deelnemer goedkeuren binnen een bepaalde periode.</p>
+<p><strong>De drie ontwerpvragen die u moet beantwoorden:</strong></p>
+<ol>
+<li><strong>Over welke periode geldt de scheiding?</strong> Dezelfde dag, dezelfde mutatiereeks, of altijd? Dit is een compliancebesluit.</li>
+<li><strong>Wat gebeurt er bij een kleine bezetting?</strong> Als er maar één behandelaar aanwezig is, kan een mutatie niet worden afgerond. Dat is de prijs uit deel 6, en er moet een uitwijkweg zijn die zelf ook wordt vastgelegd.</li>
+<li><strong>Wie mag de regel overrulen, en hoe wordt dat zichtbaar?</strong> Een noodprocedure zonder vastlegging is geen noodprocedure maar een achterdeur.</li>
+</ol>
+<p><strong>Vraag 2 en 3 zijn geen technische vragen.</strong> De architect stelt ze; compliance en de operationeel manager beantwoorden ze. Dat is dezelfde rolverdeling als bij het verwijderrecht in deel 14.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-16-1-drie-lagen-security.png" alt="De drie lagen naast elkaar — authenticatie (generiek, gekocht), autorisatie (centraal model, lokale handhaving), functiescheiding (in het aggregaat, met dossierhistorie) — met per laag waar zij leeft en wie haar bepaalt" loading="lazy"><figcaption>Figuur 16-1 — De drie lagen naast elkaar — authenticatie (generiek, gekocht), autorisatie (centraal model, lokale handhaving), functiescheiding (in het aggregaat, met dossierhistorie) — met per laag waar zij leeft en wie haar bepaalt</figcaption></figure>
+<hr>
+<h2>16.5 Gegevens beschermen</h2>
+<p><strong>In rust.</strong> Versleuteling van opslag is de norm en zij is grotendeels een infrastructuurmaatregel. De architectuurvraag is een andere: <strong>welke gegevens slaat u überhaupt op, en hoe lang?</strong> Gegevens die er niet zijn, kunnen niet lekken. Dat klinkt flauw en het is de effectiefste maatregel die er is.</p>
+<p>Voor Mutatie 2.0 concreet: de postcodedienst krijgt postcode en huisnummer, niet het volledige deelnemersobject — dat was de stempelkoppeling uit deel 3, en zij is behalve een ontwerpfout ook een privacyprobleem.</p>
+<p><strong>Onderweg.</strong> Versleuteld transport is de norm, ook intern. Zie 16.3: interne aanroepen zijn geen vertrouwde aanroepen.</p>
+<p><strong>In gebruik en in afgeleide vorm.</strong> Dit is waar het in de praktijk misgaat, en het zijn drie plekken die zelden op een architectuurplaat staan:</p>
+<ul>
+<li><strong>Waarneembaarheidsgegevens</strong> (deel 15): logging, tracering en foutrapportages bevatten regelmatig persoonsgegevens die er niet horen. De brede lezerskring maakt dit ernstig.</li>
+<li><strong>Testomgevingen</strong> (deel 15): productiegegevens in test is een van de meest voorkomende lekken in deze sector.</li>
+<li><strong>Leesmodellen en exports</strong> (deel 14): een projectie voor een rapportage bevat vaak meer dan de rapportage nodig heeft, en zij wordt zelden meegenomen in het toegangsmodel.</li>
+</ul>
+<p><strong>Bijzondere persoonsgegevens.</strong> Scheidings- en overlijdensmutaties bevatten relatiegegevens; arbeidsongeschiktheid raakt gezondheidsgegevens. Die vragen een strikter regime: minder mensen erbij, kortere bewaring, en expliciete vastlegging van inzage. Dat is niet alleen juridisch verstandig maar architectuurrelevant, want het bepaalt of deze gegevens in een gedeeld leesmodel mogen staan.</p>
+<hr>
+<h2>16.6 De toeleveringsketen en de uitrolstraat</h2>
+<p>Twee onderwerpen die tot voor kort geen architectuuronderwerp waren en het nu wel zijn.</p>
+<p><strong>Afhankelijkheden van derden.</strong> Uw systeem bestaat voor het merendeel uit code die u niet hebt geschreven. De architectuurrelevante maatregelen:</p>
+<ul>
+<li><strong>weten wat u gebruikt</strong> — een actuele inventaris van componenten en versies;</li>
+<li><strong>weten wanneer er iets bekend wordt</strong> — geautomatiseerde signalering van kwetsbaarheden;</li>
+<li><strong>kunnen wijzigen</strong> — als het bijwerken van een component een half jaar kost, is uw beveiliging afhankelijk van uw uitrolsnelheid. <strong>Dat is de verbinding met deel 15 die het vaakst wordt gemist: uitrolsnelheid is een securityeigenschap.</strong></li>
+</ul>
+<p><strong>De uitrolstraat zelf.</strong> Wie de straat beheerst, beheerst productie. De maatregelen: toegang tot de straat is even streng geregeld als toegang tot productie; artefacten zijn herleidbaar tot broncode en tot degene die hem goedkeurde; en niemand kan alleen een wijziging tot in productie brengen.</p>
+<p>Dat laatste is functiescheiding op procesniveau, en het is opvallend hoe vaak organisaties die in de applicatie afdwingen en in de uitrolstraat vergeten.</p>
+<hr>
+<h2>16.7 Security in het ontwikkelproces</h2>
+<p>De valkuil is dezelfde als bij architectuurborging in deel 9: een poortwachter aan het eind werkt niet, en géén controle ook niet.</p>
+<p><strong>De borgingsladder toegepast op security:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Laag</th>
+<th>Voorbeeld</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Onvermijdelijk</strong></td>
+<td>Versleuteld transport standaard; geheimen alleen uit de geheimenvoorziening bereikbaar</td>
+</tr>
+<tr>
+<td><strong>Controleerbaar</strong></td>
+<td>Kwetsbaarheidscontrole in de straat; controle op persoonsgegevens in logregels; controle op vastgelegde geheimen</td>
+</tr>
+<tr>
+<td><strong>Beoordeeld</strong></td>
+<td>Dreigingsmodellering bij een nieuwe module of een nieuwe externe koppeling</td>
+</tr>
+<tr>
+<td><strong>Afgesproken</strong></td>
+<td>Wat noch afdwingbaar noch controleerbaar is</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wanneer modelleert u opnieuw?</strong> Niet elke sprint. De aanleidingen: een nieuwe vertrouwensgrens, een nieuwe soort gegevens, een nieuw kanaal, of een wijziging in wie waarbij mag. Dat is een korte lijst en zij is objectief toetsbaar — daarmee is dit een beoordelingspunt voor het gremium uit deel 9 in plaats van een gevoelskwestie.</p>
+<p><strong>Wat de architect wel en niet doet.</strong> De architect wijst vertrouwensgrenzen aan, belegt maatregelen, en zorgt dat de vragen bij de juiste partij komen. De architect doet geen beveiligingsonderzoek, beoordeelt geen cryptografische keuzes op detailniveau, en beslist niet over de risicobereidheid van de organisatie.</p>
+<hr>
+<h2>16.8 Beveiliging tegen bruikbaarheid</h2>
+<p>Deze afweging kwam in deel 6 al voorbij en zij verdient hier de volle behandeling, want het is de plek waar architecten het vaakst een besluit nemen dat niet aan hen is.</p>
+<p><strong>QS-5</strong> vraagt dat een deelnemer van 70 jaar of ouder zelfstandig een adreswijziging voltooit. Elke extra verificatiestap verlaagt die kans.</p>
+<p><strong>De vraag is niet technisch maar bestuurlijk:</strong> hoeveel fraude accepteren we om hoeveel mensen zelfstandig te laten werken? Er is geen technisch antwoord, en een architect die stilzwijgend voor “veilig” kiest, heeft een bestuursbesluit genomen zonder mandaat.</p>
+<p><strong>Wat u wel doet, is de keuze scherp maken.</strong> Dat betekent: de opties in kaart brengen met hun gevolgen in aantallen, en het besluit voorleggen.</p>
+<table>
+<thead>
+<tr>
+<th>Optie</th>
+<th>Effect op fraude</th>
+<th>Effect op QS-5</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Geen extra verificatie</td>
+<td>Hoogste risico</td>
+<td>Beste zelfbediening</td>
+</tr>
+<tr>
+<td>Bevestiging op het oude adres</td>
+<td>Vertraging van dagen; fraude wordt zichtbaar</td>
+<td>Beperkt effect, mits het proces doorloopt</td>
+</tr>
+<tr>
+<td>Sterke verificatie bij elke wijziging</td>
+<td>Laagste risico</td>
+<td>Aanzienlijk deel haakt af</td>
+</tr>
+<tr>
+<td>Verificatie alleen bij risicokenmerken</td>
+<td>Middenweg</td>
+<td>Beperkt effect voor de meesten</td>
+</tr>
+</tbody>
+</table>
+<p>De laatste optie is doorgaans het verstandigst en zij is duurder in ontwerp: u moet vaststellen wat een risicokenmerk is, en die regels hebben een eigenaar nodig en een herzieningsmoment.</p>
+<p><strong>Merk op wat er in deel 6 gebeurde toen deze botsing werd gepreciseerd:</strong> zij viel deels uiteen. Functiescheiding betreft medewerkers en raakt QS-5 niet. Alleen de verificatie bij zelfbediening botst werkelijk. <strong>Een botsing tussen kwaliteitsattributen valt vaak uiteen zodra u hem preciseert</strong> — en dat is de eerste stap voordat u iemand een besluit voorlegt.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Dreigingsmodellering is architectuurwerk: een beeld, vertrouwensgrenzen, zes categorieën, en eigenaren per bevinding. Het vraagt geen aanvalskennis.</li>
+<li>Op elke vertrouwensgrens: vaststellen wie aanroept, valideren wat binnenkomt, begrenzen, en vastleggen.</li>
+<li>Interne aanroepen zijn geen vertrouwde aanroepen. Elke aanroep bewijst wie hij is — goedkoop vanaf het begin, duur achteraf.</li>
+<li>Authenticatie is generiek en koopt u; autorisatie is centraal beslissen en lokaal afdwingen; functiescheiding hoort in het aggregaat, want zij vraagt de dossierhistorie.</li>
+<li>De periode van functiescheiding, de uitwijkweg bij kleine bezetting en de noodprocedure zijn geen technische vragen. De architect stelt ze, compliance en de operatie beantwoorden ze.</li>
+<li>De effectiefste gegevensbescherming is gegevens niet hebben. Waarneembaarheidsgegevens, testomgevingen en leesmodellen zijn de drie plekken waar persoonsgegevens ongemerkt terechtkomen.</li>
+<li>Uitrolsnelheid is een securityeigenschap: als bijwerken een half jaar kost, is uw beveiliging daarvan afhankelijk.</li>
+<li>Functiescheiding in de uitrolstraat wordt vaker vergeten dan functiescheiding in de applicatie.</li>
+<li>De afweging beveiliging tegen bruikbaarheid is bestuurlijk. Uw taak is de opties met hun gevolgen in aantallen voorleggen — en eerst de botsing preciseren, want zij valt vaak deels uiteen.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Dreigingsmodellering</strong> — systematisch doorlopen van een architectuurbeeld op wat er misgaat door toedoen van iemand die dat wil.</p>
+<p><strong>Vertrouwensgrens</strong> — plaats waar gegevens of aanroepen overgaan tussen partijen met verschillend vertrouwensniveau.</p>
+<p><strong>Onweerlegbaarheid</strong> — de eigenschap dat iemand achteraf niet kan ontkennen wat hij deed.</p>
+<p><strong>Functiescheiding</strong> — een regel die afhangt van wat dezelfde persoon eerder deed op hetzelfde dossier.</p>
+<p><strong>Toeleveringsketen</strong> — de code van derden waaruit uw systeem grotendeels bestaat, met haar eigen risico’s.</p>
+<p><strong>Gegevensminimalisatie</strong> — alleen die gegevens verwerken en bewaren die u nodig hebt; de effectiefste beschermingsmaatregel.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Shostack, <em>Threat Modeling: Designing for Security</em> — het standaardwerk; de eerste vier hoofdstukken volstaan.</li>
+<li>OWASP — Application Security Verification Standard en de projecten rond dreigingsmodellering; vrij beschikbaar en praktisch bruikbaar.</li>
+<li>NCSC — publicaties over veilige softwareontwikkeling; Nederlandstalig en toegesneden op deze context.</li>
+<li>Uw eigen sectorkaders rond informatiebeveiliging en uitbesteding; die zijn leidend boven algemene literatuur.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 16 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">209 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">109 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">563 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-15/reader.html">&larr; Deel 15 — Deel 15 — Cloud-, infrastructuur- en uitrolarchitectuur</a><a class="swa-prevnext next" href="../deel-17/reader.html">Deel 17 — Deel 17 — Evolutionaire architectuur &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 11 — Strategisch domeingedreven ontwerp — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 11 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 11 — Strategisch domeingedreven ontwerp</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 11 van 28
+<em>Competentiegebied: methodisch</em></p>
+<hr>
+<h2>Positionering van niveau 2</h2>
+<blockquote>
+<p>Dit niveau bereidt voor op het <strong>CPSA-Advanced-traject</strong> van het iSAQB. Anders dan Foundation kent Advanced geen enkel examen maar een modulelandschap: u verzamelt credit points in drie competentiegebieden — <strong>methodisch (M)</strong>, <strong>technologisch (T)</strong> en <strong>communicatief ©</strong> — en sluit af met een certificeringsopdracht en een interview. Niveau 3 van deze cursus begeleidt dat afsluitende traject.</p>
+<p>Deze cursus is geen geaccrediteerde iSAQB-training en levert geen officiële credit points op. Wat zij levert, is de inhoudelijke voorbereiding: per deel geven wij aan welk competentiegebied en welke officiële modules het onderwerp raakt, zodat u gericht kunt kiezen waar u geaccrediteerde training inkoopt. Controleer het actuele modulelandschap en de puntenverdeling op isaqb.org.</p>
+<p>Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool. Niveau 1 is geen formele voorwaarde, maar deze reeks bouwt inhoudelijk voort op de begrippen daaruit; waar dat gebeurt, verwijzen wij expliciet.</p>
+</blockquote>
+<p><strong>De casus.</strong> Niveau 1 eindigde met een verdedigd ontwerp voor Mutatie 2.0. Niveau 2 begint waar het bouwen begint: het programma is hervat, er is een architect benoemd, de eerste twee sprints zijn geweest, en de eerste echte ontwerpvragen liggen op tafel. Die vragen zijn concreter en lastiger dan de vragen van niveau 1, omdat er nu code is die het antwoord moet dragen.</p>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>uitleggen wat een bounded context is en waarom een begrip in twee contexten iets anders mag betekenen;</li>
+<li>een ubiquitous language opstellen en de grenzen ervan herkennen;</li>
+<li>subdomeinen indelen in kern-, ondersteunende en generieke domeinen, en die indeling gebruiken voor investeringskeuzes;</li>
+<li>een context map tekenen met de gangbare relatiepatronen;</li>
+<li>bounded contexts afleiden uit gesprekken met domeindeskundigen in plaats van uit een gegevensmodel;</li>
+<li>de valkuilen van strategisch DDD benoemen, inclusief de situaties waarin het niet loont.</li>
+</ol>
+<p><strong>Raakvlak met het officiële modulelandschap:</strong> dit deel raakt de methodische modules rond domeinontwerp en architectuurbepaling. Zie isaqb.org voor de actuele modulenamen en puntenwaarden.</p>
+<hr>
+<h2>11.1 Waar niveau 1 ophield</h2>
+<p>In deel 3 stelde u vast dat het systeem wordt ingedeeld naar mutatiesoort, met de integratie afgezonderd. Het criterium was reden-van-verandering: onderdelen horen bij elkaar als zij om dezelfde reden, op verzoek van dezelfde partij, wijzigen.</p>
+<p>Dat criterium is juist en het is onvolledig. Het vertelt u wanneer twee dingen bij elkaar horen; het vertelt u niet <strong>waar de grenzen van het domein zelf lopen</strong>. En dat is precies de vraag die in sprint 3 van de bouw op tafel kwam.</p>
+<p><strong>De aanleiding.</strong> Het team bouwde de module voor scheidingsmutaties en liep vast op het begrip <em>partner</em>. Uit de gesprekken bleek:</p>
+<ul>
+<li>voor de <strong>mutatieverwerking</strong> is een partner iemand die op een mutatieformulier staat en van wie gegevens moeten worden gecontroleerd;</li>
+<li>voor de <strong>pensioenberekening</strong> is een partner iemand die op de peildatum voldeed aan de reglementaire partnerdefinitie — die per werkgever verschilt en waarbij samenwonen soms wel en soms niet meetelt;</li>
+<li>voor de <strong>correspondentie</strong> is een partner een geadresseerde met een aanhef en een taalvoorkeur;</li>
+<li>voor <strong>compliance</strong> is een partner een persoon met rechten op inzage in een deel van het dossier.</li>
+</ul>
+<p>Het team probeerde één partnerbegrip te maken dat alle vier bediende. Na twee weken had het een object met eenendertig velden waarvan er per gebruik hooguit zes relevant waren, met vier verschillende geldigheidsregels en drie manieren om vast te stellen of iemand “actief” partner was.</p>
+<p><strong>Dat is geen modelleerfout. Het is de standaardfout</strong>, en strategisch DDD is het antwoord erop.</p>
+<hr>
+<h2>11.2 De bounded context</h2>
+<p>Een <strong>bounded context</strong> is een grens waarbinnen een model geldig en eenduidig is. Binnen die grens heeft elk begrip één betekenis; buiten die grens mag hetzelfde woord iets anders betekenen.</p>
+<p>De essentie is de omkering die de meeste modelleurs moeilijk vinden: <strong>het doel is niet één model voor de hele organisatie, maar meerdere modellen met heldere grenzen ertussen.</strong></p>
+<p>Voor het partnerprobleem betekent dat: er komt geen universeel partnerbegrip. Er komen vier modellen, elk geldig binnen zijn eigen context, en er komen expliciete vertalingen op de grenzen.</p>
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>Wat “partner” daar is</th>
+<th>Wat er over hem wordt bijgehouden</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mutatieverwerking</td>
+<td>Een op te voeren en te controleren persoon</td>
+<td>Identiteit, verificatiestatus, brondocument</td>
+</tr>
+<tr>
+<td>Pensioenrechten</td>
+<td>Iemand die op een peildatum aan de reglementaire definitie voldoet</td>
+<td>Reglementaire status per periode, per werkgever</td>
+</tr>
+<tr>
+<td>Correspondentie</td>
+<td>Een geadresseerde</td>
+<td>Naam, aanhef, adres, taal, kanaal</td>
+</tr>
+<tr>
+<td>Toegang en inzage</td>
+<td>Een persoon met rechten op een dossierdeel</td>
+<td>Rechten, grondslag, geldigheidsduur</td>
+</tr>
+</tbody>
+</table>
+<p>Vergelijk dat met het object van eenendertig velden. Elk van deze vier is klein, begrijpelijk, en verandert om één reden.</p>
+<p><strong>De prijs is echt en hoort benoemd.</strong> U hebt nu vertaling nodig op de grenzen, en dezelfde persoon bestaat in vier vormen. Dat is duplicatie — en het is precies de duplicatie die deel 3 verdedigde: goedkoper dan de verkeerde abstractie. Het verschil met de fout uit sprint 4 van Mutatie 1.0 is dat deze duplicatie <strong>bewust, benoemd en van vertaling voorzien</strong> is.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-11-1-partnerbegrip-bounded-contexts.png" alt="Het partnerbegrip in vier bounded contexts — vier kleine modellen met hun eigen velden, verbonden door expliciete vertalingen op de grenzen, naast het afgekeurde object van eenendertig velden" loading="lazy"><figcaption>Figuur 11-1 — Het partnerbegrip in vier bounded contexts — vier kleine modellen met hun eigen velden, verbonden door expliciete vertalingen op de grenzen, naast het afgekeurde object van eenendertig velden</figcaption></figure>
+<hr>
+<h2>11.3 Ubiquitous language</h2>
+<p>Binnen een bounded context spreken domeindeskundigen, analisten en ontwikkelaars <strong>dezelfde taal</strong>: dezelfde woorden, dezelfde betekenis, in gesprekken, in documentatie en in code.</p>
+<p>Dat klinkt vanzelfsprekend en is het niet. De gebruikelijke situatie is dat de domeindeskundige spreekt over <em>verevening</em>, de analist het opschrijft als <em>verdeling</em>, en de ontwikkelaar een klasse <code>SplitCalculation</code> maakt. Elke vertaalslag is een plek waar betekenis wegsijpelt, en niemand merkt het tot er een fout optreedt die achteraf onverklaarbaar lijkt.</p>
+<p><strong>De regel:</strong> wat de domeindeskundige zegt, staat in de code. Niet vertaald, niet verbeterd, niet vereenvoudigd. Als de code <code>verevening</code> heet, kan een domeindeskundige meelezen; als hij <code>splitCalc</code> heet, kan dat niet, en dan is de code de enige plek waar de werkelijke regel staat zonder dat iemand hem kan controleren.</p>
+<p><strong>Voor Meridiaan</strong> is dit geen luxe. In deel 8 stelden we vast dat semantische koppeling — verschillende betekenissen achter hetzelfde woord — in administratieve systemen de meest voorkomende bron van stille fouten is. De ubiquitous language is het middel daartegen, en de begrippenlijst (arc42 hoofdstuk 12) is de neerslag.</p>
+<p><strong>De grens van de taal is de grens van de context.</strong> Zodra u merkt dat u “ja, maar in dat geval bedoelen we er iets anders mee” moet zeggen, staat u op een contextgrens. Dat is de bruikbaarste heuristiek uit dit hele deel: <strong>contextgrenzen kondigen zich aan als taalproblemen.</strong></p>
+<hr>
+<h2>11.4 Subdomeinen: waar investeert u?</h2>
+<p>Niet elk deel van het domein verdient evenveel aandacht. Drie soorten:</p>
+<p><strong>Kerndomein.</strong> Waar de organisatie zich onderscheidt, waar de complexiteit zit die niemand anders voor u oplost. Hier investeert u uw beste mensen en uw beste modellering; hier koopt u niets.</p>
+<p><strong>Ondersteunend subdomein.</strong> Nodig, specifiek voor uw organisatie, maar niet onderscheidend. Hier bouwt u eenvoudig en pragmatisch, of u koopt en past aan.</p>
+<p><strong>Generiek subdomein.</strong> Nodig, maar iedereen heeft het en het is overal hetzelfde. Hier koopt u, tenzij er een dwingende reden is dat niet te doen.</p>
+<p><strong>Voor het Mutatieplatform:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Subdomein</th>
+<th>Soort</th>
+<th>Consequentie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mutatieverwerking met statusstromen en goedkeuring</td>
+<td><strong>Kern</strong></td>
+<td>Beste modellering; hier zit QS-3 en de aantoonbaarheid</td>
+</tr>
+<tr>
+<td>Reglementaire rechtenbepaling (verevening, ingangsdatums)</td>
+<td><strong>Kern</strong></td>
+<td>Hier zit de complexiteit die Meridiaan onderscheidt; nooit uitbesteden</td>
+</tr>
+<tr>
+<td>Werkgeversaanlevering</td>
+<td>Ondersteunend</td>
+<td>Pragmatisch bouwen; het formaat is dwingend van buiten</td>
+</tr>
+<tr>
+<td>Correspondentie</td>
+<td>Ondersteunend</td>
+<td>Eenvoudig houden; sjablonen en verzending</td>
+</tr>
+<tr>
+<td>Adresvalidatie</td>
+<td>Generiek</td>
+<td>Kopen — dat gebeurt al</td>
+</tr>
+<tr>
+<td>Toegangsbeheer</td>
+<td>Generiek</td>
+<td>Kopen, mits functiescheiding erin past</td>
+</tr>
+<tr>
+<td>Berichtenverzending</td>
+<td>Generiek</td>
+<td>Kopen</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Waarom dit ertoe doet.</strong> De classificatie is een investeringsbeslissing, geen etiket. In Mutatie 1.0 is een aanzienlijk deel van de ontwikkelcapaciteit gegaan naar zaken die generiek waren, terwijl het kerndomein — de reglementaire rechtenbepaling — nooit is gebouwd. Dat is de duurste vorm van misallocatie die er is: u bouwt zelf wat u kon kopen, en u koopt niet wat u zelf had moeten bouwen omdat het uw vak is.</p>
+<p><strong>De valkuil:</strong> teams noemen graag alles kern. De toets is: <em>als een concurrent dit precies zo doet, zijn wij dan minder onderscheidend?</em> Bij adresvalidatie is het antwoord nee.</p>
+<hr>
+<h2>11.5 De context map</h2>
+<p>Een <strong>context map</strong> toont de bounded contexts en de relaties ertussen. Zij is een organisatorische kaart net zoveel als een technische: de relatiepatronen beschrijven machtsverhoudingen en samenwerkingsvormen.</p>
+<p>De patronen die u moet kennen:</p>
+<table>
+<thead>
+<tr>
+<th>Patroon</th>
+<th>Betekenis</th>
+<th>Voorbeeld Meridiaan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Partnership</strong></td>
+<td>Twee contexten die samen slagen of falen; nauwe afstemming</td>
+<td>Mutatieverwerking ↔ rechtenbepaling</td>
+</tr>
+<tr>
+<td><strong>Shared kernel</strong></td>
+<td>Een gedeeld model tussen twee contexten</td>
+<td>Zelden verstandig; bij Meridiaan niet toegepast</td>
+</tr>
+<tr>
+<td><strong>Customer–supplier</strong></td>
+<td>De leverende context houdt rekening met de afnemende</td>
+<td>Rechtenbepaling levert aan correspondentie</td>
+</tr>
+<tr>
+<td><strong>Conformist</strong></td>
+<td>De afnemer neemt het model van de leverancier over, zonder invloed</td>
+<td>Nergens gewenst</td>
+</tr>
+<tr>
+<td><strong>Anticorruption layer</strong></td>
+<td>De afnemer vertaalt actief, om het eigen model te beschermen</td>
+<td><strong>Kernadministratie-integratie</strong></td>
+</tr>
+<tr>
+<td><strong>Open host service</strong></td>
+<td>De leverancier biedt een algemeen, gepubliceerd koppelvlak</td>
+<td>De API voor werkgeverssystemen</td>
+</tr>
+<tr>
+<td><strong>Published language</strong></td>
+<td>Een gedeelde, expliciet vastgelegde uitwisselingstaal</td>
+<td>Het aanleverformaat voor werkgeversbatches</td>
+</tr>
+<tr>
+<td><strong>Separate ways</strong></td>
+<td>Geen integratie; beide doen het zelf</td>
+<td>Waar integratie duurder is dan duplicatie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Het belangrijkste patroon voor deze casus is de anticorruption layer.</strong> In deel 3 en 4 ontwierp u een integratiecomponent met een contract in domeintaal — “een mutatie wordt uiteindelijk precies één keer doorgegeven” — dat geen woord over SOAP bevatte. Dat is exact een anticorruption layer: een laag die vertaalt zodat het model van de kernadministratie het eigen domeinmodel niet binnendringt.</p>
+<p>Het patroon heeft die naam omdat de bedreiging reëel is. Zonder zo’n laag sijpelen de begrippen, veldnamen en eigenaardigheden van het externe systeem het domein binnen, en na twee jaar is het eigen model een afgeleide van andermans pakket — met als gevolg dat vervanging van dat pakket het hele systeem raakt.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-11-2-context-map-mutatie.png" alt="Context map Mutatie 2.0 — zes bounded contexts met hun relatiepatronen, met de anticorruption layer richting kernadministratie en de open host service richting werkgeverssystemen gemarkeerd" loading="lazy"><figcaption>Figuur 11-2 — Context map Mutatie 2.0 — zes bounded contexts met hun relatiepatronen, met de anticorruption layer richting kernadministratie en de open host service richting werkgeverssystemen gemarkeerd</figcaption></figure>
+<p><strong>↗ EA</strong> — Op landschapsniveau is de context map verwant aan wat de EA-cursus behandelt als applicatie-interactiediagram, met één verschil dat ertoe doet: de context map benoemt niet alleen dát twee systemen koppelen, maar <strong>hoe de machtsverhouding ligt en wie zich aan wie aanpast</strong>. Die informatie is bij integratieprojecten vaak beslissender dan de techniek.</p>
+<hr>
+<h2>11.6 Grenzen vinden</h2>
+<p>Bounded contexts leidt u niet af uit een gegevensmodel. U vindt ze in gesprekken. Vier heuristieken, in volgorde van betrouwbaarheid:</p>
+<p><strong>1. Taalbreuken.</strong> Waar hetzelfde woord iets anders betekent, of waar twee woorden hetzelfde betekenen, loopt een grens. Dit is de sterkste aanwijzing.</p>
+<p><strong>2. Verschillende belanghebbenden.</strong> Waar een andere afdeling de regels bepaalt, ligt vaak een grens. De reglementaire rechtenbepaling wordt bepaald door actuariaat en juridische zaken; mutatieverwerking door de operatie.</p>
+<p><strong>3. Verschillende verandersnelheden.</strong> Het criterium uit deel 3, hier terug op domeinniveau. Correspondentiebeleid verandert vaker dan reglementslogica.</p>
+<p><strong>4. Autonome beslisbevoegdheid.</strong> Waar een deel van het domein beslissingen neemt die de rest niet hoeft te kennen, is een grens mogelijk.</p>
+<p><strong>Wat u niet gebruikt:</strong> de bestaande systeemindeling, de databasestructuur, of de huidige teamindeling. Dat zijn uitkomsten van eerdere beslissingen, geen eigenschappen van het domein. Wie zijn contexten uit het bestaande landschap afleidt, herhaalt de indeling die hij wilde verbeteren.</p>
+<p><strong>Werkvorm.</strong> Een gestructureerde werksessie met domeindeskundigen, waarin het proces in gebeurtenissen wordt uitgeschreven op een lange tijdlijn, werkt hiervoor het best. De grenzen tekenen zich af rond clusters van gebeurtenissen die bij elkaar horen en waar de taal verandert. Wij gebruiken die vorm in opdracht 11.3.</p>
+<hr>
+<h2>11.7 Wanneer strategisch DDD niet loont</h2>
+<p>Eerlijkheid hoort erbij, en dit onderwerp lijdt aan overtoepassing.</p>
+<p><strong>Het loont niet:</strong></p>
+<ul>
+<li><strong>bij een klein, eenvoudig domein.</strong> Als er maar één betekenis van elk begrip is, zijn bounded contexts overhead. Een declaratiesysteem heeft ze niet nodig.</li>
+<li><strong>wanneer er geen domeindeskundigen beschikbaar zijn.</strong> DDD zonder toegang tot mensen die het domein kennen, wordt modelleren op basis van vermoedens, en dat is slechter dan pragmatisch bouwen.</li>
+<li><strong>wanneer het generiek is.</strong> Adresvalidatie modelleren met DDD is verspild werk.</li>
+<li><strong>wanneer de organisatie het niet volhoudt.</strong> De ubiquitous language vergt discipline over jaren. Wie hem drie maanden volhoudt en dan loslaat, houdt code over met domeinnamen die niet meer kloppen — misleidender dan neutrale namen.</li>
+</ul>
+<p><strong>Het loont wel</strong> bij Meridiaan, en de reden is specifiek: het domein is complex, de complexiteit is de kern van het vak, de begripsverwarring is aantoonbaar (deel 3 en 8), en de domeindeskundigen zijn beschikbaar en betrokken.</p>
+<p><strong>De grootste valkuil in de praktijk</strong> is de context die per team wordt getrokken in plaats van per domeingrens. Teams zijn een organisatorisch gegeven dat verandert; domeingrenzen zijn dat minder. Wie zijn contexten op de huidige teamindeling legt, moet ze bij elke reorganisatie hertekenen.</p>
+<p>Er is wel een verband — de wet van Conway zegt dat de structuur van uw systeem de communicatiestructuur van uw organisatie weerspiegelt — maar het verband loopt de andere kant op dan mensen denken: u kunt de teamindeling aanpassen aan de gekozen contexten. Dat heet <em>inverse Conway</em>, en het is in niveau 2, deel 21, aan de orde.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Een bounded context is een grens waarbinnen een model eenduidig is. Het doel is niet één model voor de organisatie maar meerdere modellen met heldere grenzen en expliciete vertaling.</li>
+<li>Het partnerprobleem is de standaardfout: één begrip dat vier contexten moet bedienen, wordt een object met eenendertig velden en vier geldigheidsregels.</li>
+<li>De duplicatie die hieruit volgt, is bewust, benoemd en van vertaling voorzien — dat onderscheidt haar van de fout uit sprint 4.</li>
+<li>Ubiquitous language: wat de domeindeskundige zegt, staat in de code. Contextgrenzen kondigen zich aan als taalproblemen.</li>
+<li>Subdomeinen indelen in kern, ondersteunend en generiek is een investeringsbeslissing. De duurste misallocatie is zelf bouwen wat u kon kopen terwijl u niet bouwt wat uw vak is.</li>
+<li>De context map beschrijft relaties én machtsverhoudingen. De anticorruption layer beschermt het eigen model tegen het model van een extern systeem — precies wat de integratiecomponent uit deel 3 en 4 doet.</li>
+<li>Grenzen vindt u in taal, belanghebbenden, verandersnelheid en beslisbevoegdheid — niet in de bestaande systeem- of teamindeling.</li>
+<li>Strategisch DDD loont niet bij eenvoudige of generieke domeinen, zonder domeindeskundigen, of wanneer de organisatie de discipline niet volhoudt.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Bounded context</strong> — grens waarbinnen een model en zijn begrippen eenduidig geldig zijn.</p>
+<p><strong>Ubiquitous language</strong> — één taal binnen een context, gedeeld door domeindeskundigen en ontwikkelaars, tot in de code.</p>
+<p><strong>Kern-, ondersteunend en generiek subdomein</strong> — respectievelijk waar de organisatie zich onderscheidt, wat nodig maar niet onderscheidend is, en wat overal hetzelfde is.</p>
+<p><strong>Context map</strong> — overzicht van bounded contexts en hun onderlinge relatiepatronen.</p>
+<p><strong>Anticorruption layer</strong> — vertaallaag die het eigen model beschermt tegen het model van een extern systeem.</p>
+<p><strong>Open host service / published language</strong> — een gepubliceerd koppelvlak, respectievelijk een expliciet vastgelegde uitwisselingstaal voor meerdere afnemers.</p>
+<p><strong>Wet van Conway / inverse Conway</strong> — de systeemstructuur weerspiegelt de communicatiestructuur; respectievelijk het bewust aanpassen van de organisatie aan de gewenste structuur.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Evans, <em>Domain-Driven Design</em> — deel IV over strategisch ontwerp; de rest is deel 12.</li>
+<li>Vernon, <em>Implementing Domain-Driven Design</em> — hoofdstuk 2 en 3, praktischer dan Evans.</li>
+<li>Brandolini, <em>Introducing EventStorming</em> — de werkvorm uit paragraaf 11.6.</li>
+<li>Skelton &amp; Pais, <em>Team Topologies</em> — over het verband tussen contexten en teamindeling; komt terug in deel 21.</li>
+<li>iSAQB, modulelandschap Advanced Level, op isaqb.org — voor de actuele modules en puntenwaarden.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 11 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">321 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">724 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../../niveau-1/deel-10/reader.html">&larr; Deel 10 — Deel 10 — Examentraining en capstoneverdediging</a><a class="swa-prevnext next" href="../deel-12/reader.html">Deel 12 — Deel 12 — Tactisch domeingedreven ontwerp en de modulith &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

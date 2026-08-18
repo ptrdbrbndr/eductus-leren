@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 13 — Microservicesarchitectuur — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 13 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 13 — Microservicesarchitectuur</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 13 van 28
+<em>Competentiegebied: technologisch</em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal; arc42 + C4 als referentienotatie.</p>
+</blockquote>
+<hr>
+<h2>Leerdoelen van dit deel</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>de herzieningsgrens van een distributiekeuze toetsen in plaats van hem te vergeten;</li>
+<li>het spectrum tussen modulith, service-based en microservices beschrijven en positioneren;</li>
+<li>bepalen langs welke grens u splitst en waarom de aggregaatgrens daarbij leidend is;</li>
+<li>de gevolgen van een netwerkgrens voor consistentie benoemen en het saga-patroon toepassen;</li>
+<li>het outbox-patroon uitleggen en de rol van idempotentie beschrijven;</li>
+<li>koppelvlakversiebeheer inrichten voor onafhankelijk uitrolbare diensten;</li>
+<li>een splitsing uitvoeren met het strangler-patroon, en bepalen wanneer u níét splitst.</li>
+</ol>
+<hr>
+<h2>13.1 De aanleiding: sprint 9</h2>
+<p>In deel 5 van niveau 1 is de distributiekeuze vastgelegd in een ADR, met een herzieningsgrens:</p>
+<blockquote>
+<p><em>Deze keuze wordt heroverwogen zodra het aantal ontwikkelteams boven de vier komt, zodra een module aantoonbaar meer dan tienvoudige capaciteit vraagt ten opzichte van de rest, of zodra een module een beschikbaarheidseis krijgt die de rest niet heeft.</em></p>
+</blockquote>
+<p>In sprint 9 gebeurt er iets. Meridiaan neemt de uitvoering over van een pensioenfonds van een fuserende werkgever. Dat betekent: 60.000 extra deelnemers, een derde ontwikkelteam vanaf het volgende kwartaal, en — het scherpst — een werkgeversaanlevering die tijdens de conversieperiode niet 4.000 maar tot 200.000 mutaties per nacht bevat.</p>
+<p>De programmadirecteur stelt de vraag die iedereen verwachtte: <strong>moeten we nu splitsen?</strong></p>
+<p><strong>Dit deel gaat over hoe u die vraag beantwoordt.</strong> Het antwoord is niet vanzelf ja en niet vanzelf nee, en de manier waarop u ertoe komt is belangrijker dan de uitkomst.</p>
+<p><strong>De eerste observatie is dat de herzieningsgrens werkt.</strong> Zij is gesteld op vier teams; er komt een derde. Zij is gesteld op tienvoudige capaciteit; de batch gaat tijdelijk maal vijftig. Dat is precies waarvoor de grens bestond, en het feit dat er nu een gestructureerd gesprek plaatsvindt in plaats van een reflex, is de opbrengst van deel 2 en deel 5 van niveau 1.</p>
+<hr>
+<h2>13.2 Het spectrum</h2>
+<p>Distributie is geen schakelaar. Tussen modulith en fijnmazige microservices ligt een spectrum, en de tussenposities worden in de praktijk ondergewaardeerd omdat er geen mode aan verbonden is.</p>
+<table>
+<thead>
+<tr>
+<th>Vorm</th>
+<th>Uitrolbare eenheden</th>
+<th>Gegevens</th>
+<th>Wanneer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Modulith</strong></td>
+<td>1</td>
+<td>Eén database, gescheiden schema’s</td>
+<td>Tot ongeveer vier teams; geen afwijkende profielen</td>
+</tr>
+<tr>
+<td><strong>Service-based</strong></td>
+<td>2–6 grovere diensten</td>
+<td>Vaak nog gedeelde database</td>
+<td>Enkele teams met verschillende ritmes; één of twee afwijkende profielen</td>
+</tr>
+<tr>
+<td><strong>Microservices</strong></td>
+<td>10+</td>
+<td>Eigen opslag per dienst</td>
+<td>Veel teams, sterk uiteenlopende profielen, volwassen operatie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Service-based is de vergeten middenpositie.</strong> Enkele grovere diensten geven u onafhankelijk uitrollen en onafhankelijk schalen waar u het nodig hebt, tegen een fractie van de operationele last van fijnmazige microservices. Voor Meridiaan is dit vrijwel zeker de juiste plek op het spectrum na de overname.</p>
+<p><strong>De regel die u meeneemt uit deel 5:</strong> de drijvers vertellen u <em>of</em> u distribueert, niet <em>hoe fijn</em>. Fijnmazigheid is een aparte beslissing, en te fijn is duurder dan te grof — want samenvoegen is goedkoper dan splitsen.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-13-1-spectrum-distributie.png" alt="Het spectrum modulith – service-based – microservices, met per positie de operationele last, de vereiste volwassenheid en de positie van Meridiaan vóór en na de overname" loading="lazy"><figcaption>Figuur 13-1 — Het spectrum modulith – service-based – microservices, met per positie de operationele last, de vereiste volwassenheid en de positie van Meridiaan vóór en na de overname</figcaption></figure>
+<hr>
+<h2>13.3 De drijverstoets opnieuw</h2>
+<p>Loop de vier drijvers uit deel 5 opnieuw langs, nu met de situatie van sprint 9.</p>
+<table>
+<thead>
+<tr>
+<th>Drijver</th>
+<th>Vóór de overname</th>
+<th>Na de overname</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Onafhankelijk uitrollen</td>
+<td>Afwezig (2 teams)</td>
+<td><strong>Mogelijk</strong> — drie teams, maar zitten zij elkaar in de weg?</td>
+</tr>
+<tr>
+<td>Onafhankelijk schalen</td>
+<td>Afwezig</td>
+<td><strong>Aanwezig, tijdelijk</strong> — de conversiebatch vraagt maal vijftig</td>
+</tr>
+<tr>
+<td>Onafhankelijk falen</td>
+<td>Afwezig</td>
+<td><strong>Mogelijk</strong> — mag een vastlopende conversie het dagelijkse mutatieproces raken?</td>
+</tr>
+<tr>
+<td>Onafhankelijke technologie</td>
+<td>Afwezig</td>
+<td>Afwezig</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Twee drijvers zijn niet meer afwezig, en dat verandert de conclusie — maar niet zoals u zou verwachten.</strong></p>
+<p><strong>Bij drijver 2 (schalen) is het beslissende woord <em>tijdelijk</em>.</strong> De conversie duurt naar verwachting vier maanden. Een architectuurwijziging aangaan voor een tijdelijk volume is de klassieke overreactie; hier gelden eerst de goedkopere opties uit deel 6: tijdelijk meer capaciteit, de conversie buiten kantooruren draaien, of de conversie in tranches verdelen.</p>
+<p><strong>Bij drijver 3 (falen) zit het echte punt.</strong> De vraag <em>mag een vastlopende conversie het dagelijkse mutatieproces raken?</em> is niet met capaciteit op te lossen. Als de conversiebatch de gedeelde database dichtzet, staat het portaal stil — en dat is een beschikbaarheidsprobleem voor 340.000 deelnemers veroorzaakt door een tijdelijk project.</p>
+<p><strong>Bij drijver 1 (uitrollen) is de vraag empirisch en meestal onbeantwoord.</strong> Drie teams is niet automatisch een probleem. Het probleem ontstaat wanneer teams op elkaar wachten. Dat is meetbaar: hoe vaak wordt een uitrol uitgesteld omdat een ander team niet klaar is?</p>
+<p><strong>De uitkomst voor Meridiaan:</strong> splits de werkgeversaanlevering en conversie af als eigen dienst. Eén splitsing, op grond van drijver 3, met drijver 2 als bijkomend argument. De rest blijft modulith.</p>
+<p>Dat is service-based, niet microservices. En het is precies wat de modulith beloofde: de module was al afgezonderd, bezat haar eigen gegevens en communiceerde met gebeurtenissen — splitsen is nu een verhuizing en geen verbouwing.</p>
+<hr>
+<h2>13.4 Waarlangs splitst u?</h2>
+<p>Wanneer u splitst, is de grens niet vrij te kiezen.</p>
+<p><strong>De aggregaatgrens is leidend.</strong> Uit deel 12: binnen een aggregaat geldt onmiddellijke consistentie, daarbuiten uiteindelijke. Een netwerkgrens dwingt uiteindelijke consistentie af. <strong>Dus loopt een dienstgrens nooit dwars door een aggregaat.</strong></p>
+<p>Wie dat toch doet, krijgt gedistribueerde transacties nodig, en die zijn duur, complex en foutgevoelig. De klassieke fout is een dienstgrens trekken op basis van een technische indeling — een “validatieservice”, een “berekeningsservice” — waardoor één logische handeling twee diensten moet wijzigen.</p>
+<p><strong>De praktische ordening:</strong></p>
+<ol>
+<li>Bounded context (deel 11) — de grofste grens, altijd een geldige dienstgrens.</li>
+<li>Aggregaat (deel 12) — de fijnste geldige grens.</li>
+<li>Alles daartussen kan, mits een dienst één of meer complete aggregaten bevat.</li>
+<li>Dwars door een aggregaat: nooit.</li>
+</ol>
+<p><strong>Voor de conversiedienst</strong> klopt dit: werkgeversaanlevering is een eigen module met eigen aggregaten, binnen dezelfde bounded context. De grens loopt niet door een aggregaat heen.</p>
+<hr>
+<h2>13.5 Wat een netwerkgrens verandert</h2>
+<p>Uit deel 5 kent u de kosten in algemene zin. Hier de vier die u concreet moet oplossen.</p>
+<h3>Verdwenen transacties: het saga-patroon</h3>
+<p>Over een dienstgrens heen bestaat geen gedeelde transactie. Een reeks stappen die samen moeten slagen, wordt een <strong>saga</strong>: een opeenvolging van lokale transacties, elk met een compenserende actie voor het geval een latere stap faalt.</p>
+<p>Voor de conversie: <em>deelnemer aangemaakt</em> → <em>rechten overgenomen</em> → <em>mutatiehistorie geconverteerd</em> → <em>conversie bevestigd</em>. Faalt stap 3, dan moet stap 2 gecompenseerd worden — niet teruggedraaid, want dat kan niet, maar gecorrigeerd met een expliciete tegenboeking.</p>
+<p><strong>Twee vormen:</strong></p>
+<ul>
+<li><strong>Georkestreerd</strong> — één component stuurt de saga aan en kent de volgorde. Voor Meridiaan de juiste keuze, om dezelfde reden als in deel 5: het proces moet aantoonbaar zijn.</li>
+<li><strong>Gechoreografeerd</strong> — elke stap reageert op de gebeurtenis van de vorige. Elegant en niet te volgen.</li>
+</ul>
+<p><strong>Compensatie is een domeinvraag, geen technische.</strong> Wat betekent het om een overgenomen recht ongedaan te maken? Die vraag beantwoordt de actuaris, niet de architect. Dat is de belangrijkste les van dit onderwerp: <strong>een saga verplaatst een technisch probleem naar het domein, en dat maakt hem duur.</strong></p>
+<h3>Betrouwbaar publiceren: het outbox-patroon</h3>
+<p>Het probleem: u wijzigt gegevens in uw database én u wilt een gebeurtenis publiceren. Dat zijn twee systemen; als de database slaagt en het publiceren faalt, is de gebeurtenis verloren — en niemand weet het.</p>
+<p><strong>De oplossing:</strong> schrijf de te publiceren gebeurtenis in dezelfde transactie weg in een tabel (de outbox). Een apart proces leest die tabel en publiceert. Slaagt het publiceren niet, dan blijft de regel staan en wordt het opnieuw geprobeerd.</p>
+<p>De prijs is dat een gebeurtenis meer dan één keer gepubliceerd kan worden. Daarom moet elke ontvanger <strong>idempotent</strong> zijn: dezelfde gebeurtenis twee keer verwerken heeft hetzelfde effect als één keer. Praktisch met een verwerkte-gebeurtenissenregistratie op ontvangerszijde.</p>
+<p><strong>Dit is geen randgeval.</strong> In een gedistribueerd systeem is “precies één keer bezorgd” niet haalbaar; wat haalbaar is, is “minstens één keer bezorgd, precies één keer verwerkt” — en dat tweede is uw werk, in elke ontvanger.</p>
+<h3>Waarneembaarheid</h3>
+<p>De correlatie-identificatie uit deel 8 van niveau 1 wordt hier onmisbaar in plaats van nuttig. Zonder gecorreleerde tracering over dienstgrenzen is een storing niet te volgen — dat was bevinding B7. Deel 15 werkt dit uit.</p>
+<h3>Koppelvlakversiebeheer</h3>
+<p>Zodra twee diensten onafhankelijk uitrollen, kunt u een koppelvlak niet meer eenzijdig wijzigen. De regels:</p>
+<ul>
+<li><strong>Achterwaarts compatibel wijzigen</strong> is de norm: velden toevoegen mag, verwijderen of hernoemen niet.</li>
+<li><strong>Breken vereist twee versies naast elkaar</strong>, met een afgesproken termijn waarna de oude vervalt.</li>
+<li><strong>De ontvanger negeert wat hij niet kent</strong>, zodat de zender kan toevoegen zonder te coördineren.</li>
+</ul>
+<p>Voor de werkgeverskoppeling uit deel 11 (open host service met published language) geldt dit dubbel: elf werkgeverssystemen hebben zich aan uw formaat aangepast, en die kunt u niet in één nacht laten meebewegen.</p>
+<hr>
+<h2>13.6 Hoe u splitst: het strangler-patroon</h2>
+<p>U splitst niet met een grote verbouwing. Het beproefde patroon:</p>
+<ol>
+<li><strong>Een doorgeefpunt plaatsen</strong> vóór de functionaliteit die u gaat verplaatsen.</li>
+<li><strong>De nieuwe dienst bouwen</strong> naast de bestaande module.</li>
+<li><strong>Verkeer geleidelijk verleggen</strong>, te beginnen met een klein deel of met een enkele werkgever.</li>
+<li><strong>Meten</strong> — de drijver die de splitsing rechtvaardigde, moet aantoonbaar beter worden.</li>
+<li><strong>De oude module verwijderen</strong> wanneer er geen verkeer meer langs gaat.</li>
+</ol>
+<p><strong>Stap 5 wordt overgeslagen</strong> en dat is de meest voorkomende fout. Het resultaat is een systeem met twee implementaties van hetzelfde, waarvan er één slaapt tot iemand hem per ongeluk aanroept. Zet er een termijn en een eigenaar op — de borgingsvorm uit deel 9.</p>
+<p><strong>Stap 4 wordt eveneens overgeslagen</strong>, en dat is erger. Een splitsing die niet meetbaar oplevert wat zij beloofde, moet worden teruggedraaid. Samenvoegen is goedkoper dan splitsen; dat werkt beide kanten op.</p>
+<hr>
+<h2>13.7 Wanneer u niet splitst</h2>
+<ul>
+<li><strong>Wanneer de drijver tijdelijk is.</strong> De conversiepiek duurt vier maanden; capaciteit is dan goedkoper dan architectuur.</li>
+<li><strong>Wanneer de operatie het niet aankan.</strong> Beheer zonder nachtbezetting kan niet zes diensten bewaken. Dat is een randvoorwaarde uit deel 2 van niveau 1 en zij is niet weg.</li>
+<li><strong>Wanneer de grens door een aggregaat loopt.</strong> Dan splitst u niet; dan modelleert u eerst opnieuw.</li>
+<li><strong>Wanneer u de teams niet meebeweegt.</strong> Een dienst zonder eigenaar wordt niemands zorg. De omgekeerde Conway-beweging — de organisatie aanpassen aan de gekozen structuur — hoort bij de beslissing, niet erna. Deel 21 werkt dit uit.</li>
+</ul>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Een herzieningsgrens werkt alleen als hij wordt getoetst. Sprint 9 is die toets, en het gestructureerde gesprek is de opbrengst van niveau 1.</li>
+<li>Distributie is een spectrum. Service-based — enkele grovere diensten — is de ondergewaardeerde middenpositie en voor Meridiaan de juiste.</li>
+<li>De drijvers vertellen of u distribueert, niet hoe fijn. Te fijn is duurder dan te grof, want samenvoegen is goedkoper dan splitsen.</li>
+<li>Bij de conversie is drijver 3 (onafhankelijk falen) het echte argument; drijver 2 is tijdelijk en dus geen architectuurargument.</li>
+<li>Een dienstgrens loopt nooit dwars door een aggregaat. Bounded context is de grofste geldige grens, het aggregaat de fijnste.</li>
+<li>Een saga verplaatst een technisch probleem naar het domein: compensatie is een domeinvraag. Dat maakt hem duur.</li>
+<li>Outbox plus idempotentie: “precies één keer bezorgd” bestaat niet; “minstens één keer bezorgd, precies één keer verwerkt” is uw werk in elke ontvanger.</li>
+<li>Splits met het strangler-patroon. Stap 4 (meten) en stap 5 (opruimen) worden overgeslagen; beide horen een eigenaar en een termijn te hebben.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Service-based architectuur</strong> — enkele grovere, onafhankelijk uitrolbare diensten, vaak met gedeelde opslag.</p>
+<p><strong>Saga</strong> — reeks lokale transacties met compenserende acties, als vervanging van een gedeelde transactie.</p>
+<p><strong>Compensatie</strong> — een expliciete tegenhandeling die het effect van een eerdere stap corrigeert; een domeinvraag.</p>
+<p><strong>Outbox</strong> — het in dezelfde transactie wegschrijven van te publiceren gebeurtenissen, met een apart publicatieproces.</p>
+<p><strong>Idempotentie</strong> — een bewerking veilig kunnen herhalen; noodzakelijk bij minstens-één-keer-bezorging.</p>
+<p><strong>Strangler-patroon</strong> — geleidelijk verkeer verleggen van een bestaande implementatie naar een nieuwe, met verwijdering als sluitstuk.</p>
+<p><strong>Achterwaartse compatibiliteit</strong> — een koppelvlak wijzigen zonder bestaande afnemers te breken.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Newman, <em>Building Microservices</em> (2e druk) — hoofdstuk 1, 3 en 4.</li>
+<li>Newman, <em>Monolith to Microservices</em> — het beste boek over splitsen, inclusief wanneer niet.</li>
+<li>Richardson, <em>Microservices Patterns</em> — de saga- en outboxhoofdstukken.</li>
+<li>Fowler, <em>StranglerFigApplication</em> — het oorspronkelijke, korte stuk.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 13 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">213 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">19 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">16 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">368 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-12/reader.html">&larr; Deel 12 — Deel 12 — Tactisch domeingedreven ontwerp en de modulith</a><a class="swa-prevnext next" href="../deel-14/reader.html">Deel 14 — Deel 14 — Event sourcing en CQRS &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>

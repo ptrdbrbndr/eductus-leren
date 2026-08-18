@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Deel 15 — Cloud-, infrastructuur- en uitrolarchitectuur — Softwarearchitectuur — Eductus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../swa.css">
+</head>
+<body>
+<header class="swa-header">
+  <div class="swa-header-inner">
+    <a class="swa-brand" href="../../index.html">Softwarearchitectuur</a>
+    <nav class="swa-breadcrumb"><a href="../../index.html">Cursusoverzicht</a> &rsaquo; Niveau 2 &rsaquo; Deel 15 &rsaquo; Reader</nav>
+  </div>
+</header>
+<main class="swa-main">
+<div class="swa-tabs"><a href="reader.html" class="active">Reader</a><a href="werkboek.html">Werkboek</a><a href="slidedeck.html">Slidedeck</a><a href="docentenhandleiding.html">Docentenhandleiding</a></div>
+<article class="swa-article">
+<h1>Deel 15 — Cloud-, infrastructuur- en uitrolarchitectuur</h1>
+<p><strong>Deelnemersreader</strong></p>
+<p>Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 15 van 28
+<em>Competentiegebied: technologisch · <strong>twee dagdelen</strong></em></p>
+<hr>
+<h2>Positionering</h2>
+<blockquote>
+<p>Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal — dit deel noemt geen leveranciers of producten, omdat die sneller wijzigen dan de vragen die zij beantwoorden. Waar u productkennis nodig hebt, is dat leverancierstraining, geen architectuur.</p>
+</blockquote>
+<p><strong>Waarom twee dagdelen.</strong> Dit deel behandelt vier onderwerpen die in de praktijk onlosmakelijk samenhangen en die elk apart oppervlakkig zouden blijven: waar het draait, hoe het er komt, hoe u weet wat het doet, en wat het kost. Dagdeel A behandelt de eerste twee, dagdeel B de laatste twee.</p>
+<hr>
+<h2>Leerdoelen</h2>
+<p>Na dit deel kunt u:</p>
+<ol>
+<li>de architectuurrelevante keuzes bij cloudgebruik onderscheiden van de infrastructuurkeuzes die dat niet zijn;</li>
+<li>de gevolgen van vervangbare, kortlevende uitvoeringsomgevingen voor uw ontwerp benoemen;</li>
+<li>omgevingen, configuratie en geheimen inrichten volgens beproefde uitgangspunten;</li>
+<li>een uitrolstraat ontwerpen met de juiste toetsen op de juiste plaats;</li>
+<li>uitrolstrategieën kiezen en de gevolgen ervan voor uw applicatieontwerp benoemen;</li>
+<li>een waarneembaarheidsconcept opstellen met logging, metrieken en tracering, gericht op vragen in plaats van op volledigheid;</li>
+<li>dienstniveaudoelen formuleren en het foutbudget gebruiken als besluitvormingsinstrument;</li>
+<li>de kostenstructuur van uw architectuur benoemen en kosten als kwaliteitsattribuut behandelen.</li>
+</ol>
+<hr>
+<h1>Dagdeel A — Waar het draait en hoe het er komt</h1>
+<h2>15.1 De aanleiding: de conversiedienst moet ergens draaien</h2>
+<p>Uit deel 13 volgde één splitsing: de werkgeversaanlevering en conversie worden een eigen dienst, op grond van isolatie van falen. Dat besluit heeft gevolgen die tot nu toe zijn blijven liggen:</p>
+<ul>
+<li>de dienst moet <strong>apart uitgerold</strong> kunnen worden, anders levert de splitsing niets op;</li>
+<li>zij moet <strong>apart kunnen omvallen</strong> zonder de rest mee te nemen — dat was de hele grond;</li>
+<li>zij moet <strong>tijdelijk veel meer capaciteit</strong> krijgen tijdens de conversie;</li>
+<li>en beheer, dat 's nachts geen bezetting heeft, moet weten wat zij doet.</li>
+</ul>
+<p>Daarnaast ligt er een tweede besluit klaar dat niemand nog heeft genomen: Meridiaan draait vandaag op eigen infrastructuur, en de vraag of dit platform naar een clouddienst gaat, staat op de agenda van de IT-directeur.</p>
+<p><strong>Dit deel gaat over de architectuurvragen daarachter — niet over de productkeuze.</strong></p>
+<hr>
+<h2>15.2 Wat aan cloud architectuurrelevant is</h2>
+<p>De cloudkeuze wordt vaak besproken als een leveranciers- of kostenvraag. Voor de architect zijn drie dingen relevant, en de rest is inkoop.</p>
+<h3>1. Uw uitvoeringsomgeving is vervangbaar en kortlevend</h3>
+<p>Dit is de belangrijkste verandering en zij geldt ook zonder cloud, zodra u met containers werkt. De aannames die vervallen:</p>
+<ul>
+<li><strong>“De machine blijft bestaan.”</strong> Een uitvoeringsomgeving kan op elk moment worden vervangen. Alles wat u lokaal opslaat — geüploade bestanden, sessies, tijdelijke berekeningen — is weg.</li>
+<li><strong>“Ik weet welke instantie dit afhandelt.”</strong> Bij meerdere instanties komt een volgend verzoek elders terecht. Toestand in het geheugen van één instantie werkt niet.</li>
+<li><strong>“Opstarten mag lang duren.”</strong> Bij schalen en vervangen is opstarttijd een kwaliteitseigenschap.</li>
+</ul>
+<p><strong>Voor Mutatie 2.0</strong> heeft dat concrete gevolgen: geüploade bijlagen gaan naar gedeelde opslag en niet naar de schijf; sessietoestand gaat naar een gedeelde voorziening; en de projectieopbouw uit deel 14 mag niet afhankelijk zijn van één instantie die blijft draaien.</p>
+<h3>2. Beheerde diensten verplaatsen werk, geen verantwoordelijkheid</h3>
+<p>Een beheerde database bespaart u patchen, back-ups en failover. Wat u niet bespaart: het ontwerp van uw gegevensmodel, uw herstelprocedure, en uw verantwoordelijkheid richting toezichthouder.</p>
+<p><strong>De architectuurvraag is de gebondenheid.</strong> Hoe diep bent u verweven met dienstspecifieke eigenschappen, en wat kost het om eruit te komen? Er is geen goed antwoord in het algemeen; er is een bewuste keuze met een prijs.</p>
+<p>Voor een pensioenuitvoerder speelt hierbij mee dat uitbesteding onder toezicht aan eisen is gebonden: DNB stelt eisen aan uitbesteding van kritieke processen, waaronder exitstrategieën en toegang tot informatie voor toezicht. <strong>Dat maakt de exitvraag geen theoretische maar een verplichte.</strong></p>
+<h3>3. Elasticiteit is een ontwerpvraag, geen instelling</h3>
+<p>Automatisch schalen werkt alleen als uw applicatie ertegen kan: geen lokale toestand, snelle opstart, en — het vaakst vergeten — <strong>een afhankelijkheid die meeschaalt</strong>.</p>
+<p>Twintig instanties van de conversiedienst tegen een kernadministratie die twintig aanroepen per seconde aankan, levert twintig keer zoveel wachtrij op en geen enkele versnelling. Schalen zonder de flessenhals mee te nemen, verplaatst het probleem en verbergt het.</p>
+<p><strong>↗ EA</strong> — De EA-cursus behandelt de cloudkeuze op landschapsniveau als sourcingvraag met leveranciersafhankelijkheid en exitstrategie. Op systeemniveau is de vraag smaller: welke aannames in mijn ontwerp vervallen, en wat kost het om te vertrekken?</p>
+<hr>
+<h2>15.3 Omgevingen, configuratie en geheimen</h2>
+<p><strong>Omgevingen.</strong> Minimaal ontwikkel, test, acceptatie en productie. De architectuurrelevante eis is dat zij <strong>op dezelfde manier tot stand komen</strong> — anders test u iets anders dan u uitrolt, en de fouten die u dan vindt, vindt u in productie.</p>
+<p>Voor Meridiaan geldt een extra eis die vaak wordt onderschat: <strong>productiegegevens horen niet in test.</strong> Dat betekent dat testgegevens realistisch genoeg moeten zijn om peildatumgedrag en reglementaire randgevallen te toetsen, zonder persoonsgegevens te bevatten. Dat is ontwerpwerk, geen bijzaak — het cross-cutting concept “testen” uit deel 8 van niveau 1.</p>
+<p><strong>Configuratie.</strong> Uitgangspunten die zich bewezen hebben:</p>
+<ul>
+<li><strong>Configuratie zit niet in het artefact.</strong> Hetzelfde artefact draait in elke omgeving; alleen de configuratie verschilt. Wie per omgeving een eigen bouwsel maakt, test niet wat hij uitrolt.</li>
+<li><strong>Configuratie is versiebeheerd en herleidbaar.</strong> Wie wijzigde wat wanneer, en waarom. Dit is dezelfde eis als bij de reglementparameters uit deel 14, en zij wordt om dezelfde reden vergeten.</li>
+<li><strong>Onderscheid technische configuratie van bedrijfsgegevens.</strong> De reglementparameters per werkgever zijn geen configuratie maar administratieve gegevens met versiehistorie en een eigenaar bij de administratie.</li>
+</ul>
+<p>Dat laatste onderscheid is voor deze casus het belangrijkst en het is precies waar de reconstructieproef op strandde.</p>
+<p><strong>Geheimen.</strong> Wachtwoorden, sleutels en certificaten horen niet in versiebeheer, niet in configuratiebestanden en niet in logregels. Zij horen in een daarvoor bestemde voorziening, met toegang per rol en met vastlegging van wie wat wanneer opvroeg. Rotatie moet mogelijk zijn zonder uitrol — anders gebeurt het niet.</p>
+<hr>
+<h2>15.4 De uitrolstraat</h2>
+<p>Een uitrolstraat is architectuur, geen gereedschapskwestie: zij bepaalt hoe snel u kunt corrigeren, en dat is een kwaliteitseigenschap.</p>
+<p><strong>De opeenvolging en wat waar hoort:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Wat er gebeurt</th>
+<th>Wat er faalt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bouwen</td>
+<td>Eén artefact, één keer</td>
+<td>Compilatiefouten</td>
+</tr>
+<tr>
+<td>Snelle toetsen</td>
+<td>Eenheidstoetsen, statische analyse</td>
+<td>Logische fouten in het klein</td>
+</tr>
+<tr>
+<td><strong>Architectuurtoetsen</strong></td>
+<td>Modulegrenzen, afhankelijkheidsrichting, verboden aanroepen</td>
+<td><strong>Erosie van uw ontwerp</strong></td>
+</tr>
+<tr>
+<td>Integratietoetsen</td>
+<td>Samenwerking tussen modules, tegen echte opslag</td>
+<td>Koppelvlakfouten</td>
+</tr>
+<tr>
+<td>Uitrol naar acceptatie</td>
+<td>Zelfde artefact, andere configuratie</td>
+<td>Omgevingsverschillen</td>
+</tr>
+<tr>
+<td>Toetsen op acceptatie</td>
+<td>Scenario’s uit uw meetplan</td>
+<td>Kwaliteitseisen</td>
+</tr>
+<tr>
+<td>Uitrol naar productie</td>
+<td>Zelfde artefact</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De architectuurtoetsen zijn wat dit tot architectuur maakt.</strong> Uit deel 5, 8, 9 en 12 hebt u een reeks regels: modules bezitten hun eigen gegevens, verwijzingen over grenzen gebeuren met identiteiten, het domein leest de klok niet rechtstreeks, correlatie-identificatie wordt meegegeven. <strong>Elk van die regels die u niet in de straat toetst, is een regel die van oplettendheid afhangt</strong> — en dat is de zwakste borgingslaag uit deel 9.</p>
+<p><strong>Het meetplan hoort hier thuis.</strong> In deel 6 van niveau 1 legde u per drijverscenario een meetmoment vast. Metingen die alleen handmatig gebeuren, verwateren; de scenario’s die zich lenen voor automatisering horen in de straat, met een drempel die faalt.</p>
+<p><strong>De opruimregel.</strong> Elke toets die vaak faalt zonder dat iemand iets repareert, wordt genegeerd en daarna uitgezet. Een straat met tien onbetrouwbare toetsen is slechter dan een straat met drie betrouwbare, want het faalsignaal verliest zijn betekenis.</p>
+<hr>
+<h2>15.5 Uitrolstrategieën</h2>
+<p>Hoe u nieuwe versies in productie brengt, is een architectuurkeuze omdat het eisen stelt aan uw applicatie.</p>
+<table>
+<thead>
+<tr>
+<th>Strategie</th>
+<th>Werking</th>
+<th>Eist van uw applicatie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Stilstand</strong></td>
+<td>Uitzetten, vervangen, aanzetten</td>
+<td>Niets — maar wel een venster</td>
+</tr>
+<tr>
+<td><strong>Rollend</strong></td>
+<td>Instanties één voor één vervangen</td>
+<td>Twee versies moeten naast elkaar kunnen draaien</td>
+</tr>
+<tr>
+<td><strong>Blauw-groen</strong></td>
+<td>Volledige tweede omgeving, verkeer omschakelen</td>
+<td>Idem, plus dubbele capaciteit tijdens de wissel</td>
+</tr>
+<tr>
+<td><strong>Kanarie</strong></td>
+<td>Klein deel van het verkeer naar de nieuwe versie</td>
+<td>Idem, plus meten per versie</td>
+</tr>
+</tbody>
+</table>
+<p><strong>De eis die alle strategieën behalve de eerste stellen, is dezelfde en wordt het vaakst gemist: twee versies moeten tegelijk kunnen draaien.</strong> Dat heeft twee concrete gevolgen:</p>
+<p><strong>Databasewijzigingen moeten achterwaarts compatibel zijn.</strong> U voegt eerst een kolom toe, rolt de code uit die hem vult, en verwijdert de oude kolom pas in een latere uitrol. Een migratie die de oude versie breekt, maakt rollende uitrol onmogelijk — en dat merkt u pas tijdens de uitrol.</p>
+<p><strong>Gebeurtenisformaten moeten achterwaarts compatibel zijn.</strong> Dat is dezelfde eis als bij het versiëren van gebeurtenissen in deel 14, nu tijdens de uitrol: de oude versie leest gebeurtenissen die de nieuwe schrijft.</p>
+<p><strong>Voor Meridiaan.</strong> De modulith kan met een kort stilstandvenster buiten kantooruren — dat is eenvoudig en past bij twee tot drie teams. De conversiedienst kan rollend, want zij is afgesplitst en heeft geen interactieve gebruikers. <strong>Verschillende strategieën per dienst is normaal</strong>, en de keuze volgt uit de beschikbaarheidseis, niet uit een voorkeur.</p>
+<p><strong>Terugdraaien.</strong> Elke strategie heeft een terugweg nodig, en de belangrijkste vraag is hoe u omgaat met gegevens die de nieuwe versie al heeft geschreven. Terugdraaien van code is eenvoudig; terugdraaien van gegevenswijzigingen is dat zelden. Wie dat niet vooraf heeft doordacht, ontdekt tijdens een storing dat terugdraaien geen optie is.</p>
+<figure class="swa-figure"><img src="../../figuren/figuur-15-1-uitrolstrategieen.png" alt="De vier uitrolstrategieën naast elkaar — beschikbaarheid tijdens uitrol, benodigde capaciteit, en de eis van twee gelijktijdige versies — met de keuze per Meridiaan-dienst gemarkeerd" loading="lazy"><figcaption>Figuur 15-1 — De vier uitrolstrategieën naast elkaar — beschikbaarheid tijdens uitrol, benodigde capaciteit, en de eis van twee gelijktijdige versies — met de keuze per Meridiaan-dienst gemarkeerd</figcaption></figure>
+<hr>
+<h1>Dagdeel B — Weten wat het doet, en wat het kost</h1>
+<h2>15.6 Waarneembaarheid</h2>
+<p>Uit bevinding B7 van niveau 1: een storing was niet over servicegrenzen heen te volgen. Met een afgesplitste dienst en asynchrone verwerking is dat probleem terug — en groter.</p>
+<p><strong>Waarneembaarheid is niet hetzelfde als bewaking.</strong> Bewaking beantwoordt vragen die u vooraf hebt bedacht (“staat de dienst aan?”). Waarneembaarheid stelt u in staat vragen te beantwoorden die u niet had bedacht — en dat is wat u nodig hebt bij een storing, want de storingen die u had voorzien, hebt u al voorkomen.</p>
+<h3>De drie soorten gegevens</h3>
+<p><strong>Logging</strong> — gebeurtenissen met context. Wat, wanneer, voor wie, met welk resultaat, en de correlatie-identificatie uit deel 8.</p>
+<p><strong>Metrieken</strong> — getallen over de tijd: aantallen, doorlooptijden, wachtrijlengtes. Goedkoop, samen te vatten, en geschikt voor drempels.</p>
+<p><strong>Tracering</strong> — het pad van één opdracht door het systeem, met de tijd per stap. Onmisbaar zodra er een netwerkgrens of asynchrone verwerking is.</p>
+<p><strong>Voor Mutatie 2.0</strong> zijn dit de metrieken die er werkelijk toe doen, en het is een korte lijst:</p>
+<table>
+<thead>
+<tr>
+<th>Metriek</th>
+<th>Waarom</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Doorlooptijd bevestiging (p95, p99,5)</td>
+<td>QS-1 rechtstreeks</td>
+</tr>
+<tr>
+<td>Aantal mutaties in de outbox-wachtrij, en de oudste</td>
+<td>QS-2; <strong>stille stilstand</strong></td>
+</tr>
+<tr>
+<td>Achterstand per projectie</td>
+<td>Deel 14; een stilstaande projectie meldt niets</td>
+</tr>
+<tr>
+<td>Aantal vastgelopen doorgiftes</td>
+<td>QS-2</td>
+</tr>
+<tr>
+<td>Batchdoorlooptijd en uitvalpercentage</td>
+<td>QS-6</td>
+</tr>
+<tr>
+<td>Aanroepen per seconde richting kernadministratie</td>
+<td>De limiet uit deel 2</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Twee van deze zes meten iets dat níét gebeurt</strong>, en dat is de belangrijkste les van dit onderdeel. Uit deel 6 van niveau 1: stille stilstand is de moeilijkst ontdekbare storing. Bewaking op fouten vindt hem nooit; bewaking op uitblijvende voortgang wel.</p>
+<h3>Wat u niet doet</h3>
+<p><strong>Alles verzamelen.</strong> De verleiding is groot en de gevolgen zijn kosten, ruis en een AVG-risico. De vraag bij elke gegevensstroom: <em>welke vraag beantwoordt dit, en wie stelt hem?</em> Wat geen antwoord heeft, verzamelt u niet.</p>
+<p><strong>Persoonsgegevens loggen.</strong> Uit deel 8: geen BSN, geen volledige adressen, en met name geen relatiegegevens uit scheidings- en overlijdensmutaties. Een verwijzing volstaat.</p>
+<p><strong>Alarmeren op alles.</strong> Een beheerafdeling die 's nachts geen bezetting heeft, kan niet op vijftig signalen reageren. Alarmeer op wat iemand nu moet weten; de rest is een overzicht dat morgen wordt bekeken.</p>
+<hr>
+<h2>15.7 Dienstniveaudoelen en het foutbudget</h2>
+<p><strong>Een dienstniveaudoel (SLO)</strong> is een expliciete norm voor de betrouwbaarheid van een dienst, gemeten aan wat de gebruiker ervaart. Bijvoorbeeld: <em>99,5% van de mutatiebevestigingen binnen 2 seconden, gemeten over een kalendermaand.</em></p>
+<p>Dat lijkt op een kwaliteitsscenario uit deel 2, en dat is het ook — met één toevoeging: het wordt continu gemeten en er hangt een consequentie aan.</p>
+<p><strong>Het foutbudget</strong> is het verschil tussen het doel en honderd procent. Bij 99,5% mag 0,5% van de bevestigingen te traag zijn: bij 100.000 bevestigingen per maand zijn dat er 500.</p>
+<p>Dat budget is een besluitvormingsinstrument:</p>
+<ul>
+<li><strong>Is het budget nog ruim</strong>, dan kunt u risico nemen: sneller uitrollen, meer wijzigingen tegelijk.</li>
+<li><strong>Is het budget bijna op</strong>, dan gaat de aandacht naar stabiliteit en niet naar nieuwe functionaliteit.</li>
+</ul>
+<p><strong>Waarom dit werkt.</strong> Het maakt de discussie tussen “meer functionaliteit” en “meer stabiliteit” een rekensom in plaats van een meningsverschil. Dat is voor een architect die met een product owner onderhandelt een aanzienlijk sterkere positie dan een beroep op zorgvuldigheid.</p>
+<p><strong>Twee waarschuwingen.</strong></p>
+<p><strong>Een doel van 100% is geen doel maar een weigering te kiezen.</strong> Het is onhaalbaar, en de poging maakt elke wijziging onbetaalbaar duur.</p>
+<p><strong>Meet wat de gebruiker ervaart</strong>, niet wat uw dienst denkt te doen. Een dienst die intern binnen 200 milliseconden antwoordt terwijl de gebruiker vier seconden wacht, haalt een doel dat niets betekent.</p>
+<hr>
+<h2>15.8 Kosten als kwaliteitsattribuut</h2>
+<p>Kosten staan niet in ISO 25010 en het loont ze in een cloudomgeving als kwaliteitsattribuut te behandelen, omdat architectuurkeuzes daar rechtstreeks in maandelijkse bedragen resulteren.</p>
+<p><strong>Wat kosten drijft:</strong></p>
+<ul>
+<li><strong>Verwerkingscapaciteit</strong> die draait, ook als er niets gebeurt.</li>
+<li><strong>Opslag die groeit</strong> — en bij event sourcing groeit die per definitie. Zeven jaar gebeurtenissen van 340.000 deelnemers is een reëel bedrag en het hoort in de afweging uit deel 14.</li>
+<li><strong>Gegevensverkeer</strong>, met name tussen zones of regio’s.</li>
+<li><strong>Waarneembaarheidsgegevens</strong> — vaak de post die het snelst en onopgemerkt groeit.</li>
+</ul>
+<p><strong>De architectuurkeuzes met de grootste kosteneffecten</strong> zijn dezelfde die u om andere redenen al hebt gemaakt: fijnmazigheid van diensten (elke dienst heeft een minimumvoetafdruk), synchroon versus asynchroon (wachtende verwerking is betaalde verwerking), en de bewaartermijn van gebeurtenissen en logging.</p>
+<p><strong>De regel die u meeneemt:</strong> kosten horen als expliciete post in een ADR, net als de andere prijzen die u benoemt. Een architect die de kostenstructuur van zijn eigen keuzes niet kent, laat iemand anders die afweging maken — meestal een half jaar later, onder druk, zonder de context.</p>
+<hr>
+<h2>Samenvatting</h2>
+<ul>
+<li>Aan cloud is drieërlei architectuurrelevant: uw uitvoeringsomgeving is vervangbaar en kortlevend, beheerde diensten verplaatsen werk maar geen verantwoordelijkheid, en elasticiteit is een ontwerpvraag. De rest is inkoop.</li>
+<li>Schalen zonder de flessenhals mee te nemen, verplaatst het probleem: twintig instanties tegen een limiet van twintig aanroepen per seconde geeft twintig keer zoveel wachtrij.</li>
+<li>Omgevingen komen op dezelfde manier tot stand; configuratie zit niet in het artefact en is versiebeheerd; geheimen zitten in een eigen voorziening met rotatie zonder uitrol.</li>
+<li>Onderscheid technische configuratie van bedrijfsgegevens. De reglementparameters zijn het tweede en zijn precies waar de reconstructieproef op strandde.</li>
+<li>De uitrolstraat is architectuur omdat zij bepaalt hoe snel u kunt corrigeren. Elke ontwerpregel die u er niet in toetst, hangt van oplettendheid af.</li>
+<li>Elke uitrolstrategie behalve stilstand eist dat twee versies naast elkaar draaien: achterwaarts compatibele databasewijzigingen en gebeurtenisformaten.</li>
+<li>Terugdraaien van code is eenvoudig; terugdraaien van gegevenswijzigingen zelden. Denk het vooraf door.</li>
+<li>Waarneembaarheid beantwoordt vragen die u niet had bedacht; bewaking alleen de vragen die u wel had. Twee van de zes kernmetrieken meten iets dat níét gebeurt.</li>
+<li>Een dienstniveaudoel met foutbudget maakt de afweging tussen functionaliteit en stabiliteit een rekensom in plaats van een meningsverschil. Een doel van 100% is een weigering te kiezen.</li>
+<li>Kosten zijn in een cloudomgeving een kwaliteitsattribuut en horen als expliciete post in een ADR.</li>
+</ul>
+<hr>
+<h2>Kernbegrippen</h2>
+<p><strong>Vervangbare uitvoeringsomgeving</strong> — een omgeving die op elk moment kan worden vervangen; lokale toestand gaat verloren.</p>
+<p><strong>Beheerde dienst</strong> — een dienst waarvan de leverancier het beheer uitvoert; verplaatst werk, niet verantwoordelijkheid.</p>
+<p><strong>Uitrolstraat</strong> — de geautomatiseerde reeks van bouwen, toetsen en uitrollen.</p>
+<p><strong>Architectuurtoets</strong> — een geautomatiseerde controle op ontwerpregels, uitgevoerd in de uitrolstraat.</p>
+<p><strong>Rollende / blauw-groene / kanarie-uitrol</strong> — strategieën die alle vereisen dat twee versies naast elkaar kunnen draaien.</p>
+<p><strong>Waarneembaarheid</strong> — het vermogen vragen te beantwoorden die vooraf niet bedacht waren, op basis van logging, metrieken en tracering.</p>
+<p><strong>Dienstniveaudoel (SLO)</strong> — expliciete, continu gemeten betrouwbaarheidsnorm vanuit gebruikersperspectief.</p>
+<p><strong>Foutbudget</strong> — het toegestane verschil tussen het doel en volledige betrouwbaarheid; instrument voor besluitvorming.</p>
+<hr>
+<h2>Verder lezen</h2>
+<ul>
+<li>Kim, Humble e.a., <em>The DevOps Handbook</em> — over uitrolstraten en werkstromen.</li>
+<li>Humble &amp; Farley, <em>Continuous Delivery</em> — de klassieke bron; het hoofdstuk over databasemigraties is nog steeds het beste dat er is.</li>
+<li>Beyer e.a., <em>Site Reliability Engineering</em> — de hoofdstukken over SLO’s en foutbudgetten; lees ze kritisch, want de context is een organisatie van andere schaal.</li>
+<li>Majors, Fong-Jones &amp; Miranda, <em>Observability Engineering</em> — over het verschil tussen bewaking en waarneembaarheid.</li>
+<li>Nygard, <em>Release It!</em> — over wat er in productie werkelijk misgaat.</li>
+</ul>
+<hr>
+<p><em>Ductus B.V. · Cursus Softwarearchitectuur · Niveau 2, deel 15 · Deelnemersreader</em></p>
+
+</article>
+<aside class="swa-download-box">
+  <h2>Dit deel downloaden</h2>
+  <ul>
+  <li><a href="reader.docx">Reader (.docx)</a><span class="swa-download-size">126 KB</span></li>
+<li><a href="werkboek.docx">Werkboek (.docx)</a><span class="swa-download-size">22 KB</span></li>
+<li><a href="docentenhandleiding.docx">Docentenhandleiding (.docx)</a><span class="swa-download-size">17 KB</span></li>
+<li><a href="slidedeck.pptx">Slidedeck (.pptx)</a><span class="swa-download-size">523 KB</span></li>
+  </ul>
+</aside>
+<nav class="swa-partnav"><a class="swa-prevnext prev" href="../deel-14/reader.html">&larr; Deel 14 — Deel 14 — Event sourcing en CQRS</a><a class="swa-prevnext next" href="../deel-16/reader.html">Deel 16 — Deel 16 — Securityarchitectuur &rarr;</a></nav>
+</main>
+<footer class="swa-footer">
+  <p>Ductus-cursusfamilie · Softwarearchitectuur · <a href="../../index.html">terug naar cursusoverzicht</a> · <a href="../../../index.html">alle Eductus-cursussen</a></p>
+</footer>
+</body>
+</html>
