@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 4 — Het model versus de implementatie: kaart en terrein | Eductus</title>
+<meta name="description" content="Cursus Domain-Driven Design, Deel 4: het verschil tussen een domeinmodel en de technische implementatie, de metafoor van kaart en terrein, en de modeltoets om een model op die scheiding te beoordelen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quote{margin:20px 0;padding:6px 0 6px 22px;border-left:3px solid var(--line);color:var(--ink-soft);font-style:italic}
+.quote p{margin:8px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Domain-Driven Design · Deel 4</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Domain-Driven Design · Niveau 1 (fundament) · Deel 4 van 30</p>
+  <h1>Kaart en <em>terrein</em></h1>
+  <p class="hero__lead">Met het kerndomein scherp in beeld gaat het team voor het eerst echt modelleren — en dat is precies het moment waarop een nieuw risico ontstaat. Daans eerste diagram blijkt, bij nader inzien, de bestaande databasetabel met een andere naam erop. Dit deel leert het team het verschil tussen de kaart die het met Willemijn deelt en het terrein waarin het uiteindelijk gebouwd wordt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±1u</b><span>leestijd + opdrachten</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>5</b><span>vragen modeltoets</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de iSAQB® Advanced Level-module <em>Domain-Driven Design</em> en is uitdrukkelijk geen vervanging van een erkende iSAQB-training — zij levert op zichzelf geen certificaat op. Alle formuleringen, figuren en werkvormen zijn van Ductus; waar wij naar begrippen van Eric Evans en Vaughn Vernon verwijzen, doen wij dat in eigen woorden en eigen voorbeelden. Studeer voor de module altijd óók bij een erkende provider.</div>
+  <div class="trail">Niveau 1: ➊ Wat DDD is → ➋ Ubiquitous language → ➌ Domain/subdomain → <b>➍ Model vs. implementatie (hier)</b> → ➎ Entity/value object → ➏ Aggregate → ➐ Domain event → ➑ Services/factory/repository → ➒ Bounded context → ➓ Examentraining + capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: Daans eerste tekening</a></li>
+      <li><a href="#s3" data-target="s3">Model versus implementatie</a></li>
+      <li><a href="#s4" data-target="s4">Twee manieren om de kaart kwijt te raken</a></li>
+      <li><a href="#s5" data-target="s5">De werkvorm: de modeltoets</a></li>
+      <li><a href="#s6" data-target="s6">Het veld dat het verschil maakt</a></li>
+      <li><a href="#s7" data-target="s7">Terug naar de casus</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 3 heeft het team het Nabestaandenloket ingedeeld: het vaststellen van recht op partnerpensioen is het kerndomein, een aantal onderdelen is ondersteunend, en documentbeheer en adresverificatie zijn generiek. Met dat kerndomein scherp in beeld gaat het team voor het eerst echt modelleren — en dat is precies het moment waarop een nieuw risico ontstaat: het model dat op papier of op het whiteboard staat, kan stilletjes iets anders worden dan wat het team met Willemijn heeft afgesproken.</p>
+<p>Aan het eind van dit deel kun je:</p>
+<ul>
+<li>in eigen woorden uitleggen wat het verschil is tussen een domeinmodel en de technische implementatie ervan, en waarom dat verschil ertoe doet;</li>
+<li>de metafoor van kaart en terrein toepassen op een eigen modelfragment;</li>
+<li>benoemen wat er misgaat als een model te ver van de implementatie afstaat, en wat er misgaat als een model stiekem al de implementatie is;</li>
+<li>met de <strong>modeltoets</strong> een opgesteld domeinmodel beoordelen op de vraag of het nog de taal van het domein spreekt, of al de taal van de techniek.</li>
+</ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: Daans eerste tekening</h2><span class="chip time">⏱ 11 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Daan krijgt de opdracht om tegen de volgende sessie een eerste opzet te maken van het model rond het vaststellen van recht op partnerpensioen. De volgende ochtend legt hij een klassendiagram op tafel: een klasse <code>Dossier</code> met velden <code>id</code>, <code>bsn_deelnemer</code>, <code>partnertype_code</code>, <code>status_code</code>, <code>aangemaakt_op</code> en <code>gewijzigd_op</code>. Ernaast een klasse <code>PartnerRecord</code> met een foreign key naar <code>Dossier</code>, en een klasse <code>Mutatie</code> met een <code>volgnummer</code> en een <code>type_code</code>.</p>
+<div class="quote">
+<p>"Dat ziet er… bekend uit," zegt Rutger, terwijl hij het diagram omdraait. "Dit is de tabel <code>DOSSIER</code> uit de polisadministratie. Met een paar kolommen erbij."</p>
+<p>Willemijn kijkt er langer naar. "Wat is <code>partnertype_code</code>?"</p>
+<p>"Een code voor het type partner," zegt Daan. "1 voor huwelijkspartner, 2 voor geregistreerd partner, 3 voor samenwonend met contract."</p>
+<p>"En als er twee partners tegelijk zijn, zoals bij dossier 4471?"</p>
+<p>"Dan… zou er een tweede rij in <code>PartnerRecord</code> komen."</p>
+<p>"Dat kan ik niet lezen," zegt Willemijn. "Ik zie een code en een verwijzing. Ik zie niet wat er feitelijk gebeurt als Saïda mij vraagt waarom de ex-partner voorrang kreeg. Dit is niet het model dat we drie weken lang hebben opgebouwd. Dit is een tabel met een andere naam erboven."</p>
+</div>
+<p>Tijmen vraagt Daan: "Kun je, zonder naar het diagram te kijken, uitleggen wat er gebeurt bij samenloop tussen twee partners?" Daan doet dat — in gewone taal, feilloos. "Teken dat nu opnieuw," zegt Tijmen. "Maar teken wat je net vertelde, niet wat er in de tabel <code>DOSSIER</code> staat."</p>
+<p>Dat is het beginpunt van dit deel: het onderscheid tussen het model dat het team met Willemijn deelt — de kaart — en de code die daar ooit uit voortkomt — het terrein. Daan heeft ze, onbedoeld, al bij de eerste poging door elkaar laten lopen.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Model versus implementatie</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>domeinmodel</strong> is een vereenvoudigde voorstelling van een deel van de werkelijkheid, opgebouwd uit de begrippen en regels die voor dat deel van het domein relevant zijn. Een <strong>implementatie</strong> is de technische vorm waarin dat model uiteindelijk wordt gebouwd: klassen, tabellen, velden, foreign keys, framework-conventies.</p>
+<p>De metafoor die dit deel gebruikt: <strong>een model is een kaart, nooit het terrein zelf.</strong> Een kaart van een stad toont straten, gebouwen en een schaal — niet elke stoeptegel, niet de kleur van elke voordeur. Een goede kaart laat precies genoeg weg om bruikbaar te zijn, en houdt precies genoeg vast om te kloppen met wat je onderweg tegenkomt. Een domeinmodel doet hetzelfde met het Nabestaandenloket: het toont de begrippen en regels die er inhoudelijk toe doen, en laat weg wat er technisch bij komt kijken om dat te bouwen.</p>
+<figure><img src="figuren/figuur-4-1-kaart-en-luchtfoto.svg" alt="Een kaart naast een luchtfoto van hetzelfde gebied — de kaart toont alleen wat relevant is voor de reiziger, de foto toont alles wat er letterlijk staat"><figcaption>Figuur 4-1 — een kaart naast een luchtfoto: de kaart toont wat relevant is, de foto toont alles</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 1 — kaart of terrein?</p><details class="q"><summary><span class="qn">1</span><span>Het feit dat er, bij samenloop, meer dan één partnerclaim tegelijk kan bestaan — domeinbegrip of technisch element?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Domeinbegrip.</strong> Dit is precies het feit dat Willemijn in dossier 4471 tegenkwam en dat het model moet kunnen uitdrukken.</div></details><details class="q"><summary><span class="qn">2</span><span><code>dossier_id</code> als foreign key in <code>PartnerRecord</code> — domeinbegrip of technisch element?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Technisch element.</strong> Een foreign key bestaat vanwege de manier waarop een relationele database rijen aan elkaar koppelt, niet vanwege een domeinbehoefte.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Twee manieren om de kaart kwijt te raken</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het gevaar zit aan twee kanten, en beide kanten kosten het team iets anders.</p>
+<p><strong>Een model dat te ver van de implementatie afstaat.</strong> Dit is het model dat mooi oogt op het whiteboard, vol dozen en pijlen die precies de nuances van het reglement uitdrukken, maar dat niemand ooit kan terugvinden in de code. De sessies blijven mooi, de code wordt onherkenbaar, en niemand merkt het op tijd omdat er niemand is die beide werelden naast elkaar legt.</p>
+<p><strong>Een model dat stiekem al de implementatie is.</strong> Dit is Daans valkuil: een model dat oogt als een domeinmodel maar bij nader inzien niets anders is dan de bestaande databasestructuur met een andere naam erop. <code>Dossier</code> met een <code>partnertype_code</code> is geen domeinbegrip — het is een tabelontwerp.</p>
+<p>Beide valkuilen delen één patroon: het model stopt de taal te spreken van de mensen voor wie het bedoeld is.</p>
+<figure><img src="figuren/figuur-4-2-twee-richtingen.svg" alt="Twee richtingen: een model dat wegdrijft van de implementatie, en een model dat al implementatie is verkleed als domeinmodel"><figcaption>Figuur 4-2 — twee richtingen: wegdrijven van de implementatie, of stiekem al implementatie zijn</figcaption></figure>
+<h3>Waarom Daans diagram de tweede valkuil is</h3>
+<p>Ten eerste: de namen. <code>partnertype_code</code>, <code>status_code</code>, <code>volgnummer</code> zijn geen woorden die Willemijn in een gesprek zou gebruiken — het zijn woorden die je kiest wanneer je denkt in kolommen die iets moeten opslaan, niet in begrippen die iets moeten betekenen. Ten tweede: velden die er alleen zijn omdát de techniek ze nodig heeft, zoals een foreign key. Ten derde: wat het diagram niet kan uitleggen — toen Willemijn vroeg waarom de ex-partner voorrang kreeg, had het diagram geen antwoord, omdat een tabelontwerp niet is gemaakt om regels uit te leggen, alleen om gegevens op te slaan.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 2 — dossierstuk 4-B en 4-C</p><details class="q"><summary><span class="qn">1</span><span>Rutger constateert dat Daans model “de oude tabel, overgetypt” is. Welke twee aanwijzingen uit het diagram onderbouwen dat?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(1) De waarden van <code>partnertype_code</code> (1, 2, 3) komen woordelijk overeen met de kolom <code>PARTNERTYPE</code> in de bestaande polisadministratie. (2) <code>status_code</code> gebruikt dezelfde tien waarden als de bestaande kolom <code>STATUS</code> — het model voegt geen nieuw onderscheid toe, het herhaalt een bestaande technische indeling onder een nieuwe naam.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De werkvorm: de modeltoets</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het instrument van dit deel is de <strong>modeltoets</strong>: een sjabloon waarmee je een opgesteld domeinmodel — of een fragment ervan — beoordeelt op de vraag of het nog steeds de kaart is die het domein weerspiegelt, of dat het inmiddels het terrein is geworden.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Vraag</th><th>Waar het op let</th></tr></thead>
+<tbody>
+<tr><td><strong>Herkent de domeinexpert elk begrip zonder technische uitleg?</strong></td><td>Leg het fragment aan Willemijn voor: kan zij vertellen wat elk onderdeel betekent zonder dat iemand "database" of "klasse" zegt?</td></tr>
+<tr><td><strong>Spreekt het fragment de taalkaart-taal, of technische taal?</strong></td><td>Vergelijk elke naam met de termen uit de taalkaart van deel 2.</td></tr>
+<tr><td><strong>Bestaat elk veld vanwege een domeinbehoefte, of een technische behoefte?</strong></td><td>Zou dit veld blijven bestaan als we morgen van database wisselen?</td></tr>
+<tr><td><strong>Overleeft het model een technische verandering?</strong></td><td>Een model dat bij elke technische wissel opnieuw getekend moet worden, was nooit een domeinmodel.</td></tr>
+<tr><td><strong>Kan het fragment de regel uitleggen, of alleen het gegeven vastleggen?</strong></td><td>Als Saïda vraagt "waarom is dit zo besloten", geeft het fragment daar een aanknopingspunt voor?</td></tr>
+</tbody>
+</table></div>
+<figure><img src="figuren/figuur-4-3-modeltoets.svg" alt="Het invulblad van de modeltoets, ingevuld voor Daans eerste diagram"><figcaption>Figuur 4-3 — het invulblad van de modeltoets, ingevuld voor Daans eerste diagram</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 3 — de modeltoets op PartnerRecord</p><details class="q"><summary><span class="qn">1</span><span>Het veld <code>volgorde</code> (integer) in <code>PartnerRecord</code> bepaalt welke claim voorrang heeft. Wat toont de modeltoets, en wat maakt het verschil als het zo blijft staan?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De modeltoets valt door op bijna elke vraag: Willemijn herkent “volgorde” niet (zij zou spreken over “welke claim voorrang heeft”), het is technische taal, en het legt alleen een getal vast, niet de reden waaróm de ene claim voorrang kreeg. <strong>Dat het verschil maakt:</strong> als <code>volgorde</code> als integer blijft staan zonder de onderliggende voorrangsregel expliciet te maken, kan Saïda bij een bezwaar niet reconstrueren waaróm claim 1 voorrang kreeg op claim 2 — zij merkt dat als eerste, op het moment dat een afgewezen ex-partner om een onderbouwing vraagt.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Het veld dat het verschil maakt</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Onder de vijf vragen staat een afsluitend veld:</p>
+<div class="callout note"><span class="lbl">Het zesde veld</span><p><strong>Dat het verschil maakt: als we dit modelonderdeel laten samenvallen met de implementatie, wat kunnen we straks niet meer los van elkaar aanpassen — en wie merkt dat als eerste?</strong></p></div>
+<p>Dit veld dwingt het team van een constatering naar een concrete consequentie. "Dit model is eigenlijk de databasetabel" is een oordeel; "als we <code>partnertype_code</code> als domeinbegrip laten staan, kunnen we straks niet meer los van de database bepalen wat een 'partner' precies is — en de eerstvolgende keer dat het reglement wijzigt, moet Rutger een databasemigratie draaien voor iets wat eigenlijk een regelwijziging is" is een inzicht waarmee je een ontwerpbeslissing kunt verdedigen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4 — de andere kant van de valkuil</p><details class="q"><summary><span class="qn">1</span><span>Een team tekent een volledig uitgewerkt model van elke denkbare tussenstap uit het reglement, inclusief zeldzame combinaties. Wat gaat hier concreet mis, en wie merkt het als eerste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het model is inhoudelijk correct en volledig, maar niemand weet hoe je dit in een werkend systeem vertaalt zonder maanden bouwtijd. Gevolg: de bouw stokt, of er wordt in stilte een sterk vereenvoudigde versie gebouwd die niets meer met het mooie model te maken heeft. <strong>Rutger</strong> merkt dit als eerste, op het moment dat hij moet gaan bouwen en ontdekt dat het model geen enkele aanwijzing geeft over wat een technisch haalbare eerste stap is.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Terug naar de casus</h2><span class="chip time">⏱ 9 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het team past de modeltoets toe op Daans oorspronkelijke diagram. Op vrijwel elke vraag valt het fragment door: <code>partnertype_code</code> is geen taalkaart-term maar een databasecode, de foreign key bestaat vanwege de techniek, en het model kan niet uitleggen waarom een ex-partner voorrang kreeg — het kan alleen laten zien dát er een tweede rij bestaat.</p>
+<p>Daan tekent het model opnieuw, deze keer vanuit het verhaal dat hij aan Tijmen vertelde in plaats van vanuit de tabel <code>DOSSIER</code>. Er komt een begrip <strong>partnervaststelling</strong> dat expliciet ruimte biedt voor meer dan één claim tegelijk, met een aparte plek voor de afweging tussen een lopende en een historische claim. Willemijn leest het tweede diagram hardop voor, zin voor zin, zonder dat iemand een technische term hoeft te vertalen. "Dit lees ik," zegt ze. "Dit ken ik."</p>
+<p>Rutger formuleert de les die het scherpst blijft hangen: "Het probleem was niet dat Daan een technisch model maakte. Ergens moet dit gebouwd worden, en dan wordt het een tabel. Het probleem was dat hij dat tabelontwerp aan óns liet zien alsof het het domeinmodel was. De kaart en het terrein mogen allebei bestaan — ze moeten alleen niet hetzelfde plaatje worden voordat wij ernaar gekeken hebben."</p>
+<h4>Samenvatting</h4>
+<ul>
+<li>Een domeinmodel is een kaart, nooit het terrein zelf — het laat technische details weg en houdt domeinbegrippen vast.</li>
+<li>Twee valkuilen: een model dat te ver van de implementatie afdrijft, en een model dat stiekem al de implementatie is.</li>
+<li>De modeltoets scoort een modelfragment op vijf vragen plus een zesde, concreet consequentieveld.</li>
+<li>Een goed domeinmodel kan een regel uitleggen; een tabelontwerp kan alleen een gegeven vastleggen.</li>
+</ul>
+<div class="callout tip"><span class="lbl">Vooruit naar deel 5</span><p>Met een model dat weer de taal van Willemijn spreekt, dient zich een scherpere vraag aan. Is dit dossier hetzelfde dossier als gisteren — met een eigen identiteit die je door de tijd heen kunt volgen — of bedoelt Willemijn iets waarvan alleen de inhoud telt? Dat onderscheid — tussen identiteit en waarde, tussen entity en value object — is het onderwerp van deel 5.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 6 — taalprobleem of kaart-en-terrein-probleem?</p><details class="q"><summary><span class="qn">1</span><span>Bij WGP 2.0 dekte het woord “mutatie” vijf of zes dingen, en de specificatie nam dat woord direct over als technisch begrip. Was dit vooral een taalprobleem, vooral een kaart-en-terrein-probleem, of allebei — en hoe hangen ze samen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Allebei tegelijk, en ze versterkten elkaar. Het taalprobleem zat in het woord “mutatie” zelf, dat vijf of zes verschillende dingen dekte zonder dat iemand het onderscheid had gemaakt (deel 2). Het kaart-en-terrein-probleem zat in het feit dat de specificatie, en later de code, dat ongedifferentieerde woord direct overnam als technisch begrip. Een taalkaart had het onderscheid vóór de bouw zichtbaar gemaakt; een modeltoets had vervolgens voorkomen dat die soorten alsnog werden platgeslagen tot één technisch veld. Zonder het een is het ander niet genoeg.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 5</h3>
+      <p>Met een model dat weer de taal van Willemijn spreekt, dient zich een scherpere vraag aan: is dit dossier hetzelfde dossier als gisteren, of een nieuw dossier met dezelfde inhoud? Dat onderscheid — tussen identiteit en waarde, tussen entity en value object — is het onderwerp van deel 5.</p>
+      <a class="btn" href="https://cursus.eductus.nl/domain-driven-design/niveau-1/deel-05/reader.html">Deel 5 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Domain-Driven Design · Deel 4 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/domain-driven-design/niveau-1/deel-04/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_ddd4_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
