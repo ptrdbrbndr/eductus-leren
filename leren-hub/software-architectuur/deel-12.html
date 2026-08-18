@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 12 — Tactisch domeingedreven ontwerp en de modulith | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 12 (iSAQB CPSA-A): entiteiten, waardeobjecten, aggregaten als consistentiegrens, en de vertaling van tactisch DDD naar de modulith — aan de hand van het gelijktijdigheidsincident uit sprint 5.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 12</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 12 van 28</p>
+  <h1>Waar begint<br><em>een transactie?</em></h1>
+  <p class="hero__lead">Deel 11 bepaalde waar de contextgrenzen liggen. Vandaag kijkt u binnen één grens: de mutatieverwerkingscontext, waar het bouwteam nu werkt. In sprint 5 bleek dat twee behandelaars die tegelijk aan hetzelfde dossier werken elkaars wijzigingen overschrijven, en dat het opslaan van één adreswijziging acht tabellen raakt. De ontbrekende begrippen zijn waardeobject en aggregaat — en de vraag die ze beantwoorden is niet wat bij elkaar hoort, maar wat op elk moment moet kloppen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±4u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>aggregaatregels</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool.</div>
+  <div class="trail">Niveau 2: ➊ Strategisch DDD → <b>➋ Tactisch DDD (hier)</b> → ➌ Microservices → ➍ Event sourcing/CQRS → ➎ Cloud &amp; uitrol → ➏ Security → ➐ Evolutionaire architectuur → ➑ Evaluatie gevorderd → ➒ Documentatie → ➓ Modereren/overtuigen → ⑪ Teamindeling &amp; tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Van grenzen naar inhoud</a></li>
+      <li><a href="#s2" data-target="s2">Entiteit en waardeobject</a></li>
+      <li><a href="#s3" data-target="s3">Het aggregaat</a></li>
+      <li><a href="#s4" data-target="s4">De overige bouwstenen</a></li>
+      <li><a href="#s5" data-target="s5">Van aggregaten naar modules</a></li>
+      <li><a href="#s6" data-target="s6">Het bloedarmoedige domeinmodel</a></li>
+      <li><a href="#s7" data-target="s7">De opbrengst voor sprint 5</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Van grenzen naar inhoud</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 11 bepaalde waar de contextgrenzen liggen. Vandaag kijken we binnen één grens: de mutatieverwerkingscontext, waar het bouwteam nu werkt.</p>
+        <p>De vraag die daar op tafel ligt, komt uit sprint 5 en luidt in de woorden van het team: <em>"waar begint en eindigt een transactie?"</em></p>
+        <p>De aanleiding is concreet. Een scheidingsmutatie bevat de mutatie zelf, de gegevens van beide ex-partners, een reeks bijlagen, een goedkeuringsstap, en een berekende vereveningsuitkomst. Het team heeft dat gebouwd als één samenhangend geheel dat in één keer wordt opgeslagen. Bij de eerste belastingtest bleek dat twee behandelaars die tegelijk aan hetzelfde dossier werken, elkaars wijzigingen overschrijven — en bij het toevoegen van de zesde mutatiesoort bleek dat het opslaan van één adreswijziging inmiddels acht tabellen raakte.</p>
+        <div class="callout"><span class="lbl">De ontbrekende begrippen</span><p>Waardeobject en aggregaat. Beide beantwoorden dezelfde vraag: niet wat bij elkaar hoort, maar wat op elk moment moet kloppen.</p></div>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Entiteit en waardeobject</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Een entiteit</strong> heeft een identiteit die losstaat van haar eigenschappen. Een deelnemer blijft dezelfde deelnemer na een naamswijziging, een verhuizing en een scheiding. U volgt haar door de tijd.</p>
+        <p><strong>Een waardeobject</strong> heeft geen eigen identiteit; het <em>is</em> zijn waarde. Een bedrag van € 1.240,50 is uitwisselbaar met elk ander bedrag van € 1.240,50. Een adres, een periode, een percentage, een peildatum.</p>
+        <h4>Waarom dit onderscheid ertoe doet — drie gevolgen</h4>
+        <p><strong>1. Waardeobjecten zijn onveranderlijk.</strong> U wijzigt ze niet; u vervangt ze. Dat lijkt een detail en het lost een categorie fouten volledig op: gedeelde veranderlijke waarden die op één plek worden gewijzigd en op een andere onverwacht meeveranderen.</p>
+        <p><strong>2. Waardeobjecten dragen hun eigen regels.</strong> Een <code>Periode</code> weet dat een einddatum niet vóór een begindatum ligt. Een <code>Peildatum</code> weet dat zij een kalenderdag is en geen tijdstip — precies het datumconcept uit deel 8 van niveau 1, nu afdwingbaar in plaats van afgesproken.</p>
+        <p>Dit is een belangrijke winst: in niveau 1 was het datumconcept het enige cross-cutting concept dat niet te automatiseren viel. Met waardeobjecten verschuift een deel ervan van "afgesproken" naar "onvermijdelijk" — de sterkste borgingslaag uit deel 9. Wie <code>Peildatum</code> als eigen type heeft, kan haar niet per ongeluk met een verwerkingsdatum verwisselen; de compiler weigert.</p>
+        <p><strong>3. Waardeobjecten zijn goedkoop.</strong> Geen identiteit betekent geen levensduurbeheer, geen sleutel, geen gelijktijdigheidsvraagstuk.</p>
+        <div class="callout note"><span class="lbl">De praktische fout</span><p>Is te veel entiteiten. Teams maken van elk begrip een entiteit met een identificatie, omdat het gegevensmodel dat suggereert. De toets: <em>doet het ertoe wélke van twee gelijke exemplaren dit is?</em> Bij twee adressen met dezelfde inhoud: nee — waardeobject. Bij twee mutaties met dezelfde inhoud: ja, want het zijn twee gebeurtenissen in de tijd — entiteit.</p></div>
+        <p>Voor Meridiaan zijn goede waardeobjecten: <code>Peildatum</code>, <code>Periode</code>, <code>Bedrag</code>, <code>Percentage</code>, <code>Adres</code>, <code>Burgerservicenummer</code>, <code>Vereveningsuitkomst</code>, <code>ReglementparameterSet</code>.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.1 / Uitwerking 12.1</p>
+        <details class="q"><summary><span class="qn">1</span><span><code>Burgerservicenummer</code> lijkt "een identificatie" en dus een entiteit. Waarom is het toch een waardeobject?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het identificeert een <strong>persoon</strong>, het is niet de identiteit van het BSN-object zelf. Twee BSN-objecten met dezelfde waarde zijn uitwisselbaar — het is het bedrag-argument, toegepast op een identificatienummer. Dat het als waardeobject wordt gemodelleerd, levert bovendien een plek op waar de elfproef als eigen regel kan wonen, in plaats van los verspreid over de code.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Het aggregaat</h2><span class="chip time">⏱ 24 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Een aggregaat is een cluster van entiteiten en waardeobjecten dat als één geheel wordt gewijzigd, met één entiteit als toegangspunt: de aggregaatwortel.</strong></p>
+        <p>De essentie zit in de vraag die het beantwoordt: <strong>waarbinnen moet een regel op elk moment kloppen?</strong></p>
+        <p>Dat is een consistentievraag, geen structuurvraag. Een aggregaat is de eenheid waarbinnen u <em>onmiddellijke</em> consistentie garandeert; alles daarbuiten wordt <em>uiteindelijk</em> consistent, via gebeurtenissen.</p>
+        <h4>De vier regels</h4>
+        <ol>
+          <li><strong>Alleen de wortel is van buiten bereikbaar.</strong> Andere onderdelen bereikt u via de wortel. Zo weet u zeker dat er geen wijziging plaatsvindt die de regels van het aggregaat omzeilt.</li>
+          <li><strong>Eén aggregaat, één transactie.</strong> Per bewerking wijzigt u precies één aggregaat. Moet u er twee wijzigen, dan is dat een aanwijzing dat de grens verkeerd ligt — of dat de tweede wijziging uiteindelijk-consistent mag zijn.</li>
+          <li><strong>Verwijzen naar andere aggregaten gebeurt met identiteit, niet met objecten.</strong> Een mutatie verwijst naar een deelnemer met een deelnemersnummer, niet met een deelnemersobject. Dit voorkomt dat aggregaten aan elkaar groeien tot alles met alles samenhangt — de gedistribueerde variant van B3 uit niveau 1.</li>
+          <li><strong>Buiten de grens: uiteindelijke consistentie via gebeurtenissen.</strong> Als het goedkeuren van een mutatie de deelnemersstatus moet bijwerken, gebeurt dat door een domeingebeurtenis, niet in dezelfde transactie.</li>
+        </ol>
+        <h4>Hoe u de grens bepaalt</h4>
+        <p>De bruikbare vraag is niet "wat hoort bij elkaar" maar: <strong>welke regel moet op elk moment kloppen, en welke mag een seconde later kloppen?</strong> Voor de scheidingsmutatie uit sprint 5:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Regel</th><th>Onmiddellijk of uiteindelijk?</th></tr></thead>
+          <tbody>
+            <tr><td>Een mutatie kan niet worden goedgekeurd door de indiener</td><td><strong>Onmiddellijk</strong> — anders is functiescheiding niet gegarandeerd</td></tr>
+            <tr><td>Een goedgekeurde mutatie heeft alle vereiste bijlagen</td><td><strong>Onmiddellijk</strong> — de controle heeft anders geen betekenis</td></tr>
+            <tr><td>De vereveningsuitkomst hoort bij de gegevens waarop zij is berekend</td><td><strong>Onmiddellijk</strong> binnen de berekening</td></tr>
+            <tr><td>Het deelnemersdossier toont de laatste mutatiestatus</td><td>Uiteindelijk — seconden vertraging is werkbaar</td></tr>
+            <tr><td>De kernadministratie kent de mutatie</td><td>Uiteindelijk — dat was ADR-014</td></tr>
+            <tr><td>Het maandoverzicht voor de werkgever klopt</td><td>Uiteindelijk</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Daaruit volgt de aggregaatindeling:</strong> de mutatie met haar bijlagen, goedkeuring en statusovergangen is één aggregaat. De deelnemer is een ander aggregaat. De vereveningsberekening is een derde. Zij verwijzen naar elkaar met identiteiten en communiceren met gebeurtenissen.</p>
+        <p><strong>Wat het team in sprint 5 had gebouwd</strong>, was één groot aggregaat waarin mutatie, deelnemer, partners, bijlagen en berekening samen zaten. Dat verklaart beide problemen: twee behandelaars die tegelijk werken botsen op hetzelfde aggregaat, en één adreswijziging raakt acht tabellen omdat het hele cluster wordt opgeslagen.</p>
+        <figure><img src="figuren/figuur-12-1-aggregaat-voor-na.png" alt="Het aggregaat uit sprint 5 tegenover de nieuwe indeling"><figcaption>Figuur 12-1 — links één cluster met alles erin (sprint 5), rechts drie aggregaten met identiteitsverwijzingen en domeingebeurtenissen ertussen (Mutatie 2.0)</figcaption></figure>
+        <h4>Klein houden</h4>
+        <p><strong>De vuistregel is: aggregaten zo klein als de consistentieregels toelaten.</strong> Grote aggregaten geven drie problemen tegelijk: gelijktijdigheidsconflicten, prestatieproblemen (alles laden om iets kleins te wijzigen), en verwevenheid. De verleiding om groot te maken komt van de wens alles onmiddellijk consistent te hebben — begrijpelijk en zelden gerechtvaardigd.</p>
+        <div class="callout tip"><span class="lbl">De toets die werkt</span><p><em>Als dit een seconde later klopt, wat gaat er dan mis, en voor wie?</em> Bij het deelnemersdossier is het antwoord "niets ernstigs"; bij functiescheiding is het antwoord "dan is de controle omzeilbaar".</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.2 / Uitwerking 12.2</p>
+        <details class="q"><summary><span class="qn">1</span><span>"Een deelnemer met status overleden krijgt geen nieuwe mutaties meer" voelt als een regel die onmiddellijk moet kloppen. Is dat zo?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dit is het interessantste geval van de opdracht. De regel raakt twee aggregaten (deelnemer en mutatie) en <em>voelt</em> als onmiddellijk — maar bedenk wat er misgaat als zij een seconde later klopt: een mutatie wordt aangemaakt op een deelnemer die zojuist als overleden is geregistreerd. Dat is hinderlijk en herstelbaar; de mutatie wordt afgekeurd zodra de gebeurtenis is verwerkt. Wilt u haar toch onmiddellijk, dan moet u deelnemer en mutatie in één aggregaat stoppen — en dan zit u weer bij het probleem uit sprint 5. <strong>Dit is het schoolvoorbeeld van de afweging:</strong> u koopt onmiddellijke consistentie op een randgeval met permanente gelijktijdigheids- en prestatieproblemen op het hoofdpad.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De overige bouwstenen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Domeinservice.</strong> Voor domeinlogica die niet natuurlijk bij één entiteit of waardeobject hoort. De vereveningsberekening gebruikt gegevens van twee deelnemers en de reglementparameters van een werkgever; die hoort niet in één van drieën thuis.</p>
+        <p><em>Valkuil:</em> alles wordt een service, en de entiteiten worden lege gegevenshouders — het bloedarmoedige model uit sectie 6.</p>
+        <p><strong>Repository.</strong> Een verzamelingachtig toegangspunt tot aggregaten — één repository per aggregaat, nooit per tabel. Een repository die deelaggregaten teruggeeft, doorbreekt regel 1.</p>
+        <p><strong>Fabriek.</strong> Voor het maken van complexe aggregaten met invarianten die vanaf het begin moeten gelden. Een scheidingsmutatie kan niet bestaan zonder twee partijen en een grondslag; een fabriek dwingt dat af in plaats van het over te laten aan de aanroeper.</p>
+        <p><strong>Domeingebeurtenis.</strong> Iets betekenisvols dat in het domein is gebeurd, in voltooide vorm benoemd: <em>mutatie goedgekeurd</em>, <em>verevening berekend</em>, <em>mutatie doorgegeven</em>.</p>
+        <p>Domeingebeurtenissen doen drie dingen tegelijk, en dat maakt ze de belangrijkste bouwsteen van dit deel:</p>
+        <ol>
+          <li><strong>Zij koppelen aggregaten</strong> zonder ze te vergroten (regel 4).</li>
+          <li><strong>Zij zijn de vastlegging</strong> die QS-4 vraagt — de mutatiegeschiedenis als bron, uit deel 5 van niveau 1.</li>
+          <li><strong>Zij zijn de taal</strong> waarin domeindeskundigen het proces beschrijven. De gebeurtenissen uit de werksessie van deel 11 zijn precies deze gebeurtenissen.</li>
+        </ol>
+        <div class="callout warn"><span class="lbl">Let op het verschil met technische berichten</span><p>Een domeingebeurtenis is geformuleerd in de taal van het domein en beschrijft iets wat betekenis heeft voor een domeindeskundige. <code>MutatieRecordUpdated</code> is geen domeingebeurtenis; <code>MutatieGoedgekeurd</code> wel.</p></div>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Van aggregaten naar modules</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Hier komt de modulith uit deel 5 van niveau 1 terug. De vertaling is directer dan u misschien verwacht:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>DDD-begrip</th><th>In de modulith</th></tr></thead>
+          <tbody>
+            <tr><td>Bounded context</td><td>Een groep modules met een gedeelde taal en een expliciete buitengrens</td></tr>
+            <tr><td>Aggregaat</td><td>Het hart van een module; bepaalt de transactiegrens</td></tr>
+            <tr><td>Repository</td><td>De toegang tot de eigen gegevens van de module</td></tr>
+            <tr><td>Domeingebeurtenis</td><td>Het communicatiemiddel tussen modules</td></tr>
+            <tr><td>Anticorruption layer</td><td>De integratiemodule</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Drie regels die hieruit volgen</strong> en die u kunt handhaven:</p>
+        <p><strong>1. Een module bezit haar eigen aggregaten en hun gegevens.</strong> Geen andere module leest rechtstreeks in die tabellen — de invarianten van een aggregaat zijn niet te garanderen als iemand anders eraan kan schrijven.</p>
+        <p><strong>2. Modules verwijzen naar elkaar met identiteiten.</strong> Regel 3 van aggregaten, op moduleniveau. De mutatiemodule kent het deelnemersnummer, niet het deelnemersobject van de deelnemersmodule.</p>
+        <p><strong>3. Wijzigingen over modulegrenzen verlopen via gebeurtenissen.</strong> Regel 2 en 4 samen: één transactie raakt één module.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Regel</th><th>Handhaving</th><th>Middel</th></tr></thead>
+          <tbody>
+            <tr><td>Eigen gegevens</td><td>Onvermijdelijk</td><td>Gescheiden databaseschema's met rechten per module</td></tr>
+            <tr><td>Verwijzen met identiteiten</td><td>Controleerbaar</td><td>Bouwstraatcontrole op typegebruik over modulegrenzen</td></tr>
+            <tr><td>Wijzigingen via gebeurtenissen</td><td>Controleerbaar</td><td>Bouwstraatcontrole op transacties die twee modules raken</td></tr>
+            <tr><td>Aggregaatgrenzen zelf</td><td>Beoordeeld</td><td>Reviewpunt; niet te automatiseren</td></tr>
+          </tbody>
+        </table></div>
+        <p>De laatste regel is de zwakste, en dat is bekend terrein: net als het datumconcept in niveau 1 is de aggregaatafbakening een betekeniskwestie en dus niet machinaal te toetsen. Zij hoort daarom expliciet op de agenda van het gremium.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.5 / Uitwerking 12.5</p>
+        <details class="q"><summary><span class="qn">1</span><span>De aggregaatafbakening zelf is niet machinaal toetsbaar. Hoe zorgt u dat een team dat over een jaar een zevende mutatiesoort bouwt, de grenzen goed trekt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Drie mechanismen, oplopend in kracht: een vast reviewpunt bij elke nieuwe module ("welke regels moeten hier onmiddellijk kloppen?"); een ADR per nieuw aggregaat met die vraag als verplicht onderdeel; en het gremium dat de vraag stelt voordat de bouw begint, niet erna. Het middelste is het praktischst: de vraag wordt gesteld op het moment dat hij goedkoop te beantwoorden is, en het antwoord wordt vindbaar vastgelegd voor het team van over twee jaar. Antwoorden in de vorm "we leggen het uit in de onboarding" zijn laag 3 uit deel 9 van niveau 1 en dus geen borging.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Het bloedarmoedige domeinmodel</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>bloedarmoedig domeinmodel</strong> bestaat uit objecten met alleen gegevens en zonder gedrag, met alle logica in services eromheen. Het is de meest voorkomende uitkomst van "wij doen DDD".</p>
+        <p><strong>Waarom het als probleem geldt.</strong> De regels van het domein zitten dan verspreid over services, en niets belet een service om een object in een ongeldige toestand te brengen. Een <code>Mutatie</code> met alleen velden kan door service A worden goedgekeurd zonder dat de bijlagencontrole van service B is gedraaid — de invariant bestaat alleen zolang iedereen dezelfde volgorde aanhoudt.</p>
+        <p>Met gedrag in het aggregaat is dat onmogelijk: <code>mutatie.keurGoed(medewerker)</code> weigert als de indiener en de goedkeurder dezelfde zijn. <strong>De regel staat dan op de plek waar hij niet te omzeilen is</strong> — dezelfde redenering als de borgingsladder uit deel 9, nu binnen de code.</p>
+        <p><strong>Wanneer het géén probleem is</strong>, en dit hoort erbij:</p>
+        <ul>
+          <li><strong>Bij een generiek of ondersteunend subdomein.</strong> Voor correspondentiesjablonen is een gegevensobject met een service prima; er zijn nauwelijks invarianten.</li>
+          <li><strong>Bij eenvoudige gegevensverwerking</strong> — lezen, tonen, doorgeven zonder regels.</li>
+          <li><strong>Bij een leesmodel.</strong> Een leesmodel is per definitie bloedarmoedig en hoort dat te zijn; het heeft geen invarianten te bewaken. Dat is de opmaat naar CQRS in deel 14.</li>
+        </ul>
+        <div class="callout"><span class="lbl">De praktische lijn voor Mutatie 2.0</span><p>Rijk model in de kernsubdomeinen (mutatieverwerking, rechtenbepaling), pragmatisch elders. Dat is dezelfde investeringsredenering als bij de subdomeinen in deel 11: u besteedt modelleerinspanning waar de complexiteit zit die u onderscheidt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.6 / Uitwerking 12.6</p>
+        <details class="q"><summary><span class="qn">1</span><span><code>Deelnemer</code> bevat alleen velden; de regel "een deelnemer met status overleden krijgt geen mutaties meer" staat in drie verschillende services. Is dat een probleem — en hoe merkt u het?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ja, en dit is het interessantste geval.</strong> De regel staat op drie plaatsen, dus zij zal uiteenlopen — dezelfde adresvalidatiefout uit deel 3 van niveau 1, in andere vorm. U merkt het niet meteen; u merkt het wanneer een vierde plek wordt toegevoegd waar de regel wordt vergeten. De fout die daaruit volgt is een mutatie op een overleden deelnemer, en die valt pas op bij een uitkeringscontrole of bij een klacht van nabestaanden. Dat is het patroon van dit soort fouten: zij manifesteren zich niet als storing maar als een verkeerd administratief resultaat, maanden later, bij een persoon in een kwetsbare situatie.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">De opbrengst voor sprint 5</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Terug naar de twee problemen.</p>
+        <p><strong>Twee behandelaars overschrijven elkaars werk.</strong> Met de nieuwe indeling botsen zij nog steeds op hetzelfde mutatieaggregaat als zij dezelfde mutatie bewerken — en dat is correct: dat <em>is</em> een conflict. Wat verdwijnt, is het onterechte conflict tussen twee behandelaars die aan verschillende mutaties op dezelfde deelnemer werken.</p>
+        <p>Het echte conflict lost u op met een gelijktijdigheidsmechanisme op het aggregaat (bijvoorbeeld een versienummer dat bij opslag wordt gecontroleerd) plus het zichtbaar maken dat een collega het dossier open heeft — het scenario dat in deel 2 van niveau 1 uit het rollenspel met de mutatiebehandelaar kwam.</p>
+        <p><strong>Eén adreswijziging raakt acht tabellen.</strong> Met kleinere aggregaten raakt een adreswijziging het adresmutatieaggregaat en verder niets; de rest volgt uit gebeurtenissen. Dat dient QS-1 rechtstreeks.</p>
+        <p><strong>Wat het kost.</strong> Uiteindelijke consistentie tussen aggregaten betekent dat het deelnemersdossier de laatste mutatiestatus met vertraging toont. Dat is het afwijkingsvenster uit ADR-014, nu ook intern. Het moet zichtbaar zijn — en dat is precies de scenariovraag die de mutatiebehandelaar in de evaluatie van deel 9 stelde: <em>"ik zie het, mijn collega niet — is dat normaal of een storing?"</em></p>
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Een entiteit heeft identiteit door de tijd; een waardeobject <em>is</em> zijn waarde. Waardeobjecten zijn onveranderlijk, dragen hun eigen regels en zijn goedkoop.</li>
+          <li>Een aggregaat is de eenheid waarbinnen consistentie onmiddellijk geldt. De vier regels: alleen de wortel is bereikbaar, één aggregaat per transactie, verwijzen met identiteiten, en uiteindelijke consistentie daarbuiten.</li>
+          <li>De grens bepaalt u met de vraag welke regel op elk moment moet kloppen — niet met de vraag wat bij elkaar hoort. Houd aggregaten klein.</li>
+          <li>Domeingebeurtenissen koppelen aggregaten zonder ze te vergroten, vormen de vastlegging die QS-4 vraagt, en zijn de taal waarin het domein zichzelf beschrijft.</li>
+          <li>In de modulith: een module bezit haar aggregaten en gegevens, verwijst met identiteiten, en communiceert over grenzen met gebeurtenissen. De aggregaatafbakening zelf is een reviewpunt.</li>
+          <li>Een bloedarmoedig model is een probleem in kernsubdomeinen en volstrekt normaal in leesmodellen en generieke subdomeinen.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.3 en 12.4 / Uitwerkingen 12.3 en 12.4</p>
+        <details class="q"><summary><span class="qn">1</span><span>Zou het gelijktijdigheidsincident uit sprint 5 nog optreden met de nieuwe aggregaatindeling — bij dezelfde mutatie, en bij twee verschillende mutaties op dezelfde deelnemer?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij <strong>twee verschillende mutaties</strong> verdwijnt het conflict: de behandelaars bewerken nu verschillende aggregaten. Bij <strong>dezelfde mutatie</strong> blijft het conflict, en dat is correct — twee mensen die tegelijk dezelfde mutatie bewerken, hébben een conflict; dat is geen technisch probleem maar een werkelijk probleem dat zichtbaar moet worden. Een ontwerp waarin nooit een conflict optreedt, verbergt ze — precies wat er in sprint 5 gebeurde: geen foutmelding, alleen verdwenen werk.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>De acht tabellen worden er drie na de herindeling. Is die winst de reden om kleinere aggregaten te kiezen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Niet in de eerste plaats. De rechtstreekse schrijfwinst is grofweg 20 tot 40 milliseconden per mutatie — reëel, maar klein naast de meting uit deel 6 van niveau 1, waar 70% van de doorlooptijd naar wachten op de kernadministratie ging. <strong>De goede motivering voor kleinere aggregaten is gelijktijdigheid en wijzigbaarheid</strong>, niet de rechtstreekse schrijftijd: een kleiner aggregaat betekent een kortere transactie en dus minder kans op conflicten bij vijftig gelijktijdige gebruikers, en dat effect is bij belasting aanzienlijk groter dan de milliseconden. Wie de verkeerde motivering gebruikt, wordt bij de eerste meting weersproken.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 13</h3>
+      <p>Deel 13 zet de aggregaatgrens uit dit deel in als leidraad voor een heel andere vraag: moet Meridiaan nu splitsen naar meerdere diensten? Neem uw aggregaatindeling en uw modulith uit deel 5 mee.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-13/reader.html">Deel 13 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 12 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-12/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_swa12_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

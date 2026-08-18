@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 17 — Evolutionaire architectuur | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 17 (iSAQB CPSA-A): architectuurerosie, fitness functions ontwerpen, het laatste verantwoorde moment en verantwoorde technische schuld.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 17</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 17 van 28</p>
+  <h1>Evolutionaire<br><em>architectuur</em></h1>
+  <p class="hero__lead">In sprint 22 doet iemand een routinecontrole op Mutatieplatform en vindt drie overtredingen van regels die bestonden, gedocumenteerd waren en besproken waren. Niemand deed iets fout — de architectuur is gewoon afgedreven. In dit deel leert u waarom discipline dat niet stopt, hoe u fitness functions ontwerpt die het wél doen, en hoe u verandering goedkoop houdt zonder dat "de architectuur emergeert vanzelf" een excuus wordt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>12</b><span>fitness functions Mutatie 2.0</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal.</div>
+  <div class="trail">Niveau 2 (CPSA-A), deel 11–21: ➊ DDD strategisch → ➋ DDD tactisch &amp; modulith → ➌ Microservices → ➍ Event sourcing &amp; CQRS → ➎ Cloud &amp; uitrol → ➏ Security → <b>➐ Evolutionaire architectuur (hier)</b> → ➑ Architectuurevaluatie gevorderd → ➒ Documentatie &amp; communicatie → ➓ Vaardigheden &amp; tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">De aanleiding: sprint 22</a></li>
+      <li><a href="#s2" data-target="s2">Waarom discipline niet werkt</a></li>
+      <li><a href="#s3" data-target="s3">Wat een fitness function is</a></li>
+      <li><a href="#s4" data-target="s4">De twaalf fitness functions</a></li>
+      <li><a href="#s5" data-target="s5">Fitness functions ontwerpen</a></li>
+      <li><a href="#s6" data-target="s6">Ontwerpen voor verandering</a></li>
+      <li><a href="#s7" data-target="s7">Technische schuld</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik en samenvatting</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">De aanleiding: sprint 22</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het platform draait inmiddels in productie voor adres- en e-mailmutaties. Er zijn drie teams, zes modules, en een afgesplitste conversiedienst. In sprint 22 doet iemand een routinecontrole en constateert drie dingen.</p>
+        <ul>
+          <li><strong>Twee modules lezen rechtstreeks in elkaars databaseschema.</strong> Dat mag niet sinds deel 5; de rechten waren nooit ingesteld, alleen afgesproken.</li>
+          <li><strong>Er staan vier plaatsen in de code waar de systeemklok rechtstreeks wordt gelezen.</strong> Alle vier toegevoegd in de afgelopen drie maanden, alle vier door mensen die de tijdpoort niet kenden.</li>
+          <li><strong>De correlatie-identificatie ontbreekt in de outbox-regel.</strong> Precies de plek waar deel 15 waarschuwde dat de keten breekt.</li>
+        </ul>
+        <p>Geen van deze drie is met kwade wil ontstaan. Zij zijn ontstaan door verloop, tijdsdruk en onbekendheid — en in elk van de drie gevallen bestond de regel, stond zij in de documentatie, en was zij besproken.</p>
+        <div class="callout warn"><span class="lbl">De kern van dit deel</span><p><strong>Dat is architectuurerosie, en zij is de normale toestand.</strong> Een architectuur die niet actief wordt bewaakt, drijft af — niet met sprongen maar met kleine, lokaal verdedigbare stappen. Precies zoals in Mutatie 1.0, waar het uiteindelijk elf verschillende oplossingen voor hetzelfde probleem opleverde.</p></div>
+        <p><strong>De vraag van dit deel:</strong> hoe zorgt u dat uw architectuur over drie jaar nog is wat u bedoelde — zonder dat het van oplettendheid afhangt?</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.1 — hoe erosie ontstaat</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welke van de drie bevindingen zou met een strengere review zijn voorkomen — en wat zegt het antwoord over erosie?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Eerlijk antwoord: <strong>hooguit één.</strong> De schemaovertreding zou een oplettende reviewer opvallen. De klokaanroepen zijn onzichtbaar in een pull request van driehonderd regels tenzij iemand er specifiek naar zoekt. De ontbrekende correlatie is een omissie, geen fout — er stond niets verkeerds, er ontbrak iets, en dat is in een review vrijwel niet te zien. <strong>Het meest voorkomende erosiepatroon is niet dat iemand iets verkeerds doet, maar dat iemand iets nalaat wat hij niet wist.</strong> Alle drie de regels stonden bovendien in de documentatie: die is niet waardeloos, maar zij is laag 4 op de borgingsladder — de zwakste vorm. Zij maakt een regel kenbaar; zij handhaaft niet.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Waarom discipline niet werkt</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De eerste reflex is dezelfde als altijd: meer aandacht, betere reviews, duidelijker documentatie. Die maatregelen zijn nuttig en zij lossen dit niet op, en het loont te begrijpen waarom.</p>
+        <ul>
+          <li><strong>Discipline schaalt niet met verloop.</strong> De vier klokaanroepen zijn toegevoegd door mensen die de regel niet kenden. Zij hebben niets fout gedaan naar hun eigen maatstaf; zij wisten niet dat er een maatstaf was.</li>
+          <li><strong>Discipline is de eerste die wijkt onder druk.</strong> Uit deel 9: reviews sneuvelen bij een deadline, en juist dan worden de snelle oplossingen gekozen.</li>
+          <li><strong>Discipline maakt de architect tot flessenhals.</strong> Wie elke wijziging moet zien om erosie te voorkomen, wordt omzeild.</li>
+        </ul>
+        <div class="callout"><span class="lbl">De bekende oplossing, nu systematisch</span><p>Dit is de borgingsladder uit deel 9, nu systematisch toegepast: wat automatisch afgedwongen kan worden, wordt automatisch afgedwongen; wat dat niet kan, wordt geautomatiseerd <em>getoetst</em>; en wat ook dat niet kan, krijgt een expliciet beoordelingsmoment. De naam voor die geautomatiseerde toetsen is <strong>fitness function</strong>.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Wat een fitness function is</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>fitness function</strong> is een geautomatiseerde, objectieve toets die vaststelt of uw systeem nog voldoet aan een architectuureigenschap die u belangrijk vindt. Het begrip komt uit de evolutionaire biologie: uw architectuur verandert voortdurend, en de fitness function bepaalt of de veranderingen nog in de richting gaan die u wilt.</p>
+        <h4>Drie eigenschappen die een toets tot fitness function maken</h4>
+        <ol>
+          <li><strong>Zij is objectief.</strong> Slagen of falen, geen oordeel.</li>
+          <li><strong>Zij is geautomatiseerd.</strong> Zij draait zonder dat iemand eraan denkt.</li>
+          <li><strong>Zij hoort bij een expliciet benoemde eigenschap.</strong> Zonder die eigenschap is het een willekeurige controle.</li>
+        </ol>
+        <div class="callout note"><span class="lbl">De verbinding met niveau 1</span><p>Dat derde punt is de verbinding met deel 2: <strong>een fitness function zonder kwaliteitsscenario is smaak</strong>, precies zoals een ontwerpprincipe zonder scenario dat is.</p></div>
+        <h4>Twee indelingen</h4>
+        <p><strong>Atomair of holistisch.</strong> Een atomaire toets meet één eigenschap in isolatie — bijvoorbeeld: geen module leest in andermans schema. Een holistische toets meet een combinatie onder realistische omstandigheden — bijvoorbeeld: de bevestiging blijft binnen 2 seconden bij vijftig gelijktijdige gebruikers terwijl de conversiebatch draait. Holistische toetsen zijn zeldzamer, duurder en waardevoller, want zij vinden wat atomaire toetsen per definitie missen: het samenspel.</p>
+        <p><strong>Doorlopend of periodiek.</strong> Doorlopende toetsen draaien bij elke wijziging in de uitrolstraat. Periodieke toetsen draaien op een ritme — dagelijks, wekelijks, per kwartaal — omdat zij te traag zijn of een andere omgeving vragen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Doorlopend</th><th>Periodiek</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Atomair</strong></td><td>Modulegrenzen, klokaanroepen, correlatie in logregels</td><td>Inventaris van afhankelijkheden en hun kwetsbaarheden</td></tr>
+            <tr><td><strong>Holistisch</strong></td><td>Doorlooptijd op een vaste dataset</td><td>Belastingtest met conversie; herstelproef; de wijzigbaarheidsproef</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De twaalf fitness functions voor Mutatie 2.0</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De regels die in zeventien delen zijn vastgelegd, met hun toets:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Eigenschap</th><th>Bron</th><th>Toets</th><th>Ritme</th></tr></thead>
+          <tbody>
+            <tr><td>Modules bezitten eigen gegevens</td><td>Deel 5, 12</td><td>Schemarechten per module; controle op query's over schemagrenzen</td><td>Onvermijdelijk + doorlopend</td></tr>
+            <tr><td>Afhankelijkheden wijzen naar binnen</td><td>Deel 4</td><td>Controle op uitgaande afhankelijkheden vanuit de domeinkern</td><td>Doorlopend</td></tr>
+            <tr><td>Verwijzen met identiteiten</td><td>Deel 12</td><td>Controle op typegebruik over modulegrenzen</td><td>Doorlopend</td></tr>
+            <tr><td>Eén transactie, één module</td><td>Deel 12</td><td>Controle op transacties over twee schema's</td><td>Doorlopend</td></tr>
+            <tr><td>Klok niet rechtstreeks lezen</td><td>Deel 8, 12</td><td>Controle op klokaanroepen buiten de tijdadapter</td><td>Doorlopend</td></tr>
+            <tr><td>Correlatie in elke log- en outbox-regel</td><td>Deel 8, 15</td><td>Controle op ontbrekende correlatie</td><td>Doorlopend</td></tr>
+            <tr><td>Geen persoonsgegevens in logs</td><td>Deel 16</td><td>Controle op gemarkeerde typen in logaanroepen</td><td>Doorlopend</td></tr>
+            <tr><td>QS-1 doorlooptijd</td><td>Deel 2, 6</td><td>Belastingtest op vaste dataset</td><td>Doorlopend (klein) + periodiek (volledig)</td></tr>
+            <tr><td>QS-2 doorwerken bij storing</td><td>Deel 2, 6</td><td>Storingsproef in acceptatie</td><td>Periodiek, maandelijks</td></tr>
+            <tr><td>QS-4 reconstrueerbaarheid</td><td>Deel 2, 14</td><td><strong>Reconstructieproef door een buitenstaander</strong></td><td>Periodiek, per kwartaal</td></tr>
+            <tr><td>QS-3 wijzigbaarheid</td><td>Deel 2, 6</td><td><strong>Een mutatiesoort bouwen en klokken</strong></td><td>Periodiek, bij elke nieuwe soort</td></tr>
+            <tr><td>Kwetsbare afhankelijkheden</td><td>Deel 16</td><td>Signalering op de inventaris</td><td>Doorlopend</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout"><span class="lbl">Het eerlijke beeld</span><p><strong>Twee van deze twaalf zijn geen software.</strong> De reconstructieproef en de wijzigbaarheidsproef vragen een mens — en dat was in deel 6 al vastgesteld. Zij zijn daarom niet minder waardevol: zij zijn juist de twee die de belangrijkste eigenschappen meten. Wie alleen automatiseerbare eigenschappen bewaakt, bewaakt de eigenschappen die het makkelijkst te meten zijn, niet de belangrijkste.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.2 — de regelinventaris</p>
+        <details class="q"><summary><span class="qn">1</span><span>Zoek de regels die niet te automatiseren zijn. Wat doet u met die?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De drie niet-automatiseerbare zijn: of een aggregaatgrens goed is gekozen, of een abstractie een beslissing verbergt, en of de ubiquitous language nog klopt. De wijzigbaarheids- en reconstructieproef zijn wél objectief uitvoerbaar — het verschil is dat zij een mens vragen, niet dat zij een oordeel vragen. <strong>Een proef die een mens vraagt maar objectief uitpakt (lukt het binnen tien werkdagen, ja of nee) is iets anders dan een oordeel dat inherent subjectief is.</strong></div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Rangschik de regels die u nog moet automatiseren op schade bij overtreding gedeeld door bouwkosten. Welke doet u eerst?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Doorgaans bovenaan: <strong>schemarechten</strong> (hoge schade — onzichtbare verwevenheid, precies B3 uit niveau 1 — en eenmalige, lage kosten: rechten instellen), <strong>klokaanroepen</strong> (peildatumlogica wordt ontestbaar, lage bouwkosten), en <strong>correlatie in de outbox</strong> (hoge schade bij een storing, lage bouwkosten). <strong>Het patroon:</strong> de goedkoopste toetsen beschermen vaak de duurste eigenschappen — structurele regels zijn eenvoudig te toetsen en hun overtreding is duur te herstellen.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Fitness functions ontwerpen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Begin bij de eigenschap, niet bij de toets.</strong> De vraag is: welke eigenschap wil ik behouden, en hoe merk ik dat zij verdwijnt? Vier ontwerpregels:</p>
+        <ol>
+          <li><strong>De toets faalt om één reden.</strong> Een toets die om zes redenen kan falen, levert een foutmelding op waar niemand iets mee kan. Splits.</li>
+          <li><strong>De foutmelding benoemt de regel en het alternatief.</strong> Uit deel 15: dat verschil bepaalt of de toets over een jaar nog aanstaat. <code>Module A benadert schema van B; gebruik het koppelvlak</code> werkt; <code>constraint violation in check 14</code> niet.</li>
+          <li><strong>Een nieuwe toets begint met de bestaande situatie als uitgangspunt.</strong> Als u vandaag zestien overtredingen hebt, faalt uw toets meteen en wordt hij uitgezet. Leg de huidige toestand vast als tijdelijk aanvaard, laat de toets falen op <em>nieuwe</em> overtredingen, en werk de lijst af met een termijn en een eigenaar. Dit is de belangrijkste praktische regel en zij wordt het vaakst gemist. Zonder haar kunt u fitness functions alleen invoeren op nieuwe systemen.</li>
+          <li><strong>Elke toets heeft een eigenaar.</strong> Wie repareert hem als hij faalt en niemand weet waarom? Zonder eigenaar volgt de opruimregel uit deel 15: hij wordt genegeerd en daarna uitgezet.</li>
+        </ol>
+        <h4>Wat u niet meet</h4>
+        <p>Sommige architectuureigenschappen zijn niet objectief te toetsen: of een aggregaatgrens goed gekozen is (deel 12) — een betekeniskwestie; of een abstractie een beslissing verbergt (deel 3) — vraagt een oordeel over de toekomst; of de ubiquitous language nog klopt (deel 11) — vraagt een domeindeskundige.</p>
+        <div class="callout tip"><span class="lbl">De aanleiding is automatiseerbaar</span><p>Wat u daarmee doet, is niet niets. Deze eigenschappen krijgen een beoordelingsmoment met een objectieve <em>aanleiding</em>: bij elke nieuwe module de vraag "welke regels moeten hier onmiddellijk kloppen", bij elke nieuwe abstractie de vraag "welke verandering wordt hierdoor goedkoper", en bij elk nieuw domeinbegrip een controle tegen de begrippenlijst. Een controle die faalt wanneer er een nieuwe module is toegevoegd zonder bijbehorende ADR, dwingt het gesprek af zonder het gesprek te voeren — de sterkste vorm die voor deze categorie beschikbaar is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.3 — een fitness function ontwerpen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Het invoerprobleem: vandaag zijn er zestien overtredingen en uw toets zou meteen falen. Hoe voert u hem toch in?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De werkbare aanpak: <strong>(1)</strong> voer de toets uit en leg de huidige zestien overtredingen vast in een uitzonderingslijst; <strong>(2)</strong> de toets faalt alleen op overtredingen die niet in die lijst staan — dus op nieuwe; <strong>(3)</strong> de lijst krijgt een eigenaar en een termijn, en mag alleen korter worden; <strong>(4)</strong> bij elke wijziging in een bestand met een uitzondering vervalt de uitzondering. Dat laatste punt is het aardigst: het koppelt de aflossing aan werk dat toch al gebeurt, in plaats van aan een opschoonproject dat nooit wordt ingepland. Zonder deze aanpak kunt u fitness functions alleen invoeren op nieuwe systemen — en dat is precies waarom zij in de praktijk zo zelden worden ingevoerd.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Ontwerpen voor verandering</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Fitness functions bewaken wat er is. Evolutionaire architectuur gaat ook over het goedkoop houden van verandering.</p>
+        <h4>Het laatste verantwoorde moment</h4>
+        <p>Neem een beslissing niet eerder dan nodig, en niet later dan verantwoord. Vroeg beslissen kost opties; laat beslissen kost herstelwerk. De vraag is telkens: <em>wat weet ik over drie maanden dat ik nu niet weet, en wat kost het om tot dan open te houden?</em> Voor Meridiaan was dat zichtbaar bij de distributiekeuze: in deel 5 was de keuze een modulith met bewaakte grenzen, wat de splitsing in deel 13 goedkoop maakte. Openhouden kostte iets — de grenshandhaving — en dat is de prijs die u bewust betaalt.</p>
+        <h4>Omkeerbaarheid</h4>
+        <p>Uit deel 1: het significantiecriterium bevat "duur om terug te draaien". Een architectuur die verandering goedkoop houdt, maakt zoveel mogelijk beslissingen omkeerbaar en concentreert de onomkeerbare op zo min mogelijk plaatsen. De onomkeerbare beslissingen in Mutatie 2.0 zijn er drie: het gebeurtenismodel (zeven jaar historie), het aanleverformaat richting elf werkgevers, en de gegevensmodellen van de aggregaten in productie. Bij die drie hoort meer zorgvuldigheid vooraf dan bij alle andere samen.</p>
+        <h4>Experimenteerruimte</h4>
+        <p>Niet elke beslissing hoeft doordacht te worden; sommige kunnen worden geprobeerd. Dat vraagt dat het proberen goedkoop is en dat het terugdraaien werkt — precies de uitrolstrategieën uit deel 15.</p>
+        <div class="callout note"><span class="lbl">Wat evolutionaire architectuur níét betekent</span><p>Dat u niet vooruit ontwerpt. De onomkeerbare beslissingen vragen juist meer vooruitdenken, niet minder. Het idee dat "de architectuur wel emergeert" is de bewering die in Mutatie 1.0 tot elf services leidde.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.6 — omkeerbaar of niet</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij welke drie beslissingen hoort meer zorgvuldigheid vooraf dan bij alle andere samen — en hoeveel tijd is daar destijds werkelijk aan besteed?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De drie praktisch onomkeerbare: <strong>het gebeurtenismodel</strong> (zeven jaar historie; terug betekent informatieverlies), <strong>het aanleverformaat</strong> richting elf werkgevers (migratietermijn wordt bepaald door de traagste externe partij), en <strong>de aggregaatgrenzen in productie</strong> (migratie met historie is zeer duur). Bij de meeste deelnemers is de eerlijke uitkomst dat aan de omkeerbare beslissingen (hexagonaal, modulith) uitgebreid is gerekend, terwijl de onomkeerbare — met name het aanleverformaat — ooit door één ontwikkelaar in een middag zijn vastgesteld. <strong>De zichtbare beslissingen krijgen aandacht; de onomkeerbare zijn vaak de onzichtbare.</strong></div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Technische schuld</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Technische schuld</strong> is de toekomstige kostenpost van een keuze die vandaag sneller ging dan de betere oplossing. De metafoor is nuttig en zij wordt slecht toegepast. Twee onderscheiden die haar bruikbaar maken:</p>
+        <p><strong>Bewust of onbewust.</strong> Bewuste schuld is een beslissing: wij doen het nu zo, wetend dat het later duurder wordt, om een reden. Onbewuste schuld is iets wat u ontdekt. Alleen de eerste is schuld in de nuttige zin; de tweede is gewoon een probleem.</p>
+        <p><strong>Met of zonder rente.</strong> Sommige schuld kost elke maand geld: elke wijziging in dat gebied duurt langer. Andere schuld kost niets tot u die plek raakt. Schuld zonder rente aflossen is verspilling — en het is waar veel opschoonvoorstellen op stranden.</p>
+        <div class="callout warn"><span class="lbl">Wat het niet is</span><p>Een verlanglijst. "Wij willen naar het nieuwe raamwerk" is geen schuld maar een wens. De toets: <strong>kunt u aanwijzen wat het vandaag kost?</strong> Zo nee, dan staat het op de verkeerde lijst.</p></div>
+        <p><strong>Hoe u het opschrijft.</strong> In arc42 hoofdstuk 11, met per post: wat, waarom toen zo gekozen, wat het nu kost, wat aflossen kost, en wat de aanleiding zou zijn om af te lossen.</p>
+        <p><strong>De verbinding met dit deel.</strong> Erosie produceert schuld. De drie bevindingen uit sprint 22 zijn schuld met rente: de klokaanroepen maken peildatumlogica ontestbaar, en dat kost bij elke wijziging in dat gebied. Fitness functions voorkomen dat nieuwe schuld ongemerkt ontstaat; zij lossen de bestaande niet af. Dat blijft werk met een eigenaar en een termijn.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.7 — technische schuld verantwoorden</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een voorstel wil de dubbele adresvalidatie samenvoegen. Is dit schuld?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat hangt af van de vraag uit deel 3: veranderen de twee validaties om dezelfde reden? Zo nee, dan is de duplicatie geen schuld maar een bewuste keuze, en hoort het voorstel te worden afgewezen. <strong>Niet alles wat op een schuldlijst staat, is schuld. Sommige posten zijn eerdere beslissingen die het team niet kent.</strong></div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik en samenvatting</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Architectuurerosie is de normale toestand: kleine, lokaal verdedigbare stappen door verloop, tijdsdruk en onbekendheid. Alle drie bevindingen uit sprint 22 betroffen regels die bestonden, gedocumenteerd waren en besproken.</li>
+          <li>Discipline lost het niet op: zij schaalt niet met verloop, wijkt onder druk, en maakt de architect tot flessenhals.</li>
+          <li>Een fitness function is objectief, geautomatiseerd, en hoort bij een expliciet benoemde eigenschap. Zonder scenario is zij smaak.</li>
+          <li>Atomair tegenover holistisch, doorlopend tegenover periodiek. Holistische toetsen zijn zeldzamer, duurder en vinden wat atomaire per definitie missen.</li>
+          <li>Twee van de twaalf toetsen voor Mutatie 2.0 vragen een mens — en dat zijn juist de twee die de belangrijkste eigenschappen meten.</li>
+          <li>Ontwerpregels: faal om één reden, benoem regel én alternatief, begin met de bestaande situatie als aanvaard uitgangspunt, en geef elke toets een eigenaar.</li>
+          <li>Ontwerpen voor verandering: beslis op het laatste verantwoorde moment, houd beslissingen omkeerbaar, en concentreer de onomkeerbare — bij Mutatie 2.0 zijn dat er drie.</li>
+          <li>Technische schuld is nuttig als begrip wanneer zij bewust is en rente draagt. De toets: kunt u aanwijzen wat het vandaag kost?</li>
+        </ul>
+        <div class="callout"><span class="lbl">Kernbegrippen</span><p><strong>Architectuurerosie</strong> — het geleidelijk afdrijven van een systeem van zijn bedoelde architectuur. <strong>Fitness function</strong> — objectieve, geautomatiseerde toets op een expliciet benoemde eigenschap. <strong>Laatste verantwoorde moment</strong> — het punt waarop uitstel van een beslissing meer kost dan het aan opties oplevert. <strong>Omkeerbaarheid</strong> — de mate waarin een beslissing tegen aanvaardbare kosten kan worden teruggedraaid.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.8 — uw eigen systeem</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welke beslissing in uw eigen systeem is praktisch onomkeerbaar en is destijds in een middag genomen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Vrijwel iedereen kan hier een antwoord op geven, en dat is het punt. Meestal is het een gegevensmodel of een koppelvlakformaat — hetzelfde patroon als bij het aanleverformaat van Mutatie 2.0: de onomkeerbare beslissingen zijn vaak de onzichtbare, en zij krijgen daarom de minste aandacht vooraf. Ook instructief: bij de vraag hoeveel architectuurregels bij u geautomatiseerd worden getoetst, is nul tot drie het gebruikelijke antwoord, en die toetsen betreffen meestal testdekking en codestijl — niet de architectuurregels die er werkelijk toe doen. Organisaties automatiseren wat het gereedschap standaard biedt, niet wat hun architectuur nodig heeft.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 18</h3>
+      <p>Deel 18 behandelt de volledige, tweefasige ATAM en het beoordelen van andermans ontwerp — inclusief het architectuurvoorstel van een leverancier. Neem uw fitness functions en uw schuldenlijst mee als evaluatiemateriaal.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-18/reader.html">Deel 18 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 17 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-17/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_swa17_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 4 — Architectuurstijlen I | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 4 (iSAQB CPSA-F): de gelaagde stijl, de afhankelijkheidsomkering van hexagonale architectuur en pipes & filters — beoordeeld tegen kwaliteitsscenario's, niet tegen voorkeur.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 4</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 1 (CPSA-F) · Deel 4 van 10</p>
+  <h1>Architectuur-<br><em>stijlen</em></h1>
+  <p class="hero__lead">Een architectuurstijl lost geen probleem op dat u niet heeft. Dit deel behandelt de gelaagde stijl, de afhankelijkheidsomkering van hexagonale architectuur, en pipes & filters — steeds getoetst tegen de vier architectuurdrijvers uit deel 2, niet tegen voorkeur. U beredeneert de stijlkeuze voor Mutatie 2.0 en sluit de eerste helft van bevinding B4.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>6</b><span>secties</span></div>
+    <div class="stat"><b>±1,5u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>5</b><span>controlevragen</span></div>
+    <div class="stat"><b>3</b><span>stijlen behandeld</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op het examen iSAQB® CPSA-F en uitdrukkelijk geen vervanging van het officiële curriculum — dat is kosteloos beschikbaar via isaqb.org. Voor documentatie hanteren wij arc42 en het C4-model als referentienotatie, met Structurizr als open-source referentietool; die keuze is didactisch, niet normatief.</div>
+  <div class="trail">Niveau 1: ➊ Wat is architectuur → ➋ Van eisen naar architectuur → ➌ Ontwerpprincipes → <b>➍ Architectuurstijlen I (hier)</b> → ➎ Architectuurstijlen II → ➏ Kwaliteitstactieken → ➐ Documentatie → ➑ Cross-cutting → ➒ Evaluatie → ➓ Capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Wat is een stijl, en hoe beoordeelt u er een?</a></li>
+      <li><a href="#s2" data-target="s2">De gelaagde stijl</a></li>
+      <li><a href="#s3" data-target="s3">Hexagonale architectuur</a></li>
+      <li><a href="#s4" data-target="s4">Pipes &amp; filters</a></li>
+      <li><a href="#s5" data-target="s5">Stijlen combineren</a></li>
+      <li><a href="#s6" data-target="s6">De stijlkeuze, beredeneerd</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Wat is een stijl, en hoe beoordeelt u er een?</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Wat een stijl u geeft — en niet geeft</h3>
+        <p>Een <strong>architectuurstijl</strong> is een beproefd, benoembaar bouwplan voor een systeem: een set componenttypen, een set toegestane relaties daartussen, en een reden waarom die opzet bepaalde kwaliteiten oplevert.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Begrip</th><th>Reikwijdte</th><th>Voorbeeld</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Architectuurstijl</strong></td><td>Het hele systeem; bepaalt de grondvorm</td><td>Gelaagd, hexagonaal, pipes &amp; filters</td></tr>
+            <tr><td><strong>Architectuurpatroon</strong></td><td>Een terugkerend deelprobleem binnen een systeem</td><td>Publiceren/abonneren, circuit breaker, outbox</td></tr>
+            <tr><td><strong>Ontwerppatroon</strong></td><td>Binnen een component, op klasseniveau</td><td>Strategie, waarnemer, fabriek</td></tr>
+            <tr><td><strong>Referentiearchitectuur</strong></td><td>Een uitgewerkte, domeinspecifieke invulling</td><td>Een sectorreferentie voor pensioenuitvoering</td></tr>
+          </tbody>
+        </table></div>
+        <p>De grenzen zijn niet absoluut — sommige auteurs noemen gelaagd een patroon — en dat hoeft u niet te verontrusten. Wat telt is de reikwijdte: een stijl bepaalt de grondvorm van het geheel, een patroon lost een deelprobleem op, en u kunt binnen één stijl vele patronen gebruiken.</p>
+        <figure><img src="figuren/figuur-4-1-stijl-patroon-ontwerppatroon.png" alt="Drie geneste reikwijdtes: architectuurstijl, architectuurpatroon, ontwerppatroon"><figcaption>Figuur 4-1 — de verhouding tussen stijl, patroon en ontwerppatroon, met voorbeelden per niveau</figcaption></figure>
+        <p><strong>Wat een stijl u geeft</strong>, in volgorde van belang: een beproefde verdeling van verantwoordelijkheden — u hoeft de vragen uit deel 3 niet vanaf nul te beantwoorden; voorspelbaarheid — wie de stijl kent, kan uw systeem lezen; en een bekend gedragsprofiel — van elke stijl is bekend welke kwaliteiten hij bevordert en bemoeilijkt.</p>
+        <p><strong>Wat een stijl u niet geeft:</strong> een oplossing voor uw probleem. Dit is de kern van bevinding B4 en van dit deel — een stijl is een antwoord op een bepaalde vraag, en hij helpt alleen als u die vraag ook echt hebt. Een stijl kiezen zonder de vraag te stellen, is het antwoord overnemen van iemand anders' systeem.</p>
+        <h4>Het beoordelingskader: vier vragen</h4>
+        <ol>
+          <li><strong>Welk probleem lost deze stijl op?</strong> Wie die moeilijkheid niet heeft, betaalt de prijs zonder de baat.</li>
+          <li><strong>Welke kwaliteiten bevordert hij, welke bemoeilijkt hij?</strong> Leg dat naast uw architectuurdrijvers uit deel 2.</li>
+          <li><strong>Welke randvoorwaarden veronderstelt hij?</strong> Teamgrootte, operationele volwassenheid, deploymogelijkheden, kennisniveau.</li>
+          <li><strong>Wat kost het als u het half doet?</strong> De vraag die vrijwel nooit gesteld wordt en het meeste voorspelt.</li>
+        </ol>
+        <div class="callout warn"><span class="lbl">Halfheid is niet evenredig</span><p>Een gelaagde architectuur waarin drie van de dertig componenten de laagregels overtreden, werkt nog steeds redelijk. Een hexagonale architectuur waarin de domeinkern toch rechtstreeks de database aanroept, heeft alle kosten van de abstractie en geen enkele baat. Bij sommige stijlen is halfheid dodelijk.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.1 — twaalf begrippen classificeren als stijl, patroon, ontwerppatroon of referentiearchitectuur</p>
+        <details class="q"><summary><span class="qn">1</span><span>Classificeer: "ports &amp; adapters" en "circuit breaker".</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ports &amp; adapters</strong> is een architectuurstijl — bepaalt de grondvorm van het geheel. <strong>Circuit breaker</strong> is een architectuurpatroon — lost een deelprobleem op, namelijk omgaan met een falende afhankelijkheid.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Twee van de twaalf begrippen in de opdracht zijn omstreden. Welke, en waarom maakt dat voor de praktijk weinig uit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Model-view-controller</strong> en <strong>clean architecture</strong>. MVC wordt door sommigen stijl, door anderen patroon genoemd — de reikwijdte bepaalt de grondvorm van een gebruikersinterface, niet van een heel systeem, dus in de praktijk eerder patroon. Clean architecture is een variant op ports &amp; adapters; sommigen noemen het een stijl, anderen een specifieke uitwerking ervan. Het maakt weinig uit, want de indeling is een hulpmiddel om over reikwijdte te praten, geen taxonomie die u moet verdedigen — wat telt is de vraag <em>hoeveel van het systeem legt deze keuze vast?</em></div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De gelaagde stijl</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Horizontale lagen, elk met een dienst</h3>
+        <p><strong>Grondvorm.</strong> Componenten worden geordend in horizontale lagen. Elke laag biedt diensten aan de laag erboven en gebruikt diensten van de laag eronder. De klassieke indeling: presentatie, applicatielogica, domeinlogica, gegevenstoegang.</p>
+        <p><strong>Het probleem dat hij oplost.</strong> Vermenging van technische verantwoordelijkheden. Zonder lagen komt SQL in schermcode terecht en zit schermlogica in gegevensverwerking; wijzigingen aan de ene kant slaan door naar de andere.</p>
+        <h4>Open en gesloten lagen</h4>
+        <p><strong>Gesloten lagen</strong> — een laag mag uitsluitend de laag direct eronder aanroepen. Elke laag is een echte isolatielaag; nadeel: doorgeefluikcomponenten. <strong>Open lagen</strong> — een laag mag lagen overslaan. Geen doorgeefluiken; nadeel: de isolatie is weg.</p>
+        <div class="callout tip"><span class="lbl">Aanbeveling</span><p>Kies bewust en leg het vast. Het meest voorkomende probleem is niet de keuze maar de afwezigheid ervan: teams beginnen gesloten, maken uitzonderingen zonder ze te benoemen, en houden na twee jaar een architectuur over waarvan niemand weet welke regels gelden.</p></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bevordert</th><th>Bemoeilijkt</th></tr></thead>
+          <tbody>
+            <tr><td>Begrijpelijkheid — iedereen kent de stijl</td><td>Wijzigingen die alle lagen doorsnijden</td></tr>
+            <tr><td>Vervangbaarheid van technische onderdelen</td><td>Prestatie bij diepe stapels met veel vertaalslagen</td></tr>
+            <tr><td>Testbaarheid per laag</td><td>Domeinlogica blijft zelden zuiver: zij gaat leunen op de gegevenslaag</td></tr>
+            <tr><td>Verdeling van werk naar technische expertise</td><td>Verdeling van werk naar functionaliteit</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Twee klassieke problemen</h4>
+        <p><strong>Het architectuur-sinkhole-antipatroon.</strong> Een deel van de verzoeken gaat door alle lagen zonder dat een tussenlaag iets toevoegt. Bij een minderheid van de verzoeken is dat geen probleem — wordt het de meerderheid, dan betaalt u een structuur die u niet gebruikt.</p>
+        <p><strong>De omgekeerde afhankelijkheid van het domein.</strong> In de klassieke gelaagde opzet hangt de domeinlogica af van de gegevenstoegang. Dat betekent dat de kern van uw systeem — de reglementslogica — afhankelijk is van hóe gegevens worden opgeslagen. Dat is precies verkeerd om: de stabiele partij zou niet van de instabiele moeten afhangen. Dit is het vertrekpunt van de volgende stijl.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.2 — open of gesloten lagen, op basis van het componentbeeld van Mutatie 1.0</p>
+        <details class="q"><summary><span class="qn">1</span><span>Het componentbeeld toont zeven laagoverschrijdende aanroepen in drie soorten. Welke is het ernstigst?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <strong>omgekeerde aanroep</strong> (gegevenstoegang → applicatielogica) is het ernstigst: een cyclus tussen lagen betekent dat de lagen geen lagen meer zijn, en is bijna zeker geen bewuste keuze. De vier leesacties (presentatie → gegevenstoegang) zijn defensibel als bewuste optimalisatie tegen sinkhole; de twee omzeilingen van de domeinlaag zijn dat niet, want daar is domeinlogica omzeild en leven regels op twee plaatsen of nergens.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is een bruikbare regel voor open/gesloten lagen, en waarom werkt "in principe gesloten, tenzij het niet anders kan" niet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bijvoorbeeld: <em>"gesloten, met één uitzondering: pure leesacties zonder domeinregels mogen de gegevenstoegang rechtstreeks aanroepen via een expliciet benoemd leesmodel."</em> "In principe gesloten, tenzij het niet anders kan" is geen regel maar een vrijbrief — precies wat er in Mutatie 1.0 gebeurde. De toets is of een ontwikkelaar de regel morgen kan toepassen zonder u te hoeven vragen.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Hexagonale architectuur</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>De afhankelijkheidsomkering</h3>
+        <p><strong>Grondvorm.</strong> De domeinlogica staat in het midden en hangt van niets af. Alles wat van buiten komt — gebruikersinterface, database, berichtenbus, externe systemen — bereikt het domein via <strong>poorten</strong> (contracten, gedefinieerd door het domein zelf) die door <strong>adapters</strong> worden ingevuld.</p>
+        <p>De sleutelgedachte is de afhankelijkheidsomkering. In de gelaagde stijl definieert de gegevenslaag hoe je gegevens opvraagt en past het domein zich daaraan aan. In de hexagonale stijl definieert het <em>domein</em> wat het nodig heeft — "geef mij de deelnemer met dit nummer" — en moet de adapter zich daaraan aanpassen. De pijl van de afhankelijkheid wijst naar binnen, altijd.</p>
+        <figure><img src="figuren/figuur-4-2-hexagoon-mutatie.png" alt="Hexagonale architectuur voor Mutatie 2.0 met domeinkern, poorten en adapters"><figcaption>Figuur 4-2 — domeinkern omringd door poorten, met aandrijvende adapters (portaal, scherm, batch) en aangedreven adapters (gebeurtenisopslag, postcodedienst, kernadministratie); alle afhankelijkheidspijlen wijzen naar binnen</figcaption></figure>
+        <h4>Aandrijvende en aangedreven kant</h4>
+        <p><strong>Aandrijvend (primair)</strong> — de buitenwereld roept het domein aan: zelfbedieningsportaal, behandelaarsscherm, werkgeversbatch, alle drie op dezelfde domeinbewerking "dien mutatie in", met verschillende adapters. <strong>Aangedreven (secundair)</strong> — het domein roept de buitenwereld aan via een contract dat het domein zelf vaststelt: de kernadministratie-integratie, de postcodedienst, de gebeurtenisopslag.</p>
+        <p>De aangedreven kant is waar de stijl zijn waarde bewijst. Het contract dat u in deel 3 schreef voor de integratiecomponent — een mutatie wordt uiteindelijk precies één keer doorgegeven, zonder één woord over SOAP — is exact een aangedreven poort. De hexagonale stijl is de systematische toepassing van information hiding op systeemniveau.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bevordert</th><th>Bemoeilijkt</th></tr></thead>
+          <tbody>
+            <tr><td>Vervangbaarheid van externe systemen — dient de "toekomstvast"-eis rechtstreeks</td><td>Begrijpelijkheid voor wie de stijl niet kent: veel indirectie</td></tr>
+            <tr><td>Testbaarheid: het domein is testbaar zonder database of externe diensten</td><td>Eenvoudige CRUD wordt onevenredig duur</td></tr>
+            <tr><td>Zuiverheid van de domeinlogica: reglementsregels op één plek</td><td>Verleiding tot abstracties zonder beslissing (deel 3)</td></tr>
+            <tr><td>Meerdere kanalen op dezelfde logica (portaal, scherm, batch)</td><td>Discipline: de stijl is niet genadig bij halfheid</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Waar het misgaat</h4>
+        <p><strong>Het domein lekt.</strong> Zodra het domeinmodel velden bevat die er alleen zijn omdat de database of het koppelvlak ze wil, is de omkering ongedaan gemaakt. Praktische toets: zou dit veld bestaan als we alles op papier deden?</p>
+        <p><strong>Poorten die de buitenwereld beschrijven.</strong> Een poort die <code>roepSoapDienstAan()</code> heet, is geen poort.</p>
+        <p><strong>Halfheid.</strong> Een hexagonale opzet waarin de domeinkern toch rechtstreeks de database aanspreekt "omdat het hier even sneller was", heeft alle indirectiekosten en geen enkele vervangbaarheidsbaat. Bij deze stijl is halfheid slechter dan het achterwege laten.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.3 — het hexagoon tekenen voor Mutatie 2.0</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat hoort wél en wat hoort niet in de domeinkern van Mutatie 2.0?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Wel:</strong> de mutatiesoorten met hun regels, de reglementaire berekeningen (ingangsdatums, termijnen), de goedkeuringsregels en de mutatiegeschiedenis als domeinbegrip. <strong>Niet:</strong> schermopmaak, SOAP, bestandsformaten van werkgeversaanleveringen, de postcodedienst, de databasestructuur, autorisatietokens. Het lastigste grensgeval is het statusoverzicht: de <em>statusovergangen</em> zijn domein, de <em>presentatie</em> van het overzicht is adapter.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Waar plaatst u de reglementslogica die de ingangsdatum berekent op basis van een tabel die per werkgever verschilt en door de administratie wordt onderhouden — kern, adapter, of ertussenin?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Er is geen enkel juist antwoord — dit is de beste discussie van het dagdeel. Drie verdedigbare posities: (1) <strong>kern, met de tabel als aangedreven poort</strong> — de zuiverste vorm en meestal het beste antwoord; (2) <strong>kern inclusief de tabel</strong> — verdedigbaar als parameters zelden wijzigen en door dezelfde partij worden beheerd; (3) <strong>adapter</strong> — verdedigbaar als de berekening in werkelijkheid door de kernadministratie wordt gedaan. De onderscheidende vraag: wie is eigenaar van de regel, en om welke reden verandert hij? Dat is de cohesietoets uit deel 3, nu op stijlniveau.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Pipes &amp; filters</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Verwerking als keten</h3>
+        <p><strong>Grondvorm.</strong> Verwerking wordt opgedeeld in onafhankelijke stappen (filters) die via kanalen (pipes) aan elkaar worden geknoopt. Elk filter kent alleen zijn invoer en uitvoer, niet zijn buren.</p>
+        <p><strong>Het probleem dat hij oplost.</strong> Verwerking die van nature een keten is, waarbij de stappen apart moeten kunnen worden gewijzigd, hergebruikt, geschaald of opnieuw uitgevoerd. De nachtelijke werkgeversbatch is een schoolvoorbeeld: 4.000 mutaties die achtereenvolgens moeten worden ingelezen, ontdubbeld, formaatgecontroleerd, verrijkt met deelnemersgegevens, inhoudelijk gevalideerd, verwerkt en gerapporteerd.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bevordert</th><th>Bemoeilijkt</th></tr></thead>
+          <tbody>
+            <tr><td>Wijzigbaarheid per stap; stappen toevoegen of vervangen</td><td>Verwerking waarin stappen elkaar nodig hebben of terug moeten grijpen</td></tr>
+            <tr><td>Herbruikbaarheid van filters</td><td>Foutafhandeling: waar hoort een fout in de keten?</td></tr>
+            <tr><td>Schaalbaarheid: trage stappen apart parallelliseren</td><td>Transactionele samenhang over de hele keten</td></tr>
+            <tr><td>Testbaarheid per stap; herstart vanaf een tussenpunt</td><td>Interactieve verwerking met korte antwoordtijden</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>De belangrijkste ontwerpvraag</strong> in deze stijl is niet de indeling in stappen maar de <strong>foutstrategie</strong>. Wat gebeurt er met een batch van 4.000 waarvan er 12 ongeldig zijn? Drie mogelijkheden, met heel verschillende gevolgen: alles afwijzen (veilig, operationeel onwerkbaar); de 12 apart zetten en 3.988 verwerken (werkbaar, vraagt een terugmeldproces); de 12 corrigeren en doorlaten (gevaarlijk zonder expliciet mandaat).</p>
+        <p>In Mutatie 1.0 was dit nooit besloten. Het gedrag was per stap verschillend, en toen het foutgedrag van de gedeelde validatie in maand elf werd aangescherpt, sloeg dat door naar de batch — die eerder overslak en nu afbrak.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.4 — de werkgeversbatch als pipeline</p>
+        <details class="q"><summary><span class="qn">1</span><span>4.000 verrijkingen met deelnemersgegevens uit de kernadministratie, bij een limiet van 20 aanroepen per seconde. Past dat binnen het nachtvenster van 01:00–05:00?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ja, ruimschoots.</strong> 4.000 ÷ 20 = 200 seconden, ruim drie minuten, tegen een venster van vier uur. Het punt van deze rekensom: dezelfde randvoorwaarde van 20 aanroepen per seconde is een blokkade bij 50 gelijktijdige interactieve gebruikers (deel 2) en een non-issue bij nachtelijke batchverwerking. Een architectuurbeslissing hoort altijd bij een scenario, inclusief de omgeving waarin het speelt — wie dat niet ziet, bouwt onnodige complexiteit in de batch.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is een werkbare foutstrategie voor de 12 ongeldige records, en welke twee dingen worden daarbij vaak vergeten?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De 12 records gaan naar een uitvalbestand, de 3.988 worden verwerkt, en de werkgever ontvangt in de ochtendrapportage (beschikbaar vóór 07:00) een specificatie per afgekeurd record met reden en correctie-instructie. Vaak vergeten: (1) een <strong>drempel</strong> — bij bijvoorbeeld meer dan 10% uitval is er waarschijnlijk iets structureel mis met de aanlevering en moet de hele batch worden gestopt in plaats van 90% verwerkt; (2) <strong>wie er kijkt</strong> — een uitvalbestand dat niemand opent, is geen foutafhandeling.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Stijlen combineren</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Regel voor combineren</h3>
+        <p>Reële systemen gebruiken zelden één stijl. Dat is geen zwakte, mits de combinatie bewust is en de grenzen duidelijk zijn.</p>
+        <p>Voor Mutatie 2.0 ligt de volgende combinatie voor de hand: <strong>hexagonaal als hoofdstijl</strong> — de mutatielogica en de reglementsregels vormen de kern; portaal, behandelaarsscherm, werkgeversaanlevering, kernadministratie, postcodedienst en gebeurtenisopslag zijn adapters. <strong>Pipes &amp; filters binnen de werkgeversbatch-adapter</strong> — de ketenverwerking van 4.000 mutaties blijft binnen één adapter; de domeinkern merkt er niets van. <strong>Gelaagdheid binnen componenten</strong> — binnen de portaaladapter is een laagindeling prima en gebruikelijk, maar niet als hoofdindeling.</p>
+        <div class="callout"><span class="lbl">Regel voor combineren</span><p>Een stijl mag binnen een component van een andere stijl leven, maar niet ernaast op hetzelfde niveau. Twee hoofdstijlen naast elkaar op systeemniveau levert twee onverenigbare mentale modellen op, en dan moet iedereen bij elke wijziging eerst uitzoeken in welk deel van het systeem hij zit — precies het verlies aan conceptual integrity uit deel 3.</p></div>
+        <p><strong>Vastleggen.</strong> Welke stijl waar geldt, hoort in de architectuurdocumentatie (arc42 hoofdstuk 5 en 8) en de keuze zelf in een ADR. Deel 7 werkt dat uit.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">De stijlkeuze voor Mutatie 2.0, beredeneerd</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>De vier vragen langsgelopen</h3>
+        <p><strong>1. Welk probleem lossen we op?</strong> De reglementslogica moet vier jaar meegaan terwijl de kernadministratie mogelijk wordt vervangen, drie verschillende kanalen moeten dezelfde mutatielogica gebruiken, en het domein moet testbaar zijn zonder de trage, gelimiteerde externe systemen.</p>
+        <h4>2. Kwaliteiten tegen de drijvers</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Drijver</th><th>Gelaagd</th><th>Hexagonaal</th></tr></thead>
+          <tbody>
+            <tr><td>QS-1 bevestiging &lt; 2 sec</td><td>Neutraal</td><td>Neutraal tot licht positief</td></tr>
+            <tr><td>QS-2 doorwerken bij storing</td><td>Zwak — de gegevenslaag dicteert het gedrag</td><td>Sterk — de poort belegt de belofte, de adapter vangt de storing</td></tr>
+            <tr><td>QS-3 nieuwe mutatiesoort in 10 dagen</td><td>Zwak — snijdt alle lagen</td><td>Sterk, mits het domein per mutatiesoort is ingedeeld</td></tr>
+            <tr><td>QS-4 zeven jaar reconstrueerbaar</td><td>Neutraal</td><td>Positief — gebeurtenisopslag is een aangedreven poort</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>3. Randvoorwaarden.</strong> Twee teams, geen groei voorzien (deel 2) — voldoende voor hexagonaal, dat geen operationele complexiteit toevoegt. Het kennisniveau vraagt aandacht: de stijl is niet moeilijk maar wel ongewoon, en halfheid is duur — scholing en reviewpraktijk zijn onderdeel van de keuze, geen bijzaak.</p>
+        <p><strong>4. Wat kost halfheid?</strong> Veel. Dit is het serieuze bezwaar tegen deze keuze en het hoort in de ADR te staan, samen met de maatregel: een expliciete regel dat de domeinkern geen enkele afhankelijkheid naar buiten heeft, en een controle daarop in de reviewpraktijk.</p>
+        <div class="callout tip"><span class="lbl">Conclusie</span><p>Hexagonaal als hoofdstijl, met pipes &amp; filters binnen de batchadapter en gelaagdheid binnen componenten. Dat is een verdedigbare keuze — niet omdat de stijl modern is, maar omdat drie van de vier drijvers erdoor gediend worden en de vierde er niet onder lijdt.</p></div>
+        <p>Wat deze conclusie nog niet is: zij zegt niets over hoe het systeem wordt gedeployd — als één applicatie, als een handvol, of als elf services. Die vraag staat los van de stijlkeuze en wordt in deel 5 behandeld. In Mutatie 1.0 zijn beide vragen door elkaar gehaald: er is een distributiebeslissing genomen (elf services) die als structuurbeslissing werd gepresenteerd. Dat is de tweede helft van bevinding B4.</p>
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Een architectuurstijl is een beproefd bouwplan: componenttypen, toegestane relaties, en een bekend gedragsprofiel. Hij geeft verantwoordelijkheidsverdeling, voorspelbaarheid en verdedigbaarheid — geen oplossing voor uw probleem.</li>
+          <li>Beoordeel elke stijl met vier vragen: welk probleem lost hij op, welke kwaliteiten bevordert en bemoeilijkt hij, welke randvoorwaarden veronderstelt hij, en wat kost halfheid.</li>
+          <li>De gelaagde stijl is begrijpelijk en universeel bekend, maar maakt functionele wijzigingen duur en laat het domein afhangen van de opslag.</li>
+          <li>Hexagonale architectuur keert die afhankelijkheid om: het domein definieert poorten, adapters vullen ze in. Dit is information hiding op systeemniveau, en de stijl is niet genadig bij halfheid.</li>
+          <li>Pipes &amp; filters past bij ketenverwerking. De beslissende ontwerpvraag is niet de stapindeling maar de foutstrategie.</li>
+          <li>Stijlen combineren mag: een stijl binnen een component van een andere stijl. Twee hoofdstijlen naast elkaar op systeemniveau kost conceptual integrity.</li>
+          <li>Een stijlkeuze zegt niets over distributie. Die vraag is deel 5.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.5 — de hexagonale keuze verdedigen tegen een ervaren teamlead (rollenspel)</p>
+        <details class="q"><summary><span class="qn">1</span><span>De tegenstander noemt drie argumenten: over-engineering, YAGNI, en "bij deadlinedruk wordt het toch half gedaan — en dan heb je alle kosten en geen baten". Welk argument is het sterkst, en hoe beantwoordt u het?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Argument 3 (halfheid) is het sterkst, en dat is bewust zo geconstrueerd: het citeert de reader zelf. Verdedigers die het wegwuiven, hebben verloren. Het juiste antwoord <strong>accepteert</strong> het argument en beantwoordt het met een maatregel: een expliciete regel dat de kern geen uitgaande afhankelijkheden heeft, controle daarop in reviews, en op termijn een geautomatiseerde toets (in niveau 2 een fitness function). Zonder maatregel is de tegenstander gewoon in het gelijk.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Hoe weerlegt u het YAGNI-argument ("de kernadministratie wordt misschien nooit vervangen")?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Met het omkeerbaarheidscriterium uit deel 1 en 3: YAGNI geldt voor wat goedkoop terug te draaien is. Een poort later invoegen in een systeem waarin dertig plaatsen rechtstreeks de kernadministratie aanroepen, is een verbouwing, geen sprint werk. Bovendien is de kernadministratievervanging in deze casus geen speculatie maar een genoemd scenario — YAGNI is hier niet van toepassing.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 5</h3>
+      <p>Deel 5 behandelt de distributiestijlen — hoeveel deployeenheden uw systeem heeft, en waarom dat een andere vraag is dan de stijlkeuze uit dit deel. Daarmee wordt de tweede helft van bevinding B4 gesloten.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-1/deel-05/reader.html">Deel 5 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 4 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-1/deel-04/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_swa4_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

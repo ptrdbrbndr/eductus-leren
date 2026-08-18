@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 16 — Securityarchitectuur | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 16 (iSAQB CPSA-A): dreigingsmodellering, vertrouwensgrenzen, authenticatie/autorisatie/functiescheiding, gegevensbescherming, de toeleveringsketen en de uitrolstraat, en de afweging tussen beveiliging en bruikbaarheid.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 16</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 16 van 28</p>
+  <h1>Security<br><em>architectuur</em></h1>
+  <p class="hero__lead">Sinds deel 2 van niveau 1 staat er een eis open die nooit is uitgewerkt: dat een medewerker het adres van een deelnemer niet naar zichzelf wijzigt en vervolgens de eigen uitkeringsopdracht goedkeurt. Dit deel bouwt hem — samen met dreigingsmodellering, vertrouwensgrenzen die net zo hard gelden tussen uw eigen diensten als naar buiten, en de afweging tussen beveiliging en bruikbaarheid die niet aan de architect is.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>9</b><span>controlevragen</span></div>
+    <div class="stat"><b>7</b><span>vertrouwensgrenzen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering en afbakening.</strong> Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Dit deel gaat over security als ontwerpvraag: waar zitten uw grenzen, wie mag wat, en welke maatregelen horen in de architectuur. Het gaat niet over aanvalstechnieken, penetratietesten of het uitvoeren van beveiligingsonderzoek. Waar u die kennis nodig hebt, hoort daar een specialist bij.</div>
+  <div class="trail">Niveau 2: 11 Strategisch DDD → 12 Tactisch DDD & modulith → 13 Microservices → 14 Event sourcing &amp; CQRS → 15 Cloud &amp; uitrol → <b>➏ Securityarchitectuur (hier)</b> → 17 Evolutionaire architectuur → 18 Evaluatie gevorderd → 19 Documentatie → 20 Modereren → 21 Tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">De aanleiding en dreigingsmodellering</a></li>
+      <li><a href="#s2" data-target="s2">Vertrouwensgrenzen</a></li>
+      <li><a href="#s3" data-target="s3">Authenticatie, autorisatie en functiescheiding</a></li>
+      <li><a href="#s4" data-target="s4">Gegevens beschermen</a></li>
+      <li><a href="#s5" data-target="s5">De toeleveringsketen en de uitrolstraat</a></li>
+      <li><a href="#s6" data-target="s6">Security in het ontwikkelproces</a></li>
+      <li><a href="#s7" data-target="s7">Beveiliging tegen bruikbaarheid</a></li>
+      <li><a href="#s8" data-target="s8">Samenvatting en vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">De aanleiding en dreigingsmodellering</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Na deel 15 heeft het platform drie eigenschappen die elk een securitygevolg hebben dat niemand heeft doordacht: <strong>er draaien meer plaatsen</strong> — de conversiedienst is afgesplitst, er zijn meerdere instanties, er is gedeelde opslag voor bijlagen, elk daarvan is een toegangspunt; <strong>er is een geautomatiseerde uitrolstraat</strong> — wie de straat beheerst, beheerst het systeem zonder ooit productie aan te raken; en <strong>er zijn waarneembaarheidsgegevens</strong> — logging en tracering bevatten precies wat een aanvaller wil weten.</p>
+        <div class="callout note"><span class="lbl">De zorg van de security officer</span><p><em>"Dat een medewerker het adres van een deelnemer wijzigt naar zijn eigen adres en vervolgens zelf de uitkeringsopdracht goedkeurt."</em> Die zorg is in deel 6 en 8 benoemd als functiescheiding en als domeinregel. Vandaag bouwen we hem.</p></div>
+        <h4>Dreigingsmodellering</h4>
+        <p><strong>Dreigingsmodellering</strong> is het systematisch doorlopen van een architectuurbeeld met de vraag: wat kan hier misgaan door toedoen van iemand die dat wil? Het is geen beveiligingsonderzoek en het vraagt geen aanvalskennis. Het vraagt uw architectuurbeeld, een gestructureerde vragenlijst en twee uur met de juiste mensen.</p>
+        <p>De opzet: neem een beeld — C4-niveau 2 of 3 uit deel 7, met de gegevensstromen erin; teken de vertrouwensgrenzen; loop elk element en elke stroom langs met een categorieënlijst; noteer wat u vindt, met een inschatting van waarschijnlijkheid en gevolg; prioriteer en wijs eigenaren toe — anders is het een gesprek en geen model.</p>
+        <figure><img src="figuren/figuur-16-2-c4-container-mutatieplatform.png" alt="C4-containerdiagram van Mutatie 2.0 na de splitsing"><figcaption>C4-niveau 2 (containers) van Mutatie 2.0 na de splitsing — het beeld waarmee een dreigingsmodelleringssessie start</figcaption></figure>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Categorie</th><th>De vraag</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Identiteitsmisbruik</strong></td><td>Kan iemand zich voordoen als een ander?</td></tr>
+            <tr><td><strong>Manipulatie</strong></td><td>Kan iemand gegevens wijzigen die hij niet mag wijzigen?</td></tr>
+            <tr><td><strong>Ontkenning</strong></td><td>Kan iemand achteraf ontkennen dat hij iets deed?</td></tr>
+            <tr><td><strong>Informatielekkage</strong></td><td>Kan iemand gegevens zien die hij niet mag zien?</td></tr>
+            <tr><td><strong>Verstoring</strong></td><td>Kan iemand de dienst onbruikbaar maken?</td></tr>
+            <tr><td><strong>Rechtenverhoging</strong></td><td>Kan iemand meer rechten krijgen dan toegekend?</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Voor Mutatie 2.0</strong> levert dit vier zware bevindingen op: kan een behandelaar achteraf ontkennen dat zij een mutatie goedkeurde (QS-4 van de andere kant bekeken); kan een medewerker met mutatierechten zichzelf goedkeuringsrechten geven (de zorg van de security officer); staan er persoonsgegevens in tracering die de brede beheergroep kan lezen; en kan iemand code in productie krijgen zonder review.</p>
+        <p><strong>De belangrijkste eigenschap van deze werkvorm</strong> is dat zij architectuurgericht is. Zij levert geen lijst van kwetsbaarheden in code op — daar zijn andere middelen voor — maar een lijst van plekken waar uw ontwerp een aanname doet over vertrouwen die niet is afgedwongen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.2 — dreigingsmodelleringssessie</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welke van de zes dreigingscategorieën wordt in een echte sessie het vaakst gemist, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ontkenning</strong> wordt in ongeveer de helft van de groepen gemist, omdat teams onweerlegbaarheid niet als securityvraag zien maar als auditvraag. Dat is een nuttige constatering: <strong>QS-4 is niet alleen een reconstructie-eis maar ook een onweerlegbaarheidsmaatregel.</strong> Een audittrail die de applicatie zelf kan wijzigen, bewijst niets — dat stond al in deel 8 en krijgt hier zijn tweede rechtvaardiging. Sessies vinden vaak wél twee dreigingen die niet in een standaardlijst staan: een werkgever die per ongeluk een batch aanlevert die het hele nachtvenster vult (verstoring, geen kwaadwilligheid nodig), en een statusoverzicht dat bij een scheidingsmutatie gegevens van de ex-partner toont aan de inloggende deelnemer (informatielekkage) — een echte ontwerpvraag over de vierde bounded context uit deel 11.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Vertrouwensgrenzen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>vertrouwensgrens</strong> is een plaats waar gegevens of aanroepen overgaan tussen partijen met verschillend vertrouwensniveau. Op elke grens hoort iets te gebeuren: vaststellen wie er aanroept, controleren wat er binnenkomt, en vastleggen dat het gebeurde.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Grens</th><th>Wat er overgaat</th><th>Wat er moet gebeuren</th></tr></thead>
+          <tbody>
+            <tr><td>Deelnemer → portaal</td><td>Zelfbediening</td><td>Authenticatie; strikte invoercontrole</td></tr>
+            <tr><td>Behandelaar → applicatie</td><td>Interne bediening</td><td>Authenticatie; rol en mandaat vaststellen</td></tr>
+            <tr><td>Werkgeverssysteem → platform</td><td>Batchaanlevering</td><td>Systeemidentiteit; formaatcontrole; volumebegrenzing</td></tr>
+            <tr><td>Platform → kernadministratie</td><td>Doorgifte</td><td>Wederzijdse identiteit; vastlegging</td></tr>
+            <tr><td>Platform → postcodedienst</td><td>Externe dienst</td><td>Uitgaande beperking; geen persoonsgegevens meer dan nodig</td></tr>
+            <tr><td>Modulith → conversiedienst</td><td>Interne aanroep</td><td><strong>Zie hieronder</strong></td></tr>
+            <tr><td>Uitrolstraat → productie</td><td>Artefacten</td><td>Herkomst en integriteit vaststellen</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-16-3-c4-component-modulith.png" alt="C4-componentdiagram van de modulith met de grens naar de conversiedienst"><figcaption>C4-niveau 3 (componenten) van de modulith — de grens tussen modulith en conversiedienst wordt hier zichtbaar als netwerkgrens, niet als interne aanroep</figcaption></figure>
+        <p><strong>De grens tussen modulith en conversiedienst verdient uitleg.</strong> Sinds de splitsing in deel 13 is dat een netwerkgrens, en de verleiding is groot haar als "intern en dus vertrouwd" te behandelen. Dat is de aanname die in de praktijk het duurst uitpakt. Wie eenmaal binnen is — via een lek in een willekeurige component — kan zich dan vrij bewegen. <strong>Het uitgangspunt dat werkt: elke aanroep bewijst wie hij is, ook binnen uw eigen systeem.</strong> Dat kost weinig als u het vanaf het begin doet en veel als u het achteraf invoegt.</p>
+        <p>Wat u op elke grens doet: <strong>vaststellen wie aanroept</strong> — niet op basis van netwerkpositie; <strong>valideren wat binnenkomt</strong> — op de grens, niet dieper (uit deel 8: validatie aan de rand betreft formaat en volledigheid, in het domein de bedrijfsregels); <strong>begrenzen</strong> — een aanroeper mag niet onbeperkt vragen, dit beschermt tegen misbruik én tegen de conversiedienst die per ongeluk de kernadministratie overspoelt (deel 15); en <strong>vastleggen</strong> — wie deed wat, wanneer, met welk resultaat.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.1 — vertrouwensgrenzen tekenen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Is de grens tussen modulith en conversiedienst "intern en dus vertrouwd"? Wat gaat er mis bij die keuze?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Nee</strong>, en het argument is niet theoretisch: wie via een willekeurige component binnenkomt, kan zich anders vrij bewegen. De conversiedienst heeft toegang tot deelnemersgegevens van 60.000 mensen en tot de doorgifte naar de kernadministratie. Wat er misgaat bij de andere keuze is niet dat het meteen fout loopt, maar dat het <strong>onherstelbaar</strong> wordt: interne authenticatie achteraf invoeren in een systeem dat ervan uitgaat dat interne aanroepen vertrouwd zijn, raakt elke aanroeper.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Authenticatie, autorisatie en functiescheiding</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deze drie worden door elkaar gehaald en zij horen op verschillende plaatsen.</p>
+        <p><strong>Authenticatie — wie bent u?</strong> Generiek subdomein (deel 11): kopen, niet bouwen. Voor deelnemers en medewerkers gelden verschillende regimes en verschillende sterkte-eisen.</p>
+        <p><strong>Autorisatie — wat mag u?</strong> Uit deel 8: centraal beslissen, lokaal afdwingen. Het model — welke rol mag welke handeling — hoort op één plaats; de handhaving hoort bij de handeling zelf, want dat is de enige plek waar zeker is dat er niets omheen gaat.</p>
+        <p><strong>Functiescheiding — wat mag u niet meer, gegeven wat u al deed?</strong> Dit is de derde en zij is fundamenteel anders: zij hangt af van de geschiedenis van het dossier. Een generiek toegangsproduct kent rollen en rechten. Het kent niet de vraag <em>heeft deze medewerker eerder vandaag het adres van deze deelnemer gewijzigd?</em> — daarvoor moet u de mutatiegeschiedenis raadplegen, en die leeft in uw domein.</p>
+        <div class="callout"><span class="lbl">Dat is precies waarom de regel in het aggregaat hoort</span><p><code>mutatie.keurGoed(medewerker)</code> weigert wanneer de indiener en de goedkeurder dezelfde persoon zijn. En breder: wie een adreswijziging op een deelnemer heeft ingediend, mag geen uitkeringsopdracht op diezelfde deelnemer goedkeuren binnen een bepaalde periode.</p></div>
+        <figure><img src="figuren/figuur-16-1-drie-lagen-security.png" alt="De drie lagen naast elkaar: authenticatie, autorisatie, functiescheiding"><figcaption>Figuur 16-1 — authenticatie (generiek, gekocht), autorisatie (centraal model, lokale handhaving), functiescheiding (in het aggregaat, met dossierhistorie), met per laag waar zij leeft en wie haar bepaalt</figcaption></figure>
+        <p>De drie ontwerpvragen die u moet beantwoorden: <strong>over welke periode geldt de scheiding?</strong> Dezelfde dag, dezelfde mutatiereeks, of altijd — een compliancebesluit. <strong>Wat gebeurt er bij een kleine bezetting?</strong> Als er maar één behandelaar aanwezig is, kan een mutatie niet worden afgerond — er moet een uitwijkweg zijn die zelf ook wordt vastgelegd. <strong>Wie mag de regel overrulen, en hoe wordt dat zichtbaar?</strong> Een noodprocedure zonder vastlegging is geen noodprocedure maar een achterdeur.</p>
+        <p><strong>Vraag 2 en 3 zijn geen technische vragen.</strong> De architect stelt ze; compliance en de operationeel manager beantwoorden ze. Dat is dezelfde rolverdeling als bij het verwijderrecht in deel 14.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.3 — functiescheiding ontwerpen, onderdeel d</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wie beantwoordt elk van de drie ontwerpvragen — periode, kleine bezetting, overrulen? Als u bij een ervan "de architect" antwoordt, klopt dat dan?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Periode</strong> is een compliancebesluit, want het bepaalt hoeveel restrisico wordt geaccepteerd. <strong>Kleine bezetting</strong> beantwoordt de operationeel manager, want het raakt de doorlooptijd waarop hij wordt afgerekend. <strong>Overrulen</strong> beantwoordt compliance, en de architect zorgt dat de markering onvermijdelijk is. <strong>Als u bij een van de drie "de architect" hebt geantwoord, hebt u een besluit naar u toegetrokken dat elders hoort.</strong> Dit is dezelfde les als bij het verwijderrecht in deel 14, en het is het patroon dat in niveau 3 centraal staat.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Gegevens beschermen</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>In rust.</strong> Versleuteling van opslag is de norm en zij is grotendeels een infrastructuurmaatregel. De architectuurvraag is een andere: <strong>welke gegevens slaat u überhaupt op, en hoe lang?</strong> Gegevens die er niet zijn, kunnen niet lekken. Dat klinkt flauw en het is de effectiefste maatregel die er is.</p>
+        <p>Voor Mutatie 2.0 concreet: de postcodedienst krijgt postcode en huisnummer, niet het volledige deelnemersobject — dat was de stempelkoppeling uit deel 3, en zij is behalve een ontwerpfout ook een privacyprobleem.</p>
+        <p><strong>Onderweg.</strong> Versleuteld transport is de norm, ook intern. Interne aanroepen zijn geen vertrouwde aanroepen.</p>
+        <h4>In gebruik en in afgeleide vorm</h4>
+        <p>Dit is waar het in de praktijk misgaat, en het zijn drie plekken die zelden op een architectuurplaat staan: <strong>waarneembaarheidsgegevens</strong> (deel 15) — logging, tracering en foutrapportages bevatten regelmatig persoonsgegevens die er niet horen, en de brede lezerskring maakt dit ernstig; <strong>testomgevingen</strong> (deel 15) — productiegegevens in test is een van de meest voorkomende lekken in deze sector; en <strong>leesmodellen en exports</strong> (deel 14) — een projectie voor een rapportage bevat vaak meer dan de rapportage nodig heeft, en zij wordt zelden meegenomen in het toegangsmodel.</p>
+        <div class="callout note"><span class="lbl">Bijzondere persoonsgegevens</span><p>Scheidings- en overlijdensmutaties bevatten relatiegegevens; arbeidsongeschiktheid raakt gezondheidsgegevens. Die vragen een strikter regime: minder mensen erbij, kortere bewaring, en expliciete vastlegging van inzage. Dat is niet alleen juridisch verstandig maar architectuurrelevant, want het bepaalt of deze gegevens in een gedeeld leesmodel mogen staan.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.4 — logregels beoordelen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Van de circa twaalf logregels met persoonsgegevens in een steekproef van 200: welke is het ernstigst, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De regel met de <strong>volledige inhoud van een scheidingsmutatie</strong>, om drie redenen tegelijk: zij bevat gegevens over de relatie tussen twee personen, zij betreft een derde die geen deelnemer hoeft te zijn, en zij staat in een logbestand met een lezerskring van twaalf mensen inclusief een externe leverancier. In plaats van de gegevens had er een verwijzing moeten staan (mutatie-identificatie, deelnemersnummer) plus de correlatie-identificatie — beheer heeft die nodig om te diagnosticeren, de inhoud heeft het niet nodig. Op de borgingsladder uit deel 9 is dit <strong>controleerbaar</strong>: een toets in de uitrolstraat die faalt bij het loggen van velden die als persoonsgegeven zijn gemarkeerd, wat vraagt dat uw domeintypen die markering dragen.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De toeleveringsketen en de uitrolstraat</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Twee onderwerpen die tot voor kort geen architectuuronderwerp waren en het nu wel zijn.</p>
+        <p><strong>Afhankelijkheden van derden.</strong> Uw systeem bestaat voor het merendeel uit code die u niet hebt geschreven. De architectuurrelevante maatregelen: <strong>weten wat u gebruikt</strong> — een actuele inventaris van componenten en versies; <strong>weten wanneer er iets bekend wordt</strong> — geautomatiseerde signalering van kwetsbaarheden; en <strong>kunnen wijzigen</strong> — als het bijwerken van een component een half jaar kost, is uw beveiliging afhankelijk van uw uitrolsnelheid. Dat is de verbinding met deel 15 die het vaakst wordt gemist: uitrolsnelheid is een securityeigenschap.</p>
+        <p><strong>De uitrolstraat zelf.</strong> Wie de straat beheerst, beheerst productie. De maatregelen: toegang tot de straat is even streng geregeld als toegang tot productie; artefacten zijn herleidbaar tot broncode en tot degene die hem goedkeurde; en niemand kan alleen een wijziging tot in productie brengen.</p>
+        <p>Dat laatste is functiescheiding op procesniveau, en het is opvallend hoe vaak organisaties die in de applicatie afdwingen en in de uitrolstraat vergeten.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.5 — de uitrolstraat als aanvalsweg</p>
+        <details class="q"><summary><span class="qn">1</span><span>Formuleer de functiescheidingsregel voor het uitrolproces en vergelijk hem met de regel uit paragraaf 16.4. Wat valt op?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><em>Wie een wijziging heeft geschreven, mag hem niet alleen goedkeuren en uitrollen.</em> Wat opvalt: het is <strong>dezelfde regel</strong> als de functiescheiding uit 16.4, één abstractieniveau hoger. Organisaties dwingen functiescheiding in de applicatie af en vergeten haar in het proces dat de applicatie bouwt — terwijl wie de straat beheerst, elke applicatieregel kan verwijderen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Leg uit waarom uitrolsnelheid een securityeigenschap is, met een concreet scenario.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Scenario: een kwetsbaarheid in een veelgebruikte component wordt bekend, met actief misbruik binnen dagen. Uw straat vergt een vrijgaveoverleg, een testcyclus en een uitrolvenster: vier weken. In die vier weken bent u kwetsbaar, en <strong>geen enkele architectuurmaatregel helpt daartegen.</strong> Uitrolsnelheid is dus geen gemaksvraag maar een securityeigenschap, en dat is het argument dat het vaakst ontbreekt in het gesprek over investeren in de straat.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Security in het ontwikkelproces</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De valkuil is dezelfde als bij architectuurborging in deel 9: een poortwachter aan het eind werkt niet, en géén controle ook niet.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Laag</th><th>Voorbeeld</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Onvermijdelijk</strong></td><td>Versleuteld transport standaard; geheimen alleen uit de geheimenvoorziening bereikbaar</td></tr>
+            <tr><td><strong>Controleerbaar</strong></td><td>Kwetsbaarheidscontrole in de straat; controle op persoonsgegevens in logregels; controle op vastgelegde geheimen</td></tr>
+            <tr><td><strong>Beoordeeld</strong></td><td>Dreigingsmodellering bij een nieuwe module of een nieuwe externe koppeling</td></tr>
+            <tr><td><strong>Afgesproken</strong></td><td>Wat noch afdwingbaar noch controleerbaar is</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Wanneer modelleert u opnieuw?</strong> Niet elke sprint. De aanleidingen: een nieuwe vertrouwensgrens, een nieuwe soort gegevens, een nieuw kanaal, of een wijziging in wie waarbij mag. Dat is een korte lijst en zij is objectief toetsbaar — daarmee is dit een beoordelingspunt voor het gremium uit deel 9 in plaats van een gevoelskwestie.</p>
+        <div class="callout"><span class="lbl">Wat de architect wel en niet doet</span><p>De architect wijst vertrouwensgrenzen aan, belegt maatregelen, en zorgt dat de vragen bij de juiste partij komen. De architect doet geen beveiligingsonderzoek, beoordeelt geen cryptografische keuzes op detailniveau, en beslist niet over de risicobereidheid van de organisatie.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.7 — vier voorvallen, onderdeel d</p>
+        <details class="q"><summary><span class="qn">1</span><span>Zou dreigingsmodellering elk van de vier sectorvoorvallen hebben gevonden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Drie van de vier, eerlijk gezegd — het vierde niet. Dat vierde was een fout in de configuratie van een gedeelde opslag waardoor bestanden publiek benaderbaar werden: geen ontwerpfout maar een <strong>uitvoeringsfout</strong>. Dat onderscheid is het onderscheid uit deel 9: dreigingsmodellering vindt ontwerpfouten. Uitvoeringsfouten vindt u met controles in de straat en met periodieke verificatie van de werkelijke toestand. Wie dreigingsmodellering presenteert als volledige dekking, wekt een verwachting die bij het eerste incident sneuvelt.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Beveiliging tegen bruikbaarheid</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deze afweging kwam in deel 6 al voorbij en zij verdient hier de volle behandeling, want het is de plek waar architecten het vaakst een besluit nemen dat niet aan hen is.</p>
+        <p><strong>QS-5</strong> vraagt dat een deelnemer van 70 jaar of ouder zelfstandig een adreswijziging voltooit. Elke extra verificatiestap verlaagt die kans. <strong>De vraag is niet technisch maar bestuurlijk:</strong> hoeveel fraude accepteren we om hoeveel mensen zelfstandig te laten werken? Er is geen technisch antwoord, en een architect die stilzwijgend voor "veilig" kiest, heeft een bestuursbesluit genomen zonder mandaat.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Optie</th><th>Effect op fraude</th><th>Effect op QS-5</th></tr></thead>
+          <tbody>
+            <tr><td>Geen extra verificatie</td><td>Hoogste risico</td><td>Beste zelfbediening</td></tr>
+            <tr><td>Bevestiging op het oude adres</td><td>Vertraging van dagen; fraude wordt zichtbaar</td><td>Beperkt effect, mits het proces doorloopt</td></tr>
+            <tr><td>Sterke verificatie bij elke wijziging</td><td>Laagste risico</td><td>Aanzienlijk deel haakt af</td></tr>
+            <tr><td>Verificatie alleen bij risicokenmerken</td><td>Middenweg</td><td>Beperkt effect voor de meesten</td></tr>
+          </tbody>
+        </table></div>
+        <p>De laatste optie is doorgaans het verstandigst en zij is duurder in ontwerp: u moet vaststellen wat een risicokenmerk is, en die regels hebben een eigenaar nodig en een herzieningsmoment.</p>
+        <div class="callout note"><span class="lbl">De botsing valt vaak uiteen</span><p>Functiescheiding betreft medewerkers en raakt QS-5 niet. Alleen de verificatie bij zelfbediening botst werkelijk. Een botsing tussen kwaliteitsattributen valt vaak uiteen zodra u hem preciseert — en dat is de eerste stap voordat u iemand een besluit voorlegt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.6 — de afweging voorleggen, onderdeel d</p>
+        <details class="q"><summary><span class="qn">1</span><span>De directeur vraagt: "wat zou u doen?" Wat antwoordt u?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Niet ontwijken ("dat is aan u") en niet overnemen ("ik zou X doen"). Bijvoorbeeld: <em>"ik zou de risicogestuurde variant kiezen, omdat zij de meeste mensen ongemoeid laat en het risico richt op de gevallen waar het zit. Wat ik daarbij niet kan bepalen, is hoeveel fraudegevallen u acceptabel vindt — als dat er nul moeten zijn, is mijn advies anders."</em> Dat antwoord doet drie dingen tegelijk: het geeft een aanbeveling, het benoemt de grond, en het maakt zichtbaar welke aanname de directeur moet invullen.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Samenvatting en vooruitblik</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <ul>
+          <li>Dreigingsmodellering is architectuurwerk: een beeld, vertrouwensgrenzen, zes categorieën, en eigenaren per bevinding. Het vraagt geen aanvalskennis.</li>
+          <li>Op elke vertrouwensgrens: vaststellen wie aanroept, valideren wat binnenkomt, begrenzen, en vastleggen. Interne aanroepen zijn geen vertrouwde aanroepen.</li>
+          <li>Authenticatie is generiek en koopt u; autorisatie is centraal beslissen en lokaal afdwingen; functiescheiding hoort in het aggregaat, want zij vraagt de dossierhistorie.</li>
+          <li>De periode van functiescheiding, de uitwijkweg bij kleine bezetting en de noodprocedure zijn geen technische vragen. De architect stelt ze, compliance en de operatie beantwoorden ze.</li>
+          <li>De effectiefste gegevensbescherming is gegevens niet hebben. Waarneembaarheidsgegevens, testomgevingen en leesmodellen zijn de drie plekken waar persoonsgegevens ongemerkt terechtkomen.</li>
+          <li>Uitrolsnelheid is een securityeigenschap, en functiescheiding in de uitrolstraat wordt vaker vergeten dan functiescheiding in de applicatie.</li>
+          <li>De afweging beveiliging tegen bruikbaarheid is bestuurlijk. Uw taak is de opties met hun gevolgen in aantallen voorleggen — en eerst de botsing preciseren, want zij valt vaak deels uiteen.</li>
+        </ul>
+        <p>Deel 17 gaat over evolutionaire architectuur: hoe een ontwerp dat vandaag klopt, bewust en beheersbaar blijft wijzigen zonder dat de erosie uit deel 9 terugkeert.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.8 — uw eigen systeem, onderdeel c</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bevatten uw eigen logs persoonsgegevens? Waarom is "kijk het na, schat het niet in" hier de instructie?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij navraag geeft vrijwel iedereen aan dat er "vast wel iets" in staat; bij daadwerkelijk kijken blijkt het meestal <strong>meer en gevoeliger dan gedacht</strong> — en het merendeel is er ooit tijdelijk in gezet en nooit weggehaald. Dit is de opdracht met het hoogste rendement van het hele deel, en zij wordt het vaakst overgeslagen. Schatten is hier geen vervanging voor kijken.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 17</h3>
+      <p>Deel 17 behandelt evolutionaire architectuur: hoe u een ontwerp dat vandaag klopt, bewust laat meebewegen met veranderende eisen zonder terug te vallen in de ontstane architectuur uit deel 1. Neem uw dreigingsmodel en vertrouwensgrenzen uit dit deel mee.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-17/reader.html">Deel 17 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 16 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-16/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_swa16_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Architectuurevaluatie gevorderd | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 18 (iSAQB CPSA-A): de volledige tweefasige ATAM, wachtrijredenering en beschikbaarheidsrekenwerk, en het beoordelen van andermans architectuur.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 18 van 28</p>
+  <h1>Architectuurevaluatie<br><em>gevorderd</em></h1>
+  <p class="hero__lead">Het programma nadert een besluitmoment: worden de resterende drie mutatiesoorten volgens hetzelfde ontwerp gebouwd, en overweegt Meridiaan uitbesteding aan een leverancier wiens architectuurvoorstel al binnen is. Dat vraagt twee verschillende vaardigheden — uw eigen architectuur evalueren met de volledige, tweefasige ATAM, en het ontwerp van een ander beoordelen zonder toegang tot de makers. Dit deel geeft u beide, plus het rekenwerk dat een evaluatie overtuigend maakt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>9</b><span>controlevragen</span></div>
+    <div class="stat"><b>6</b><span>vragen om andermans ontwerp te beoordelen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal.</div>
+  <div class="trail">Niveau 2 (CPSA-A), deel 11–21: ➊ DDD strategisch → ➋ DDD tactisch &amp; modulith → ➌ Microservices → ➍ Event sourcing &amp; CQRS → ➎ Cloud &amp; uitrol → ➏ Security → ➐ Evolutionaire architectuur → <b>➑ Architectuurevaluatie gevorderd (hier)</b> → ➒ Documentatie &amp; communicatie → ➓ Vaardigheden &amp; tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">De aanleiding: de tussenevaluatie</a></li>
+      <li><a href="#s2" data-target="s2">De volledige ATAM</a></li>
+      <li><a href="#s3" data-target="s3">Evaluatie schalen</a></li>
+      <li><a href="#s4" data-target="s4">Kwantitatieve analyse</a></li>
+      <li><a href="#s5" data-target="s5">De uitkomsten ordenen</a></li>
+      <li><a href="#s6" data-target="s6">Het ontwerp van een ander beoordelen</a></li>
+      <li><a href="#s7" data-target="s7">De grenzen en de politiek</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik en samenvatting</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">De aanleiding: de tussenevaluatie</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het programma nadert een besluitmoment. Adres- en e-mailmutaties draaien in productie, scheiding en overlijden zijn gebouwd maar niet uitgerold, en de conversie loopt. De stuurgroep moet beslissen of de resterende drie mutatiesoorten volgens hetzelfde ontwerp worden gebouwd, of dat er iets fundamenteel anders moet.</p>
+        <p>Daarbij komt een tweede vraag. Meridiaan overweegt een deel van het bouwwerk uit te besteden, en de beoogde leverancier heeft een architectuurvoorstel ingediend. Iemand moet dat beoordelen.</p>
+        <div class="callout"><span class="lbl">Twee verschillende evaluaties</span><p><strong>Uw eigen architectuur</strong>, waarvan u alles weet en waarover u niet objectief bent. <strong>Die van een ander</strong>, waarvan u weinig weet en waarover u een oordeel moet geven met gevolgen. Dit deel behandelt beide, en de vaardigheden verschillen meer dan u zou verwachten.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.1 — de evaluatie voorbereiden</p>
+        <details class="q"><summary><span class="qn">1</span><span>Formuleer de vraag die de stuurgroep beantwoord wil zien, in één zin. Wat betekent het als u dat niet kunt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een verdedigbare vraag: <em>"Houdt de huidige architectuur stand bij drie extra mutatiesoorten en een gedeeltelijke uitbesteding, en zo nee, waar breekt zij?"</em> Onderdeel e) is de belangrijkste voorbereiding: <strong>groepen die geen scherpe vraag kunnen formuleren, hebben daarmee de belangrijkste bevinding van de opdracht — de evaluatie is dan te vroeg of het besluit is niet helder.</strong></div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De volledige ATAM</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 9 van niveau 1 hebt u de lichte variant uitgevoerd: één dagdeel, uw eigen drijvers, een handvol mensen. De volledige methode is zwaarder en zij is bedoeld voor besluitmomenten zoals dit. De kern is een tweefasige opzet.</p>
+        <p><strong>Fase 1 — met de kerngroep</strong> (architect, hoofdontwikkelaars, opdrachtgever, evaluatieteam). Een halve tot een hele dag. Hier worden de bedrijfsdoelen gepresenteerd, de architectuur toegelicht, de kwaliteitsboom gebouwd en de eerste analyse gedaan.</p>
+        <p><strong>Tussenperiode.</strong> De evaluatoren werken de analyse uit en bereiden de tweede fase voor. Deze periode is geen formaliteit: hier ontstaan de vragen die in fase 2 het meest opleveren.</p>
+        <p><strong>Fase 2 — met de bredere groep</strong> (fase 1 plus beheer, security, compliance, gebruikers, aangrenzende teams). Een dag. Hier worden aanvullende scenario's verzameld, geprioriteerd en geanalyseerd, en worden de bevindingen gepresenteerd.</p>
+        <div class="callout note"><span class="lbl">Waarom twee fasen</span><p>De kerngroep kent het systeem en niet zijn eigen aannames; de bredere groep kent het systeem niet en ziet daardoor wat de kerngroep vanzelfsprekend vindt. Ze in één sessie samenbrengen leidt ertoe dat de kerngroep de agenda bepaalt en de rest luistert.</p></div>
+        <h4>De rolverdeling die het verschil maakt</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Rol</th><th>Taak</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Evaluatieleider</strong></td><td>Bewaakt het proces, niet de inhoud. Stelt geen inhoudelijke vragen</td></tr>
+            <tr><td><strong>Vragensteller</strong></td><td>Stelt de scenariovragen, ook de ongemakkelijke</td></tr>
+            <tr><td><strong>Notulist</strong></td><td>Legt vast in de vier uitkomstsoorten, letterlijk</td></tr>
+            <tr><td><strong>Procesbewaker</strong></td><td>Let op wie niet aan het woord komt</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>De vierde rol is de meest onderschatte.</strong> In elke evaluatie zijn er mensen die iets weten en het niet zeggen — omdat zij junior zijn, omdat hun afdeling niet aan tafel hoort, of omdat de architect aanwezig is. De procesbewaker haalt dat naar boven, en dat is doorgaans waar de zwaarste bevindingen vandaan komen.</p>
+        <div class="callout warn"><span class="lbl">Wat de evaluatoren níét doen</span><p>De architectuur verbeteren. Zij stellen vast wat er is en waar de risico's zitten. Zodra evaluatoren ontwerpvoorstellen doen, verliezen zij hun positie — en de architect verliest zijn eigenaarschap.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.2 — de tweefasige sessie</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom mag de kerngroep pas in de laatste tien minuten van fase 2 verdedigen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Zonder die regel stopt de bredere groep na drie scenario's met aandragen. In de tussenperiode ontstaat bovendien het meest waardevolle materiaal: de observatoren horen aannames die de kerngroep niet hoort, meestal in de vorm van "wij gaan ervan uit dat..." of een stilte waar een vraag hoorde. Bij de afronding is clusteren cruciaal: <strong>twintig losse risico's zijn niet bespreekbaar in een stuurgroep; drie thema's wel.</strong></div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Evaluatie schalen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Niet elke vraag verdient twee dagen. Vier vormen, met hun toepassing:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vorm</th><th>Duur</th><th>Wanneer</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Drijvertoets</strong></td><td>1 uur</td><td>Bij een enkele beslissing: haalt dit ontwerp mijn vier drijvers?</td></tr>
+            <tr><td><strong>Lichte evaluatie</strong></td><td>1 dagdeel</td><td>Bij een kwartaalherziening of een nieuwe module (deel 9)</td></tr>
+            <tr><td><strong>Volledige ATAM</strong></td><td>2 dagen, tweefasig</td><td>Bij een besluitmoment, een grote wijziging, of een overname</td></tr>
+            <tr><td><strong>Documentgebaseerde beoordeling</strong></td><td>variabel</td><td>Bij het beoordelen van een ontwerp van een ander</td></tr>
+          </tbody>
+        </table></div>
+        <p>De keuze volgt uit twee vragen: hoeveel hangt er van de uitkomst af, en hoeveel weten wij nog niet? Bij weinig van beide volstaat een uur.</p>
+        <div class="callout warn"><span class="lbl">De meest voorkomende fout</span><p>De zwaarste vorm kiezen om de uitkomst gewicht te geven. Een tweedaagse evaluatie waarvan de conclusie in een uur te trekken was, ondermijnt het instrument: de volgende keer maakt niemand meer tijd vrij.</p></div>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Kwantitatieve analyse</h2><span class="chip time">⏱ 24 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Scenariogebaseerd evalueren levert kwalitatieve oordelen op. Sommige vragen zijn te rekenen, en dat is aanzienlijk overtuigender.</p>
+        <h3>Wachtrijredenering</h3>
+        <p>De belangrijkste rekenvorm voor dit systeem, en zij vraagt geen zware wiskunde. Het kernpunt: wanneer de aankomstsnelheid de verwerkingssnelheid nadert, groeit de wachttijd niet lineair maar explosief. Bij 50% benutting is de wachttijd ongeveer gelijk aan de bedieningstijd; bij 90% is zij een veelvoud daarvan; bij 95% loopt zij weg.</p>
+        <p>Voor Mutatie 2.0: de kernadministratie verwerkt 20 aanroepen per seconde. Bij 10 per seconde is er ruimte; bij 18 per seconde zit u op 90% benutting en zijn de wachttijden onvoorspelbaar geworden — terwijl er nog "capaciteit over" lijkt.</p>
+        <div class="callout"><span class="lbl">Het inzicht dat elke capaciteitsdiscussie verandert</span><p>Een systeem op 90% benutting is niet voor 90% belast maar praktisch vol. Wie plant op gemiddelde benutting, plant op de rand van instabiliteit. Het verklaart ook de meting uit deel 6 van niveau 1 exact: bij één gebruiker geen wachtrij, bij vijftig gelijktijdige gebruikers boven de verwerkingssnelheid, en de doorlooptijd sprong van 6 naar 90 seconden — met een rekensom te voorzien.</p></div>
+        <h3>Beschikbaarheidsrekenwerk</h3>
+        <p><strong>Componenten in serie:</strong> de beschikbaarheden vermenigvuldigen. Drie componenten van elk 99,9% geven samen 99,7%. Elke afhankelijkheid in het kritieke pad verlaagt uw beschikbaarheid — een argument tegen lange synchrone ketens dat u kunt rekenen in plaats van beweren.</p>
+        <p><strong>Componenten parallel:</strong> de onbeschikbaarheden vermenigvuldigen. Twee instanties van elk 99% geven samen 99,99% — mits zij werkelijk onafhankelijk falen. Dat laatste is de aanname die het vaakst niet klopt: twee instanties op dezelfde infrastructuur, met dezelfde database of dezelfde configuratiefout, vallen samen om.</p>
+        <p><strong>De praktische toepassing:</strong> reken uw kritieke pad door en kijk of de uitkomst overeenkomt met wat u belooft. Bij Mutatie 2.0 is de asynchrone doorgifte uit ADR-014 hier de sleutel — zij haalt de kernadministratie uít het kritieke pad, en dat is beschikbaarheidsrekenkundig het verschil tussen wel en niet halen.</p>
+        <h3>Gevoeligheidsanalyse</h3>
+        <p>Voor elk gevoelig punt uit de evaluatie: bij welke waarde kantelt het? Voorbeelden: bij welke geldigheidsduur van het leesmodel wordt de actualiteit een probleem voor de behandelaar; bij hoeveel gelijktijdige gebruikers wordt QS-1 onhaalbaar; bij welk batchvolume past de conversie niet meer in het nachtvenster; bij hoeveel teams wordt de modulith onhoudbaar?</p>
+        <div class="callout note"><span class="lbl">Het antwoord is een getal</span><p>En dat getal is de herzieningsgrens. Dit is de verbinding met deel 2 en deel 13: een herzieningsgrens die uit een gevoeligheidsanalyse komt, is verdedigbaar; een grens die op gevoel is gekozen, wordt bij de eerste discussie weggeredeneerd.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.3 (wachtrijredenering) en 18.4 (beschikbaarheid)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Beheer rapporteert "gemiddeld 55% benut — voldoende ruimte". Beoordeel die conclusie.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>De conclusie is onjuist.</strong> Een gemiddelde over een spitsperiode verbergt de pieken binnen die periode — en 55% gemiddeld met pieken naar 95% is een heel ander systeem dan 55% constant. Bij de gemeten piekmomenten loopt de benutting naar 90% en hoger, en de doorlooptijden lopen niet-lineair op. Bij de huidige verhouding komt het koppelvlak boven 90% benutting bij ongeveer veertig gelijktijdige gebruikers — terwijl QS-1 er vijftig vraagt. De asynchrone doorgifte uit ADR-014 is daarom geen stijlkeuze maar de kwantitatieve rechtvaardiging om de kernadministratie uit het kritieke pad te halen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Twee instanties van de conversiedienst draaien elk op 99%. De formule geeft 99,99% gecombineerd. Waarom klopt dat getal waarschijnlijk niet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De formule veronderstelt <strong>onafhankelijk falen</strong>, en dat is bij twee instanties van dezelfde applicatie vrijwel nooit het geval. Drie manieren waarop zij toch samen omvallen: dezelfde database, dezelfde configuratiefout (die een uitrolstraat naar beide instanties tegelijk stuurt), en dezelfde onderliggende infrastructuur. Een vierde: dezelfde belasting — valt instantie A om door overbelasting, dan krijgt B alle verkeer en valt kort daarna ook om.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De uitkomsten ordenen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 9 kent u de vier soorten: risico, niet-risico, gevoelig punt, trade-offpunt. Op dit niveau komt er ordening bij.</p>
+        <p><strong>Risicothema's.</strong> Losse risico's zijn moeilijk te bespreken; groepeer ze. Voor Mutatie 2.0 clusteren de bevindingen doorgaans in drie thema's: <em>afhankelijkheid van de kernadministratie</em>, <em>handhaving van ontwerpregels</em>, en <em>aantoonbaarheid onder toezicht</em>. Een stuurgroep kan drie thema's wegen; twintig losse risico's niet.</p>
+        <p><strong>Prioriteren op twee assen</strong> — dezelfde als in deel 2: hoeveel raakt het een bedrijfsdoel, en hoe waarschijnlijk is het. De combinatie hoog-hoog krijgt een eigenaar en een termijn; de rest wordt genoteerd.</p>
+        <p><strong>Overdragen.</strong> Een evaluatierapport dat bij de architect blijft liggen, verandert niets. Elk risico gaat naar de partij die erover kan beslissen — en dat is vaak niet de architect. Dit is hetzelfde patroon als in deel 14, 15 en 16.</p>
+        <div class="callout warn"><span class="lbl">Wat u niet doet</span><p>Een cijfer geven. Een architectuur scoort geen zeven. Wie een cijfer levert, krijgt de vraag waarom het geen negen is en verliest het gesprek over de inhoud.</p></div>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Het ontwerp van een ander beoordelen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is een andere vaardigheid dan uw eigen architectuur evalueren, en hij komt in de praktijk vaker voor. Het verschil: u hebt geen toegang tot de mensen, geen kennis van de geschiedenis, en een oordeel met gevolgen — voor een leverancier, voor een contract, soms voor collega's.</p>
+        <h4>De zes vragen die het meeste opleveren</h4>
+        <ol>
+          <li><strong>Welke kwaliteitseisen zijn geoperationaliseerd?</strong> Als het voorstel "hoge beschikbaarheid" belooft zonder scenario, is dat B2 uit niveau 1 in een offerte.</li>
+          <li><strong>Welke alternatieven zijn afgewogen, en op welke gronden?</strong> Een voorstel zonder afgewezen alternatieven is een voorkeur, geen ontwerp.</li>
+          <li><strong>Welke aannames zitten erin, en zijn zij getoetst?</strong> Vraag specifiek naar volumes, externe capaciteit en teamgrootte.</li>
+          <li><strong>Wat wordt hierdoor duur?</strong> Elk ontwerp maakt iets duur. Een aanbieder die dat niet kan benoemen, heeft het niet doordacht — of hij verzwijgt het.</li>
+          <li><strong>Wat gebeurt er als het half wordt gedaan?</strong> De halfheidsvraag uit deel 4, hier toegepast op iemand anders' werk.</li>
+          <li><strong>Hoe komen wij eruit?</strong> Bij uitbesteding: wat is de exitpositie, wie bezit de gegevens, en welke kennis blijft bij ons?</li>
+        </ol>
+        <div class="callout tip"><span class="lbl">Vraag 4 is de scherpste</span><p>En zij is beleefd te stellen: <em>"Elk ontwerp maakt sommige wijzigingen goedkoper en andere duurder. Welke wijziging wordt in dit ontwerp duur, en welke had u overwogen goedkoper te maken?"</em> Een goede aanbieder heeft er een antwoord op en waardeert de vraag; een zwakke aanbieder ontwijkt hem, en dat is zelf informatie.</p></div>
+        <div class="callout warn"><span class="lbl">Wat u niet beoordeelt</span><p>Of het ontwerp is zoals u het gemaakt zou hebben. Dat is de meest voorkomende fout bij het beoordelen van andermans werk, en zij levert een oordeel op dat over u gaat in plaats van over het ontwerp. <strong>De toets is of het ontwerp de eisen haalt, niet of het uw ontwerp is.</strong></p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.6 — het voorstel van de leverancier</p>
+        <details class="q"><summary><span class="qn">1</span><span>Er staat één ding in het voorstel dat u zelf anders zou doen maar dat verdedigbaar is. Hoe voorkomt u dat uw oordeel daarover uw rapport kleurt?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Door de vraag om te draaien: niet <em>"waarom doen zij het niet zoals ik"</em> maar <em>"welke eis wordt hierdoor niet gehaald?"</em> Als het antwoord "geen" is, gaat het niet in het rapport — hooguit als opmerking dat er een alternatief was. <strong>Dit is de moeilijkste vaardigheid van dit deel:</strong> het onderscheid tussen een oordeel over het ontwerp en een oordeel over de ontwerper.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">De grenzen en de politiek</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Wat een evaluatie niet kan.</strong> Uit deel 9: geen zekerheid, geen garantie. Daar komt op dit niveau bij: een evaluatie vindt geen uitvoeringsfouten. Zij beoordeelt het ontwerp, niet de bouw — de configuratiefout waardoor een opslag publiek benaderbaar wordt, komt er niet uit.</p>
+        <p><strong>Wat een evaluatie ook niet kan:</strong> de organisatie repareren. Als de bevinding is dat er geen eigenaar is voor cross-cutting concepten, dan is dat een organisatievraag, en het rapport lost hem niet op.</p>
+        <h4>De politieke lading</h4>
+        <p>Een architectuurevaluatie raakt het werk van aanwezige mensen. Vier dingen die het gesprek open houden:</p>
+        <ul>
+          <li><strong>Onderscheid ontwerpfout van gerealiseerd risico</strong> (deel 9). Wie elk risico als fout behandelt, krijgt architecten die geen risico's meer benoemen.</li>
+          <li><strong>Benoem wat goed is.</strong> Een rapport met alleen risico's is niet geloofwaardig en wordt gelezen als aanval.</li>
+          <li><strong>Laat de architect de bevindingen bevestigen</strong> vóór publicatie — niet om ze af te zwakken, maar om feitelijke fouten eruit te halen. Een rapport met één feitelijke fout wordt op dat punt aangevallen en de rest verdwijnt.</li>
+          <li><strong>Wees expliciet over wat u niet hebt gekeken.</strong> Dat voorkomt dat het rapport later als volledige toets wordt gebruikt.</li>
+        </ul>
+        <div class="callout note"><span class="lbl">Als u zelf wordt geëvalueerd</span><p>Geldt de houding uit deel 10 van niveau 1: erkennen, verhelderen, weerleggen. Een erkend zwak punt met benoemde maatregel is sterker dan een ontkend zwak punt — en de evaluatoren merken het verschil onmiddellijk.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.7 — een rapport beoordelen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een evaluatierapport bevat één feitelijke onjuistheid. Wat gebeurt er daardoor met de rest van het rapport?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De architect valt op dat punt aan, en in het gesprek dat volgt verdwijnt de rest — <strong>één feitelijke fout kost een heel rapport.</strong> Dat is precies de reden dat de bevestigingsronde bestaat: geen concessie aan de geëvalueerde, maar een kwaliteitsmaatregel. Herschrijven van een verwijtende bevinding ("de architect heeft nagelaten...") naar een systeemgerichte ("de modulegrenzen worden niet geautomatiseerd gehandhaafd; eigenaar: architect, termijn: eerstvolgende kwartaal") behoudt dezelfde inhoud zonder defensief te maken.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik en samenvatting</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>De volledige ATAM is tweefasig: eerst de kerngroep, dan de bredere groep. De kerngroep kent het systeem en niet zijn eigen aannames; de bredere groep ziet wat vanzelfsprekend werd gevonden.</li>
+          <li>De procesbewaker is de meest onderschatte rol: de zwaarste bevindingen komen doorgaans van mensen die iets wisten en het niet zeiden.</li>
+          <li>Evaluatoren stellen vast; zij verbeteren niet. Schaal de vorm naar de vraag — de zwaarste vorm kiezen om gewicht te geven, ondermijnt het instrument.</li>
+          <li>Wachtrijredenering: bij 90% benutting is een systeem niet voor 90% belast maar praktisch vol.</li>
+          <li>Beschikbaarheid in serie vermenigvuldigt; elke afhankelijkheid in het kritieke pad verlaagt haar. Parallel vermenigvuldigen de onbeschikbaarheden — mits het falen werkelijk onafhankelijk is, en dat is de aanname die het vaakst niet klopt.</li>
+          <li>Groepeer bevindingen in risicothema's. Geef geen cijfer.</li>
+          <li>Bij het beoordelen van andermans ontwerp: zes vragen, waarvan "wat wordt hierdoor duur" de scherpste is. De toets is of het de eisen haalt, niet of het uw ontwerp is.</li>
+          <li>Een evaluatie vindt geen uitvoeringsfouten en repareert de organisatie niet. Benoem wat goed is, laat feiten bevestigen, en wees expliciet over wat u niet hebt bekeken.</li>
+        </ul>
+        <div class="callout"><span class="lbl">Kernbegrippen</span><p><strong>Tweefasige evaluatie</strong> — kerngroep eerst, bredere groep daarna, met een uitwerkperiode ertussen. <strong>Wachtrijredenering</strong> — de niet-lineaire relatie tussen benutting en wachttijd. <strong>Gevoeligheidsanalyse</strong> — vaststellen bij welke waarde een gevoelig punt kantelt; levert de herzieningsgrens. <strong>Documentgebaseerde beoordeling</strong> — evaluatie van een ontwerp zonder toegang tot de makers.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.8 — uw eigen organisatie</p>
+        <details class="q"><summary><span class="qn">1</span><span>Als u morgen geëvalueerd zou worden: welke bevinding zou u het meest raken, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij deze vraag is het eerlijke antwoord meestal een bevinding die de deelnemer zelf al kent en heeft laten liggen. <strong>Dat is een nuttige zelfobservatie: de bevindingen die pijn doen, zijn zelden verrassingen.</strong> Vergelijkbaar herkenbaar: vrijwel niemand kent het benuttingspercentage van de eigen drukste afhankelijkheid, en bij navraag blijkt het vaak hoger dan verwacht.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>Deel 19 opent het communicatieve competentiegebied: dezelfde bevindingen, verteld aan vier verschillende publieken zonder ze te vervalsen. Neem uw risicothema's uit dit deel mee — u gaat ze opnieuw vertellen.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-19/reader.html">Deel 19 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-18/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_swa18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

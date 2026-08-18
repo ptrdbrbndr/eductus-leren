@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 8 — Cross-cutting concepten | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 8 (iSAQB CPSA-F): cross-cutting concepten herkennen en vastleggen — foutafhandeling, logging en tracering, autorisatie, en tijd- en datumconcepten. Sluit bevinding B7.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 8</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 1 (CPSA-F) · Deel 8 van 10</p>
+  <h1>Wat is een<br><em>cross-cutting concept</em>?</h1>
+  <p class="hero__lead">Bevinding B7 luidde: foutafhandeling, logging, autorisatie en tijd zijn in de elf services van Mutatie 1.0 op verschillende manieren geïmplementeerd — een storing is niet over servicegrenzen heen te volgen, en een autorisatiewijziging kost elf aanpassingen. In dit deel leert u waarom zulke concepten door geen enkele hoofdindeling worden gevangen, hoe u ze vastlegt in arc42 hoofdstuk 8, en — het belangrijkste onderdeel — hoe u ze laat naleven in plaats van alleen op te schrijven.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2u15</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>6</b><span>controlevragen</span></div>
+    <div class="stat"><b>B7</b><span>bevinding gesloten</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op het examen iSAQB® CPSA-F en uitdrukkelijk geen vervanging van het officiële curriculum — dat is kosteloos beschikbaar via isaqb.org. Voor documentatie hanteren wij arc42 en het C4-model als referentienotatie, met Structurizr als open-source referentietool; die keuze is didactisch, niet normatief.</div>
+  <div class="trail">Niveau 1: ➊ Wat is architectuur → ➋ Van eisen naar architectuur → ➌ Ontwerpprincipes → ➍–➎ Architectuurstijlen → ➏ Kwaliteitstactieken → ➐ Documentatie → <b>➑ Cross-cutting (hier)</b> → ➒ Evaluatie → ➓ Capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">De bevinding en de openstaande wijziging</a></li>
+      <li><a href="#s2" data-target="s2">Welke concepten legt u vast?</a></li>
+      <li><a href="#s3" data-target="s3">Foutafhandeling</a></li>
+      <li><a href="#s4" data-target="s4">Logging en tracering</a></li>
+      <li><a href="#s5" data-target="s5">Autorisatie</a></li>
+      <li><a href="#s6" data-target="s6">Tijd en datums</a></li>
+      <li><a href="#s7" data-target="s7">De overige concepten, kort</a></li>
+      <li><a href="#s8" data-target="s8">Hoe u concepten laat leven</a></li>
+      <li><a href="#s9" data-target="s9">B7 gesloten en samenvatting</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">De bevinding en de openstaande wijziging</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>De wijziging die langs geen van beide assen liep</h3>
+        <p><strong>B7 luidde:</strong> foutafhandeling, logging, autorisatie en het omgaan met tijdzones en peildatums zijn in de elf services op verschillende manieren geïmplementeerd. Gevolg: een storing is niet over servicegrenzen heen te volgen, en een autorisatiewijziging vergt elf aanpassingen.</p>
+        <p>Er staat nog iets open. In deel 3 rekende u drie wijzigingen door tegen twee indelingen. De derde — <em>alle correspondentie moet voortaan ook in het Engels beschikbaar zijn</em> — liep langs geen van beide assen. Bij een lagenindeling raakte hij alle lagen, bij een domeinindeling alle mutatiesoorten. Dat was geen fout in uw indeling.</p>
+        <p><strong>Dat is de definitie van een cross-cutting concept: iets dat overal geldt en dus door geen enkele hoofdindeling wordt gevangen.</strong> Elke indeling maakt sommige wijzigingen goedkoop en andere duur; de dure zijn niet toevallig maar structureel, en zij moeten apart geregeld worden.</p>
+        <figure><img src="figuren/figuur-8-1-cross-cutting-concepten.png" alt="Domeinindeling met zes mutatiesoortmodules en vier cross-cutting banen eroverheen"><figcaption>Figuur 8-1 — een domeinindeling met zes mutatiesoortmodules, met daaroverheen vier banen — foutafhandeling, logging, autorisatie, tijd — die alle modules doorsnijden</figcaption></figure>
+        <h4>Waarom dit zo vaak misgaat</h4>
+        <p>Een cross-cutting concept heeft geen natuurlijke eigenaar. Elk team komt hem tegen, elk team lost hem lokaal op, en elke lokale oplossing is op zichzelf redelijk. Pas als geheel is het onwerkbaar. Dit is precies de conceptual-integrity-eigenschap uit deel 3: <strong>niet lokaal te verdedigen, dus alleen door iemand die over de componenten heen kijkt.</strong></p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.1 — tien onderwerpen beoordeeld op cross-cutting</p>
+        <details class="q"><summary><span class="qn">1</span><span>Onderwerp 5 uit de opdracht — welke datum leidend is bij een berekening — wordt in de uitwerking het zwaarste concept genoemd. Waarom weegt dit zwaarder dan bijvoorbeeld de schermindeling van het behandelaarsscherm?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat verschillende antwoorden verschillende <strong>berekende rechten</strong> opleveren — dat is geen ongemak maar een compliancekwestie. De schermindeling (onderwerp 8) is wél een ontwerpafspraak maar geen architectuurconcept: afwijking blijft binnen de module en veroorzaakt geen schade tussen modules. Het patroon: iets is een concept als afwijking <em>tussen</em> modules schade veroorzaakt, en een implementatiekeuze als afwijking <em>binnen</em> een module blijft.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Onderwerp 6 — de keuze voor een bepaalde bibliotheek voor datumberekening — is een twijfelgeval. Welk aanvullend gegeven doet het oordeel kantelen naar "concept"?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Of er ergens met datums gerekend wordt op een manier waarin bibliotheken verschillen — bijvoorbeeld in afrondings- of schrikkeljaarregels. Zolang dat niet het geval is, blijft het een implementatiekeuze; zodra twee bibliotheken op zulke randgevallen andere uitkomsten geven, wordt het een concept.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Welke concepten legt u vast?</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voor een bedrijfssysteem als Mutatie 2.0 komt de volgende lijst steeds terug:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Concept</th><th>Kernvraag</th><th>Prioriteit</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Foutafhandeling</strong></td><td>Hoe reageren we op fouten, en wie ziet wat?</td><td>Hoog</td></tr>
+            <tr><td><strong>Logging en tracering</strong></td><td>Hoe volgen we wat er gebeurd is?</td><td>Hoog</td></tr>
+            <tr><td><strong>Autorisatie</strong></td><td>Wie mag wat, en hoe weten we dat?</td><td>Hoog</td></tr>
+            <tr><td><strong>Tijd en datums</strong></td><td>Welke datum bedoelen we, en in welke zone?</td><td>Hoog</td></tr>
+            <tr><td>Transacties en consistentie</td><td>Wat gebeurt er samen, wat niet?</td><td>Hoog</td></tr>
+            <tr><td>Validatie</td><td>Waar valideren we wat, en hoe melden we het?</td><td>Midden</td></tr>
+            <tr><td>Configuratie</td><td>Wat is instelbaar, waar staat het, wie wijzigt het?</td><td>Midden</td></tr>
+            <tr><td>Meertaligheid</td><td>Waar leeft tekst, en hoe wordt hij gekozen?</td><td>Midden</td></tr>
+            <tr><td>Testen</td><td>Wat wordt waar getest, met welke gegevens?</td><td>Midden</td></tr>
+            <tr><td>Persistentie</td><td>Hoe slaan we op, en wie mag bij wat?</td><td>Midden</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout tip"><span class="lbl">De toets</span><p>Niet alles hoeft even zwaar. Wat u vastlegt, hangt af van wat werkelijk overal geldt en wat werkelijk verschil maakt: <em>als twee teams dit ieder voor zich oplossen, hebben we dan een probleem?</em> Is het antwoord nee, dan is het geen cross-cutting concept maar een implementatiekeuze.</p></div>
+        <h4>Vorm</h4>
+        <p>Een concept legt u vast in arc42 hoofdstuk 8, per stuk in ongeveer één pagina: de regel, de reden, een voorbeeld, en wat er gebeurt bij afwijking. Meer dan een pagina wordt niet gelezen; minder dan een regel is niet handhaafbaar.</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Foutafhandeling</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het meest verwaarloosde concept en het meest zichtbare bij een storing.</p>
+        <h4>Begin met een indeling naar foutsoort</h4>
+        <p>Want de reactie verschilt fundamenteel:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Soort</th><th>Voorbeeld</th><th>Reactie</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Invoerfout</strong></td><td>Ongeldige postcode</td><td>Melden aan de indiener in begrijpelijke taal; niet loggen als fout</td></tr>
+            <tr><td><strong>Bedrijfsregelfout</strong></td><td>Scheidingsdatum ligt na de peildatum</td><td>Melden met de regel erbij; vastleggen als gebeurtenis, want zij hoort in de mutatiegeschiedenis</td></tr>
+            <tr><td><strong>Tijdelijke technische fout</strong></td><td>Kernadministratie onbereikbaar</td><td>Niet melden aan de indiener; herpogen, vasthouden, en zichtbaar maken voor beheer</td></tr>
+            <tr><td><strong>Blijvende technische fout</strong></td><td>Ongeldige configuratie, programmeerfout</td><td>Snel falen, luid loggen, en niet doorgaan alsof er niets is</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout warn"><span class="lbl">De fout in Mutatie 1.0</span><p>Deze vier soorten werden niet onderscheiden. Een onbereikbare kernadministratie leverde de deelnemer een foutmelding op; een ongeldige postcode belandde in het foutlogboek tussen de echte storingen. Het gevolg is dubbel: gebruikers krijgen meldingen waar zij niets mee kunnen, en beheer kan door de ruis de echte fouten niet vinden.</p></div>
+        <h4>Vier regels om vast te leggen</h4>
+        <ol>
+          <li><strong>Wie ziet wat.</strong> De deelnemer ziet begrijpelijke taal zonder technische details; de behandelaar ziet de bedrijfsregel; beheer ziet de technische oorzaak. Drie verschillende teksten voor dezelfde gebeurtenis is normaal, geen verspilling.</li>
+          <li><strong>Wat is herstelbaar en wat niet.</strong> Een tijdelijke fout wordt herpoogd, een blijvende niet. Herpogen op een blijvende fout is de meest voorkomende oorzaak van een storing die zichzelf versterkt.</li>
+          <li><strong>Wat gebeurt er met het werk.</strong> Gaat de mutatie verloren, wordt zij vastgehouden, of gaat zij naar een uitvalbak? Dit is de vraag uit deel 4 (foutstrategie in de pipeline), nu voor het hele systeem.</li>
+          <li><strong>Wie wordt gewaarschuwd, en wanneer.</strong> Niet elke fout is een melding waard. Wat wel: blijvende technische fouten, en het overschrijden van een drempel op tijdelijke fouten.</li>
+        </ol>
+        <p><strong>Wat u niet doet:</strong> een generieke foutklasse waarin alles terechtkomt, of het onderdrukken van fouten om het scherm rustig te houden. Beide zijn in Mutatie 1.0 aangetroffen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.2 — het foutafhandelingsconcept, getoetst tegen Bijlage T en drie situaties</p>
+        <details class="q"><summary><span class="qn">1</span><span>De vier teams in Mutatie 1.0 kozen elk een andere aanpak — alles loggen, fouten stil opvangen, alles herpogen, of invoerfouten scheiden. Waar zat de schade, als elk team op zichzelf redelijk koos?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De schade zat in de <strong>combinatie</strong>, niet in de afzonderlijke keuzes. Team 2's stille opvang maakte team 1's transparantie waardeloos — fouten verdwenen alsnog — en team 3's herpogingen op blijvende fouten leverden storingen op die zichzelf versterkten. Elk team had gelijk binnen zijn eigen grens; niemand keek over de teams heen.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Een programmeerfout levert een onmogelijke ingangsdatum op. Waarom is dit de belangrijkste van de drie toetssituaties uit de opdracht?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat de verleiding groot is om de onmogelijke waarde stilletjes te "repareren" — bijvoorbeeld naar de eerste van de maand — in plaats van de mutatie te laten falen. Dat is de gevaarlijkste vorm van foutafhandeling in een administratief systeem: <strong>het levert een fout recht op dat niemand ooit opmerkt.</strong> Het juiste antwoord is snel falen, luid loggen bij beheer, en de mutatie naar een uitvalbak sturen die een mens beoordeelt.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Logging en tracering</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het concept dat B7 rechtstreeks adresseert: <em>een storing is niet over servicegrenzen heen te volgen.</em></p>
+        <h4>Correlatie-identificatie</h4>
+        <p>Elke inkomende opdracht krijgt bij binnenkomst een identificatie die wordt meegegeven aan alles wat eruit voortkomt — synchrone aanroepen, gebeurtenissen, batchregels, en de doorgifte naar de kernadministratie. Zonder deze ene afspraak is een storing niet te volgen, en met haar is een storing bijna altijd te volgen.</p>
+        <p>In een modulith met één logbestand lijkt dit minder urgent. Dat is bedrog: zodra er asynchrone verwerking is — en die is er, want de doorgifte is asynchroon — valt de samenhang uit elkaar. Een mutatie die om 10:03 wordt bevestigd en om 10:47 wordt doorgegeven, is zonder correlatie niet als één gebeurtenis te herkennen.</p>
+        <h4>Wat u logt, en wat niet</h4>
+        <p>Op elke betekenisvolle stap: wat, wanneer, voor wie, met welk resultaat, en de correlatie-identificatie. Wat u níét logt: persoonsgegevens die er niet toe doen, wachtwoorden, en volledige berichten waarin toevallig persoonsgegevens zitten. Dat laatste is een veelvoorkomende AVG-fout die pas bij een audit boven water komt.</p>
+        <div class="callout"><span class="lbl">Logniveaus met betekenis</span><p>Leg vast wat elk niveau betekent en wanneer u het gebruikt. Zonder afspraak logt de een op waarschuwingsniveau wat de ander op foutniveau logt, en is het niveau als filter waardeloos.</p></div>
+        <h4>Onderscheid drie soorten vastlegging</h4>
+        <p>Dit wordt vaak verward en heeft verschillende bewaartermijnen en verschillende lezers:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Soort</th><th>Bewaartermijn</th><th>Kenmerk</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Technische logging</strong></td><td>Dagen tot weken</td><td>Voor beheer, mag ruis bevatten</td></tr>
+            <tr><td><strong>Gebeurtenissen</strong></td><td>Zeven jaar</td><td>De mutatiegeschiedenis, de bron uit deel 5, onveranderlijk</td></tr>
+            <tr><td><strong>Audittrail voor toezicht</strong></td><td>Eigen regime</td><td>Gerichte selectie van gebeurtenissen, met eigen bewaar- en toegangsregime</td></tr>
+          </tbody>
+        </table></div>
+        <p>Wie deze drie in één voorziening propt, krijgt of te veel bewaard (kosten en AVG-risico) of te weinig (QS-4 niet haalbaar).</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.3 — een storing reconstrueren en het loggingconcept ontwerpen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Uw systeem is een modulith met één logbestand. Een adresmutatie wordt om 10:03 bevestigd en om 10:47 doorgegeven. Waarom hebt u tóch een correlatie-identificatie nodig?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Eén logbestand betekent dat alle regels op één plek staan — niet dat ze bij elkaar horen. Tussen 10:03 en 10:47 staan duizenden regels van tientallen andere mutaties. Zonder correlatie is er geen manier om de bevestigingsregel en de doorgifteregel als één gebeurtenis te herkennen, behalve filteren op deelnemersnummer — en dat werkt niet zodra er twee mutaties op dezelfde deelnemer lopen. Een modulith maakt correlatie minder urgent voor synchrone paden, maar <strong>even urgent voor asynchrone</strong> — en asynchroon is de doorgifte.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Noem drie zaken die u expliciet niet logt, en waarom dat bij een scheidingsmutatie extra gevoelig ligt.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Wachtwoorden en tokens, volledige berichtinhoud waarin persoonsgegevens kunnen zitten, en burgerservicenummers of rekeningnummers in leesbare vorm — een verwijzing volstaat. Bij een scheidingsmutatie komen bovendien gevoelige gegevens over de relatie tussen personen voorbij, en die horen niet in een technisch logbestand met een ruime lezerskring.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Autorisatie</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>De vraag is niet "wie mag inloggen" maar "wie mag welke handeling verrichten op welk gegeven".</strong></p>
+        <p>Voor Mutatie 2.0 zijn er vier soorten actoren met verschillende regimes: de deelnemer (mag alleen zijn eigen gegevens, alleen bepaalde mutaties), de mutatiebehandelaar (mag veel deelnemers, met beperkingen per mutatiesoort), het werkgeverssysteem (mag alleen de eigen deelnemers, alleen via batch), en beheer (mag technische handelingen, uitdrukkelijk geen inhoudelijke).</p>
+        <h4>Centraal beslissen, lokaal afdwingen</h4>
+        <p>Het autorisatiemodel — welke rol mag welke handeling — hoort op één plaats. De handhaving hoort bij de handeling zelf, want dat is de enige plek waar zeker is dat er niets omheen gaat. In Mutatie 1.0 was het omgekeerd: elke service had zijn eigen model, en een wijziging kostte elf aanpassingen.</p>
+        <div class="callout"><span class="lbl">Functiescheiding hoort in het domein</span><p>Uit deel 2 en 6: de zorg van de security officer was dat een medewerker een adres wijzigt en vervolgens zelf de uitkeringsopdracht goedkeurt. Dat is geen rollenkwestie maar een regel over opeenvolgende handelingen op hetzelfde dossier. Zulke regels kunnen niet in een generieke autorisatielaag leven, want die kent de geschiedenis van het dossier niet.</p></div>
+        <p><strong>Leg vast wat er gebeurt bij weigering.</strong> Ziet de gebruiker dat iets bestaat maar verboden is, of ziet hij het helemaal niet? Voor persoonsgegevens is dat verschil wezenlijk: "u mag het dossier van deze deelnemer niet inzien" bevestigt dat de deelnemer bestaat.</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Tijd en datums</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voor een pensioensysteem is dit het concept met de hoogste opbrengst, en het staat in de meeste architecturen niet.</p>
+        <h4>Drie soorten datums die op elkaar lijken en niet hetzelfde zijn</h4>
+        <ul>
+          <li><strong>Ingangsdatum</strong> — vanaf wanneer geldt de verandering in de werkelijkheid? Een verhuizing per 1 juni.</li>
+          <li><strong>Verwerkingsdatum</strong> — wanneer hebben wij het vastgelegd? De melding kwam op 14 juni.</li>
+          <li><strong>Peildatum</strong> — naar welk moment kijken wij bij een berekening? Bijvoorbeeld de stand per 31 december.</li>
+        </ul>
+        <p>Een adreswijziging met ingangsdatum 1 juni, verwerkt op 14 juni, met een uitkeringsberekening op peildatum 1 juni, is een normale situatie — en zij is alleen correct af te handelen als deze drie apart worden bijgehouden. In deel 3 zagen we dat mutatieverwerking en statusoverzicht verschillende dingen bedoelden met een leeg datumveld; dat is de goedkope versie van dit probleem.</p>
+        <h4>Terugwerkende kracht</h4>
+        <p>Administratieve systemen krijgen mutaties met terugwerkende kracht — een scheiding die twee jaar geleden is uitgesproken, een overlijden dat laat gemeld wordt. Dat betekent dat een berekening die vorig jaar klopte, vandaag anders uitvalt. Het concept moet vastleggen: kunnen we de toestand op een willekeurig moment reconstrueren (dat kan alleen met de gebeurtenissenaanpak uit deel 5), en hoe gaan we om met reeds verzonden berichten die achteraf onjuist blijken?</p>
+        <h4>Vier regels om vast te leggen</h4>
+        <ol>
+          <li><strong>Eén tijdzone in de opslag</strong> (UTC), omzetting naar lokale tijd uitsluitend bij weergave. Nederland kent twee zomertijdovergangen per jaar; een batch die om 02:30 draait, draait één nacht per jaar twee keer en één nacht helemaal niet.</li>
+          <li><strong>Datum zonder tijd waar het om een kalenderdag gaat.</strong> Een ingangsdatum is een dag, geen tijdstip. Er als tijdstip mee rekenen levert fouten op bij middernachtgrenzen.</li>
+          <li><strong>Systeemtijd niet rechtstreeks lezen.</strong> Dit was de "tijdpoort" uit deel 4: het domein vraagt de peildatum op via een poort, zodat peildatumlogica testbaar is zonder de klok te manipuleren.</li>
+          <li><strong>Vastleggen welke datum leidend is</strong> per soort berekening, en dat in de begrippenlijst (arc42 hoofdstuk 12) opnemen.</li>
+        </ol>
+        <div class="callout note"><span class="lbl">↗ EA</span><p>Op landschapsniveau is dit hetzelfde probleem als de gegevensdefinitie-afstemming die de EA-cursus behandelt: verschillende systemen die hetzelfde begrip net anders invullen. De schade is hier alleen directer zichtbaar, omdat het om berekende rechten gaat.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.4 — het verhuisgeval met terugwerkende kracht</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een deelnemer verhuist per 1 juni naar het buitenland en meldt dit op 14 juni; op 5 juni is al een uitkering betaald op basis van het oude woonland. Welke datum is leidend voor de belastingberekening, en wat moet er met de betaling gebeuren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <strong>ingangsdatum</strong> (1 juni) is leidend voor het woonland, want het gaat om de feitelijke situatie. De betaling van 5 juni is daarmee achteraf onjuist; het systeem moet de toestand op 5 juni kunnen reconstrueren en een correctie in gang zetten — het beslist niet zelf over terugvordering of verrekening, dat is beleid. De volgorde van vastlegging (betaling → melding → correctie) verschilt van de volgorde van ingang, en dat is precies waarom ingangs-, verwerkings- en peildatum apart worden bijgehouden.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Welke regel uit paragraaf 8.6 had dit geval voorkomen — en welk deel van het probleem voorkomt géén enkele regel?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Regel 4 (vastleggen welke datum leidend is) en regel 2 (datum zonder tijd) hadden de verwerkingsfout voorkomen. Geen enkele regel voorkomt dat een deelnemer twee weken na zijn verhuizing meldt — dat is een <strong>procesprobleem</strong>, geen technisch probleem. De architectuur kan niet voorkomen dat de werkelijkheid later binnenkomt dan zij plaatsvindt; zij kan alleen zorgen dat het systeem daar correct mee omgaat.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">De overige concepten, kort</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>Transacties en consistentie</h4>
+        <p>Leg vast wat samen gebeurt en wat niet. In een modulith kan het meeste in één transactie; het uitzonderlijke — de asynchrone doorgifte — moet expliciet zijn, inclusief het venster en de manier waarop dat zichtbaar wordt.</p>
+        <h4>Validatie</h4>
+        <p>Drie plaatsen: aan de rand (formaat en volledigheid), in het domein (bedrijfsregels), en bij opslag (integriteit). Leg vast wat waar hoort, anders staan dezelfde regels op drie plekken en lopen ze uiteen. In deel 3 was dat de kern van de adresvalidatiefout.</p>
+        <h4>Meertaligheid</h4>
+        <p>Dit was de wijziging waarop u in deel 3 vastliep. De regel: tekst leeft niet in de logica. Alle voor gebruikers zichtbare tekst komt uit één voorziening, met een sleutel per tekst en een taalkeuze per ontvanger. Wie dat vanaf het begin doet, kost het niets; wie het achteraf invoert, raakt elke module.</p>
+        <h4>Configuratie</h4>
+        <p>Leg vast wat instelbaar is en wie het mag wijzigen. De reglementsparameters per werkgever uit deel 4 zijn hier het lastige geval: zij zijn geen technische configuratie maar bedrijfsgegevens, en zij horen dus in beheer bij de administratie, met versiehistorie — want een parameterwijziging verandert berekende rechten.</p>
+        <h4>Testen</h4>
+        <p>Leg vast wat waar getest wordt en met welke gegevens. Voor deze doelgroep relevant: testgegevens met echte persoonsgegevens zijn geen optie, en gefingeerde gegevens moeten toch realistisch genoeg zijn om peildatumgedrag te toetsen.</p>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Hoe u concepten laat leven</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een vastgelegd concept dat niemand toepast, is een document. Vier maatregelen, van sterk naar zwak — dezelfde ordening als bij de modulegrenzen in deel 5:</p>
+        <ol>
+          <li><strong>Onvermijdelijk maken.</strong> Als correlatie-identificatie automatisch wordt meegegeven door de infrastructuur die iedereen gebruikt, kan niemand hem vergeten. Dit is verreweg de sterkste maatregel: het concept is geen regel maar de weg van de minste weerstand.</li>
+          <li><strong>Controleerbaar maken.</strong> Een bouwstraatcontrole die faalt bij het rechtstreeks lezen van de systeemklok, of bij een logregel zonder correlatie.</li>
+          <li><strong>Voorbeeldig maken.</strong> Eén module die het goed doet en waarnaar iedereen kijkt. Werkt goed bij nieuwe teamleden, minder bij tijdsdruk.</li>
+          <li><strong>Afspreken.</strong> Het concept staat in hoofdstuk 8 en iedereen heeft het gelezen. De zwakste vorm, en de enige die beschikbaar is voor concepten die zich niet laten automatiseren — bijvoorbeeld welke datum leidend is.</li>
+        </ol>
+        <div class="callout tip"><span class="lbl">De praktische consequentie</span><p>Kies bij het ontwerpen van een concept bewust hoe u het handhaaft, en geef de voorkeur aan concepten die zichzelf afdwingen. Een concept dat alleen in een document staat, is over twee jaar elf keer verschillend geïmplementeerd — dat is precies wat er gebeurd is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.5 — handhaving kiezen per concept</p>
+        <details class="q"><summary><span class="qn">1</span><span>Concept 5 — welke datum leidend is per berekening — is als enige van de zes concepten niet te automatiseren. Waarom niet, en wat betekent dat voor de borging?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het is het enige concept dat over <strong>betekenis</strong> gaat en niet over vorm: een controle kan zien of u de klok rechtstreeks leest, maar niet of u de juiste datum bedoelt. Daarom moet het concept in de begrippenlijst staan (arc42 hoofdstuk 12), ter sprake komen bij elke refinement van een nieuwe berekening, en een eigenaar hebben die erop let. Het is zo het concept met het hoogste risico én de zwakste handhavingsvorm.</div></details>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">B7 gesloten en samenvatting</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Bevinding B7 sluit met drie dingen samen:</p>
+        <ol>
+          <li><strong>De concepten zijn vastgelegd</strong> in arc42 hoofdstuk 8, per stuk ongeveer één pagina, met regel, reden, voorbeeld en gedrag bij afwijking.</li>
+          <li><strong>De belangrijkste concepten zijn onvermijdelijk of controleerbaar gemaakt</strong> — niet alleen afgesproken.</li>
+          <li><strong>Er is een eigenaar.</strong> Een cross-cutting concept heeft geen natuurlijke eigenaar en krijgt er dus een toegewezen: de architect, of het gremium dat in deel 9 aan de orde komt.</li>
+        </ol>
+        <div class="callout note"><span class="lbl">Wat B7 niet is</span><p>Het is geen technisch probleem. Elk van de elf teams in Mutatie 1.0 had een redelijke oplossing voor foutafhandeling. De schade ontstond doordat er elf redelijke oplossingen waren en niemand de bevoegdheid had om er één van te maken. Dat is een organisatorisch probleem met een technische verschijningsvorm — en het is de reden dat deel 9 over governance en evaluatie gaat.</p></div>
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Een cross-cutting concept geldt overal en wordt daarom door geen enkele hoofdindeling gevangen. Elke indeling maakt sommige wijzigingen duur; die zijn niet toevallig maar structureel.</li>
+          <li>Cross-cutting concepten hebben geen natuurlijke eigenaar. Elk team lost ze lokaal en redelijk op; het geheel is dan onwerkbaar. Toets: als twee teams dit ieder voor zich oplossen, hebben we dan een probleem?</li>
+          <li>Foutafhandeling begint met een indeling naar foutsoort — invoerfout, bedrijfsregelfout, tijdelijke en blijvende technische fout — want de reactie verschilt fundamenteel.</li>
+          <li>Correlatie-identificatie is de ene afspraak die een storing volgbaar maakt. Onderscheid technische logging, gebeurtenissen en audittrail: verschillende lezers, verschillende bewaartermijnen.</li>
+          <li>Autorisatie: centraal beslissen, lokaal afdwingen. Functiescheiding hoort in het domein, want die kent de geschiedenis van het dossier.</li>
+          <li>Tijd en datums leveren in administratieve systemen de meeste stille fouten. Onderscheid ingangs-, verwerkings- en peildatum; sla op in UTC; lees de klok niet rechtstreeks.</li>
+          <li>Concepten laat u leven door ze onvermijdelijk of controleerbaar te maken. Een concept dat alleen in een document staat, is over twee jaar elf keer verschillend geïmplementeerd.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.7 — capstonedossier bijwerken</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom sluit B7 niet als u alleen het foutafhandelings-, logging- en datumconcept in arc42 hoofdstuk 8 hebt vastgelegd?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat vastlegging maar één van de drie elementen is. B7 sluit pas met vastlegging <strong>én</strong> handhaving (bij voorkeur onvermijdelijk of controleerbaar) <strong>én</strong> een toegewezen eigenaar. Wie alleen vastlegging noemt, herhaalt de fout van Mutatie 1.0: ook daar stond er wel iets in een wiki.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Bij hoeveel van de zeven bevindingen staan bij de meeste deelnemers na de terugblik alle drie de vinkjes — vastgelegd, gehandhaafd, eigenaar?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij <strong>twee of drie van de zeven</strong>. Vastlegging is meestal wel geregeld, handhaving vaak niet, en een eigenaar bijna nooit. Dat is geen tekortkoming — het is precies het patroon waarmee Mutatie 1.0 is vastgelopen: er waren voornemens, maar niemand die van een voornemen een afspraak kon maken. Dat is de vraag waarmee deel 9 verdergaat.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 9</h3>
+      <p>Deel 9 beantwoordt de vraag die na dit deel openstaat: wie maakt van een voornemen een afspraak? U bereidt een scenariogebaseerde evaluatie op ATAM-basis voor, onderscheidt risico's van trade-offpunten, en leert hoe architectuurbewaking wordt belegd zonder dat de architect een flessenhals wordt. Neem uw bevindingenregister met de drie vinkjes mee.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-1/deel-09/reader.html">Deel 9 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 8 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-1/deel-08/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_swa8_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

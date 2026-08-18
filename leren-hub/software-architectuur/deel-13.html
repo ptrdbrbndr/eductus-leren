@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 13 — Microservicesarchitectuur | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 13 (iSAQB CPSA-A): het spectrum modulith–service-based–microservices, de drijverstoets herhaald, saga's, outbox, koppelvlakversiebeheer en het strangler-patroon — aan de hand van de overname in sprint 9.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--line);background:var(--paper-2);border-radius:0 12px 12px 0;font-style:italic;color:var(--ink-soft)}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 13</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 13 van 28</p>
+  <h1>Moeten we nu<br><em>splitsen?</em></h1>
+  <p class="hero__lead">In sprint 9 neemt Meridiaan de uitvoering over van een fuserende werkgever: 60.000 extra deelnemers, een derde ontwikkelteam, en een werkgeversaanlevering die tijdelijk vijftig keer zoveel mutaties per nacht verwerkt. De herzieningsgrens uit de ADR van niveau 1 wordt voor het eerst getoetst. In dit deel leert u het spectrum tussen modulith en microservices positioneren, de aggregaatgrens gebruiken om te bepalen waarlangs u splitst, saga's en het outbox-patroon toepassen op een netwerkgrens, en het strangler-patroon gebruiken om daadwerkelijk te splitsen — inclusief de twee stappen die bijna altijd worden overgeslagen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±4u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>7</b><span>controlevragen</span></div>
+    <div class="stat"><b>5</b><span>strangler-stappen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Voorbereiding op het CPSA-Advanced-traject van het iSAQB; deze cursus is geen geaccrediteerde training en levert geen credit points. Raadpleeg isaqb.org voor het actuele modulelandschap. Technologieneutraal; arc42 + C4 als referentienotatie.</div>
+  <div class="trail">Niveau 2: ➊ Strategisch DDD → ➋ Tactisch DDD → <b>➌ Microservices (hier)</b> → ➍ Event sourcing/CQRS → ➎ Cloud &amp; uitrol → ➏ Security → ➐ Evolutionaire architectuur → ➑ Evaluatie gevorderd → ➒ Documentatie → ➓ Modereren/overtuigen → ⑪ Teamindeling &amp; tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">De aanleiding: sprint 9</a></li>
+      <li><a href="#s2" data-target="s2">Het spectrum</a></li>
+      <li><a href="#s3" data-target="s3">De drijverstoets opnieuw</a></li>
+      <li><a href="#s4" data-target="s4">Waarlangs splitst u?</a></li>
+      <li><a href="#s5" data-target="s5">Wat een netwerkgrens verandert</a></li>
+      <li><a href="#s6" data-target="s6">Het strangler-patroon</a></li>
+      <li><a href="#s7" data-target="s7">Wanneer u niet splitst</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">De aanleiding: sprint 9</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 5 van niveau 1 is de distributiekeuze vastgelegd in een ADR, met een herzieningsgrens:</p>
+        <blockquote>Deze keuze wordt heroverwogen zodra het aantal ontwikkelteams boven de vier komt, zodra een module aantoonbaar meer dan tienvoudige capaciteit vraagt ten opzichte van de rest, of zodra een module een beschikbaarheidseis krijgt die de rest niet heeft.</blockquote>
+        <p>In sprint 9 gebeurt er iets. Meridiaan neemt de uitvoering over van een pensioenfonds van een fuserende werkgever. Dat betekent: 60.000 extra deelnemers, een derde ontwikkelteam vanaf het volgende kwartaal, en — het scherpst — een werkgeversaanlevering die tijdens de conversieperiode niet 4.000 maar tot 200.000 mutaties per nacht bevat.</p>
+        <p>De programmadirecteur stelt de vraag die iedereen verwachtte: <strong>moeten we nu splitsen?</strong> Dit deel gaat over hoe u die vraag beantwoordt. Het antwoord is niet vanzelf ja en niet vanzelf nee, en de manier waarop u ertoe komt is belangrijker dan de uitkomst.</p>
+        <div class="callout"><span class="lbl">De eerste observatie</span><p>De herzieningsgrens werkt. Zij is gesteld op vier teams; er komt een derde. Zij is gesteld op tienvoudige capaciteit; de batch gaat tijdelijk maal vijftig. Dat is precies waarvoor de grens bestond, en het feit dat er nu een gestructureerd gesprek plaatsvindt in plaats van een reflex, is de opbrengst van deel 2 en deel 5 van niveau 1.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.1 / Uitwerking 13.1</p>
+        <details class="q"><summary><span class="qn">1</span><span>Stel dat Meridiaan deze herzieningsgrens niet had vastgelegd. Wat zou er in sprint 9 waarschijnlijk gebeurd zijn?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het gesprek zou voorspelbaar zijn verlopen: iemand stelt dat "we altijd al hadden moeten splitsen", iemand anders dat "we net alles net werkend hebben", en de uitkomst hangt af van wie het hardst praat of het hoogst in de organisatie zit. Er is geen gedeeld criterium, dus de discussie gaat over posities in plaats van over feiten. Met de grens gaat de discussie over drie toetsbare voorwaarden en over de vraag welk gegeven ontbreekt. Dat is de hele opbrengst, en zij kostte drie regels in een ADR.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Het spectrum</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Distributie is geen schakelaar. Tussen modulith en fijnmazige microservices ligt een spectrum, en de tussenposities worden in de praktijk ondergewaardeerd omdat er geen mode aan verbonden is.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vorm</th><th>Uitrolbare eenheden</th><th>Gegevens</th><th>Wanneer</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Modulith</strong></td><td>1</td><td>Eén database, gescheiden schema's</td><td>Tot ongeveer vier teams; geen afwijkende profielen</td></tr>
+            <tr><td><strong>Service-based</strong></td><td>2–6 grovere diensten</td><td>Vaak nog gedeelde database</td><td>Enkele teams met verschillende ritmes; één of twee afwijkende profielen</td></tr>
+            <tr><td><strong>Microservices</strong></td><td>10+</td><td>Eigen opslag per dienst</td><td>Veel teams, sterk uiteenlopende profielen, volwassen operatie</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Service-based is de vergeten middenpositie.</strong> Enkele grovere diensten geven u onafhankelijk uitrollen en onafhankelijk schalen waar u het nodig hebt, tegen een fractie van de operationele last van fijnmazige microservices. Voor Meridiaan is dit vrijwel zeker de juiste plek op het spectrum na de overname.</p>
+        <figure><img src="figuren/figuur-13-1-spectrum-distributie.png" alt="Het spectrum modulith - service-based - microservices"><figcaption>Figuur 13-1 — het spectrum met operationele last en vereiste volwassenheid per positie, en Meridiaan vóór en ná de overname</figcaption></figure>
+        <div class="callout tip"><span class="lbl">De regel die u meeneemt uit deel 5</span><p>De drijvers vertellen u <em>of</em> u distribueert, niet <em>hoe fijn</em>. Fijnmazigheid is een aparte beslissing, en te fijn is duurder dan te grof — want samenvoegen is goedkoper dan splitsen.</p></div>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De drijverstoets opnieuw</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Loop de vier drijvers uit deel 5 opnieuw langs, nu met de situatie van sprint 9.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Drijver</th><th>Vóór de overname</th><th>Na de overname</th></tr></thead>
+          <tbody>
+            <tr><td>Onafhankelijk uitrollen</td><td>Afwezig (2 teams)</td><td><strong>Mogelijk</strong> — drie teams, maar zitten zij elkaar in de weg?</td></tr>
+            <tr><td>Onafhankelijk schalen</td><td>Afwezig</td><td><strong>Aanwezig, tijdelijk</strong> — de conversiebatch vraagt maal vijftig</td></tr>
+            <tr><td>Onafhankelijk falen</td><td>Afwezig</td><td><strong>Mogelijk</strong> — mag een vastlopende conversie het dagelijkse mutatieproces raken?</td></tr>
+            <tr><td>Onafhankelijke technologie</td><td>Afwezig</td><td>Afwezig</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Twee drijvers zijn niet meer afwezig, en dat verandert de conclusie — maar niet zoals u zou verwachten.</strong></p>
+        <p><strong>Bij drijver 2 (schalen) is het beslissende woord <em>tijdelijk</em>.</strong> De conversie duurt naar verwachting vier maanden. Een architectuurwijziging aangaan voor een tijdelijk volume is de klassieke overreactie; hier gelden eerst de goedkopere opties uit deel 6: tijdelijk meer capaciteit, de conversie buiten kantooruren draaien, of de conversie in tranches verdelen.</p>
+        <p><strong>Bij drijver 3 (falen) zit het echte punt.</strong> De vraag <em>mag een vastlopende conversie het dagelijkse mutatieproces raken?</em> is niet met capaciteit op te lossen. Als de conversiebatch de gedeelde database dichtzet, staat het portaal stil — en dat is een beschikbaarheidsprobleem voor 340.000 deelnemers veroorzaakt door een tijdelijk project.</p>
+        <p><strong>Bij drijver 1 (uitrollen) is de vraag empirisch en meestal onbeantwoord.</strong> Drie teams is niet automatisch een probleem. Het probleem ontstaat wanneer teams op elkaar wachten. Dat is meetbaar: hoe vaak wordt een uitrol uitgesteld omdat een ander team niet klaar is?</p>
+        <div class="callout warn"><span class="lbl">De uitkomst voor Meridiaan</span><p>Splits de werkgeversaanlevering en conversie af als eigen dienst. Eén splitsing, op grond van drijver 3, met drijver 2 als bijkomend argument. De rest blijft modulith. Dat is service-based, niet microservices — en het is precies wat de modulith beloofde: de module was al afgezonderd, bezat haar eigen gegevens en communiceerde met gebeurtenissen. Splitsen is nu een verhuizing en geen verbouwing.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.2 / Uitwerking 13.2</p>
+        <details class="q"><summary><span class="qn">1</span><span>In de laatste twintig sprints is vier keer een uitrol uitgesteld omdat een ander team niet klaar was. Is dat drijver 1 (onafhankelijk uitrollen) die zich aandient?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee. Drie van de vier keer wachtte men op één specifiek koppelvlak — met de kernadministratie — niet op teamonafhankelijkheid als zodanig. Dat lost u op door dat koppelvlak eerder klaar te hebben, niet door te splitsen. <strong>Dit is de belangrijkste les van de opdracht:</strong> de vraag "zitten teams elkaar in de weg" is meetbaar, en het antwoord is verrassend vaak nee. Wie op teamaantal splitst zonder te meten, splitst op een aanname.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Waarlangs splitst u?</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Wanneer u splitst, is de grens niet vrij te kiezen.</p>
+        <p><strong>De aggregaatgrens is leidend.</strong> Uit deel 12: binnen een aggregaat geldt onmiddellijke consistentie, daarbuiten uiteindelijke. Een netwerkgrens dwingt uiteindelijke consistentie af. <strong>Dus loopt een dienstgrens nooit dwars door een aggregaat.</strong></p>
+        <p>Wie dat toch doet, krijgt gedistribueerde transacties nodig, en die zijn duur, complex en foutgevoelig. De klassieke fout is een dienstgrens trekken op basis van een technische indeling — een "validatieservice", een "berekeningsservice" — waardoor één logische handeling twee diensten moet wijzigen.</p>
+        <p><strong>De praktische ordening:</strong></p>
+        <ol>
+          <li>Bounded context (deel 11) — de grofste grens, altijd een geldige dienstgrens.</li>
+          <li>Aggregaat (deel 12) — de fijnste geldige grens.</li>
+          <li>Alles daartussen kan, mits een dienst één of meer complete aggregaten bevat.</li>
+          <li>Dwars door een aggregaat: nooit.</li>
+        </ol>
+        <p>Voor de conversiedienst klopt dit: werkgeversaanlevering is een eigen module met eigen aggregaten, binnen dezelfde bounded context. De grens loopt niet door een aggregaat heen — en dat is geen toeval maar het gevolg van de modulith-opzet uit deel 5 en de aggregaatafbakening uit deel 12. <strong>Dit is de plek waar de belofte van de modulith wordt ingelost.</strong></p>
+        <figure><img src="figuren/figuur-13-2-c4-container-mutatieplatform.png" alt="C4-containerdiagram van het Mutatieplatform na de splitsing"><figcaption>Figuur 13-2 — containerzicht na de splitsing: de conversiedienst is afgesplitst op grond van isolatie van falen, de mutatie-modulith blijft voor de rest ongewijzigd</figcaption></figure>
+        <div class="callout"><span class="lbl">Dezelfde vraag, ander antwoord</span><p>De conversiedienst heeft deelnemersgegevens nodig die zij niet zelf bezit. Synchroon opvragen is nu niet gratis meer — het is een netwerkaanroep in een batch van 200.000 records. Het juiste antwoord is een kopie via gebeurtenissen, en dat is precies het omgekeerde van het antwoord in deel 5 van niveau 1, waar synchroon opvragen binnen één proces triviaal was. Dezelfde vraag, ander antwoord, omdat de omstandigheden veranderd zijn.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.3 / Uitwerking 13.3</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welke handeling wijzigt na de splitsing nog altijd twee diensten tegelijk, en wat zegt dat?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><em>Conversie bevestigd</em>: die sluit het conversieaggregaat én markeert de deelnemer als geconverteerd. Dat is precies de ongemakkelijke toets uit de opdracht — als er zo'n handeling is, hebt u een saga nodig, of de grens ligt verkeerd. Hier ligt de grens goed; wat nodig is, is een saga, uitgewerkt in de volgende sectie.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Wat een netwerkgrens verandert</h2><span class="chip time">⏱ 24 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Uit deel 5 kent u de kosten in algemene zin. Hier de vier die u concreet moet oplossen.</p>
+        <h4>Verdwenen transacties: het saga-patroon</h4>
+        <p>Over een dienstgrens heen bestaat geen gedeelde transactie. Een reeks stappen die samen moeten slagen, wordt een <strong>saga</strong>: een opeenvolging van lokale transacties, elk met een compenserende actie voor het geval een latere stap faalt.</p>
+        <p>Voor de conversie: <em>deelnemer aangemaakt</em> → <em>rechten overgenomen</em> → <em>mutatiehistorie geconverteerd</em> → <em>conversie bevestigd</em>. Faalt stap 3, dan moet stap 2 gecompenseerd worden — niet teruggedraaid, want dat kan niet, maar gecorrigeerd met een expliciete tegenboeking.</p>
+        <p><strong>Twee vormen:</strong> georkestreerd — één component stuurt de saga aan en kent de volgorde; voor Meridiaan de juiste keuze, om dezelfde reden als in deel 5: het proces moet aantoonbaar zijn. Gechoreografeerd — elke stap reageert op de gebeurtenis van de vorige; elegant en niet te volgen.</p>
+        <div class="callout warn"><span class="lbl">De belangrijkste les van dit onderwerp</span><p><strong>Compensatie is een domeinvraag, geen technische.</strong> Wat betekent het om een overgenomen recht ongedaan te maken? Die vraag beantwoordt de actuaris, niet de architect. Een saga verplaatst een technisch probleem naar het domein, en dat maakt hem duur.</p></div>
+        <h4>Betrouwbaar publiceren: het outbox-patroon</h4>
+        <p>Het probleem: u wijzigt gegevens in uw database én u wilt een gebeurtenis publiceren. Dat zijn twee systemen; als de database slaagt en het publiceren faalt, is de gebeurtenis verloren — en niemand weet het.</p>
+        <p><strong>De oplossing:</strong> schrijf de te publiceren gebeurtenis in dezelfde transactie weg in een tabel (de outbox). Een apart proces leest die tabel en publiceert. Slaagt het publiceren niet, dan blijft de regel staan en wordt het opnieuw geprobeerd.</p>
+        <p>De prijs is dat een gebeurtenis meer dan één keer gepubliceerd kan worden. Daarom moet elke ontvanger <strong>idempotent</strong> zijn: dezelfde gebeurtenis twee keer verwerken heeft hetzelfde effect als één keer.</p>
+        <p>In een gedistribueerd systeem is "precies één keer bezorgd" niet haalbaar; wat haalbaar is, is "minstens één keer bezorgd, precies één keer verwerkt" — en dat tweede is uw werk, in elke ontvanger.</p>
+        <h4>Waarneembaarheid</h4>
+        <p>De correlatie-identificatie uit deel 8 van niveau 1 wordt hier onmisbaar in plaats van nuttig. Zonder gecorreleerde tracering over dienstgrenzen is een storing niet te volgen — dat was bevinding B7. Deel 15 werkt dit uit.</p>
+        <h4>Koppelvlakversiebeheer</h4>
+        <p>Zodra twee diensten onafhankelijk uitrollen, kunt u een koppelvlak niet meer eenzijdig wijzigen. De regels: <strong>achterwaarts compatibel wijzigen</strong> is de norm — velden toevoegen mag, verwijderen of hernoemen niet; <strong>breken vereist twee versies naast elkaar</strong>, met een afgesproken termijn waarna de oude vervalt; <strong>de ontvanger negeert wat hij niet kent</strong>, zodat de zender kan toevoegen zonder te coördineren.</p>
+        <p>Voor de werkgeverskoppeling uit deel 11 (open host service met published language) geldt dit dubbel: elf werkgeverssystemen hebben zich aan uw formaat aangepast, en die kunt u niet in één nacht laten meebewegen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.4 en 13.5 / Uitwerkingen 13.4 en 13.5</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat betekent het om een "overgenomen recht" ongedaan te maken in de compensatiestap van de saga, en wie beantwoordt die vraag?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Er zijn drie mogelijkheden met verschillende gevolgen: het recht verwijderen (mag niet — de gebeurtenis heeft plaatsgevonden), het recht op nul zetten (misleidend — het lijkt alsof er geen recht was), of een expliciete tegenboeking maken met reden en tijdstip (correct — de historie blijft kloppen). <strong>De derde is de juiste, en die keuze maakt de actuaris, niet de architect.</strong> Bij een pensioenrecht is "ongedaan maken" geen technische handeling maar een administratieve gebeurtenis met eigen betekenis en eigen verantwoording richting toezicht.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Van de drie ontvangers van de outbox-gebeurtenis <em>mutatie afgerond</em> — leesmodel, bevestigingsbericht, kernadministratie — welke is het lastigst idempotent te maken, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het <strong>bevestigingsbericht</strong>. Een e-mail of brief is niet terug te nemen: twee keer verwerken betekent twee berichten aan de deelnemer, en dat is zichtbare schade, niet alleen een technische onvolkomenheid. De oplossing is een verzendregistratie die vóór het verzenden wordt vastgelegd, met de gebeurtenisidentificatie als sleutel: is er al een bericht voor deze gebeurtenis, dan wordt er niet nogmaals verzonden. Dat verschuift het risico van dubbel verzenden naar het risico van niet verzenden bij een storing — en dat tweede is met bewaking op te vangen, het eerste niet. U ruilt een onherstelbaar risico in voor een herstelbaar.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Het strangler-patroon</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>U splitst niet met een grote verbouwing. Het beproefde patroon:</p>
+        <ol>
+          <li><strong>Een doorgeefpunt plaatsen</strong> vóór de functionaliteit die u gaat verplaatsen.</li>
+          <li><strong>De nieuwe dienst bouwen</strong> naast de bestaande module.</li>
+          <li><strong>Verkeer geleidelijk verleggen</strong>, te beginnen met een klein deel of met een enkele werkgever.</li>
+          <li><strong>Meten</strong> — de drijver die de splitsing rechtvaardigde, moet aantoonbaar beter worden.</li>
+          <li><strong>De oude module verwijderen</strong> wanneer er geen verkeer meer langs gaat.</li>
+        </ol>
+        <div class="callout warn"><span class="lbl">De twee stappen die worden overgeslagen</span><p><strong>Stap 5</strong> wordt overgeslagen, en dat is de meest voorkomende fout. Het resultaat is een systeem met twee implementaties van hetzelfde, waarvan er één slaapt tot iemand hem per ongeluk aanroept. Zet er een termijn en een eigenaar op. <strong>Stap 4</strong> wordt eveneens overgeslagen, en dat is erger. Een splitsing die niet meetbaar oplevert wat zij beloofde, moet worden teruggedraaid. Samenvoegen is goedkoper dan splitsen; dat werkt beide kanten op.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.7 / Uitwerking 13.7</p>
+        <details class="q"><summary><span class="qn">1</span><span>De meting bij stap 4 valt tegen: het portaal is tijdens de conversiebatch nog steeds traag. Wat doet u?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Deze vraag wordt zelden gesteld en is de belangrijkste van de opdracht. Er zijn drie mogelijkheden: de splitsing was onvoldoende (de diensten delen nog iets, bijvoorbeeld de database), de oorzaak lag elders (het was niet de batch maar een rapportagequery), of de splitsing was niet nodig. <strong>In het derde geval draait u terug</strong>, en dat is een reële uitkomst die vrijwel nooit wordt overwogen. Samenvoegen is goedkoper dan splitsen; een architect die dat argument alleen in één richting gebruikt, is niet consequent.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wanneer u niet splitst</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <ul>
+          <li><strong>Wanneer de drijver tijdelijk is.</strong> De conversiepiek duurt vier maanden; capaciteit is dan goedkoper dan architectuur.</li>
+          <li><strong>Wanneer de operatie het niet aankan.</strong> Beheer zonder nachtbezetting kan niet zes diensten bewaken. Dat is een randvoorwaarde uit deel 2 van niveau 1 en zij is niet weg.</li>
+          <li><strong>Wanneer de grens door een aggregaat loopt.</strong> Dan splitst u niet; dan modelleert u eerst opnieuw.</li>
+          <li><strong>Wanneer u de teams niet meebeweegt.</strong> Een dienst zonder eigenaar wordt niemands zorg. De omgekeerde Conway-beweging — de organisatie aanpassen aan de gekozen structuur — hoort bij de beslissing, niet erna. Deel 21 werkt dit uit.</li>
+        </ul>
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Een herzieningsgrens werkt alleen als hij wordt getoetst. Sprint 9 is die toets, en het gestructureerde gesprek is de opbrengst van niveau 1.</li>
+          <li>Distributie is een spectrum. Service-based — enkele grovere diensten — is de ondergewaardeerde middenpositie en voor Meridiaan de juiste.</li>
+          <li>De drijvers vertellen of u distribueert, niet hoe fijn. Bij de conversie is drijver 3 (onafhankelijk falen) het echte argument; drijver 2 is tijdelijk en dus geen architectuurargument.</li>
+          <li>Een dienstgrens loopt nooit dwars door een aggregaat. Bounded context is de grofste geldige grens, het aggregaat de fijnste.</li>
+          <li>Een saga verplaatst een technisch probleem naar het domein: compensatie is een domeinvraag. Outbox plus idempotentie: "precies één keer bezorgd" bestaat niet.</li>
+          <li>Splits met het strangler-patroon. Stap 4 (meten) en stap 5 (opruimen) worden overgeslagen; beide horen een eigenaar en een termijn te hebben.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 13, Opdracht 13.6 / Uitwerking 13.6</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welk contextpatroon uit deel 11 is van toepassing op de werkgeverskoppeling, en wat zegt dat over wie zich aan wie aanpast zodra elf systemen zich hebben geconformeerd?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het patroon is <strong>open host service met published language</strong>. Dat betekent in theorie: u publiceert en zij conformeren zich — maar zodra elf werkgeverssystemen zich daadwerkelijk hebben geconformeerd, is de machtsverhouding feitelijk omgekeerd. Twee werkgevers die hun systeem in vier jaar niet hebben aangepast, betekenen dat uw effectieve migratietermijn niet door uw planning wordt bepaald maar door de traagste afnemer. Uw versiebeleid moet daarom rekenen met afnemers die nooit meebewegen. Dat is de prijs van standaardisatie en zij hoort in de ADR.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 14</h3>
+      <p>Deel 14 werkt de schrijf- en leeskant van het platform verder uit met event sourcing en CQRS — het vervolg op de gebeurtenisopslag en de domeingebeurtenissen uit deel 12. Neem uw saga-ontwerp en uw containerdiagram uit dit deel mee.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-14/reader.html">Deel 14 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 13 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-13/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_swa13_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

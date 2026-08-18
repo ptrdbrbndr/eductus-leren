@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 11 — Strategisch domeingedreven ontwerp | Eductus</title>
+<meta name="description" content="Cursus Softwarearchitectuur, Deel 11 (iSAQB CPSA-A): bounded contexts, ubiquitous language, subdomeinclassificatie en de context map — aan de hand van het partnerprobleem uit Mutatie 2.0.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Softwarearchitectuur · Deel 11</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Softwarearchitectuur · Niveau 2 (CPSA-A) · Deel 11 van 28</p>
+  <h1>Eén woord,<br><em>vier betekenissen</em></h1>
+  <p class="hero__lead">Niveau 1 eindigde met een verdedigd ontwerp voor Mutatie 2.0; de bouw is drie sprints onderweg. In sprint 3 loopt het team vast op een simpel woord — <em>partner</em> — dat voor mutatieverwerking, pensioenberekening, correspondentie en compliance vier verschillende dingen betekent. In dit deel leert u wat een bounded context is, hoe u contextgrenzen herkent aan taalbreuken in plaats van in een gegevensmodel, hoe u subdomeinen classificeert als investeringsbeslissing, en hoe een context map niet alleen techniek maar machtsverhoudingen in kaart brengt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±4u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>7</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>bounded contexts</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering van niveau 2.</strong> Dit niveau bereidt voor op het CPSA-Advanced-traject van het iSAQB: geen examen maar een modulelandschap, met credit points in drie competentiegebieden — methodisch, technologisch en communicatief. Deze cursus is geen geaccrediteerde iSAQB-training en levert geen officiële credit points op; raadpleeg het actuele modulelandschap op isaqb.org. Technologieneutraal; arc42 + C4 als referentienotatie, Structurizr als referentietool. Niveau 1 is geen formele voorwaarde, maar deze reeks bouwt inhoudelijk voort op de begrippen daaruit.</div>
+  <div class="trail">Niveau 2: <b>➊ Strategisch DDD (hier)</b> → ➋ Tactisch DDD → ➌ Microservices → ➍ Event sourcing/CQRS → ➎ Cloud &amp; uitrol → ➏ Security → ➐ Evolutionaire architectuur → ➑ Evaluatie gevorderd → ➒ Documentatie → ➓ Modereren/overtuigen → ⑪ Teamindeling &amp; tussenbeoordeling</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Vastgelopen op één woord</a></li>
+      <li><a href="#s2" data-target="s2">De bounded context</a></li>
+      <li><a href="#s3" data-target="s3">Eén taal binnen de grens</a></li>
+      <li><a href="#s4" data-target="s4">Subdomeinen: waar u investeert</a></li>
+      <li><a href="#s5" data-target="s5">De context map: macht in kaart</a></li>
+      <li><a href="#s6" data-target="s6">Grenzen vindt u in gesprekken</a></li>
+      <li><a href="#s7" data-target="s7">Wanneer het niet loont</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Vastgelopen op één woord</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 3 van niveau 1 stelde u vast dat het systeem wordt ingedeeld naar mutatiesoort, met de integratie afgezonderd. Het criterium was reden-van-verandering: onderdelen horen bij elkaar als zij om dezelfde reden, op verzoek van dezelfde partij, wijzigen.</p>
+        <p>Dat criterium is juist en het is onvolledig. Het vertelt u wanneer twee dingen bij elkaar horen; het vertelt u niet <strong>waar de grenzen van het domein zelf lopen</strong>. En dat is precies de vraag die in sprint 3 van de bouw op tafel kwam.</p>
+        <h4>De aanleiding</h4>
+        <p>Het team bouwde de module voor scheidingsmutaties en liep vast op het begrip <em>partner</em>. Uit de gesprekken bleek:</p>
+        <ul>
+          <li>voor de <strong>mutatieverwerking</strong> is een partner iemand die op een mutatieformulier staat en van wie gegevens moeten worden gecontroleerd;</li>
+          <li>voor de <strong>pensioenberekening</strong> is een partner iemand die op de peildatum voldeed aan de reglementaire partnerdefinitie — die per werkgever verschilt en waarbij samenwonen soms wel en soms niet meetelt;</li>
+          <li>voor de <strong>correspondentie</strong> is een partner een geadresseerde met een aanhef en een taalvoorkeur;</li>
+          <li>voor <strong>compliance</strong> is een partner een persoon met rechten op inzage in een deel van het dossier.</li>
+        </ul>
+        <div class="callout warn"><span class="lbl">Wat er gebeurde</span><p>Het team probeerde één partnerbegrip te maken dat alle vier bediende. Na twee weken had het een object met eenendertig velden waarvan er per gebruik hooguit zes relevant waren, met vier verschillende geldigheidsregels en drie manieren om vast te stellen of iemand "actief" partner was.</p></div>
+        <p><strong>Dat is geen modelleerfout. Het is de standaardfout</strong>, en strategisch DDD is het antwoord erop.</p>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De bounded context</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>bounded context</strong> is een grens waarbinnen een model geldig en eenduidig is. Binnen die grens heeft elk begrip één betekenis; buiten die grens mag hetzelfde woord iets anders betekenen.</p>
+        <p>De essentie is de omkering die de meeste modelleurs moeilijk vinden: <strong>het doel is niet één model voor de hele organisatie, maar meerdere modellen met heldere grenzen ertussen.</strong></p>
+        <p>Voor het partnerprobleem betekent dat: er komt geen universeel partnerbegrip. Er komen vier modellen, elk geldig binnen zijn eigen context, en er komen expliciete vertalingen op de grenzen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Context</th><th>Wat "partner" daar is</th><th>Wat er wordt bijgehouden</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Mutatieverwerking</strong></td><td>Een op te voeren en te controleren persoon</td><td>Identiteit, verificatiestatus, brondocument</td></tr>
+            <tr><td><strong>Pensioenrechten</strong></td><td>Iemand die op een peildatum aan de reglementaire definitie voldoet</td><td>Reglementaire status per periode, per werkgever</td></tr>
+            <tr><td><strong>Correspondentie</strong></td><td>Een geadresseerde</td><td>Naam, aanhef, adres, taal, kanaal</td></tr>
+            <tr><td><strong>Toegang en inzage</strong></td><td>Een persoon met rechten op een dossierdeel</td><td>Rechten, grondslag, geldigheidsduur</td></tr>
+          </tbody>
+        </table></div>
+        <p>Vergelijk dat met het object van eenendertig velden. Elk van deze vier is klein, begrijpelijk, en verandert om één reden.</p>
+        <figure><img src="figuren/figuur-11-1-partnerbegrip-bounded-contexts.png" alt="Het partnerbegrip in vier bounded contexts"><figcaption>Figuur 11-1 — vier kleine modellen met hun eigen velden, verbonden door expliciete vertalingen, naast het afgekeurde object van eenendertig velden</figcaption></figure>
+        <div class="callout"><span class="lbl">De prijs is echt en hoort benoemd</span><p>U hebt nu vertaling nodig op de grenzen, en dezelfde persoon bestaat in vier vormen. Dat is duplicatie — en het is precies de duplicatie die deel 3 van niveau 1 verdedigde: goedkoper dan de verkeerde abstractie. Het verschil met de fout uit sprint 4 van Mutatie 1.0 is dat deze duplicatie <strong>bewust, benoemd en van vertaling voorzien</strong> is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 1.1 / Uitwerking 11.1</p>
+        <details class="q"><summary><span class="qn">1</span><span>Het veld <code>partnerStatus</code> komt zowel in de mutatieverwerking als in de rechtenbepaling voor. Betekent het daar hetzelfde?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Nee. In de invoercontext betekent het <strong>of de gegevens geverifieerd zijn</strong>; in de rechtencontext betekent het <strong>of iemand reglementair als partner geldt</strong>. Een verificatie kan compleet zijn terwijl de persoon reglementair géén partner is, en omgekeerd. Dit is semantische koppeling in zijn zuiverste vorm — precies waar deel 8 van niveau 1 voor waarschuwde — en geen enkele codeanalyse laat het zien; het komt aan het licht wanneer een berekening een uitkomst geeft die niemand kan verklaren.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Eén taal binnen de grens</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Binnen een bounded context spreken domeindeskundigen, analisten en ontwikkelaars <strong>dezelfde taal</strong>: dezelfde woorden, dezelfde betekenis, in gesprekken, in documentatie en in code.</p>
+        <p>Dat klinkt vanzelfsprekend en is het niet. De gebruikelijke situatie is dat de domeindeskundige spreekt over <em>verevening</em>, de analist het opschrijft als <em>verdeling</em>, en de ontwikkelaar een klasse <code>SplitCalculation</code> maakt. Elke vertaalslag is een plek waar betekenis wegsijpelt, en niemand merkt het tot er een fout optreedt die achteraf onverklaarbaar lijkt.</p>
+        <p><strong>De regel:</strong> wat de domeindeskundige zegt, staat in de code. Niet vertaald, niet verbeterd, niet vereenvoudigd. Als de code <code>verevening</code> heet, kan een domeindeskundige meelezen; als hij <code>splitCalc</code> heet, kan dat niet, en dan is de code de enige plek waar de werkelijke regel staat zonder dat iemand hem kan controleren.</p>
+        <p><strong>Voor Meridiaan</strong> is dit geen luxe. In deel 8 van niveau 1 stelden we vast dat semantische koppeling — verschillende betekenissen achter hetzelfde woord — in administratieve systemen de meest voorkomende bron van stille fouten is. De ubiquitous language is het middel daartegen, en de begrippenlijst (arc42 hoofdstuk 12) is de neerslag.</p>
+        <div class="callout tip"><span class="lbl">De bruikbaarste heuristiek van dit deel</span><p><strong>De grens van de taal is de grens van de context.</strong> Zodra u merkt dat u "ja, maar in dat geval bedoelen we er iets anders mee" moet zeggen, staat u op een contextgrens. Contextgrenzen kondigen zich aan als taalproblemen.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.2 / Uitwerking 11.2</p>
+        <details class="q"><summary><span class="qn">1</span><span>Op de plek waar een domeindeskundige zegt "ja, maar in dat geval bedoelen we…" — wat gebeurt daar precies als niemand erop let?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De deskundige past zich aan aan de vraagsteller, geeft het antwoord dat in díé context klopt, en de vraagsteller noteert het als algemene regel. Zo ontstaat het object van eenendertig velden: een reeks lokaal correcte antwoorden die tot één, niet-kloppend model worden samengevoegd. In de gespreksverslagen van deze casus komt dat woord minstens vijf keer voor, met <em>verwerkt</em> als het aardigste voorbeeld: voor de mutatiebehandelaar betekent het "vastgelegd", voor de actuaris "herberekend", voor compliance "audittrail compleet" — en alle drie kunnen op verschillende momenten waar zijn.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Subdomeinen: waar u investeert</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Niet elk deel van het domein verdient evenveel aandacht. Drie soorten:</p>
+        <p><strong>Kerndomein.</strong> Waar de organisatie zich onderscheidt, waar de complexiteit zit die niemand anders voor u oplost. Hier investeert u uw beste mensen en uw beste modellering; hier koopt u niets.</p>
+        <p><strong>Ondersteunend subdomein.</strong> Nodig, specifiek voor uw organisatie, maar niet onderscheidend. Hier bouwt u eenvoudig en pragmatisch, of u koopt en past aan.</p>
+        <p><strong>Generiek subdomein.</strong> Nodig, maar iedereen heeft het en het is overal hetzelfde. Hier koopt u, tenzij er een dwingende reden is dat niet te doen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Subdomein</th><th>Soort</th><th>Consequentie</th></tr></thead>
+          <tbody>
+            <tr><td>Mutatieverwerking met statusstromen en goedkeuring</td><td><strong>Kern</strong></td><td>Beste modellering; hier zit QS-3 en de aantoonbaarheid</td></tr>
+            <tr><td>Reglementaire rechtenbepaling (verevening, ingangsdatums)</td><td><strong>Kern</strong></td><td>Hier zit de complexiteit die Meridiaan onderscheidt; nooit uitbesteden</td></tr>
+            <tr><td>Werkgeversaanlevering</td><td>Ondersteunend</td><td>Pragmatisch bouwen; het formaat is dwingend van buiten</td></tr>
+            <tr><td>Correspondentie</td><td>Ondersteunend</td><td>Eenvoudig houden; sjablonen en verzending</td></tr>
+            <tr><td>Adresvalidatie</td><td>Generiek</td><td>Kopen — dat gebeurt al</td></tr>
+            <tr><td>Toegangsbeheer</td><td>Generiek</td><td>Kopen, mits functiescheiding erin past</td></tr>
+            <tr><td>Berichtenverzending</td><td>Generiek</td><td>Kopen</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Waarom dit ertoe doet.</strong> De classificatie is een investeringsbeslissing, geen etiket. In Mutatie 1.0 is een aanzienlijk deel van de ontwikkelcapaciteit gegaan naar zaken die generiek waren, terwijl het kerndomein — de reglementaire rechtenbepaling — nooit is gebouwd. Dat is de duurste vorm van misallocatie die er is: u bouwt zelf wat u kon kopen, en u koopt niet wat u zelf had moeten bouwen omdat het uw vak is.</p>
+        <div class="callout note"><span class="lbl">De valkuil</span><p>Teams noemen graag alles kern. De toets is: <em>als een concurrent dit precies zo doet, zijn wij dan minder onderscheidend?</em> Bij adresvalidatie is het antwoord nee.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.4 / Uitwerking 11.4</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waar in het ontwerp van Mutatie 2.0 dreigt de misallocatie uit Mutatie 1.0 zich te herhalen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Bij de <strong>gebeurtenisopslag</strong>. Dat is technisch aantrekkelijk werk dat teams graag zelf bouwen, terwijl de opslagmechaniek generiek is. Wat wél kern is, is het <em>model</em> van de gebeurtenissen — welke gebeurtenissen er zijn en wat ze betekenen — niet de opslagmachinerie eromheen. Een team dat zijn beste mensen aan de gebeurtenisopslag zet, doet precies wat Mutatie 1.0 deed: capaciteit naar het technisch interessante in plaats van naar het onderscheidende.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De context map: macht in kaart</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een <strong>context map</strong> toont de bounded contexts en de relaties ertussen. Zij is een organisatorische kaart net zoveel als een technische: de relatiepatronen beschrijven machtsverhoudingen en samenwerkingsvormen.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Patroon</th><th>Betekenis</th><th>Voorbeeld Meridiaan</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Partnership</strong></td><td>Twee contexten die samen slagen of falen; nauwe afstemming</td><td>Mutatieverwerking ↔ rechtenbepaling</td></tr>
+            <tr><td><strong>Shared kernel</strong></td><td>Een gedeeld model tussen twee contexten</td><td>Zelden verstandig; bij Meridiaan niet toegepast</td></tr>
+            <tr><td><strong>Customer–supplier</strong></td><td>De leverende context houdt rekening met de afnemende</td><td>Rechtenbepaling levert aan correspondentie</td></tr>
+            <tr><td><strong>Conformist</strong></td><td>De afnemer neemt het model van de leverancier over, zonder invloed</td><td>Nergens gewenst, behalve bewust bij adresvalidatie</td></tr>
+            <tr><td><strong>Anticorruption layer</strong></td><td>De afnemer vertaalt actief, om het eigen model te beschermen</td><td>Kernadministratie-integratie</td></tr>
+            <tr><td><strong>Open host service</strong></td><td>De leverancier biedt een algemeen, gepubliceerd koppelvlak</td><td>De API voor werkgeverssystemen</td></tr>
+            <tr><td><strong>Published language</strong></td><td>Een gedeelde, expliciet vastgelegde uitwisselingstaal</td><td>Het aanleverformaat voor werkgeversbatches</td></tr>
+            <tr><td><strong>Separate ways</strong></td><td>Geen integratie; beide doen het zelf</td><td>Waar integratie duurder is dan duplicatie</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Het belangrijkste patroon voor deze casus is de anticorruption layer.</strong> In deel 3 en 4 van niveau 1 ontwierp u een integratiecomponent met een contract in domeintaal — "een mutatie wordt uiteindelijk precies één keer doorgegeven" — dat geen woord over SOAP bevatte. Dat is exact een anticorruption layer: een laag die vertaalt zodat het model van de kernadministratie het eigen domeinmodel niet binnendringt.</p>
+        <p>Het patroon heeft die naam omdat de bedreiging reëel is. Zonder zo'n laag sijpelen de begrippen, veldnamen en eigenaardigheden van het externe systeem het domein binnen, en na twee jaar is het eigen model een afgeleide van andermans pakket — met als gevolg dat vervanging van dat pakket het hele systeem raakt.</p>
+        <figure><img src="figuren/figuur-11-2-context-map-mutatie.png" alt="Context map Mutatie 2.0"><figcaption>Figuur 11-2 — de anticorruption layer richting kernadministratie en de open host service richting werkgeverssystemen, gemarkeerd tussen de overige contexten</figcaption></figure>
+        <div class="callout"><span class="lbl">↗ EA</span><p>Op landschapsniveau is de context map verwant aan wat de EA-cursus behandelt als applicatie-interactiediagram, met één verschil dat ertoe doet: de context map benoemt niet alleen dát twee systemen koppelen, maar <strong>hoe de machtsverhouding ligt en wie zich aan wie aanpast</strong>. Die informatie is bij integratieprojecten vaak beslissender dan de techniek.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.5 / Uitwerking 11.5</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom is de kernadministratie-integratie een anticorruption layer en geen conformist?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat het kernadministratiepakket over vier jaar vervangen kan worden, en omdat zijn model — SOAP-berichten, hoofdlettereisen, tweeledige mutaties — niets met het domein van Meridiaan te maken heeft maar met de bouwgeschiedenis van dat pakket. Werd het conformist, dan sijpelen die eigenaardigheden het domein binnen; na twee jaar heeft het mutatiemodel velden die er alleen zijn omdat het pakket ze wil, en dan is vervanging een systeembrede verbouwing in plaats van een adapterwissel. Dat is exact wat het contract uit deel 3 en 4 van niveau 1 voorkwam.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het verschil tussen de open host service en de published language bij de werkgeverskoppeling, en welke van de twee bepaalt uw versiebeleid?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De open host service is het <strong>koppelvlak</strong>: één gepubliceerde ingang voor alle werkgevers, in plaats van maatwerk per werkgever. De published language is het <strong>formaat</strong>: de expliciet vastgelegde uitwisselingstaal. Het versiebeleid wordt bepaald door de published language — zodra elf werkgeverssystemen zich aan uw formaat hebben aangepast, kunt u het niet meer eenzijdig wijzigen. Dat is de prijs van standaardisatie en zij hoort in een ADR.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Grenzen vindt u in gesprekken</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Bounded contexts leidt u niet af uit een gegevensmodel. U vindt ze in gesprekken. Vier heuristieken, in volgorde van betrouwbaarheid:</p>
+        <ol>
+          <li><strong>Taalbreuken.</strong> Waar hetzelfde woord iets anders betekent, of waar twee woorden hetzelfde betekenen, loopt een grens. Dit is de sterkste aanwijzing.</li>
+          <li><strong>Verschillende belanghebbenden.</strong> Waar een andere afdeling de regels bepaalt, ligt vaak een grens. De reglementaire rechtenbepaling wordt bepaald door actuariaat en juridische zaken; mutatieverwerking door de operatie.</li>
+          <li><strong>Verschillende verandersnelheden.</strong> Het criterium uit deel 3 van niveau 1, hier terug op domeinniveau. Correspondentiebeleid verandert vaker dan reglementslogica.</li>
+          <li><strong>Autonome beslisbevoegdheid.</strong> Waar een deel van het domein beslissingen neemt die de rest niet hoeft te kennen, is een grens mogelijk.</li>
+        </ol>
+        <p><strong>Wat u niet gebruikt:</strong> de bestaande systeemindeling, de databasestructuur, of de huidige teamindeling. Dat zijn uitkomsten van eerdere beslissingen, geen eigenschappen van het domein. Wie zijn contexten uit het bestaande landschap afleidt, herhaalt de indeling die hij wilde verbeteren.</p>
+        <p><strong>Werkvorm.</strong> Een gestructureerde werksessie met domeindeskundigen, waarin het proces in gebeurtenissen wordt uitgeschreven op een lange tijdlijn (EventStorming), werkt hiervoor het best. De grenzen tekenen zich af rond clusters van gebeurtenissen die bij elkaar horen en waar de taal verandert.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.3 / Uitwerking 11.3 — de werksessie</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waaraan herkent u tijdens zo'n werksessie dat de ontwikkelaars het gesprek van de domeindeskundigen hebben overgenomen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Aan de taal op de tijdlijn. Gebeurtenissen horen in de taal van het domein te staan: <em>scheiding gemeld</em>, <em>verevening berekend</em>. Zodra er kaartjes bijkomen als "record aangemaakt" of "API aangeroepen", is de sessie omgeslagen naar een technische discussie — en dat is de regel voor de sessie: als zij daar belandt, is zij mislukt, hoe interessant het gesprek ook was. De domeindeskundigen praten, de ontwikkelaars luisteren en vragen.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Wanneer het niet loont</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Eerlijkheid hoort erbij, en dit onderwerp lijdt aan overtoepassing.</p>
+        <p><strong>Het loont niet:</strong></p>
+        <ul>
+          <li><strong>bij een klein, eenvoudig domein.</strong> Als er maar één betekenis van elk begrip is, zijn bounded contexts overhead. Een declaratiesysteem heeft ze niet nodig.</li>
+          <li><strong>wanneer er geen domeindeskundigen beschikbaar zijn.</strong> DDD zonder toegang tot mensen die het domein kennen, wordt modelleren op basis van vermoedens, en dat is slechter dan pragmatisch bouwen.</li>
+          <li><strong>wanneer het generiek is.</strong> Adresvalidatie modelleren met DDD is verspild werk.</li>
+          <li><strong>wanneer de organisatie het niet volhoudt.</strong> De ubiquitous language vergt discipline over jaren. Wie hem drie maanden volhoudt en dan loslaat, houdt code over met domeinnamen die niet meer kloppen — misleidender dan neutrale namen.</li>
+        </ul>
+        <p><strong>Het loont wel</strong> bij Meridiaan, en de reden is specifiek: het domein is complex, de complexiteit is de kern van het vak, de begripsverwarring is aantoonbaar, en de domeindeskundigen zijn beschikbaar en betrokken.</p>
+        <div class="callout warn"><span class="lbl">De grootste valkuil in de praktijk</span><p>De context die per team wordt getrokken in plaats van per domeingrens. Teams zijn een organisatorisch gegeven dat verandert; domeingrenzen zijn dat minder. Er is wel een verband — de wet van Conway zegt dat de structuur van uw systeem de communicatiestructuur van uw organisatie weerspiegelt — maar het loopt de andere kant op dan mensen denken: u kunt de teamindeling aanpassen aan de gekozen contexten. Dat heet <em>inverse Conway</em>, en het komt terug in deel 21.</p></div>
+        <h4>Samenvatting</h4>
+        <ul>
+          <li>Een bounded context is een grens waarbinnen een model eenduidig is. Het doel is niet één model voor de organisatie maar meerdere modellen met heldere grenzen en expliciete vertaling.</li>
+          <li>Het partnerprobleem is de standaardfout: één begrip dat vier contexten moet bedienen, wordt een object met eenendertig velden en vier geldigheidsregels.</li>
+          <li>Ubiquitous language: wat de domeindeskundige zegt, staat in de code. Contextgrenzen kondigen zich aan als taalproblemen.</li>
+          <li>Subdomeinen indelen in kern, ondersteunend en generiek is een investeringsbeslissing. De duurste misallocatie is zelf bouwen wat u kon kopen terwijl u niet bouwt wat uw vak is.</li>
+          <li>De context map beschrijft relaties én machtsverhoudingen. De anticorruption layer beschermt het eigen model tegen het model van een extern systeem.</li>
+          <li>Grenzen vindt u in taal, belanghebbenden, verandersnelheid en beslisbevoegdheid — niet in de bestaande systeem- of teamindeling.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.6 / Uitwerking 11.6</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een greenfield-systeem in een domein waar de organisatie zelf nog uitvindt hoe het werkt. Loont strategisch DDD?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Gedeeltelijk, en dit is het lastigste geval.</strong> Waar de organisatie zelf nog uitvindt hoe het domein werkt, is er geen stabiele ubiquitous language om vast te leggen. DDD toepassen levert dan een model op dat de eerste hypothese vastlegt en daarna in de weg zit. Het verdedigbare antwoord: gebruik de <em>werkvorm</em> — gebeurtenissen uitschrijven, taal opsporen — om het domein te verkennen, maar leg de contextgrenzen nog niet vast in code en zeker niet in koppelvlakken. Houd de architectuur goedkoop te herzien; dat is het monoliet-argument uit deel 5 van niveau 1, hier op domeinniveau.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 12</h3>
+      <p>Deel 12 kijkt binnen één bounded context: hoe u aggregaten afbakent met de consistentiegrens als criterium, en hoe strategisch DDD zich vertaalt naar de modulestructuur van de modulith. Neem uw context map uit dit deel mee.</p>
+      <a class="btn" href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-12/reader.html">Deel 12 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Softwarearchitectuur · Deel 11 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/software-architectuur/niveau-2/deel-11/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_swa11_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
