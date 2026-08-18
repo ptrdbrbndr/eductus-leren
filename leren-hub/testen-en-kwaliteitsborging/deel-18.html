@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Testautomatisering II: in de pijplijn | Eductus</title>
+<meta name="description" content="Cursus Testen en Kwaliteitsborging, Deel 18 (niveau 2, ISTQB Advanced/TMAP): gefaseerde testselectie in een CI/CD-pijplijn, deploy versus release, feature toggles, en testen in productie met canary-releases en shadow-verwerking — met de casus van het Programma Mutatieplatform.">
+<link rel="canonical" href="https://leren.eductus.nl/testen-en-kwaliteitsborging/deel-18.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Testen en kwaliteitsborging · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Testen en Kwaliteitsborging · Niveau 2 (Professional) · Deel 18 van 30</p>
+  <h1>Testautomatisering II:<br>in de <em>pijplijn</em></h1>
+  <p class="hero__lead">Groen licht, veertig minuten later rood: de pijplijn van het portaalteam gaf een schijnzekerheid die niemand had bedoeld. Dit deel plaatst automatisering in de CI/CD-pijplijn — met gefaseerde testselectie, het onderscheid tussen deploy en release, feature toggles, en testen in productie via canary-releases en shadow-verwerking — en leert u een pijplijn te lezen als wat zij is: een uitspraak over de tests die erin zitten, niet over de kwaliteit van het systeem.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>6</b><span>secties</span></div>
+    <div class="stat"><b>±3u</b><span>leestijd + werkboek</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>pijplijnfasen §2.1</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is een voorbereiding op het ISTQB Certified Tester Advanced Level-examen en/of TMAP-certificering (Quality for cross-functional teams), en uitdrukkelijk geen vervanging van het officiële examenmateriaal — de actuele ISTQB Advanced Level-syllabus (istqb.org) en de TMAP-body of knowledge (tmap.net). Alle formuleringen, figuren en werkvormen in dit materiaal zijn van Ductus; studeer voor het examen altijd óók de bron.</div>
+  <div class="trail">Niveau 2: 11 TMAP integraal → 12 Teststrategie op programmaschaal → 13 Testanalyse gevorderd → 14 Kwaliteitskenmerken I → 15 Testdata en testomgevingen → 16 Keten- en integratietesten → 17 Testautomatisering I: ontwerp → <b>18 Testautomatisering II: in de pijplijn (hier)</b> → 19 Niet-functioneel testen → 20 Testen met generatieve AI → 21 Testmanagement → 22 Examentraining + portfolio</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">Groen licht, veertig minuten later rood</a></li>
+      <li><a href="#s3" data-target="s3">Testselectie per fase in de pijplijn</a></li>
+      <li><a href="#s4" data-target="s4">Deploy versus release</a></li>
+      <li><a href="#s5" data-target="s5">Testen in productie</a></li>
+      <li><a href="#s6" data-target="s6">De pijplijn als kwaliteitspoort</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Waar deel 17 het ontwerp van automatisering behandelde, plaatst dit deel die automatisering in de doorlopende CI/CD-pijplijn: wanneer draait wat, en wat betekent een groen licht daadwerkelijk?</p>
+        <p>Aan het eind van dit deel kunt u:</p>
+        <ul>
+          <li>testautomatisering integreren in een CI/CD-pijplijn met bewuste testselectie per fase;</li>
+          <li>het onderscheid tussen deploy en release toepassen als ontwerpprincipe voor risicobeheersing;</li>
+          <li>feature toggles inzetten en de testimplicaties ervan beoordelen;</li>
+          <li>testen in productie (canary, shadow) toepassen als aanvulling op, niet vervanging van, vooraf testen;</li>
+          <li>de pijplijn zelf als kwaliteitspoort beoordelen en verdedigen tegen druk om haar te omzeilen.</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Groen licht, veertig minuten later rood</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De geautomatiseerde pijplijn van het portaalteam gaf op een vrijdagmiddag groen licht: alle 340 geautomatiseerde tests geslaagd, klaar voor deploy. Veertig minuten na de deploy meldde het kernintegratieteam een falende ketentest — niet omdat het portaalteam iets fout had gedaan, maar omdat de pijplijn van het portaalteam de ketentest (deel 16) niet had meegenomen: die liep apart, handmatig gepland, eens per twee weken.</p>
+        <p>Groen licht van een pijplijn zegt alleen iets over wat er in die pijplijn zit. Dit is T8 in een nieuwe gedaante: een groen scherm dat een besluit lijkt te ondersteunen, zonder dat iemand had vastgesteld wélke risico's het daadwerkelijk afdekte.</p>
+        <div class="callout"><span class="lbl">Kernzin</span><p>Een groene pijplijn is een uitspraak over de tests die erin zitten, niet over de kwaliteit van het systeem. Verwar die twee, en de pijplijn wordt het nieuwe exitcriterium-dat-een-percentage-is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.1 — herken het patroon</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welke bevinding uit niveau 1 herhaalt zich in deze casus, en in welke technische vorm?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">T8 — een groen signaal dat wordt gelezen als "alles is in orde" terwijl het criterium (de scope van de pijplijn) niet was vastgesteld of gecommuniceerd.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Testselectie per fase in de pijplijn</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een pijplijn die bij elke wijziging alle 340 tests plus de volledige ketentest draait, wordt binnen de kortste keren te traag om bruikbaar te zijn. De oplossing is gefaseerde testselectie, gekoppeld aan de teststrategiematrix (deel 12):</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Fase</th><th>Wanneer</th><th>Wat draait</th><th>Doel</th></tr></thead>
+          <tbody>
+            <tr><td>Commit-fase</td><td>bij elke wijziging</td><td>snelle componenttests, statische analyse</td><td>direct feedback aan de ontwikkelaar</td></tr>
+            <tr><td>Integratiefase</td><td>bij samenvoeging naar de hoofdlijn</td><td>integratie- en contracttests (deel 16)</td><td>vroeg conflicten tussen teams vangen</td></tr>
+            <tr><td>Ketenfase</td><td>vóór een release</td><td>volledige ketentest, inclusief Vestara</td><td>het risico dat T7 herhaalt, expliciet afgedekt</td></tr>
+            <tr><td>Productiefase</td><td>na deploy</td><td>monitoring, canary-analyse (§5)</td><td>risico's die alleen onder echte belasting zichtbaar worden</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-18-1-pijplijn-trechter.svg" alt="De pijplijn als trechter: snel en smal bij elke commit, breder en trager naarmate het risico van een gemiste afwijking toeneemt."><figcaption>Figuur 18-1 — De pijplijn als trechter: snel en smal bij elke commit, breder en trager naarmate het risico van een gemiste afwijking toeneemt.</figcaption></figure>
+        <p>Gefaseerde selectie is geen versoepeling maar een toepassing van precies dezelfde risicologica als deel 12: niet alles hoeft even vaak en even diep, mits de keuze bewust en gedocumenteerd is. Het probleem bij het portaalteam was niet dat de ketentest apart liep — dat kan een verantwoorde keuze zijn — maar dat niemand dat wist toen het groene licht werd gelezen als "alles is getest".</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.2 — ontwerp de gefaseerde pijplijn</p>
+        <details class="q"><summary><span class="qn">1</span><span>Verdeel de tests uit de teststrategiematrix (deel 12) over de vier fasen hierboven, voor de mutatieverwerking. Onderbouw waarom de ketentest niet bij elke commit kan draaien, en wat u doet om het risico daarvan te compenseren.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Compensatie kan bijvoorbeeld een dagelijkse (in plaats van tweewekelijkse) automatische ketentestrun zijn, gecombineerd met contracttesten (deel 16) die wél bij elke commit draaien en een deel van het risico afvangen tussen de ketentestmomenten in.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Deploy versus release</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Deploy</strong> is het technisch uitrollen van nieuwe code naar een omgeving, inclusief productie. <strong>Release</strong> is het besluit om die code daadwerkelijk zichtbaar of actief te maken voor (een deel van) de gebruikers. Het scheiden van deze twee is een van de krachtigste risicobeheersingsprincipes in moderne delivery.</p>
+        <p>Wanneer deploy en release gelijktijdig gebeuren, is elke wijziging onmiddellijk voor alle gebruikers zichtbaar — een fout heeft direct volledige impact. Door ze te scheiden (met <strong>feature toggles</strong>) kan code al in productie draaien, getest worden onder echte omstandigheden op beperkte schaal, zonder dat een fout meteen alle 210.000 deelnemers raakt.</p>
+        <figure><img src="figuren/figuur-18-2-deploy-release-schakelaars.svg" alt="Deploy en release als twee aparte schakelaars: code kan gedeployed zijn en toch uitgeschakeld (niet released), of andersom nooit gedeployed maar wel &quot;aangekondigd&quot;."><figcaption>Figuur 18-2 — Deploy en release als twee aparte schakelaars: code kan gedeployed zijn en toch uitgeschakeld (niet released), of andersom nooit gedeployed maar wel "aangekondigd".</figcaption></figure>
+        <p>Een <strong>feature toggle</strong> is een schakelaar in de code die bepaalt of nieuwe functionaliteit actief is, onafhankelijk van deploy. Voor testen heeft dit twee gevolgen: een kans (nieuwe functionaliteit testen in productie-achtige omstandigheden vóór volledige release) en een risico — het aantal mogelijke toestandscombinaties groeit. Een systeem met vijf toggles heeft potentieel 2⁵ combinaties van aan/uit, en de meeste teams testen slechts een klein deel daarvan. Dit is de terugkeer van de combinatorische explosie uit deel 13 (pairwise), nu toegepast op toggle-combinaties.</p>
+        <div class="callout"><span class="lbl">Kernzin</span><p>Elke toggle die u toevoegt, voegt een testdimensie toe die niemand vraagt te testen totdat twee toggles tegelijk een onverwachte combinatie blootleggen.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.3 — deploy of release?</p>
+        <details class="q"><summary><span class="qn">1</span><span>Voor elke situatie: is dit een deploy-, een release-, of een beide-tegelijk-beslissing? (a) Nieuwe code staat live op de servers maar is achter een uitgeschakelde toggle verborgen. (b) Een toggle wordt aangezet voor 5% van de werkgevers. (c) Een hotfix wordt direct volledig zichtbaar voor iedereen zodra hij op de server staat.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(a) Deploy zonder release. (b) Release (gedeeltelijk). (c) Deploy en release gelijktijdig — het scenario met het hoogste risico, omdat er geen scheiding is.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Testen in productie</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Shift-right is een aanvulling, geen excuus om vooraf minder te testen bij hoog risico. Twee concrete technieken werken dat uit.</p>
+        <p><strong>Canary-releases</strong> rollen nieuwe functionaliteit eerst uit naar een klein, gecontroleerd deel van de gebruikers (bijvoorbeeld 2% van de werkgevers), met intensieve monitoring, vóórdat de volledige uitrol volgt. Een probleem raakt zo een beperkte groep in plaats van iedereen, en wordt — mits de monitoring goed is ingericht — snel opgemerkt.</p>
+        <p>Bij <strong>shadow-verwerking</strong> draait nieuwe functionaliteit parallel aan de bestaande, met dezelfde invoer, maar zonder dat het resultaat daadwerkelijk wordt gebruikt. De uitkomsten worden vergeleken: waar wijken oud en nieuw af, en is dat een verbetering of een fout? Dit is bijzonder waardevol voor een herbouwde berekening waar het orakelprobleem speelt: de oude, vertrouwde verwerking dient tijdelijk als vergelijkingsmateriaal voor de nieuwe.</p>
+        <figure><img src="figuren/figuur-18-3-shadow-verwerking.svg" alt="Shadow-verwerking: dezelfde invoer naar oud en nieuw systeem tegelijk, resultaten vergeleken, alleen het oude resultaat telt."><figcaption>Figuur 18-3 — Shadow-verwerking: dezelfde invoer naar oud en nieuw systeem tegelijk, resultaten vergeleken, alleen het oude resultaat telt.</figcaption></figure>
+        <p>Beide technieken vereisen dat een fout, als hij optreedt, beheersbaar en omkeerbaar blijft. Voor de invaarberekening in niveau 3 — eenmalig en grotendeels onomkeerbaar — is canary-releasen in de klassieke zin niet toepasbaar; shadow-verwerking blijft daar wél waardevol, juist omdat er dan niets onomkeerbaars gebeurt.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.4 — canary of shadow?</p>
+        <details class="q"><summary><span class="qn">1</span><span>Voor elke situatie: canary-release, shadow-verwerking, of geen van beide (te risicovol)? (a) Een nieuwe interface-indeling van het portaal. (b) Een herbouwde berekeningsregel voor premie-afdracht. (c) De definitieve invaarberekening (niveau 3-vooruitblik).</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(a) Canary — laag risico bij een fout, direct zichtbaar en omkeerbaar. (b) Shadow — vergelijk oud en nieuw zonder het nieuwe resultaat te gebruiken, precies het orakelprobleem opgelost door de oude verwerking als referentie te gebruiken. (c) Geen van beide in de klassieke zin (eenmalig, onomkeerbaar) — al blijft een vorm van shadow-vergelijking (zonder daadwerkelijk in te varen) waardevol als extra check.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">De pijplijn als kwaliteitspoort</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Onder tijdsdruk ontstaat vrijwel onvermijdelijk de vraag: kunnen we deze ene keer de pijplijn overslaan, of een falende test tijdelijk uitschakelen om te kunnen deployen? Dit is exact de druk die T8 veroorzaakte, nu in technische vorm: een kwaliteitspoort die "deze ene keer" wordt omzeild, is een kwaliteitspoort die op den duur nooit meer iets tegenhoudt.</p>
+        <p>Een pijplijn moet kunnen weerstaan: het uitschakelen van individuele tests zonder geregistreerde reden en zonder een vervolgactie om ze te herstellen — vergelijk de discipline rond bevindingenbeheer — en "even handmatig langs de pijplijn" deployen, wat elke garantie ondermijnt die de pijplijn zou moeten geven. Een kwaliteitspoort die nog nooit een deploy heeft tegengehouden, heeft waarschijnlijk nog nooit het juiste getoetst — of is zo vaak omzeild dat zij feitelijk niets meer betekent.</p>
+        <div class="callout note"><span class="lbl">TMAP-lens</span><p><strong>Hoe heet dit daar.</strong> CI/CD-integratie valt in TMAP onder agile/DevOps-fit, met een sterke nadruk op de pijplijn als gedeeld, teambreed instrument — niet als iets dat een aparte DevOps-rol beheert namens het team. <strong>Waar het werkelijk anders is.</strong> TMAP benadrukt sterker de koppeling tussen pijplijnontwerp en VOICE: elke fase in de pijplijn zou een expliciete indicator moeten opleveren, zodat "groen licht" nooit een geïsoleerd signaal is maar onderdeel van het bredere VOICE-beeld.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>Automatisering en pijplijn zijn ontworpen. Deel 19 verlegt de aandacht naar niet-functioneel testen: de jaarwerkpiek als vraag die geen enkele functionele test beantwoordt — performance, betrouwbaarheid, en de eerste laag beveiligingstesten.</p>
+      <a class="btn" href="deel-19.html">Deel 19 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Testen en Kwaliteitsborging · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/testen-en-kwaliteitsborging/niveau-2/deel-18/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_tkb18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
