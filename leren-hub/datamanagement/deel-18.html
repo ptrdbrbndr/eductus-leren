@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Data-analyse voor besluitvorming | Eductus</title>
+<meta name="description" content="Cursus Datamanagement, Deel 18 (CDMP Practitioner + IIBA-CBDA): van bestuurlijke vraag naar toetsbare hypothese, bronbeoordeling, SQL met CTE's en window functions, significantie versus effectgrootte, A/B-testen, Simpson's paradox en forecasting bij Meridiaan Pensioen N.V.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Datamanagement · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Datamanagement · Niveau 2 (CDMP Practitioner + IIBA-CBDA) · Deel 18 van 29</p>
+  <h1>Data-analyse voor<br><em>besluitvorming</em></h1>
+  <p class="hero__lead">Waar niveau 1 een afgebakende vraag beantwoordde, begint dit deel bij een bestuurlijke vraag die dat niet is. De rode draad is onzekerheid: een analist op dit niveau rapporteert een getal met een marge, benoemt wat hij niet kan uitsluiten, en zegt welke uitkomst zijn advies zou veranderen — bij Meridiaan Pensioen N.V., aan de hand van SQL, significantie, A/B-tests en Simpson's paradox.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>plus huiswerk</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>CBDA-domeinen gedekt</span></div>
+  </div>
+  <div class="disclaimer"><strong>Voorbereiding, geen vervanging.</strong> Deze cursusmap is onafhankelijk ontwikkeld door Ductus B.V. Ductus is niet gelieerd aan, geaccrediteerd door of goedgekeurd door DAMA International, IIBA, IAPP, de EDM Association of Microsoft. Dit materiaal bereidt voor op de genoemde examens en vervangt het officiële examenmateriaal niet — bodies of knowledge, handboeken en examenblueprints worden hier niet gereproduceerd. Alle genoemde merken zijn eigendom van hun respectieve houders. Examengegevens gecontroleerd in augustus 2026 — verifieer vóór inschrijving bij de bron.</div>
+  <div class="trail">Niveau 2: ⑪ Frameworks in de praktijk → ⑫ Conceptueel, logisch en fysiek modelleren → ⑬ Metadata, begrippenkader en catalogus → ⑭ Master- en referentiedatamanagement → ⑮ Datakwaliteitsmanagement als proces → ⑯ Data governance operating model → ⑰ Privacy, security en compliance in uitvoering → <b>⑱ Data-analyse voor besluitvorming (hier)</b> → ⑲ Van analyse naar advies → ⑳ Examentraining Practitioner en CBDA → ㉑ Capstone — de volledige opdracht</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Van bestuurlijke vraag naar hypothese</a></li>
+      <li><a href="#s2" data-target="s2">Databronnen beoordelen</a></li>
+      <li><a href="#s3" data-target="s3">SQL gevorderd</a></li>
+      <li><a href="#s4" data-target="s4">Significantie en effectgrootte</a></li>
+      <li><a href="#s5" data-target="s5">A/B-testen</a></li>
+      <li><a href="#s6" data-target="s6">Cohort, funnel en Simpson's paradox</a></li>
+      <li><a href="#s7" data-target="s7">Forecasting en zes valkuilen</a></li>
+      <li><a href="#s8" data-target="s8">Onzekerheid rapporteren</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Van bestuurlijke vraag naar hypothese</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In deel 5 leerde u een afgebakende vraag beantwoorden. Hier begint het bij een bestuurlijke vraag die niet afgebakend is, die door meerdere mensen anders wordt begrepen, en waarvan het antwoord invloed heeft op een besluit dat geld kost. Dat vraagt andere vaardigheden dan rekenen.</p>
+        <p>De rode draad van dit deel is onzekerheid. Een analist op niveau 1 rapporteert een getal. Een analist op niveau 2 rapporteert een getal met een marge, benoemt wat hij niet kan uitsluiten, en zegt welke uitkomst zijn advies zou veranderen. Dat laatste is wat een besluitnemer daadwerkelijk nodig heeft.</p>
+        <p>&quot;Werkt onze deelnemerscommunicatie?&quot; is geen analyseerbare vraag. Hij bevat geen populatie, geen maat, geen periode en geen beslisregel. De vertaalslag naar iets toetsbaars is het werk waar u op niveau 2 voor wordt betaald.</p>
+        <h4>Vier elementen van een toetsbare vraag</h4>
+        <ol>
+          <li><strong>Populatie:</strong> over wie gaat het, en wie valt er expliciet buiten?</li>
+          <li><strong>Maat:</strong> wat meten we precies, en volgens welke definitie? Verwijs naar het begrippenkader.</li>
+          <li><strong>Periode:</strong> over welk tijdvak, en met welke peildatum?</li>
+          <li><strong>Beslisregel:</strong> welke uitkomst leidt tot welk besluit? Zonder dit is er geen analyse maar nieuwsgierigheid.</li>
+        </ol>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Zoals gesteld</th><th>Zoals toetsbaar</th></tr></thead>
+          <tbody>
+            <tr><td>Werkt onze deelnemerscommunicatie?</td><td>Van de actieve deelnemers tussen 55 en 65 die in Q1 de pensioenbrief ontvingen, logde binnen dertig dagen een hoger aandeel in op het portaal dan van de vergelijkbare groep die hem niet ontving. Bij een verschil boven de vijf procentpunt breiden we de verzending uit.</td></tr>
+            <tr><td>Zijn onze werkgevers tevreden?</td><td>De gemiddelde beoordeling van werkgevers met meer dan vijftig deelnemers is in 2026 gestegen ten opzichte van 2025. Bij een daling van meer dan een halve punt herzien we het accountmanagementmodel.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout"><span class="lbl">De beslisregel vóór de analyse</span><p>Leg de beslisregel schriftelijk vast vóórdat u de uitkomst kent, en laat de opdrachtgever hem bevestigen bij Meridiaan Pensioen N.V. Dat voorkomt de meest voorkomende vorm van misbruik: het verschuiven van de grens nadat de uitkomst bekend is. Wie dat vooraf regelt, hoeft achteraf geen discussie te voeren over of vier procentpunt &quot;ook al wel wat&quot; is.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 1 — Van vraag naar hypothese</p>
+        <details class="q"><summary><span class="qn">1</span><span>Van de drie vragen bij Meridiaan — deelnemerscommunicatie, werkgeverstevredenheid, portaalinvestering — is de derde de lastigste om te herschrijven. Waarom, en welke stap zet u eerst?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">&quot;Moeten we investeren in het portaal?&quot; is een <strong>besluitvraag</strong>, geen onderzoeksvraag — hij bevat al een keuze in plaats van een toetsbaar gegeven. De eerste stap is uitwerken welke onderzoeksvraag eronder ligt, bijvoorbeeld: leidt meer portaalgebruik aantoonbaar tot minder telefonisch contact? Pas die vraag krijgt de vier elementen — populatie, maat, periode, beslisregel — en wordt daarmee analyseerbaar.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Databronnen beoordelen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voordat u rekent, beoordeelt u waarmee u rekent. Vijf vragen, in deze volgorde.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vraag</th><th>Waar u op let</th><th>Bij Meridiaan</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Dekking</strong></td><td>Wie ontbreekt er, en verschilt die groep van de rest?</td><td>Deelnemers zonder e-mailadres ontbreken in elke digitale meting</td></tr>
+            <tr><td><strong>Herkomst</strong></td><td>Uit welk systeem komt het, via welke keten?</td><td>De lineage uit deel 13; let op filters onderweg</td></tr>
+            <tr><td><strong>Definitie</strong></td><td>Welke definitie is toegepast, en door wie vastgesteld?</td><td>Vier varianten van &quot;actieve deelnemer&quot;</td></tr>
+            <tr><td><strong>Actualiteit</strong></td><td>Hoe oud is het, en is dat oud genoeg om te storen?</td><td>Premiegegevens lopen drie dagen achter</td></tr>
+            <tr><td><strong>Kwaliteit</strong></td><td>Wat weten we uit de kwaliteitsmeting van deel 15?</td><td>Dummywaarden, weeskinderen, dubbelen</td></tr>
+          </tbody>
+        </table></div>
+        <p>Deze beoordeling hoort in de verantwoording, niet alleen in uw hoofd. Een analyse waarvan de bronbeoordeling ontbreekt, is niet te beoordelen door iemand anders — en dat is precies wat een tweede analist of een auditor wil doen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 2 — Bronbeoordeling</p>
+        <details class="q"><summary><span class="qn">1</span><span>De laatste stap van Opdracht 2 is bepalen of u de vraag überhaupt met deze bronnen kunt beantwoorden. Waarom is dit de belangrijkste en tegelijk de moeilijkste stap?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het is de moeilijkste stap omdat ze ingaat tegen de opdracht die u kreeg — u bent gevraagd een antwoord te leveren, niet om te melden dat het niet kan. Het is de belangrijkste omdat <strong>&quot;nee, niet met deze bronnen&quot; een legitiem en waardevol antwoord aan een opdrachtgever is</strong>. Wie hem overslaat, levert bij Meridiaan Pensioen N.V. een cijfer op basis van bijvoorbeeld alleen de digitaal bereikbare deelnemers, zonder dat te melden — en dat is riskanter dan geen antwoord.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">SQL gevorderd</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Drie constructies dekken vrijwel alles wat u op dit niveau nodig heeft.</p>
+        <h4>Common table expressions</h4>
+        <p>Een CTE is een benoemde tussenstap. Hij maakt een query leesbaar en toetsbaar: elke stap is apart uit te voeren en te controleren. Een query van vijftig regels zonder CTE's is niet te reviewen, en een analyse die niemand kan reviewen, is geen analyse maar een bewering.</p>
+        <h4>Window functions</h4>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Functie</th><th>Wat het doet</th><th>Toepassing bij Meridiaan</th></tr></thead>
+          <tbody>
+            <tr><td><strong>ROW_NUMBER</strong></td><td>Nummert rijen binnen een groep</td><td>De meest recente mutatie per deelnemer selecteren</td></tr>
+            <tr><td><strong>RANK / DENSE_RANK</strong></td><td>Rangschikt met of zonder gaten bij gelijke waarden</td><td>Top tien werkgevers per premie-inkomsten</td></tr>
+            <tr><td><strong>LAG / LEAD</strong></td><td>Kijkt naar de vorige of volgende rij</td><td>De verandering ten opzichte van het vorige kwartaal</td></tr>
+            <tr><td><strong>SUM OVER</strong></td><td>Cumulatief of voortschrijdend totaal</td><td>Opbouw over de tijd, of een voortschrijdend gemiddelde</td></tr>
+            <tr><td><strong>NTILE</strong></td><td>Verdeelt in gelijke groepen</td><td>Deelnemers in kwintielen naar aanspraak</td></tr>
+          </tbody>
+        </table></div>
+        <p>Het belangrijkste inzicht: een window function aggregeert zonder rijen samen te voegen. Daarmee kunt u een individuele waarde naast een groepswaarde zetten — bijvoorbeeld de premie van een werkgever naast het sectorgemiddelde — zonder een tweede query of een join.</p>
+        <h4>Set-operaties</h4>
+        <p>UNION, INTERSECT en EXCEPT zijn onderschat. Ze beantwoorden vragen over verschillen tussen verzamelingen direct: welke deelnemers staan wel in de rapportage van Financiën en niet in die van Werkgeversbeheer? Dat is één EXCEPT, en het is de snelste manier om de discussie uit niveau 1 te beslechten.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Zelftoets, vraag 9</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat doet een window function dat een GROUP BY niet doet?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Aggregeren zonder rijen samen te voegen</strong>, zodat een individuele waarde naast een groepswaarde komt te staan — bijvoorbeeld de premie van één werkgever naast het sectorgemiddelde, in dezelfde rij en zonder tweede query of join. Een GROUP BY dwingt tot samenvoegen tot één rij per groep; een window function laat de detailregel intact.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Significantie en effectgrootte</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is het onderdeel waar de meeste schade wordt aangericht, in beide richtingen: door significantie te verwarren met belang, en door effectgrootte te negeren.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Begrip</th><th>Wat het zegt</th><th>Wat het níét zegt</th></tr></thead>
+          <tbody>
+            <tr><td><strong>P-waarde</strong></td><td>Hoe waarschijnlijk dit resultaat is als er geen effect zou zijn</td><td>Hoe groot het effect is, of hoe waarschijnlijk uw hypothese is</td></tr>
+            <tr><td><strong>Significantie</strong></td><td>Dat het verschil waarschijnlijk niet louter toeval is</td><td>Dat het verschil ertoe doet</td></tr>
+            <tr><td><strong>Effectgrootte</strong></td><td>Hoe groot het verschil is, in begrijpelijke eenheden</td><td>Of het verschil betrouwbaar is</td></tr>
+            <tr><td><strong>Betrouwbaarheidsinterval</strong></td><td>De marge waarbinnen de werkelijke waarde vermoedelijk ligt</td><td>Een garantie</td></tr>
+          </tbody>
+        </table></div>
+        <p>Bij grote steekproeven wordt vrijwel elk verschil significant. Bij 340.000 deelnemers is een verschil van 0,2 procentpunt statistisch significant en bestuurlijk betekenisloos. Rapporteer daarom altijd de effectgrootte en het interval, en laat de significantie een bijzin zijn.</p>
+        <div class="callout tip"><span class="lbl">De formulering die werkt</span><p>Niet: &quot;het verschil is significant (p &lt; 0,05).&quot; Wel: &quot;de groep die de brief ontving logde 6,4 procentpunt vaker in, met een marge van 2,1 procentpunt. Dat verschil is groot genoeg om de verzending uit te breiden volgens de vooraf afgesproken grens van vijf procentpunt.&quot; Een bestuurder bij Meridiaan Pensioen N.V. kan met de tweede zin iets; met de eerste niet.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Zelftoets, vraag 3</p>
+        <details class="q"><summary><span class="qn">1</span><span>Bij 340.000 deelnemers is een verschil van 0,2 procentpunt significant. Wat betekent dat?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het is <strong>waarschijnlijk geen toeval, maar bestuurlijk vermoedelijk betekenisloos</strong>. Bij zulke grote steekproeven wordt vrijwel elk verschil statistisch significant, ook verschillen die te klein zijn om ergens beleid op te baseren. De significantie zegt iets over toeval, niet over belang — dat laatste vraagt de effectgrootte.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">A/B-testen</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Een experiment is de enige manier om een oorzakelijke uitspraak te doen zonder aannames over confounders. Dat maakt het krachtig en het maakt de opzet kritisch: fouten in het ontwerp zijn achteraf niet te repareren.</p>
+        <h4>Zes ontwerpbeslissingen, vooraf</h4>
+        <ol>
+          <li>De eenheid van randomisatie: individuele deelnemers, of hele werkgevers? Bij werkgevers is de effectieve steekproef veel kleiner dan het aantal deelnemers.</li>
+          <li>De uitkomstmaat, met definitie en meetmoment. Eén primaire maat; de rest is secundair en verkennend.</li>
+          <li>De steekproefgrootte, berekend op het kleinste effect dat u wilt kunnen aantonen. Te klein betekent dat u een echt effect mist.</li>
+          <li>De looptijd, vooraf vastgelegd. Niet stoppen zodra het significant is — dat is de meest voorkomende vorm van p-hacking.</li>
+          <li>De stopregel bij schade: wanneer breekt u af omdat de behandelde groep nadeel ondervindt?</li>
+          <li>Wat u doet bij een niet-significant resultaat. Dat is geen mislukking maar een uitkomst, en die hoort ook gerapporteerd.</li>
+        </ol>
+        <h4>Wat vaak misgaat</h4>
+        <ul>
+          <li>Randomiseren op individu terwijl de interventie op groepsniveau werkt. Een brief aan alle deelnemers van één werkgever beïnvloedt de collega's; dan is de werkgever de eenheid.</li>
+          <li>Meerdere uitkomstmaten testen en de significante rapporteren. Bij twintig maten is er gemiddeld één significant zonder dat er iets aan de hand is.</li>
+          <li>Halverwege kijken en stoppen bij een gunstig moment. Wie tussentijds meekijkt zonder correctie, vindt vroeg of laat een effect dat er niet is.</li>
+          <li>Een controlegroep die systematisch verschilt, bijvoorbeeld doordat de behandelde groep is geselecteerd op bereikbaarheid.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 4 — A/B-test ontwerpen</p>
+        <details class="q"><summary><span class="qn">1</span><span>De persoonlijke pensioenbrief wordt per werkgever verstuurd, maar het effect wordt gemeten op deelnemersniveau. Wat is de eenheid van randomisatie, en waarom?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De <strong>werkgever</strong> is de randomisatie-eenheid, ook al meet u op deelnemersniveau — want de brief wordt op werkgeversniveau toegewezen en beïnvloedt binnen die werkgever alle deelnemers gezamenlijk. Wie de deelnemer als eenheid neemt, doet alsof elke deelnemer onafhankelijk is toegewezen, terwijl dat niet zo is. Dat verkleint de effectieve steekproefgrootte aanzienlijk en moet in de berekening van de benodigde steekproefgrootte worden meegenomen.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Cohort, funnel en Simpson's paradox</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <ul>
+          <li><strong>Cohortanalyse</strong> volgt groepen die op hetzelfde moment zijn ingestroomd. Zij maakt zichtbaar of een verandering aan de tijd ligt of aan de samenstelling van de instroom — een onderscheid dat in totalen onzichtbaar blijft.</li>
+          <li><strong>Funnelanalyse</strong> volgt uitval per stap in een proces. Bij Meridiaan bruikbaar voor de waardeoverdracht: aangevraagd, beoordeeld, uitgevoerd, afgerond. Let op de definitie van elke stap; ambiguïteit daar verplaatst de uitval.</li>
+          <li><strong>Segmentatie</strong> splitst een populatie in groepen. Zij is nuttig om te verklaren en riskant om op te sturen: hoe verder u uitsplitst, hoe kleiner de groepen en hoe groter de kans dat u ruis voor patroon aanziet.</li>
+        </ul>
+        <p>Voor alle drie geldt dezelfde discipline: bepaal de indeling vóór u de uitkomsten ziet. Achteraf een segment kiezen waarin het effect wel zichtbaar is, is een van de moeilijkst te weerleggen vormen van zelfbedrog.</p>
+        <h4>Simpson's paradox</h4>
+        <p>Een verband dat in de totalen de ene kant op wijst en in elke subgroep de andere kant op. Het is geen curiositeit maar een dagelijks risico, en het is de reden dat uitsplitsen soms verplicht is.</p>
+        <div class="callout warn"><span class="lbl">Bij Meridiaan Pensioen N.V.</span><p>De digitale uitvraag heeft over alle werkgevers heen een lagere respons dan de papieren variant. Splits u uit naar bedrijfsgrootte, dan scoort digitaal binnen elke groottecategorie beter. De verklaring is de samenstelling: de digitale variant is vooral bij grote werkgevers ingezet, en grote werkgevers hebben structureel een lagere respons.</p></div>
+        <figure><img src="figuren/figuur-18-1.svg" alt="Simpson's paradox bij de digitale uitvraag — een lager totaalpercentage voor digitaal, terwijl digitaal binnen elke grootteklasse van werkgevers juist beter scoort dan papier"><figcaption>Figuur 18-1 — Simpson's paradox bij de digitale uitvraag — een lager totaalpercentage voor digitaal, terwijl digitaal binnen elke grootteklasse van werkgevers juist beter scoort dan papier</figcaption></figure>
+        <h4>Wanneer uitsplitsen en wanneer niet</h4>
+        <ul>
+          <li>Splits uit als de verdeling van een derde variabele tussen de groepen verschilt en die variabele de uitkomst beïnvloedt. Dat is de definitie van een confounder.</li>
+          <li>Splits niet uit op een variabele die ná de interventie is beïnvloed. Dan corrigeert u een deel van het effect weg.</li>
+          <li>Bepaal vooraf op welke variabelen u uitsplitst en waarom. Een uitsplitsing die u pas bedenkt nadat het totaal u niet bevalt, is geen analyse maar een zoektocht.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 5 — Simpson ontrafelen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Verklaar het verschil tussen de totalen en de uitsplitsing naar bedrijfsgrootte in de digitale-versus-papieren-uitvraag, en formuleer de uitleg in maximaal vier zinnen zoals aan een directeur.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De totalen laten digitaal slechter scoren dan papier; per grootteklasse scoort digitaal juist beter. De verklaring is dat <strong>bedrijfsgrootte ongelijk verdeeld is over de twee methoden</strong>: digitaal is vooral bij grote werkgevers ingezet, en grote werkgevers hebben sowieso een lagere respons, ongeacht de methode. Een directeur die op de totalen afgaat, zou digitaal afschalen — terwijl digitaal binnen elke groottecategorie de betere keuze is. De juiste conclusie is dus: uitbreiden, niet afschalen.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Forecasting en zes valkuilen</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voor de meeste bestuurlijke vragen volstaat eenvoud. Begin bij het naïeve model en toon aan dat iets ingewikkelders beter is voordat u het gebruikt.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Model</th><th>Wat het doet</th><th>Wanneer het volstaat</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Naïef</strong></td><td>De volgende periode is gelijk aan de vorige</td><td>Als vertrekpunt en als ondergrens voor elk ander model</td></tr>
+            <tr><td><strong>Voortschrijdend gemiddelde</strong></td><td>Middelt over een venster</td><td>Bij ruis zonder duidelijke trend</td></tr>
+            <tr><td><strong>Trend</strong></td><td>Extrapoleert een lijn</td><td>Bij stabiele groei of krimp over meerdere jaren</td></tr>
+            <tr><td><strong>Trend met seizoen</strong></td><td>Voegt een terugkerend patroon toe</td><td>Bij kwartaal- of maandpatronen, zoals premie-inning</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Backtesting</h4>
+        <p>Toets uw model op historie die het niet heeft gezien: train op de periode tot vorig jaar en voorspel het afgelopen jaar. Vergelijk de fout met die van het naïeve model. Is hij niet kleiner, gebruik dan het naïeve model — dat is eerlijker en goedkoper. Rapporteer altijd een interval en niet één getal. Een forecast zonder marge wordt gelezen als een belofte, en dat is precies waar het vertrouwen in analyse sneuvelt.</p>
+        <h4>Zes valkuilen</h4>
+        <ol>
+          <li>Significantie rapporteren zonder effectgrootte, waardoor een betekenisloos verschil beleid wordt.</li>
+          <li>De beslisregel pas vaststellen nadat de uitkomst bekend is.</li>
+          <li>Tussentijds meekijken bij een experiment en stoppen op een gunstig moment.</li>
+          <li>Uitsplitsen tot er een segment is waarin het effect zichtbaar wordt.</li>
+          <li>Regressie naar het gemiddelde aanzien voor het effect van een maatregel: wie een slecht kwartaal aanpakt, ziet vrijwel altijd verbetering.</li>
+          <li>Een forecast als één getal rapporteren.</li>
+        </ol>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 6 — Forecast en backtest</p>
+        <details class="q"><summary><span class="qn">1</span><span>Uw forecastmodel met trend en seizoen presteert op de backtest niet beter dan het naïeve model. Welk model gebruikt u voor de premie-inkomsten van Meridiaan, en waarom is dat geen zwak besluit?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">U gebruikt het <strong>naïeve model</strong>. De keuze wordt bepaald door de backtest, niet door elegantie — een ingewikkelder model dat het niet beter doet, voegt alleen onderhoudskosten toe zonder voorspelkracht. Vasthouden aan het naïeve model is geen zwakte maar vakmanschap: het is eerlijker over wat u weet, en aanzienlijk goedkoper in onderhoud dan een trend-en-seizoenmodel dat geen aantoonbare meerwaarde heeft.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Onzekerheid rapporteren</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het onderscheid tussen niveau 1 en niveau 2 zit hier. Vier elementen horen in elke oplevering.</p>
+        <ul>
+          <li>Het puntresultaat, in begrijpelijke eenheden.</li>
+          <li>De marge eromheen, en wat die marge betekent voor het besluit.</li>
+          <li>Wat u niet kunt uitsluiten: welke alternatieve verklaring blijft staan?</li>
+          <li>Welke uitkomst uw advies zou hebben veranderd. Dat maakt zichtbaar hoe stevig het advies is.</li>
+        </ul>
+        <div class="callout tip"><span class="lbl">De vraag van de bestuurder</span><p>&quot;Hoe zeker weet je dit?&quot; is geen uitnodiging tot een college over betrouwbaarheidsintervallen. Het beste antwoord is een zin: &quot;als ik het mis heb, is dat vermoedelijk doordat de deelnemers zonder e-mailadres ontbreken; die groep is 4,2 procent en waarschijnlijk minder digitaal actief, dus mijn schatting is eerder te hoog dan te laag.&quot;</p></div>
+        <h4>Examenrelevantie</h4>
+        <p>Dit deel dekt de eerste vier domeinen van de IIBA-CBDA: het identificeren van de onderzoeksvraag, het ontsluiten van databronnen, het analyseren van data, en het interpreteren en rapporteren van resultaten. Deel 19 dekt de laatste twee. Daarnaast raakt dit deel het CDMP-kennisgebied Big Data &amp; Data Science.</p>
+        <p>Aandachtspunten: het onderscheid tussen een vraag, een hypothese en een beslisregel; bronbeoordeling als expliciete stap vóór de analyse; significantie versus effectgrootte en het rapporteren van onzekerheid; experimentopzet met randomisatie-eenheid, steekproefgrootte en stopregel. Engelse termen: research question, hypothesis, sampling, confidence interval, effect size, confounding, A/B test, cohort analysis.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Zelftoets, vraag 12</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat hoort er in elke oplevering op niveau 2 dat op niveau 1 ontbrak?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>De marge, wat u niet kunt uitsluiten, en welke uitkomst uw advies zou hebben veranderd.</strong> Niet een grafiek, niet een managementsamenvatting en niet de gebruikte SQL — dat kan allemaal ondersteunend zijn, maar het onderscheidende element van niveau 2 is dat de onzekerheid expliciet wordt gemaakt in plaats van weggelaten.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>Deel 19 gaat over het traject ná de analyse: de business case, requirements, prioriteren onder schaarste, stakeholders en het advies van één pagina. Het dekt de laatste twee domeinen van de IIBA-CBDA en sluit daarmee de examendekking van deel 18 en 19 samen. Neem uw uitwerking van Opdracht 7 mee.</p>
+      <a class="btn" href="deel-19.html">Deel 19 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Datamanagement · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/datamanagement/niveau-2/deel-18/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dm18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

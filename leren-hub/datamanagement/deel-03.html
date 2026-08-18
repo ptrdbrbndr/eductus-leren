@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 3 — Opslag, operations en datastromen | Eductus</title>
+<meta name="description" content="Cursus Datamanagement, Deel 3 (CDMP Associate): operationele versus analytische systemen, opslagvormen, de keten van bron tot rapportage, datawarehouse/lake/lakehouse, ETL versus ELT, integratiepatronen en RTO/RPO.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Datamanagement · Deel 3</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Datamanagement · Niveau 1 (CDMP Associate) · Deel 3 van 29</p>
+  <h1>Opslag, operations en<br><em>datastromen</em></h1>
+  <p class="hero__lead">In deel 2 stond data stil: een model legt vast wat iets betekent. In dit deel gaat data bewegen — van het scherm waarop een medewerker iets invult, via een koppelvlak naar een platform, naar het getal in een rapportage waar een bestuurder een besluit op baseert. Die keten is waar de drie afwijkende deelnemersaantallen bij Meridiaan zijn ontstaan.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>ketenlagen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Voorbereiding, geen vervanging.</strong> Deze cursusmap is onafhankelijk ontwikkeld door Ductus B.V. Ductus is niet gelieerd aan, geaccrediteerd door of goedgekeurd door DAMA International, IIBA, IAPP, de EDM Association of Microsoft. Dit materiaal bereidt voor op de genoemde examens en vervangt het officiële examenmateriaal niet — bodies of knowledge, handboeken en examenblueprints worden hier niet gereproduceerd; schaf die zelf aan. Alle genoemde merken zijn eigendom van hun respectieve houders. Examengegevens gecontroleerd in augustus 2026 — verifieer vóór inschrijving bij de bron.</div>
+  <div class="trail">Niveau 1: ➊ Data als bedrijfsmiddel → ➋ Databasics en modelleren → <b>➌ Opslag, operations en datastromen (hier)</b> → ➍ Datakwaliteit — grondbeginselen → ➎ Fundamenten van data-analyse → ➏ Visualisatie en storytelling → ➐ Governance, privacy en security → ➑ Het complete kennislandschap → ➒ Examentraining Fundamentals → ➓ Capstone — de nulmeting</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Twee werelden: operationeel en analytisch</a></li>
+      <li><a href="#s2" data-target="s2">Opslagvormen</a></li>
+      <li><a href="#s3" data-target="s3">De keten van bron tot rapportage</a></li>
+      <li><a href="#s4" data-target="s4">Warehouse, lake en lakehouse</a></li>
+      <li><a href="#s5" data-target="s5">Feiten en dimensies</a></li>
+      <li><a href="#s6" data-target="s6">Hoe data zich verplaatst</a></li>
+      <li><a href="#s7" data-target="s7">Integratiepatronen</a></li>
+      <li><a href="#s8" data-target="s8">Operations</a></li>
+      <li><a href="#s9" data-target="s9">Een ketenplaat lezen en examenrelevantie</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Twee werelden: operationeel en analytisch</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h3>Van stilstaande naar bewegende data</h3>
+        <p>In deel 2 stond data stil: een model legt vast wat iets betekent. In dit deel gaat data bewegen. Van het scherm waarop een medewerker iets invult naar het systeem dat het opslaat, via een koppelvlak naar een platform, en uiteindelijk naar het getal in een rapportage waar een bestuurder een besluit op baseert.</p>
+        <p>Die keten is waar de meeste onverklaarbare verschillen ontstaan. Als drie afdelingen bij <strong>Meridiaan Pensioen N.V.</strong> verschillende deelnemersaantallen rapporteren, is dat zelden omdat iemand slecht kan tellen. Het is omdat de drie op verschillende momenten uit verschillende bronnen hebben geput, via routes die niemand meer helemaal kan volgen. Wie de keten kan tekenen, kan het verschil verklaren.</p>
+        <p>Ook dit deel gaat over lezen en begrijpen, niet over bouwen. U hoeft geen pipeline te kunnen schrijven. U moet wel de goede vragen kunnen stellen aan degene die dat wel doet — en herkennen wanneer een antwoord niet klopt.</p>
+        <h4>Twee werelden die tegengestelde eisen stellen</h4>
+        <p>Vrijwel elk datalandschap valt uiteen in twee werelden die tegengestelde eisen stellen. Wie dat onderscheid niet maakt, stelt vragen die niet te beantwoorden zijn — bijvoorbeeld waarom een rapportage niet realtime kan.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Operationeel (OLTP)</th><th>Analytisch (OLAP)</th></tr></thead>
+          <tbody>
+            <tr><td>Doel</td><td>Het werk van vandaag ondersteunen</td><td>Sturen, verantwoorden, analyseren</td></tr>
+            <tr><td>Typische handeling</td><td>Eén polis muteren</td><td>Alle polissen van drie jaar optellen</td></tr>
+            <tr><td>Optimalisatie</td><td>Snel schrijven, consistentie bewaken</td><td>Snel lezen over grote volumes</td></tr>
+            <tr><td>Structuur</td><td>Genormaliseerd</td><td>Vaak bewust gedenormaliseerd</td></tr>
+            <tr><td>Historie</td><td>Meestal alleen de huidige stand</td><td>Juist het verloop over tijd</td></tr>
+            <tr><td>Bij Meridiaan</td><td>De polisadministratie</td><td>Het cloud-dataplatform</td></tr>
+          </tbody>
+        </table></div>
+        <p>Het gevolg voor uw werk: een vraag als "hoeveel actieve deelnemers hadden wij op 1 januari vorig jaar" is in het operationele systeem vaak onbeantwoordbaar, omdat dat systeem alleen weet hoe het nú is. Dat is geen tekortkoming maar een ontwerpkeuze. De analytische wereld bestaat precies om die vraag wél te kunnen beantwoorden.</p>
+        <div class="callout"><span class="lbl">De vraag die veel discussies beëindigt</span><p>Vraag bij elk verzoek om een rapportage: over welk moment gaat dit? De stand van nu, of de stand van toen? Wie dat onderscheid vroeg maakt, voorkomt de helft van de latere verwarring over cijfers die "niet kloppen".</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 1</p>
+        <details class="q"><summary><span class="qn">1</span><span>Waarom kan de polisadministratie meestal niet vertellen hoeveel actieve deelnemers er vorig jaar op 1 januari waren?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Operationele systemen leggen doorgaans alleen de huidige stand vast, niet het verloop over tijd.</strong> Niet omdat het systeem te oud is, niet omdat de vraag te complex zou zijn voor een relationele database, en niet omdat gegevens wegens de bewaartermijn verwijderd zouden zijn — het is een ontwerpkeuze die bij OLTP-systemen hoort.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Opslagvormen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Relationele databases zijn niet de enige optie meer, en de keuze is geen mode maar een afweging tussen structuur en flexibiliteit.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vorm</th><th>Sterk in</th><th>Voorbeeld bij Meridiaan</th><th>Zwak in</th></tr></thead>
+          <tbody>
+            <tr><td>Relationeel</td><td>Vaste structuur, consistentie, complexe bevragingen</td><td>De polisadministratie</td><td>Snel wijzigende of onvoorspelbare structuur</td></tr>
+            <tr><td>Document</td><td>Wisselende structuur per record</td><td>Berichten uit het pensioenportaal</td><td>Consistentie afdwingen over records heen</td></tr>
+            <tr><td>Kolomgeoriënteerd</td><td>Optellen en filteren over enorme volumes</td><td>Het analytische platform</td><td>Losse records muteren</td></tr>
+            <tr><td>Key-value</td><td>Zeer snel opzoeken op één sleutel</td><td>Sessiegegevens van het portaal</td><td>Alles wat verder gaat dan opzoeken</td></tr>
+            <tr><td>Graaf</td><td>Verbanden en netwerken doorzoeken</td><td>Relaties tussen deelnemer, partner en werkgever</td><td>Grote aggregaties</td></tr>
+            <tr><td>Object</td><td>Grote bestanden goedkoop bewaren</td><td>Gescande formulieren en correspondentie</td><td>Bevragen op inhoud</td></tr>
+          </tbody>
+        </table></div>
+        <p>De praktijkregel is eenvoudiger dan de brochures suggereren: begin relationeel tenzij er een aanwijsbare reden is om dat niet te doen. Die reden is meestal het volume, de vorm van de bevraging of het feit dat de structuur per record verschilt.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 2 — Opslagvorm kiezen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Beschrijf wat er misgaat als Meridiaan alles in de relationele polisadministratie zou willen onderbrengen.</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Elke opslagvorm die geen aanwijsbare reden heeft om af te wijken, hoort relationeel te zijn — maar drie categorieën passen structureel niet: gescande scheidingsstukken (grote bestanden, geen bevraagbare structuur — geschikt voor objectopslag), sessiegegevens van het portaal (extreem hoog volume opzoekverkeer op één sleutel — geschikt voor key-value) en drie jaar premiebetalingen waarover geaggregeerd wordt (kolomgeoriënteerd is daar sterker in optellen over grote volumes). Alles in één relationele polisadministratie proppen levert geen technisch onmogelijke situatie op, maar wel een systeem dat traag, moeilijk te bevragen en duur in onderhoud wordt voor precies de gevallen waarvoor het niet ontworpen is.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De keten van bron tot rapportage</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vrijwel elk landschap heeft dezelfde vier lagen. De namen verschillen per organisatie; de functies niet.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Laag</th><th>Wat er gebeurt</th><th>Typisch risico</th></tr></thead>
+          <tbody>
+            <tr><td>Bronsystemen</td><td>Data ontstaat en wordt operationeel beheerd</td><td>Invoerfouten; wijzigingen die stroomafwaarts onbekend zijn</td></tr>
+            <tr><td>Integratielaag</td><td>Data wordt opgehaald, gecombineerd en omgezet</td><td>Transformaties die betekenis veranderen zonder dat iemand het merkt</td></tr>
+            <tr><td>Opslag voor analyse</td><td>Data wordt bewaard in een vorm die geschikt is om te bevragen</td><td>Meerdere versies van dezelfde waarheid naast elkaar</td></tr>
+            <tr><td>Consumptie</td><td>Rapportages, dashboards, uitlevering aan derden</td><td>Ieder bouwt zijn eigen berekening op eigen aannames</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-3-1.svg" alt="De keten van bron tot rapportage bij Meridiaan — bronsystemen, integratielaag, opslag voor analyse en consumptie, met het ontstaan van de drie afwijkende deelnemersaantallen gemarkeerd"><figcaption>Figuur 3-1 — De keten van bron tot rapportage bij Meridiaan — bronsystemen, integratielaag, opslag voor analyse en consumptie, met het ontstaan van de drie afwijkende deelnemersaantallen gemarkeerd</figcaption></figure>
+        <div class="callout warn"><span class="lbl">Bij Meridiaan</span><p>De drie afwijkende deelnemersaantallen zijn vrijwel zeker in de vierde laag ontstaan, met een oorzaak in de tweede. Drie rapportagebouwers hebben elk hun eigen filter toegepast op wat "actief" betekent, en niemand heeft die filters ooit naast elkaar gelegd. Het is een keten- en definitieprobleem, geen rekenfout.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 4</p>
+        <details class="q"><summary><span class="qn">1</span><span>Drie afdelingen tellen verschillende deelnemersaantallen. In welke laag ontstaat dit meestal, en waar ligt de oorzaak?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>In de consumptielaag, met een oorzaak in de integratielaag of in de ontbrekende definitie.</strong> Niet in de bronsystemen door invoerfouten of een ontbrekende back-up, en niet door een technisch defect in de opslaglaag — het patroon wijst op verschillende filters en aannames die pas zichtbaar worden op het moment dat er gerapporteerd wordt.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Warehouse, lake en lakehouse</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vorm</th><th>Kern</th><th>Sterkte</th><th>Valkuil</th></tr></thead>
+          <tbody>
+            <tr><td>Datawarehouse</td><td>Gestructureerde, gemodelleerde opslag voor sturing</td><td>Betrouwbaar, uitlegbaar, geschikt voor verantwoording</td><td>Traag aan te passen; nieuwe bron kost weken</td></tr>
+            <tr><td>Data lake</td><td>Ruwe data in oorspronkelijke vorm bewaren</td><td>Alles is er, ook wat je nu nog niet nodig hebt</td><td>Wordt een moeras zodra metadata en eigenaarschap ontbreken</td></tr>
+            <tr><td>Lakehouse</td><td>Ruwe opslag met daarop een gestructureerde laag</td><td>Combineert flexibiliteit met bevraagbaarheid</td><td>Vereist discipline die veel organisaties niet hebben</td></tr>
+          </tbody>
+        </table></div>
+        <p>De veelgebruikte gelaagde inrichting — een ruwe laag, een geschoonde laag en een laag die klaar is voor gebruik — is minder een technologie dan een afspraak. De waarde zit erin dat je bij elk getal kunt terugredeneren naar de bron. Zonder die discipline is het onderscheid tussen de lagen alleen een mappenstructuur.</p>
+        <div class="callout note"><span class="lbl">Wat het echte verschil maakt</span><p>Het verschil tussen een lake en een moeras is niet de technologie maar het bestaan van metadata en eigenaarschap. Dat is precies het onderwerp van deel 8 en 13 — en de reden waarom platformkeuzes zelden de oorzaak zijn van datachaos.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 3</p>
+        <details class="q"><summary><span class="qn">1</span><span>Een data lake verandert in een moeras. Wat is daarvan de oorzaak?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Ontbrekende metadata en ontbrekend eigenaarschap</strong> — niet te weinig opslagcapaciteit, niet een verkeerd gekozen cloudleverancier en niet te veel gestructureerde data. De technologie faalt zelden; het beheer erom heen wel.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Feiten en dimensies</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Analytische opslag wordt vaak dimensioneel gemodelleerd. Voor niveau 1 volstaat het onderscheid tussen twee soorten tabellen.</p>
+        <ul>
+          <li>Een <strong>feitentabel</strong> bevat de meetbare gebeurtenissen: premiebetalingen, mutaties, uitkeringen. Veel rijen, weinig kolommen, altijd een getal dat je kunt optellen.</li>
+          <li>Een <strong>dimensietabel</strong> bevat de context waarmee je die feiten wilt uitsplitsen: deelnemer, werkgever, regeling, tijd. Weinig rijen, veel kolommen, beschrijvend van aard.</li>
+        </ul>
+        <p>De vraag "hoeveel premie is er vorig jaar per regeling binnengekomen" is een feit, uitgesplitst over twee dimensies: tijd en regeling. Wie dat onderscheid ziet, begrijpt waarom analytische modellen er anders uitzien dan de genormaliseerde modellen uit deel 2 — en waarom denormaliseren hier geen fout is. Deel 12 werkt dit verder uit.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 9</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is een feitentabel in een dimensioneel model?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een <strong>tabel met meetbare gebeurtenissen die je kunt optellen</strong> — premiebetalingen, mutaties, uitkeringen. Niet de tabel met beschrijvende context (dat is een dimensietabel), niet alleen referentiedata en niet metadata over andere tabellen.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Hoe data zich verplaatst</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>ETL en ELT</h4>
+        <p>Bij ETL wordt data opgehaald, onderweg omgezet en pas daarna weggeschreven. Bij ELT wordt data eerst ruw weggeschreven en pas in de doelomgeving omgezet. De verschuiving naar ELT komt doordat opslag goedkoop is geworden en rekenkracht schaalbaar.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>ETL</th><th>ELT</th></tr></thead>
+          <tbody>
+            <tr><td>Volgorde</td><td>Ophalen, omzetten, wegschrijven</td><td>Ophalen, wegschrijven, omzetten</td></tr>
+            <tr><td>Voordeel</td><td>Alleen wat nodig is wordt bewaard</td><td>De ruwe data blijft beschikbaar voor later</td></tr>
+            <tr><td>Nadeel</td><td>Wat onderweg is weggegooid, is weg</td><td>Meer opslag en meer discipline nodig</td></tr>
+            <tr><td>Herkomst</td><td>Transformatielogica zit in het integratieplatform</td><td>Transformatielogica zit in de doelomgeving en is beter te volgen</td></tr>
+          </tbody>
+        </table></div>
+        <figure><img src="figuren/figuur-3-2.svg" alt="ETL versus ELT — dezelfde drie stappen (ophalen, omzetten, wegschrijven) in een andere volgorde, met de gevolgen voor wat er bewaard blijft"><figcaption>Figuur 3-2 — ETL versus ELT — dezelfde drie stappen (ophalen, omzetten, wegschrijven) in een andere volgorde, met de gevolgen voor wat er bewaard blijft</figcaption></figure>
+        <h4>Batch, streaming en change data capture</h4>
+        <ul>
+          <li><strong>Batch:</strong> periodiek een verzameling records verwerken, bijvoorbeeld elke nacht. Eenvoudig, voorspelbaar, en de standaardkeuze zolang niemand kan uitleggen waarom het sneller moet.</li>
+          <li><strong>Streaming:</strong> gebeurtenissen verwerken zodra ze plaatsvinden. Krachtig, maar duurder in beheer en lastiger te reconstrueren als er iets misgaat.</li>
+          <li><strong>Change data capture:</strong> alleen de wijzigingen sinds de vorige keer doorgeven, door de wijzigingsadministratie van het bronsysteem te lezen. Vaak de verstandige middenweg.</li>
+        </ul>
+        <div class="callout"><span class="lbl">De vraag die je altijd stelt</span><p>Als iemand realtime data vraagt: welk besluit wordt er sneller genomen doordat het realtime is? In verreweg de meeste gevallen luidt het eerlijke antwoord "geen", en is een nachtelijke verwerking ruim voldoende. Realtime kost geld en beheerlast; laat dat een bewuste keuze zijn.</p></div>
+        <div class="callout note"><span class="lbl">Bij Meridiaan</span><p>De casus van een vijfendertig jaar oude polisadministratie met een lopende migratie naar een cloud-dataplatform en een DNB-bevinding over de betrouwbaarheid van de rapportageketen, is precies het scenario waarin ELT de voorkeur verdient: de ruwe data blijft beschikbaar, en "waar komt dit getal vandaan" is beter te beantwoorden.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevragen</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 2 en vraag 12</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is het belangrijkste verschil tussen ETL en ELT voor de herkomst van een getal?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Bij ELT blijft de ruwe data beschikbaar, waardoor je beter kunt terugredeneren naar de bron.</strong> Bij ETL is de herkomst niet automatisch volledig vastgelegd — wat onderweg is weggegooid, is weg — en ELT slaat de transformatielogica juist wél op, alleen in de doelomgeving in plaats van in het integratieplatform.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat maakt change data capture vaak de verstandige middenweg?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het <strong>geeft alleen de wijzigingen door</strong>, wat lichter is dan volledige batches en eenvoudiger te beheren dan streaming. Niet omdat het de goedkoopste optie is op zich, niet omdat het zonder toegang tot het bronsysteem zou werken (het leest juist de wijzigingsadministratie van dat bronsysteem), en niet omdat transformaties overbodig worden.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Integratiepatronen</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <div class="tablewrap"><table>
+          <thead><tr><th>Patroon</th><th>Wanneer passend</th><th>Risico</th></tr></thead>
+          <tbody>
+            <tr><td>Bestandsuitwisseling</td><td>Periodieke levering, eenvoudige afspraken, externe partij</td><td>Geen foutafhandeling; niemand merkt een uitgebleven bestand</td></tr>
+            <tr><td>Databasereplicatie</td><td>Een kopie voor rapportage zonder het bronsysteem te belasten</td><td>De kopie wordt behandeld als bron van waarheid</td></tr>
+            <tr><td>API</td><td>Actuele gegevens opvragen op het moment dat je ze nodig hebt</td><td>Afhankelijkheid van beschikbaarheid; versiebeheer wordt vergeten</td></tr>
+            <tr><td>Bericht of event</td><td>Meerdere afnemers moeten weten dat er iets gebeurd is</td><td>Volgorde en dubbele verwerking; complexer te doorgronden</td></tr>
+            <tr><td>Datavirtualisatie</td><td>Bevragen zonder kopiëren, over meerdere bronnen</td><td>Prestaties bij grote volumes; belasting van bronsystemen</td></tr>
+          </tbody>
+        </table></div>
+        <p>Interoperabiliteit is iets anders dan integratie. Integratie is de techniek waarmee data zich verplaatst; interoperabiliteit is de afspraak waardoor de ontvanger hetzelfde bedoelt als de verzender. Twee systemen kunnen perfect gekoppeld zijn en toch structureel langs elkaar heen praten, omdat de een onder "ingangsdatum" iets anders verstaat dan de ander. Die afspraken staan in het begrippenkader en in koppelvlakdocumentatie, niet in de techniek.</p>
+        <div class="callout warn"><span class="lbl">Bij Meridiaan</span><p>Als een deelnemer overlijdt, moeten drie afdelingen dat weten — pensioenuitkering, communicatie en de polisadministratie. Dat is het klassieke geval voor bericht- of eventgebaseerde integratie: overlijden is precies de gebeurtenis waarin een gemiste melding tot een pijnlijke fout leidt, en waarin volgorde en dubbele verwerking ertoe doen.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 8</p>
+        <details class="q"><summary><span class="qn">1</span><span>Welk integratiepatroon past het best wanneer drie afdelingen moeten weten dat een deelnemer is overleden?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Bericht of event.</strong> Bestandsuitwisseling is te traag en te foutgevoelig voor zo'n gebeurtenis, databasereplicatie en datavirtualisatie geven geen actieve melding, en alleen een bericht- of eventpatroon zorgt dat alle drie de afnemers actief op de hoogte worden gebracht op het moment dat het gebeurt.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Operations</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Beheer lijkt het domein van IT, maar drie begrippen zijn businessbeslissingen die aan u worden gevraagd — meestal op een ongelegen moment.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Begrip</th><th>Betekenis</th><th>De vraag die erachter zit</th></tr></thead>
+          <tbody>
+            <tr><td>RTO</td><td>Hoe lang mag het duren voordat een systeem weer werkt?</td><td>Hoeveel uur kan dit proces stilliggen voordat het echt schaadt?</td></tr>
+            <tr><td>RPO</td><td>Hoeveel data mag je bij een storing kwijtraken?</td><td>Kunnen wij een halve dag aan mutaties opnieuw invoeren?</td></tr>
+            <tr><td>Retentie</td><td>Hoe lang bewaren we het, en wanneer verwijderen we het?</td><td>Wat is het doel waarvoor we dit nog bewaren?</td></tr>
+          </tbody>
+        </table></div>
+        <p>Deze drie worden vrijwel altijd door IT ingevuld omdat de business geen antwoord geeft. Het gevolg is een uniforme keuze voor alles, die voor kritieke processen te licht is en voor de rest te duur. Een analist die deze drie vragen stelt vóór de storing, levert meer waarde dan tien dashboards.</p>
+        <h4>Wat u verder moet herkennen</h4>
+        <ul>
+          <li><strong>Monitoring:</strong> merkt iemand het als een nachtelijke verwerking niet is gedraaid? Bij Meridiaan is dat de eerste vraag bij elke afwijkende rapportage.</li>
+          <li><strong>Capaciteit en kosten:</strong> in de cloud betaal je per bevraging, wat gedrag stuurt op een manier die op locatie niet gold.</li>
+          <li><strong>Releases en wijzigingen:</strong> een wijziging in een bronsysteem is stroomafwaarts vaak pas zichtbaar als er iets breekt.</li>
+        </ul>
+        <div class="callout note"><span class="lbl">Bij Meridiaan</span><p>Voor het uitbetalen van pensioenen is een lage RTO en RPO een businessvraag met grote impact — te veel uitval of dataverlies raakt direct de uitkering aan deelnemers. Voor de maandelijkse managementrapportage ligt de tolerantie heel anders: een dag vertraging is vervelend maar zelden schadelijk. Eén uniforme norm voor alle drie de processen doet geen recht aan dat verschil.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 6</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat betekent RPO?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Hoeveel data je bij een storing mag kwijtraken.</strong> Niet hoe lang het duurt voordat een systeem weer werkt (dat is RTO), niet hoe lang gegevens bewaard blijven (dat is retentie) en niet hoe vaak een verwerking draait.</div></details>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Een ketenplaat lezen en examenrelevantie</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <ol>
+          <li>Welk systeem is de aangewezen bron van waarheid voor dit gegeven?</li>
+          <li>Hoe vaak wordt het ververst, en hoe oud is het getal op het moment dat ik ernaar kijk?</li>
+          <li>Waar wordt onderweg iets gefilterd, omgerekend of samengevoegd?</li>
+          <li>Wie merkt het als een verwerking niet draait?</li>
+          <li>Wat gebeurt er met records die de transformatie niet overleven?</li>
+          <li>Hoeveel kopieën van dit gegeven bestaan er, en welke is leidend?</li>
+          <li>Kan ik van het getal in de rapportage terugredeneren naar de bron?</li>
+          <li>Wie wordt gewaarschuwd als het bronsysteem verandert?</li>
+        </ol>
+        <p>Vraag vijf is de meest onderschatte. Records die om technische redenen wegvallen — een ontbrekend verplicht veld, een onbekende code — verdwijnen doorgaans geruisloos naar een logbestand dat niemand leest. Bij Meridiaan is dat een plausibele verklaring voor een deel van het verschil tussen de drie aantallen.</p>
+        <h4>Examenrelevantie</h4>
+        <p>Dit deel raakt drie kennisgebieden tegelijk: Data Storage &amp; Operations, Data Integration &amp; Interoperability, en Data Warehousing &amp; Business Intelligence. Samen wegen die substantieel mee op het CDMP Fundamentals-examen. De terminologie volgt de DAMA-DMBOK2 Revised Edition.</p>
+        <ul>
+          <li>Het onderscheid tussen OLTP en OLAP, en waarom dat tot verschillende modellen leidt.</li>
+          <li>ETL versus ELT, inclusief het gevolg voor herkomst en herstelbaarheid.</li>
+          <li>De integratiepatronen bij naam kunnen benoemen, en per patroon het risico.</li>
+          <li>Het verschil tussen integratie en interoperabiliteit — dit is een klassieke examenvraag.</li>
+          <li>Feiten en dimensies op hoofdlijnen.</li>
+          <li>Engels: source system, staging, transformation, latency, change data capture, data lineage.</li>
+        </ul>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets, vraag 10</p>
+        <details class="q"><summary><span class="qn">1</span><span>Records vallen tijdens de verwerking weg door een onbekende code. Welke ketenvraag legt dit bloot?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Wat gebeurt er met records die de transformatie niet overleven?</strong> Niet de vraag naar de bron van waarheid, niet de verversingsfrequentie en niet het aantal kopieën — het is specifiek de vraag naar wat er verdwijnt onderweg, en die wordt in de praktijk het vaakst overgeslagen.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 4</h3>
+      <p>Deel 4 legt de grondbeginselen van datakwaliteit: de dimensies waarop u kwaliteit meet, en hoe u van een vaag "de data klopt niet" naar een concreet, meetbaar kwaliteitsprobleem komt.</p>
+      <a class="btn" href="deel-04.html">Deel 4 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Datamanagement · Deel 3 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/datamanagement/niveau-1/deel-03/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_dm3_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

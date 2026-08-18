@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 5 — Fundamenten van data-analyse | Eductus</title>
+<meta name="description" content="Cursus Datamanagement, Deel 5 (CDMP Associate): vier soorten analyse, SQL met SELECT/WHERE/JOIN/GROUP BY/HAVING, de join die stil records weggooit, gemiddelde versus mediaan, bias en correlatie versus causaliteit — met de casus Meridiaan Pensioen N.V.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Datamanagement · Deel 5</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Datamanagement · Niveau 1 (CDMP Associate) · Deel 5 van 29</p>
+  <h1>Fundamenten van<br><em>data-analyse</em></h1>
+  <p class="hero__lead">Analyseren is niet moeilijk. Weten wat je hebt aangetoond — en vooral wat níét — is dat wel. Dit deel geeft je het gereedschap om een afgebakende vraag te beantwoorden met SQL en beschrijvende statistiek, en tegelijk de discipline om de grenzen van je eigen antwoord te benoemen. Aan de hand van Meridiaan Pensioen N.V. leer je de stille rijen herkennen die een inner join weggooit, gemiddelde en mediaan verantwoord kiezen, en correlatie van causaliteit onderscheiden.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±2u</b><span>dagdeel + huiswerk</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>4</b><span>soorten analyse</span></div>
+  </div>
+  <div class="disclaimer"><strong>Voorbereiding, geen vervanging.</strong> Deze cursusmap is onafhankelijk ontwikkeld door Ductus B.V. Ductus is niet gelieerd aan, geaccrediteerd door of goedgekeurd door DAMA International, IIBA, IAPP, de EDM Association of Microsoft. Dit materiaal bereidt voor op de genoemde examens en vervangt het officiële examenmateriaal niet — bodies of knowledge, handboeken en examenblueprints worden hier niet gereproduceerd.</div>
+  <div class="trail">Niveau 1: ➊ Data als bedrijfsmiddel → ➋ Databasics en modelleren → ➌ Opslag, operations en datastromen → ➍ Datakwaliteit — grondbeginselen → <b>➎ Fundamenten van data-analyse (hier)</b> → ➏ Visualisatie en storytelling → ➐ Governance, privacy en security → ➑ Het complete kennislandschap → ➒ Examentraining Fundamentals → ➓ Capstone — de nulmeting</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Vier soorten analyse</a></li>
+      <li><a href="#s2" data-target="s2">Van vraag naar analyse</a></li>
+      <li><a href="#s3" data-target="s3">SQL: het minimum dat je nodig hebt</a></li>
+      <li><a href="#s4" data-target="s4">De join die stil records weggooit</a></li>
+      <li><a href="#s5" data-target="s5">Beschrijvende statistiek en uitbijters</a></li>
+      <li><a href="#s6" data-target="s6">Steekproef, populatie en bias</a></li>
+      <li><a href="#s7" data-target="s7">Correlatie en causaliteit</a></li>
+      <li><a href="#s8" data-target="s8">Denkfouten en je analyse verantwoorden</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Vier soorten analyse</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Die tweede helft — weten wat je níét hebt aangetoond — is waar de meeste schade wordt voorkomen. Een analist die zegt "de klanttevredenheid stijgt door de nieuwe app" waar de data alleen een gelijktijdige beweging laat zien, kost een organisatie meer dan een analist die helemaal niets zegt. In dit vak is voorzichtigheid geen zwakte maar vakmanschap.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Type</th><th>Vraag</th><th>Techniek</th><th>Valkuil</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Beschrijvend</strong></td><td>Wat is er gebeurd?</td><td>Tellen, sommeren, groeperen, visualiseren</td><td>Wordt verward met verklaren</td></tr>
+            <tr><td><strong>Diagnostisch</strong></td><td>Waarom is het gebeurd?</td><td>Uitsplitsen, vergelijken, correleren</td><td>Correlatie voor oorzaak aanzien</td></tr>
+            <tr><td><strong>Voorspellend</strong></td><td>Wat gaat er waarschijnlijk gebeuren?</td><td>Trendextrapolatie, regressie, classificatie</td><td>Aannemen dat het verleden zich herhaalt</td></tr>
+            <tr><td><strong>Voorschrijvend</strong></td><td>Wat moeten we doen?</td><td>Optimalisatie, simulatie, scenario's</td><td>Een besluit presenteren als rekenuitkomst</td></tr>
+          </tbody>
+        </table></div>
+        <p>De meeste vragen die bij een analist terechtkomen zijn beschrijvend, terwijl de vraagsteller een diagnostisch antwoord verwacht. "Hoeveel deelnemers zijn er vorig kwartaal uitgestroomd bij Meridiaan" is beschrijvend; wat de manager wil weten is waarom. Maak dat verschil expliciet vóórdat je begint, anders lever je een getal en krijg je een teleurstelling.</p>
+        <figure><img src="figuren/figuur-5-1.svg" alt="Vier soorten analyse als oplopende piramide — beschrijvend, diagnostisch, voorspellend en voorschrijvend, met per laag de vraag die hij beantwoordt"><figcaption>Figuur 5-1 — Vier soorten analyse als oplopende piramide — beschrijvend, diagnostisch, voorspellend en voorschrijvend, met per laag de vraag die hij beantwoordt</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 1 — Analysetype bepalen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 1 vraagt bij acht vragen het analysetype te bepalen, waaronder (a) "hoeveel deelnemers stroomden vorig kwartaal uit" en (b) "waarom stroomden er meer uit dan het kwartaal ervoor". Welk type is (a), en waarom moet je toch oppassen met een letterlijk antwoord?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(a) is <strong>beschrijvend</strong> — tellen en groeperen volstaat. Maar de vraagsteller wil bijna altijd het <strong>diagnostische</strong> antwoord op (b): waaróm de uitstroom hoger was. Dat verschil vooraf benoemen voorkomt een teleurstellende oplevering — wie alleen het getal levert, levert niet wat er eigenlijk gevraagd werd.</div></details>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Van vraag naar analyse</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De belangrijkste vier vragen stel je voordat je één regel code schrijft. Ze kosten tien minuten en besparen regelmatig dagen.</p>
+        <ol>
+          <li>Wie neemt op grond hiervan een besluit? Als er geen naam is, is er geen analyse maar een nieuwsgierigheid.</li>
+          <li>Welk besluit precies, en welke opties liggen er op tafel?</li>
+          <li>Welke uitkomst zou tot een ander besluit leiden? Als elk antwoord tot hetzelfde besluit leidt, hoeft de analyse niet.</li>
+          <li>Welke data heb ik nodig, en wat is de gebruikscontext waarvoor die data geschikt moet zijn?</li>
+        </ol>
+        <div class="callout"><span class="lbl">De derde vraag doet het meeste werk</span><p>"Welke uitkomst zou uw besluit veranderen?" Wie die vraag stelt aan de opdrachtgever, ontdekt vaak dat het besluit al genomen is en dat de analyse als onderbouwing achteraf dient. Dat is nuttige informatie — en het is beter om dat vooraf te weten dan achteraf.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 2 — Vraag aanscherpen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 2 laat je de vage opdracht "klopt het dat het portaal werkt?" aanscherpen tot iets toetsbaars, met een afbakening in tijd, populatie en maat. Waarom is juist deze opdracht van de drie de interessantste?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat "werkt het portaal" drie totaal verschillende dingen kan betekenen — gebruiksfrequentie, tevredenheid, of effect op bijstorting — en elk daarvan vraagt een andere analyse en levert een ander besluit op. Je vraagt door voordat je begint: welke van de drie de opdrachtgever feitelijk bedoelt, en welke uitkomst voor hem tot een ander besluit zou leiden.</div></details>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">SQL: het minimum dat je nodig hebt</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Zes bouwstenen volstaan voor het overgrote deel van het werk. Wat je vooral moet begrijpen is de volgorde waarin de database ze uitvoert, want die verklaart de foutmeldingen die je krijgt.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Onderdeel</th><th>Doet</th><th>Voorbeeld op Meridiaan</th></tr></thead>
+          <tbody>
+            <tr><td><strong>SELECT</strong></td><td>Kiest welke kolommen je terugkrijgt</td><td>SELECT deelnemer_id, status</td></tr>
+            <tr><td><strong>FROM en JOIN</strong></td><td>Bepaalt uit welke tabellen, en hoe die verbonden zijn</td><td>FROM deelnemer JOIN werkgever ON ...</td></tr>
+            <tr><td><strong>WHERE</strong></td><td>Filtert rijen vóór het groeperen</td><td>WHERE status = 'actief'</td></tr>
+            <tr><td><strong>GROUP BY</strong></td><td>Vat rijen samen per waarde</td><td>GROUP BY werkgever_id</td></tr>
+            <tr><td><strong>HAVING</strong></td><td>Filtert de samengevatte groepen</td><td>HAVING COUNT(*) &gt; 50</td></tr>
+            <tr><td><strong>ORDER BY</strong></td><td>Sorteert het eindresultaat</td><td>ORDER BY aantal DESC</td></tr>
+          </tbody>
+        </table></div>
+        <h4>De volgorde van uitvoering</h4>
+        <p>De database leest je query niet van boven naar beneden. Eerst FROM en JOIN, dan WHERE, dan GROUP BY, dan HAVING, dan pas SELECT, en als laatste ORDER BY. Daaruit volgen twee dingen die anders onbegrijpelijk zijn: je kunt in WHERE niet filteren op een berekening uit SELECT, en het verschil tussen WHERE en HAVING is niet stilistisch maar fundamenteel — WHERE filtert rijen vóór het samenvatten, HAVING filtert groepen erna.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 3 — SQL, acht vragen</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 3 laat je bewust een query schrijven die in WHERE filtert op een berekening uit SELECT. Waarom levert dat een foutmelding op?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat de database de query niet van boven naar beneden leest: eerst FROM en JOIN, dan WHERE, dan GROUP BY, dan HAVING, dan pas SELECT, en als laatste ORDER BY. WHERE wordt dus uitgevoerd vóórdat SELECT de berekening heeft gemaakt, waardoor die kolom op dat moment nog niet bestaat.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De join die stil records weggooit</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit is de belangrijkste paragraaf van dit deel. Een inner join levert alleen rijen op waarvoor aan beide kanten een match bestaat. Rijen zonder match verdwijnen zonder waarschuwing, zonder foutmelding en zonder dat het resultaat er verdacht uitziet.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Soort join</th><th>Levert op</th><th>Wanneer gebruiken</th></tr></thead>
+          <tbody>
+            <tr><td><strong>INNER JOIN</strong></td><td>Alleen rijen die aan beide kanten voorkomen</td><td>Als je zeker weet dat elke rij een match hoort te hebben</td></tr>
+            <tr><td><strong>LEFT JOIN</strong></td><td>Alle rijen links, aangevuld waar rechts een match is</td><td>Als je wilt zien welke rijen géén match hebben</td></tr>
+          </tbody>
+        </table></div>
+        <p>Bij Meridiaan zijn 340 deelnemers gekoppeld aan een werkgever die na een fusie niet meer bestaat. Een inner join tussen deelnemer en werkgever laat die 340 stilzwijgend vallen. Het aantal dat je rapporteert is dan 340 te laag, en niets in de uitkomst wijst daarop. Dit is een plausibele verklaring voor een deel van het verschil tussen de drie deelnemersaantallen die in deel 3 en deel 4 al opvielen.</p>
+        <div class="callout warn"><span class="lbl">De controle die je altijd doet</span><p>Tel je bronrijen vóór de join en je resultaatrijen erna. Wijkt het af, dan weet je waarom voordat iemand anders het ontdekt. Doe dat ook als je zeker weet dat het klopt — juist dan.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 4 — De join die records weggooit</p>
+        <details class="q"><summary><span class="qn">1</span><span>340 deelnemers bij Meridiaan zijn gekoppeld aan een werkgever die na een fusie niet meer bestaat. Wat doet een inner join tussen deelnemer en werkgever met die 340 rijen, en welke controle voorkomt dat dit onopgemerkt blijft?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een inner join laat die 340 deelnemers <strong>stilzwijgend vallen</strong>: alleen rijen met een match aan beide kanten komen door, zonder foutmelding en zonder dat het resultaat er verdacht uitziet. De standaardcontrole: tel je bronrijen vóór de join en je resultaatrijen erna. Wijkt het af, dan weet je waarom voordat iemand anders het ontdekt — doe dat ook als je zeker weet dat het klopt.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Beschrijvende statistiek en uitbijters</h2><span class="chip time">⏱ 22 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Drie centrummaten, en de keuze ertussen verandert het verhaal.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Maat</th><th>Wat het is</th><th>Gevoelig voor</th><th>Gebruik als</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Gemiddelde</strong></td><td>Som gedeeld door aantal</td><td>Uitschieters</td><td>De verdeling redelijk symmetrisch is</td></tr>
+            <tr><td><strong>Mediaan</strong></td><td>De middelste waarde</td><td>Nauwelijks iets</td><td>De verdeling scheef is of uitschieters kent</td></tr>
+            <tr><td><strong>Modus</strong></td><td>De meest voorkomende waarde</td><td>Niets, maar kan ontbreken of meervoudig zijn</td><td>Je met categorieën werkt</td></tr>
+          </tbody>
+        </table></div>
+        <p>Pensioenopbouw is het schoolvoorbeeld van een scheve verdeling: veel deelnemers met bescheiden aanspraken en een kleine groep met zeer hoge. Het gemiddelde pensioen bij Meridiaan ligt daardoor ruim boven wat de meeste deelnemers krijgen. Wie het gemiddelde rapporteert, geeft een technisch correct getal dat een verkeerd beeld schept. Rapporteer bij scheve verdelingen mediaan én gemiddelde, en benoem het verschil.</p>
+        <h4>Spreiding</h4>
+        <ul>
+          <li>Bereik: hoogste min laagste. Simpel en volledig bepaald door de twee meest atypische waarnemingen.</li>
+          <li>Kwartielen: verdeel de waarnemingen in vier gelijke groepen. Het interkwartielbereik vertelt waar de middelste helft zit en is ongevoelig voor uitschieters.</li>
+          <li>Standaarddeviatie: de gemiddelde afstand tot het gemiddelde. Zeer bruikbaar bij symmetrische verdelingen, misleidend bij scheve.</li>
+        </ul>
+        <p>Een centrummaat zonder spreidingsmaat is een half antwoord. "Gemiddeld 34 dagen" betekent iets heel anders wanneer de spreiding twee dagen is dan wanneer die veertig is.</p>
+        <h4>Uitbijters</h4>
+        <p>Een uitbijter is een waarneming die ver van de rest ligt. De reflex om hem te verwijderen is bijna altijd verkeerd. Loop drie vragen langs: is het een invoerfout, is het een echte maar zeldzame waarneming, of is het een andere populatie die per ongeluk is meegekomen?</p>
+        <ul>
+          <li>Bij een invoerfout — een geboortedatum in 1900 — hoort de waarneming eruit, en hoort er een kwaliteitsregel bij zoals in deel 4.</li>
+          <li>Bij een echte zeldzame waarneming hoort hij erin, want hij is waar. Rapporteer dan mediaan naast gemiddelde.</li>
+          <li>Bij een andere populatie hoort een aparte analyse. Directeuren met een aanvullende regeling horen niet in dezelfde berekening als reguliere deelnemers.</li>
+        </ul>
+        <p>Wat je nooit doet is uitbijters verwijderen omdat de grafiek er dan mooier uitziet. Documenteer elke verwijdering, inclusief de reden, in de verantwoording bij je analyse.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5 — Gemiddelde of mediaan</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 5 laat je voor de opgebouwde pensioenaanspraken zowel het gemiddelde als de mediaan berekenen. Waarom kan het gemiddelde bij Meridiaan een verkeerd beeld scheppen, en wat doe je met de tien hoogste aanspraken?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Pensioenopbouw is scheef verdeeld: veel deelnemers met bescheiden aanspraken en een kleine groep met zeer hoge. Het gemiddelde ligt daardoor ruim boven wat de meeste deelnemers krijgen — technisch correct, maar misleidend. Rapporteer bij scheve verdelingen mediaan én gemiddelde. Bij de tien hoogste aanspraken kijk je of het om een <strong>aanvullende directieregeling</strong> gaat: is dat zo, dan is het een andere populatie die een aparte analyse verdient, geen uitbijter om te verwijderen.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Steekproef, populatie en bias</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Je werkt zelden met de hele populatie, ook al lijkt dat soms zo. Drie vormen van vertekening komen zo vaak voor dat je ze standaard moet natrekken.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Vorm</th><th>Wat er gebeurt</th><th>Voorbeeld bij Meridiaan</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Selectiebias</strong></td><td>De groep die je bekijkt is niet representatief</td><td>Alleen deelnemers analyseren die het portaal gebruiken</td></tr>
+            <tr><td><strong>Overlevingsbias</strong></td><td>Wie eruit gevallen is, telt niet meer mee</td><td>Tevredenheid meten onder wie niet is vertrokken</td></tr>
+            <tr><td><strong>Non-respons</strong></td><td>Wie niet reageert, verschilt van wie wel reageert</td><td>Enquête ingevuld door de meest betrokken deelnemers</td></tr>
+          </tbody>
+        </table></div>
+        <p>De vraag die je jezelf stelt: wie ontbreekt er in mijn data, en zou die het antwoord hebben veranderd? Bij Meridiaan ontbreken de deelnemers zonder e-mailadres in vrijwel elke digitale meting — 4,2 procent, en dat is bijna zeker geen willekeurige 4,2 procent.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 6 — Correlatie en confounder</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 6 vraagt te bepalen welke bias er zit in de meting "portaalgebruikers storten vaker bij", doordat 4,2 procent van de deelnemers geen e-mailadres heeft. Welke bias is dat, en wat betekent hij?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Dat is <strong>selectiebias</strong> in de onderliggende digitale meting: wie geen e-mailadres heeft, ontbreekt vrijwel in elke digitale meting — 4,2 procent, en dat is bijna zeker geen willekeurige 4,2 procent. De vraag die je jezelf steeds stelt: wie ontbreekt er in mijn data, en zou die het antwoord hebben veranderd?</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Correlatie en causaliteit</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Twee grootheden bewegen samen. Daaruit volgt niet dat de een de ander veroorzaakt. Er zijn vier mogelijkheden, en drie ervan worden routinematig genegeerd: A veroorzaakt B, B veroorzaakt A, C veroorzaakt beide, of het is toeval.</p>
+        <h4>Een concreet voorbeeld</h4>
+        <p>Bij Meridiaan blijkt: deelnemers die het pensioenportaal gebruiken, doen vaker aan vrijwillige bijstorting. De verleidelijke conclusie is dat het portaal tot bijstorting aanzet, en dus dat meer portaalgebruik meer bijstorting oplevert. Maar leeftijd en inkomen verklaren beide gedragingen: oudere en beter verdienende deelnemers gebruiken vaker het portaal én storten vaker bij. Leeftijd en inkomen zijn hier <strong>confounders</strong> — variabelen die beide kanten beïnvloeden en de schijnbare samenhang veroorzaken.</p>
+        <p>De praktische toets: kun je bedenken welke derde factor beide zou kunnen verklaren? Lukt dat, dan mag je geen oorzakelijke uitspraak doen. Hoe je dat wél aanpakt — met experimenten en met causale technieken — komt in latere delen.</p>
+        <div class="callout"><span class="lbl">Formuleren zonder te overclaimen</span><p>Niet: "het portaal verhoogt de bijstorting." Wel: "portaalgebruik en bijstorting hangen samen; leeftijd en inkomen verklaren beide en zijn niet uitgesloten als oorzaak." Dat is minder krachtig en het is waar. Wie het eerste schrijft, verliest zijn geloofwaardigheid bij de eerste analist die doorvraagt.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 6 — Correlatie en confounder</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 6 vraagt om minstens twee plausibele confounders te benoemen voor de samenhang "portaalgebruikers storten vaker vrijwillig bij". Welke twee noemt de reader, en hoe verklaren ze de schijnbare samenhang?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans"><strong>Leeftijd en inkomen.</strong> Oudere en beter verdienende deelnemers gebruiken vaker het portaal én storten vaker bij — de twee factoren beïnvloeden beide gedragingen tegelijk en veroorzaken zo de schijnbare samenhang. De praktische toets: kun je een derde factor bedenken die beide zou kunnen verklaren? Lukt dat, dan mag je geen oorzakelijke uitspraak doen.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Denkfouten en je analyse verantwoorden</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <h4>Zes denkfouten</h4>
+        <ol>
+          <li>Van een beschrijvende uitkomst een verklaring maken.</li>
+          <li>Het gemiddelde rapporteren bij een scheve verdeling.</li>
+          <li>Uitbijters verwijderen omdat de grafiek dan mooier is.</li>
+          <li>Vergeten wie er in de data ontbreekt.</li>
+          <li>Een inner join gebruiken en de weggevallen rijen niet tellen.</li>
+          <li>Naar een verklaring zoeken voor een verschil dat binnen de normale variatie valt.</li>
+        </ol>
+        <h4>Je analyse verantwoorden</h4>
+        <p>Bij elke analyse hoort een korte verantwoording — een halve pagina volstaat. Die maakt je werk reproduceerbaar en beschermt je wanneer iemand er over een half jaar op terugkomt.</p>
+        <ul>
+          <li>De vraag zoals jij hem hebt begrepen, en het besluit waarvoor hij dient.</li>
+          <li>De gebruikte bron, de peildatum en het moment van ophalen.</li>
+          <li>De filters die je hebt toegepast, en hoeveel rijen daardoor afvielen.</li>
+          <li>De aannames die je hebt moeten doen.</li>
+          <li>Wat de analyse níét aantoont.</li>
+        </ul>
+        <p>Dat laatste punt is het belangrijkste en het minst gebruikelijke. Eén zin volstaat: "deze analyse toont samenhang, geen oorzaak" of "deelnemers zonder e-mailadres zitten niet in deze meting".</p>
+        <p>Dit deel raakt het kennisgebied Big Data &amp; Data Science op het CDMP Fundamentals-examen. Let op de vier analysetypen bij naam en het onderscheid tussen samenhang en oorzaak — dat wordt via scenario's getoetst. Engelse termen: descriptive, diagnostic, predictive, prescriptive, sampling bias, confounding variable, outlier.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 7 — Je analyse verantwoorden</p>
+        <details class="q"><summary><span class="qn">1</span><span>Opdracht 7 vraagt om in je verantwoording de zin te schrijven over wat de analyse níét aantoont, en die concreet te maken in plaats van algemeen. Waarom is precies dat onderdeel het belangrijkste en het minst gebruikelijke?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat een verantwoording je werk reproduceerbaar maakt en je beschermt wanneer iemand er later op terugkomt, maar het bewust benoemen van de grenzen van je eigen antwoord het minst gebeurt — terwijl juist dát voorkomt dat een lezer samenhang voor oorzaak aanziet. Eén concrete zin volstaat: "deze analyse toont samenhang, geen oorzaak" of "deelnemers zonder e-mailadres zitten niet in deze meting".</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 6</h3>
+      <p>Deel 6 maakt de betekenis die je hier hebt blootgelegd zichtbaar voor iemand die er iets mee moet — met grafiektype, dashboardontwerp en de ene zin die de boodschap draagt. Neem je verantwoording uit Opdracht 7 mee.</p>
+      <a class="btn" href="deel-06.html">Deel 6 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Datamanagement · Deel 5 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/datamanagement/niveau-1/deel-05/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_dm5_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
