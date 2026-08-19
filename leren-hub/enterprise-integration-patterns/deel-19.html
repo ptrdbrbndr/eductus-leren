@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 19 — Outbox-pattern en transactional messaging | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 19 (Niveau 2 — Het landschap): Bij het bouwen van de compenserende acties uit deel 18 ontdekte een ontwikkelaar in het KERN-team een subtiele, structurele fout die niet specifiek aan saga&#39;s lag, maar aan iets fundamentelers: de manier waarop KERN al sinds niveau 1 zijn database bi…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-19.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 19</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 19 van 30</p>
+  <h1>Outbox-pattern en transactional messaging</h1>
+  <p class="hero__lead">Bij het bouwen van de compenserende acties uit deel 18 ontdekte een ontwikkelaar in het KERN-team een subtiele, structurele fout die niet specifiek aan saga&#39;s lag, maar aan iets fundamentelers: de manier waarop KERN al sinds niveau 1 zijn database bijwerkte én het bijbehorende event publiceerde. De code deed, vereenvoudigd, dit: eerst de lokale database bijwerken (bijvoorbeeld: mutatie geregistreerd), en dán, in een aparte, volgende stap, het event &quot;mutatie geregistreerd&quot; publiceren naar het mutatie-gebeurd-kanaal.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>13</b><span>controlevragen</span></div>
+    <div class="stat"><b>2</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → <b>⑨ Outbox-pattern en transactional messaging (hier)</b> → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">19.0 De gebeurtenis die nooit werd gepubliceerd</a></li>
+      <li><a href="#s2" data-target="s2">19.1 De dual-write-valkuil</a></li>
+      <li><a href="#s3" data-target="s3">19.2 Het outbox-pattern</a></li>
+      <li><a href="#s4" data-target="s4">19.3 Waarom dit geen 2PC is, en dat ook niet hoeft te zijn</a></li>
+      <li><a href="#s5" data-target="s5">19.4 Transactional messaging in bredere zin</a></li>
+      <li><a href="#s6" data-target="s6">19.5 De relatie met idempotentie en het outbox-relay-mechanisme</a></li>
+      <li><a href="#s7" data-target="s7">19.6 Terug naar KERN</a></li>
+      <li><a href="#s8" data-target="s8">Samenvatting van deel 19</a></li>
+      <li><a href="#s9" data-target="s9">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">19.0 De gebeurtenis die nooit werd gepubliceerd</h2><span class="chip time">Sectie 1 van 9</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Bij het bouwen van de compenserende acties uit deel 18 ontdekte een ontwikkelaar in het KERN-team een subtiele, structurele fout die niet specifiek aan saga's lag, maar aan iets fundamentelers: de manier waarop KERN al sinds niveau 1 zijn database bijwerkte én het bijbehorende event publiceerde. De code deed, vereenvoudigd, dit: eerst de lokale database bijwerken (bijvoorbeeld: mutatie geregistreerd), en dán, in een aparte, volgende stap, het event "mutatie geregistreerd" publiceren naar het mutatie-gebeurd-kanaal.</p>
+<p>Bij een test die bewust een storing simuleerde tussen deze twee stappen — de database-update lukte, maar de applicatie crashte vlak vóór het publiceren van het event — bleek de database correct bijgewerkt, maar had niemand ooit een event ontvangen. Het Nabestaandenloket, de audit-trail, de risicomanagement-rapportage: geen van drieën wist ooit dat deze mutatie had plaatsgevonden, terwijl KERN's eigen administratie hem wél bevatte. Precies het soort inconsistentie die niveau 1's betrouwbaarheidspatronen (deel 7-9) zouden moeten voorkomen — maar geen van die patronen beschermt tegen een fout die vóórdat een bericht ooit het kanaal bereikt, al ontstaat.</p>
+<figure><img alt='Een tijdlijn met twee stappen: "database bijgewerkt" (vinkje, gelukt) en "event gepubliceerd" (rood kruis, nooit gebeurd, door een crash ertussenin) — met een tekstballon "voor de buitenwereld bestaat deze mutatie niet, voor KERN wel".' loading="lazy" src="figuren/figuur-19-1-crash-tussen-commit-en-publiceren.svg"/><figcaption>Figuur 19-1 — Een tijdlijn met twee stappen: "database bijgewerkt" (vinkje, gelukt) en "event gepubliceerd" (rood kruis, nooit gebeurd, door een crash ertussenin) — met een tekstballon "voor de buitenwereld bestaat deze mutatie niet, voor KERN wel".</figcaption></figure>
+<p>Dit is geen incident zoals de vorige — geen enkele klacht kwam ooit binnen, want niemand miste iets waarvan hij niet wist dat het had moeten bestaan. Dat maakt dit probleem gevaarlijker dan de zichtbare incidenten uit eerdere delen: het is een <strong>stille inconsistentie tussen wat een systeem lokaal weet en wat het naar buiten toe communiceert.</strong></p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">19.1 De dual-write-valkuil</h2><span class="chip time">Sectie 2 van 9</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het probleem dat KERN's ontwerp blootlegde, heeft een naam: de <strong>dual-write-valkuil</strong>. Elke keer dat een component twee afzonderlijke, niet-atomaire handelingen moet uitvoeren die logisch bij elkaar horen — hier: een lokale databasewijziging én het versturen van een bericht — bestaat er een venster waarin de ene handeling lukt en de andere niet, ongeacht in welke volgorde ze worden uitgevoerd.</p>
+<p>Het is de moeite waard beide volgordes te ontleden, want ze falen op verschillende, maar even problematische manieren:</p>
+<p><strong>Eerst database, dan bericht</strong> (zoals bij KERN). Als de applicatie crasht tussen de twee stappen, is de database bijgewerkt maar is er nooit een bericht verstuurd — een stille inconsistentie waarbij de "waarheid" in de database voorloopt op wat de buitenwereld weet.</p>
+<p><strong>Eerst bericht, dan database.</strong> Het omgekeerde risico: als het bericht wél succesvol wordt verstuurd, maar de daaropvolgende databasewijziging mislukt (bijvoorbeeld door een constraint-violatie of een tijdelijke storing), hebben ontvangers van het bericht al gereageerd op een gebeurtenis die, wat de bron betreft, feitelijk nooit heeft plaatsgevonden — de buitenwereld loopt nu voor op de eigen administratie.</p>
+<p>Beide varianten zijn instanties van hetzelfde onderliggende probleem: <strong>twee handelingen die logisch één geheel vormen, worden technisch als twee, onafhankelijk kunnen falen, handelingen uitgevoerd.</strong> Dit is exact het probleem dat deel 18 op procesniveau behandelde (ACID-atomiciteit niet haalbaar over systemen heen), nu toegepast op het kleinst mogelijke geval: één systeem, twee lokale acties.</p>
+<blockquote><p><strong>Kernzin 20 van de cursus: elke keer dat "wijzig de database" en "verstuur een bericht" als twee losse stappen worden geschreven, ontstaat een venster waarin de werkelijkheid van het systeem en de werkelijkheid die het communiceert, uit elkaar kunnen lopen — en dat venster is klein, maar niet nul.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.1 — Beide volgordes falen</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.1 — Beide volgordes falen</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf, voor beide volgordes uit 19.1 (eerst database dan bericht, eerst bericht dan database), een concreet faalscenario en wie daarvan de schade ondervindt (Meridiaan zelf, of een externe ontvanger).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p><strong>Eerst database, dan bericht:</strong> een crash na de databasewijziging maar vóór het versturen betekent dat KERN's eigen administratie de mutatie correct bevat, maar geen enkele externe ontvanger (Nabestaandenloket, audit-trail) er ooit van hoort — de schade wordt gedragen door de ontvangers, die een onvolledig beeld hebben zonder het te weten. Dit is precies het incident van 19.0.</p>
+<p><strong>Eerst bericht, dan database:</strong> een crash na het versturen maar vóór de databasewijziging betekent dat ontvangers al hebben gereageerd op een gebeurtenis die, in de bron zelf, nooit definitief is vastgelegd. Als de databasewijziging vervolgens definitief mislukt (bijvoorbeeld door een validatiefout die pas op databaseniveau wordt ontdekt), hebben ontvangers gehandeld op basis van iets dat feitelijk nooit is gebeurd — de schade wordt in dit geval gedragen door de bron zelf, die nu moet corrigeren richting ontvangers die al gereageerd hebben.</p>
+<p><strong>Wat je hier moet meenemen:</strong> geen van beide volgordes is "veiliger" dan de andere — ze verplaatsen alleen wie de gevolgen draagt van de inconsistentie, van de ontvangers (eerst database) naar de bron (eerst bericht). Het probleem zelf blijft in beide gevallen bestaan.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">19.2 Het outbox-pattern</h2><span class="chip time">Sectie 3 van 9</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het <strong>outbox-pattern</strong> lost de dual-write-valkuil op door de tweede handeling (het versturen van een bericht) te herformuleren als <strong>onderdeel van dezelfde lokale, atomaire databasetransactie</strong> als de eerste handeling, in plaats van als een aparte, volgende stap.</p>
+<p>Concreet: in plaats van direct een bericht op het externe kanaal te plaatsen, schrijft de applicatie het te versturen bericht weg naar een aparte tabel binnen de eigen database — de <strong>outbox-tabel</strong> — als onderdeel van precies dezelfde transactie die ook de eigenlijke databasewijziging bevat. Omdat beide schrijfacties (de eigenlijke wijziging en de outbox-regel) binnen één lokale database-transactie vallen, garandeert de normale ACID-atomiciteit van die database dat ze samen slagen of samen falen — er is geen venster meer waarin de ene wel en de andere niet lukt, want ze zijn technisch nu één handeling.</p>
+<p>Een aparte, onafhankelijke component — de <strong>outbox-relay</strong> (of message relay) — leest vervolgens periodiek, of zo snel mogelijk na elke schrijfactie, nieuwe regels uit de outbox-tabel en publiceert ze daadwerkelijk naar het externe kanaal, waarna de regel als verwerkt wordt gemarkeerd (of verwijderd). Deze relay-stap is zelf weer een gewone, asynchrone integratie met alle bijbehorende overwegingen uit niveau 1 — met name idempotentie (deel 7): als de relay een regel publiceert maar crasht vóórdat hij de regel als "verwerkt" kan markeren, moet een volgende poging hetzelfde bericht kunnen hertransmitteren zonder een dubbele, schadelijke publicatie te veroorzaken (bijvoorbeeld doordat de ontvangende kant het bericht-ID al herkent).</p>
+<figure><img alt="Eén databasetransactie die zowel de mutatietabel als de outbox-tabel bijwerkt (atomair, samen), gevolgd door een aparte relay-component die de outbox-tabel periodiek uitleest en publiceert naar het externe kanaal." loading="lazy" src="figuren/figuur-19-2-outbox-relay.svg"/><figcaption>Figuur 19-2 — Eén databasetransactie die zowel de mutatietabel als de outbox-tabel bijwerkt (atomair, samen), gevolgd door een aparte relay-component die de outbox-tabel periodiek uitleest en publiceert naar het externe kanaal.</figcaption></figure>
+<blockquote><p><strong>Vuistregel: verplaats het probleem van "twee acties die samen moeten slagen" naar een plek waar atomaire garanties al bestaan (de lokale database), in plaats van te proberen die garantie zelf, handmatig, tussen twee ongelijksoortige systemen te bouwen.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.2 — Herken de dual-write-valkuil</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.2 — Herken de dual-write-valkuil</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk van de volgende codebeschrijvingen of het de dual-write-valkuil bevat, en zo ja, welke volgorde (eerst database, eerst bericht) wordt gevolgd.</p>
+<p>a. <code>opslaan(mutatie); publiceerEvent(mutatie);</code></p>
+<p>b. <code>binnenTransactie { opslaan(mutatie); opslaan(outboxRegel); }</code> gevolgd door een aparte relay die de outbox-tabel uitleest.</p>
+<p>c. <code>publiceerEvent(mutatie); opslaan(mutatie);</code></p>
+<p>d. <code>binnenTransactie { opslaan(mutatie); publiceerEvent(mutatie); }</code> — beide binnen dezelfde codeblok-transactie, waarbij het publiceren een aanroep naar een extern messagingsysteem is.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Ja, dual-write-valkuil, eerst database.</strong> Precies het patroon dat bij KERN het incident van 19.0 veroorzaakte.</p>
+<p>b. <strong>Nee, dit is het outbox-pattern</strong>, correct toegepast — de tweede schrijfactie (outboxRegel) is onderdeel van dezelfde lokale transactie als de eerste, waarna een aparte relay verantwoordelijk is voor de daadwerkelijke, asynchrone publicatie.</p>
+<p>c. <strong>Ja, dual-write-valkuil, eerst bericht.</strong></p>
+<p>d. <strong>Ja, nog steeds een vorm van de valkuil, ondanks de schijn van veiligheid.</strong> Dit is een veelgemaakte denkfout: het "binnen dezelfde transactie" plaatsen van een aanroep naar een <em>extern</em> messagingsysteem (in tegenstelling tot een tweede lokale databaseschrijfactie zoals in b) biedt doorgaans geen echte atomaire garantie, omdat de externe messaging-infrastructuur niet deelneemt aan de lokale databasetransactie — een rollback van de lokale transactie kan het al verzonden bericht niet meer terugroepen, en een geslaagde lokale transactie garandeert niet dat de externe publicatie ook daadwerkelijk is aangekomen. Alleen wanneer beide schrijfacties <strong>lokaal, binnen dezelfde database</strong> plaatsvinden (zoals bij b, met de outbox-tabel), is er een echte atomaire garantie.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het woord "transactie" in de code garandeert niets als een van de twee handelingen buiten de lokale database plaatsvindt — situatie d is een subtiele valkuil die op het eerste gezicht op het outbox-pattern lijkt, maar het cruciale onderscheid (lokaal versus extern) mist.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">19.3 Waarom dit geen 2PC is, en dat ook niet hoeft te zijn</h2><span class="chip time">Sectie 4 van 9</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het is verleidelijk om het outbox-pattern te verwarren met de distributed-transactieproblematiek uit deel 18 — beide gaan immers over "twee dingen die samen moeten slagen". Het cruciale verschil: het outbox-pattern lost dit probleem op <strong>binnen de grenzen van één enkel systeem, met één enkele lokale database</strong>, waar normale ACID-garanties al bestaan en niets geforceerd hoeft te worden. Deel 18's saga-patroon lost een fundamenteel ander probleem op: coördinatie tussen <strong>meerdere, onafhankelijke</strong> systemen, waar geen enkele gedeelde, atomaire transactiegrens bestaat of ooit kan bestaan.</p>
+<p>Dit onderscheid is belangrijk om vast te houden: het outbox-pattern is niet een lichtere vorm van saga, en een saga is niet een opgeschaalde vorm van outbox — het zijn oplossingen voor twee verschillende schaalniveaus van hetzelfde onderliggende principe (twee handelingen die logisch samenhoren, moeten ook samen slagen of falen). Bij Meridiaan wordt het outbox-pattern toegepast <strong>binnen</strong> elke individuele stap van een saga: elke stap in het uitkeringsproces (deel 18) gebruikt zelf het outbox-pattern om zijn eigen lokale databasewijziging en zijn eigen berichtpublicatie (regulier of compenserend) betrouwbaar te combineren, terwijl de saga zelf de coördinatie tussen die stappen over systeemgrenzen heen regelt.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.3 — Outbox versus saga</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.3 — Outbox versus saga</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg, met het onderscheid uit 19.3, uit waarom het outbox-pattern niet gebruikt kan worden om het probleem van deel 18 (coördinatie over vijf systemen bij het uitkeringsproces) rechtstreeks op te lossen.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Het outbox-pattern lost een probleem op binnen de grenzen van één enkele lokale database, waar normale ACID-garanties al bestaan — het "forceert" niets, het maakt alleen gebruik van een garantie die er al is. Het uitkeringsproces uit deel 18 bevat vijf onafhankelijke systemen, elk met hun eigen lokale database; er bestaat geen enkele gedeelde, atomaire transactiegrens die alle vijf tegelijk omvat, en het outbox-pattern kan die grens niet creëren — het lost alleen het probleem op tússen een lokale databasewijziging en het versturen van één bericht, niet tussen meerdere, onafhankelijke systemen.</p>
+<p>Wat wél kan (en bij Meridiaan ook gebeurt, zie 19.3 in de reader): elke individuele stap binnen de saga gebruikt zelf het outbox-pattern, zodat die specifieke stap — bijvoorbeeld "KERN werkt zijn lokale status bij én publiceert een compenserend event" — intern betrouwbaar is. De saga zelf blijft verantwoordelijk voor de coördinatie tussen die stappen; het outbox-pattern maakt elke individuele stap binnen die coördinatie robuuster, maar vervangt de saga-coördinatie niet.</p>
+<p><strong>Wat je hier moet meenemen:</strong> outbox en saga zijn complementair, niet inwisselbaar — ze werken op verschillende schaalniveaus van hetzelfde onderliggende probleem (twee of meer dingen die samen moeten slagen), en het is een denkfout om te veronderstellen dat het ene het andere overbodig maakt.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">19.4 Transactional messaging in bredere zin</h2><span class="chip time">Sectie 5 van 9</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het outbox-pattern is de meest gangbare, praktisch toepasbare vorm van een breder principe genaamd <strong>transactional messaging</strong>: elke situatie waarin een messaging-actie (versturen of ontvangen) gekoppeld moet worden aan een lokale transactionele garantie, zodat beide samen slagen of samen falen.</p>
+<p>Naast de "uitgaande" variant (outbox, 19.2) bestaat er een spiegelbeeldige, "inkomende" variant die dezelfde onderliggende logica volgt: wat gebeurt er als een ontvanger een bericht succesvol ontvangt (en bevestigt aan de broker dat hij het heeft), maar vervolgens crasht vóórdat hij de bijbehorende lokale verwerking heeft afgerond? Het bericht is dan, wat de broker betreft, afgeleverd en verwerkt — maar de lokale effecten ervan zijn nooit voltooid.</p>
+<p>Dit vraagt om een vergelijkbare discipline aan de ontvangende kant: de bevestiging aan de broker (dat het bericht is verwerkt) mag pas gebeuren <strong>nadat</strong>, of <strong>als onderdeel van dezelfde lokale transactie als</strong>, de daadwerkelijke verwerking is voltooid — nooit ervoor. Veel messaging-infrastructuur biedt hiervoor expliciete ondersteuning (bijvoorbeeld door de bevestiging pas te versturen na een succesvolle lokale commit), maar het blijft een bewuste ontwerpkeuze die niet automatisch goed staat, net zoals guaranteed delivery (deel 16) een bewuste configuratiekeuze is en geen vanzelfsprekende default.</p>
+<blockquote><p><strong>Kernzin 21 van de cursus: transactional messaging gaat niet alleen over het versturen van berichten — het geldt evenzeer aan de ontvangende kant, waar de bevestiging van ontvangst nooit voor mag lopen op de daadwerkelijke, lokale verwerking.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.4 — Transactional messaging aan de ontvangende kant</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.4 — Transactional messaging aan de ontvangende kant</p>
+        <div class="card">
+          <div class="prose">
+<p>Een ontvanger bevestigt aan de broker dat een bericht is verwerkt zodra het bericht is binnengekomen, nog vóórdat de lokale verwerkingslogica is uitgevoerd. Beschrijf, met kernzin 21, wat er misgaat als de lokale verwerking vervolgens mislukt (bijvoorbeeld door een crash).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Omdat de bevestiging al is verstuurd vóórdat de lokale verwerking daadwerkelijk is voltooid, beschouwt de broker het bericht als succesvol afgeleverd en zal het — afhankelijk van de leveringsgarantie (deel 7) — niet opnieuw aanbieden. Als de lokale verwerking vervolgens mislukt (crash, fout), is het bericht wat de broker betreft "klaar", terwijl de daadwerkelijke, beoogde lokale effecten nooit hebben plaatsgevonden — een spiegelbeeld van de dual-write-valkuil, nu aan de ontvangende in plaats van de zendende kant.</p>
+<p>De juiste volgorde: bevestig aan de broker pas nadat, of als onderdeel van dezelfde lokale transactie als, de verwerking daadwerkelijk is afgerond. Bij een crash vóór die bevestiging zal de broker het bericht (bij at-least-once, zoals deel 7 aanbeveelt) opnieuw aanbieden, en de idempotentiemaatregelen uit deel 7 zorgen ervoor dat een eventuele gedeeltelijke eerdere verwerking geen dubbel effect heeft.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de discipline van dit deel geldt symmetrisch — niet alleen "verstuur pas nadat de lokale wijziging vaststaat" (outbox, zendende kant), maar ook "bevestig pas nadat de lokale verwerking vaststaat" (ontvangende kant). Beide zijn instanties van dezelfde onderliggende regel.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">19.5 De relatie met idempotentie en het outbox-relay-mechanisme</h2><span class="chip time">Sectie 6 van 9</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De outbox-relay uit 19.2 verdient een nadere blik, omdat hij zelf een klassiek voorbeeld is van waarom niveau 1's idempotentievereisten (deel 7) nooit "klaar" zijn na de eerste toepassing, maar bij elk nieuw mechanisme opnieuw moeten worden doordacht.</p>
+<p>De relay leest een regel uit de outbox-tabel, publiceert hem naar het externe kanaal, en markeert hem daarna als verwerkt. Als de relay crasht na de publicatie maar vóór het markeren, zal een volgende poging (of een tweede relay-instantie, voor schaalbaarheid) dezelfde regel opnieuw oppikken en opnieuw publiceren — een gegarandeerde at-least-once-levering vanuit de outbox-tabel naar het externe kanaal, met exact hetzelfde duplicatierisico dat deel 7 al identificeerde voor messaging in het algemeen. De oplossing is dan ook identiek: het bericht draagt een stabiel, uniek bericht-ID (afgeleid van de outbox-regel zelf, niet opnieuw gegenereerd bij elke publicatiepoging), en de ontvangende kant past dezelfde idempotentiemaatregelen toe als bij elk ander bericht.</p>
+<p>Dit is een goed moment om, terugkijkend op de hele cursus, te bevestigen dat het outbox-pattern geen nieuwe, aparte klasse van betrouwbaarheidsproblemen introduceert — het combineert simpelweg twee reeds behandelde technieken (lokale ACID-transacties, en at-least-once-messaging met idempotentie) op een nieuwe plek, in plaats van een volledig nieuw mechanisme te zijn.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.5 — Idempotentie in de outbox-relay</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.5 — Idempotentie in de outbox-relay</p>
+        <div class="card">
+          <div class="prose">
+<p>De outbox-relay uit 19.2 crasht na het publiceren van een bericht, maar vóór het markeren van de outbox-regel als verwerkt. Beschrijf wat er gebeurt bij een volgende poging, en welk niveau 1-patroon (deel 7) dit veilig houdt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Bij een volgende poging (door dezelfde relay na herstart, of door een tweede relay-instantie) wordt de outbox-regel, die nog steeds als "niet verwerkt" gemarkeerd staat, opnieuw opgepikt en opnieuw gepubliceerd — een klassiek at-least-once-scenario (deel 7), met hetzelfde duplicatierisico dat elk ander at-least-once-mechanisme kent. Het patroon dat dit veilig houdt is <strong>idempotentie</strong> (deel 7): het gepubliceerde bericht draagt een stabiel bericht-ID, afgeleid van de outbox-regel zelf (bijvoorbeeld de primaire sleutel van die regel), zodat een ontvanger die het bericht twee keer ontvangt, de tweede keer herkent als een duplicaat en niet dubbel verwerkt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het outbox-pattern lost de dual-write-valkuil op, maar introduceert zelf weer een nieuw at-least-once-scenario (bij de relay-publicatie) — precies zoals 19.5 in de reader stelt: het combineert bestaande technieken (lokale ACID, at-least-once plus idempotentie) in plaats van een nieuwe klasse problemen te introduceren. Wie het outbox-pattern bouwt zonder deze idempotentiestap, heeft het oorspronkelijke probleem (stille inconsistentie) vervangen door een nieuw probleem (mogelijke duplicatie) in plaats van het volledig op te lossen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">19.6 Terug naar KERN</h2><span class="chip time">Sectie 7 van 9</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Na het incident van 19.0 is KERN's mutatieverwerking herbouwd rond het outbox-pattern: elke mutatieverwerking schrijft, binnen dezelfde lokale transactie, zowel de mutatie zelf als een outbox-regel voor het bijbehorende event weg. Een relay, gebouwd volgens de discipline uit 19.2 en 19.5, publiceert deze regels naar het mutatie-gebeurd-kanaal, met een idempotent bericht-ID afgeleid van de outbox-regel.</p>
+<p>Het resultaat: de stille inconsistentie uit 19.0 is structureel onmogelijk geworden. Als de databasewijziging lukt, staat de outbox-regel er gegarandeerd ook — ze zijn immers, technisch, één handeling. Als de databasewijziging mislukt, wordt er ook geen outbox-regel weggeschreven, en dus ook nooit een event gepubliceerd voor een mutatie die feitelijk nooit heeft plaatsgevonden.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 19.6 — Terug naar KERN</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 19.6 — Terug naar KERN</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf, in eigen woorden, hoe de herbouwde KERN-mutatieverwerking (19.6) het incident van 19.0 structureel onmogelijk maakt. Gebruik in je antwoord expliciet de woorden "atomair" en "outbox-regel".</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>In de herbouwde versie schrijft KERN, binnen één en dezelfde lokale databasetransactie, zowel de mutatie zelf als de bijbehorende outbox-regel weg. Omdat beide schrijfacties binnen dezelfde transactie vallen, zijn ze <strong>atomair</strong>: de database garandeert dat ze samen slagen of samen falen, er bestaat geen technisch venster meer waarin de één wel en de ander niet lukt. Als de transactie slaagt, staat de <strong>outbox-regel</strong> er gegarandeerd — de relay zal hem vroeg of laat vinden en publiceren. Als de transactie mislukt, wordt ook geen outbox-regel weggeschreven, en wordt er dus terecht nooit een event gepubliceerd voor een mutatie die feitelijk nooit heeft plaatsgevonden. De stille inconsistentie uit 19.0 (database bijgewerkt, event nooit verstuurd) kan in dit ontwerp per definitie niet meer optreden.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de oplossing zit niet in "beter opletten" of "extra foutafhandeling toevoegen" rond de oude, tweestaps aanpak — het probleem is structureel opgelost door de twee handelingen technisch tot één handeling te maken, binnen een grens waar atomaire garanties al van nature bestaan.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 19</h2><span class="chip time">Sectie 8 van 9</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>De dual-write-valkuil ontstaat wanneer een lokale databasewijziging en het versturen van een bericht als twee, onafhankelijk kunnen falen, stappen worden uitgevoerd — in beide volgordes (eerst database, eerst bericht) ontstaat een risico op stille inconsistentie.</li>
+<li>Het outbox-pattern lost dit op door het bericht als een regel binnen dezelfde lokale, atomaire databasetransactie weg te schrijven, gevolgd door een aparte relay die deze regels asynchroon publiceert.</li>
+<li>Het outbox-pattern is geen lichtere vorm van saga (deel 18) — het lost een probleem op binnen één systeem, terwijl saga coördinatie tussen meerdere systemen regelt; ze worden vaak samen toegepast (outbox binnen elke saga-stap).</li>
+<li>Transactional messaging geldt ook aan de ontvangende kant: bevestiging van ontvangst mag nooit voorlopen op daadwerkelijke lokale verwerking.</li>
+<li>De outbox-relay zelf vergt dezelfde idempotentiediscipline als elk ander at-least-once-mechanisme uit deel 7 — het outbox-pattern combineert bestaande technieken, het introduceert geen nieuwe klasse van problemen.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 19</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de dual-write-valkuil, en in welke twee volgordes kan hij zich voordoen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De dual-write-valkuil ontstaat wanneer een lokale databasewijziging en het versturen van een bericht als twee, onafhankelijk kunnen falen, stappen worden uitgevoerd. Dit kan in de volgorde "eerst database, dan bericht" (stille inconsistentie bij ontvangers) of "eerst bericht, dan database" (ontvangers reageren op iets dat nooit definitief werd vastgelegd).</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin over de dual-write-valkuil, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Elke keer dat "wijzig de database" en "verstuur een bericht" als twee losse stappen worden geschreven, ontstaat een venster waarin de werkelijkheid van het systeem en de werkelijkheid die het communiceert, uit elkaar kunnen lopen.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Hoe lost het outbox-pattern dit op, en waarom werkt dat?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Door het bericht als regel binnen dezelfde lokale, atomaire databasetransactie weg te schrijven als de eigenlijke wijziging, in plaats van als aparte, volgende stap. Dit werkt omdat de normale ACID-garantie van de lokale database dan automatisch geldt voor beide schrijfacties samen.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Waarom is een outbox-relay zelf weer een at-least-once-mechanisme, en welk patroon houdt dat veilig?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat de relay kan crashen tussen het publiceren en het markeren-als-verwerkt van een outbox-regel, waardoor een volgende poging dezelfde regel opnieuw kan publiceren. Idempotentie (deel 7), met een bericht-ID afgeleid van de outbox-regel zelf, houdt dit veilig.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Wat is het verschil tussen het outbox-pattern en een saga (deel 18), en waarom zijn ze complementair in plaats van inwisselbaar?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Outbox lost het probleem op binnen één systeem met één lokale database; saga coördineert tussen meerdere, onafhankelijke systemen zonder gedeelde transactiegrens. Ze zijn complementair: outbox maakt elke individuele saga-stap intern betrouwbaar, terwijl saga de coördinatie tussen die stappen regelt.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is de kernzin over transactional messaging aan de ontvangende kant?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Transactional messaging geldt niet alleen bij het versturen van berichten — de bevestiging van ontvangst aan de broker mag nooit voorlopen op de daadwerkelijke, lokale verwerking van dat bericht.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom is "binnen dezelfde transactie een aanroep naar een extern messagingsysteem plaatsen" géén geldige toepassing van het outbox-pattern?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat de externe messaging-infrastructuur niet deelneemt aan de lokale databasetransactie — een rollback van de lokale transactie kan een al verzonden extern bericht niet terugroepen, en een geslaagde lokale transactie garandeert niet dat de externe publicatie daadwerkelijk is aangekomen. Alleen twee lokale schrijfacties binnen dezelfde database bieden een echte atomaire garantie.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 9 van 9</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 20 — zelfstandig leesbaar en los aanbiedbaar, conform de vaste structuurkeuze van de familie — behandelt contractbeheer voor asynchrone koppelingen: schema-evolutie en consumer-driven contracts voor events, nodig zodra een landschap van deze omvang en volwassenheid koppelingen moet kunnen laten evolueren zonder ze allemaal tegelijk te breken.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 20</h3>
+      <p>Deel 20 — Contractbeheer voor asynchrone koppelingen — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-20.html">Deel 20 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 19 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-19/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];
+  var KEY="eductus_eip19_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

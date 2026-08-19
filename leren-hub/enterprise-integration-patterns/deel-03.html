@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 3 — Message Construction: command, event, document en request-reply | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 3 (Niveau 1 — Fundament): Het herziene ontwerp aan het eind van deel 2 loste de vermenging op — mutatiekanaal en mutatie-gebeurd-kanaal, keurig gescheiden. Maar toen Caspar het aan de testcoördinator van het Werkgeversportaal liet zien, kreeg hij een vraag terug die hij niet …">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-03.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 3</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 1 (Fundament) · Deel 3 van 30</p>
+  <h1>Message Construction: command, event, document en request-reply</h1>
+  <p class="hero__lead">Het herziene ontwerp aan het eind van deel 2 loste de vermenging op — mutatiekanaal en mutatie-gebeurd-kanaal, keurig gescheiden. Maar toen Caspar het aan de testcoördinator van het Werkgeversportaal liet zien, kreeg hij een vraag terug die hij niet had zien aankomen:&quot;Mooi, maar hoe laat ik straks in de interface aan de werkgever zien of zijn mutatie gelukt is? Ik kan toch niet drie kwartier lang &#39;wordt verwerkt&#39; blijven tonen zonder ooit een update?&quot;</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 1: ① Van synchroon naar asynchroon: waarom messaging → ② Messagingfundamenten: kanaal, bericht, endpoint → <b>③ Message Construction: command, event, document en request-reply (hier)</b> → ④ Basisrouting: content-based router en message filter → ⑤ Basistransformatie: translator, envelope wrapper, normalizer → ⑥ Point-to-point vs. publish-subscribe kanalen, verdiept → ⑦ Betrouwbaarheid I: garanties en idempotentie → ⑧ Betrouwbaarheid II: volgorde en guaranteed delivery → ⑨ Foutafhandeling basis: dead letter channel en invalid message channel → ⑩ Examentraining en capstone: de verdediging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">3.0 De vraag die na het herziene ontwerp overbleef</a></li>
+      <li><a href="#s2" data-target="s2">3.1 Command messages opnieuw bekeken: wat erin moet</a></li>
+      <li><a href="#s3" data-target="s3">3.2 Het request-reply-patroon</a></li>
+      <li><a href="#s4" data-target="s4">3.3 De valkuil: request-reply als vermomd blocking call</a></li>
+      <li><a href="#s5" data-target="s5">3.4 Document messages: wanneer geen opdracht en geen gebeurtenis volstaat</a></li>
+      <li><a href="#s6" data-target="s6">3.5 Terug naar de testcoördinator</a></li>
+      <li><a href="#s7" data-target="s7">Samenvatting van deel 3</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">3.0 De vraag die na het herziene ontwerp overbleef</h2><span class="chip time">Sectie 1 van 8</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het herziene ontwerp aan het eind van deel 2 loste de vermenging op — mutatiekanaal en mutatie-gebeurd-kanaal, keurig gescheiden. Maar toen Caspar het aan de testcoördinator van het Werkgeversportaal liet zien, kreeg hij een vraag terug die hij niet had zien aankomen: <em>"Mooi, maar hoe laat ik straks in de interface aan de werkgever zien of zijn mutatie gelukt is? Ik kan toch niet drie kwartier lang 'wordt verwerkt' blijven tonen zonder ooit een update?"</em></p>
+<p>Dat is geen implementatiedetail. Het is de vraag of het ontwerp uit deel 2 een compleet patroon vormt, of alleen de helft ervan. Een command message versturen is één ding; weten wat er met die opdracht gebeurd is, is een ander. Dit deel werkt drie dingen uit: hoe je de drie berichtstypen uit deel 2 concreet bouwt, hoe je met <strong>request-reply</strong> een antwoord terugkrijgt zonder terug te vallen op synchroon wachten, en waar de grens ligt tussen "nuttige asynchrone terugkoppeling" en "eigenlijk toch gewoon een blocking call, alleen trager".</p>
+<figure><img alt="De testcoördinator naast het scherm van het Werkgeversportaal, met een tijdlijn 'verzonden — ? — verwerkt' waarbij het middelste stuk leeg is" loading="lazy" src="figuren/figuur-3-1-leeg-middenstuk.svg"/><figcaption>Figuur 3-1 — de testcoördinator naast het scherm van het Werkgeversportaal, met een tijdlijn "verzonden — ? — verwerkt" waarbij het middelste stuk leeg is</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">3.1 Command messages opnieuw bekeken: wat erin moet</h2><span class="chip time">Sectie 2 van 8</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een command message is meer dan "een opdracht in JSON". Om bruikbaar te zijn voor de ontvanger, en om later terugkoppeling mogelijk te maken, moet een command message drie dingen bevatten die niet vanzelfsprekend zijn als je alleen aan de payload denkt:</p>
+<p><strong>Een unieke bericht-ID</strong>, los van eventuele fachliche identifiers zoals een deelnemersnummer. Deze ID is nodig voor idempotentie (deel 7) en voor logging — als hetzelfde command twee keer met exact dezelfde inhoud binnenkomt (door een retry, zie deel 7), moet de ontvanger kunnen vaststellen of dit een nieuw verzoek is of een dubbele aflevering van hetzelfde verzoek.</p>
+<p><strong>Een reply-to adres</strong>, als er een antwoord wordt verwacht. Dit is een header-veld dat aangeeft: als je klaar bent, stuur het resultaat naar dít kanaal, niet naar een kanaal dat de ontvanger zelf moet raden of hardcoderen.</p>
+<p><strong>Een correlation identifier</strong>, zoals geïntroduceerd in deel 2, zodat het antwoord (op het reply-to-kanaal) terug te koppelen is aan deze specifieke aanvraag.</p>
+<p>Zonder deze drie is een command message een opdracht die de ontvanger wel kan uitvoeren, maar waarvan de resultaten nergens gestructureerd terugkomen — precies het gat dat de testcoördinator signaleerde.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 3.1 — Wat ontbreekt in dit command</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.1 — Wat ontbreekt in dit command</p>
+        <div class="card">
+          <div class="prose">
+<p>Hieronder staat een command message zoals een junior ontwikkelaar hem voorstelde.</p>
+<pre><code>payload: { deelnemerId: "00482", type: "adreswijziging", nieuwAdres: "..." }</code></pre>
+<ol>
+<li>Welke drie velden ontbreken volgens paragraaf 3.1, en waarom is elk nodig?</li>
+<li>Stel dat dit bericht door een netwerkstoring twee keer wordt afgeleverd. Wat merkt KERN daarvan met dit ontwerp, en wat zou er anders zijn met de aanvullingen uit a?</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Bericht-ID</strong> — zonder deze kan KERN niet vaststellen of een binnenkomend bericht een nieuw verzoek is of een dubbele aflevering van een eerder verzoek. <strong>Reply-to</strong> — zonder dit adres weet KERN niet waar het resultaat naartoe moet, en zou dat hardgecodeerd moeten worden, wat de ontkoppeling van deel 2 weer ongedaan maakt. <strong>Correlatie-ID</strong> — zonder deze kan het Werkgeversportaal het antwoord niet aan deze specifieke aanvraag koppelen zodra er meerdere tegelijk openstaan.</p>
+<p>b. Zonder de aanvullingen verwerkt KERN het bericht gewoon twee keer — bij een adreswijziging is dat toevallig onschadelijk (het tweede keer hetzelfde adres invoeren verandert niets), maar bij bijvoorbeeld een saldomutatie zou dit een dubbele boeking betekenen. Met een bericht-ID kan KERN de tweede aflevering herkennen en negeren (idempotentie — verder uitgewerkt in deel 7).</p>
+<p><strong>Wat je hier moet meenemen:</strong> de payload beschrijft wát er moet gebeuren; bericht-ID, reply-to en correlatie-ID beschrijven hóe het bericht zich door de keten moet gedragen. Beide zijn nodig, en ze horen niet door elkaar in de payload maar in de header.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">3.2 Het request-reply-patroon</h2><span class="chip time">Sectie 3 van 8</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Request-reply</strong> is de asynchrone tegenhanger van een synchrone aanroep-met-antwoord: de aanvrager stuurt een command (of, minder gebruikelijk, een document) op een verzoekkanaal, en ontvangt het antwoord op een apart antwoordkanaal — zonder dat de aanvrager blokkeert in afwachting daarvan.</p>
+<p>Dat laatste woord, "blokkeert", is het hele verschil met synchroon wachten. Het patroon bestaat uit drie samenwerkende onderdelen:</p>
+<p><strong>Het verzoekkanaal</strong>, waarover het command wordt verstuurd — dit is precies het mutatiekanaal uit deel 2.</p>
+<p><strong>Het antwoordkanaal</strong>, aangewezen via het reply-to-veld. Dit kan een gedeeld kanaal zijn waarop alle antwoorden binnenkomen (en waarbij de correlatie-ID bepaalt wie welk antwoord oppikt), of een kanaal per aanvrager. Beide varianten hebben een plek: een gedeeld antwoordkanaal is eenvoudiger te beheren, een kanaal per aanvrager is eenvoudiger te beveiligen. Bij Meridiaan is voor het Werkgeversportaal gekozen voor een gedeeld antwoordkanaal per applicatie, omdat het aantal werkgevers te groot is om per werkgever een kanaal te onderhouden.</p>
+<p><strong>De correlatie</strong>, die bepaalt welk binnenkomend antwoord bij welke nog openstaande aanvraag hoort — het mechanisme uit 2.4, nu in actie.</p>
+<blockquote>
+<p><strong>Kernzin 3 van de cursus: request-reply is geen synchrone aanroep in een jasje — de aanvrager gaat na verzending gewoon door, en verwerkt het antwoord wanneer het komt, niet wanneer hij ernaar staat te wachten.</strong></p>
+</blockquote>
+<figure><img alt="Twee tijdlijnen naast elkaar: links een synchrone aanroep (blokkerende pijl heen, wachten, pijl terug); rechts request-reply (pijl heen, aanvrager gaat verder met ander werk, later een binnenkomend antwoord op een apart kanaal, gekoppeld via correlatie-ID)" loading="lazy" src="figuren/figuur-3-2-synchroon-versus-request-reply.svg"/><figcaption>Figuur 3-2 — twee tijdlijnen naast elkaar: links een synchrone aanroep (blokkerende pijl heen, wachten, pijl terug); rechts request-reply (pijl heen, aanvrager gaat verder met ander werk, later een binnenkomend antwoord op een apart kanaal, gekoppeld via correlatie-ID)</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 3.2 — Blocking call in vermomming herkennen</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.2 — Blocking call in vermomming herkennen</p>
+        <div class="card">
+          <div class="prose">
+<p>Een collega van Caspar presenteert dit ontwerp voor de statusopvraging: "Het portaal stuurt een command naar een statuskanaal, en blijft op een aparte thread luisteren op het antwoordkanaal totdat het antwoord er is — met een time-out van 30 seconden, net als bij de oude REST-aanroep, voor de zekerheid."</p>
+<ol>
+<li>Is dit request-reply zoals bedoeld in 3.2, of de valkuil uit 3.3? Motiveer.</li>
+<li>Wat zou je concreet veranderen aan dit ontwerp?</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Dit is de valkuil. Het gebruikt weliswaar twee kanalen en een correlatie-ID, maar de aanvrager blokkeert nog steeds — nu op een aparte thread in plaats van de hoofdthread, met precies dezelfde time-out-problematiek als de oorspronkelijke synchrone aanroep uit deel 1. De messaging-infrastructuur is toegevoegd, maar het architecturale probleem (signaal 1: onvoorspelbare verwerkingstijd van de onderliggende keten) is niet opgelost, alleen verplaatst naar een andere thread.</p>
+<p>b. Laat het portaal na verzending gewoon doorgaan (geen blokkerende wachtthread). Verwerk het antwoordbericht wanneer het binnenkomt via een aparte handler die de lokale status bijwerkt. Toon de gebruiker meteen een ontvangstbevestiging, en laat de statuspagina de lokaal opgeslagen (en bijgewerkte) status tonen op aanvraag — geen wachttijd, geen time-out nodig, want "nog in behandeling" is een geldig en onmiddellijk antwoord.</p>
+<p><strong>Discussiepunt:</strong> waarom voelt "een aparte thread met time-out" voor veel ontwikkelaars als een oplossing? Omdat het de synchrone denkwijze behoudt terwijl het de code van messaging voorziet — precies het soort schijnoplossing waar deel 1 voor waarschuwde.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">3.3 De valkuil: request-reply als vermomd blocking call</h2><span class="chip time">Sectie 4 van 8</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De meest voorkomende beginnersfout bij dit patroon is het bouwen van precies het verkeerde ding: de aanvrager verstuurt het command, en blokkeert vervolgens synchroon totdat het antwoord op het antwoordkanaal verschijnt — inclusief een time-out, exact zoals bij de oorspronkelijke REST-aanroep uit deel 1.</p>
+<p>Dit lost niets op. Het voegt alleen twee kanalen en een correlatie-ID toe aan een ontwerp dat in de kern nog steeds "wachten op antwoord" is, met alle nadelen van deel 1 (signaal 1: onvoorspelbare verwerkingstijd) intact, plus de extra complexiteit van messaging erbovenop.</p>
+<p>Wanneer is blokkerend wachten op een reply dan wél verdedigbaar? Als, en alleen als, de aanvrager werkelijk niets anders te doen heeft totdat het antwoord er is — bijvoorbeeld een achtergrondproces dat na een reeks stappen expliciet op resultaat A moet wachten voordat stap B zinvol is, en waarbij het geen enkele consequentie heeft dat dit achtergrondproces een tijdje "stilstaat". Bij een interactieve gebruiker, zoals de werkgever in het portaal, is dat vrijwel nooit het geval.</p>
+<p>Het juiste antwoord voor het Werkgeversportaal is daarom niet "blokkeer tot het antwoord er is", maar: <strong>toon direct een ontvangstbevestiging</strong> ("mutatie ontvangen, referentie MRD-2026-08341"), <strong>sla de correlatie-ID lokaal op</strong>, en <strong>werk de status bij zodra het antwoordbericht binnenkomt</strong> — via een los mechanisme dat de gebruiker ofwel actief informeert (notificatie, e-mail) ofwel laat opvragen (statuspagina). Dit laatste, het opvragen van status, is zelf weer een klein request-reply-patroon: "wat is de status van referentie MRD-2026-08341?" is een command met een eigen, onmiddellijk antwoord (want de status zélf, ook "nog in behandeling", is meteen beschikbaar — alleen de uitkomst van de oorspronkelijke mutatie niet).</p>
+<figure><img alt="Schermflow: 1) werkgever dient mutatie in, 2) directe ontvangstbevestiging met referentienummer, 3) statuspagina die op aanvraag de actuele stand toont, 4) optionele notificatie zodra de status wijzigt" loading="lazy" src="figuren/figuur-3-3-schermflow.svg"/><figcaption>Figuur 3-3 — schermflow: 1) werkgever dient mutatie in, 2) directe ontvangstbevestiging met referentienummer, 3) statuspagina die op aanvraag de actuele stand toont, 4) optionele notificatie zodra de status wijzigt</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 3.3 — Command, event of document — nu met request-reply</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.3 — Command, event of document — nu met request-reply</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk bericht: is dit een command, event of document message, en zou je hier request-reply bij verwachten (dus een reply-to en correlatie-ID)?</p>
+<ol>
+<li>"Genereer de jaaropgave voor deelnemer 00482 en stuur het resultaatbestand terug."</li>
+<li>"Deelnemer 00482 heeft de jaaropgave gedownload."</li>
+<li>"Hierbij het brondossier voor de jaaropgave-generator."</li>
+<li>"Wat is de status van referentie MRD-2026-08341?"</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Command</strong>, mét request-reply — er wordt expliciet een resultaat teruggevraagd, dus reply-to en correlatie-ID zijn nodig.</p>
+<p>b. <strong>Event</strong>, zonder request-reply — dit is een feit dat geïnteresseerde partijen (bijvoorbeeld statistiek, of een reminder-proces dat downloads bijhoudt) kunnen oppikken; er wordt geen antwoord verwacht.</p>
+<p>c. <strong>Document</strong>, zonder request-reply — puur een gegevensoverdracht die nodig is voordat command a kan worden uitgevoerd. Merk op dat c logisch vóór a plaatsvindt in de keten.</p>
+<p>d. <strong>Command</strong>, mét request-reply — dit is zelf een klein verzoek-antwoordpatroon: de statusvraag wordt gesteld en er wordt onmiddellijk (de status is immers al bekend) een antwoord verwacht.</p>
+<p><strong>Wat je hier moet meenemen:</strong> niet elk command hoeft request-reply te zijn (denk aan "verwerk deze mutatie" zonder dat de zender per se een expliciet resultaat terug wil) — de vraag is steeds: verwacht de zender een concreet antwoord waarop hij moet kunnen reageren, of is "het gebeurt, klaar" voldoende?</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">3.4 Document messages: wanneer geen opdracht en geen gebeurtenis volstaat</h2><span class="chip time">Sectie 5 van 8</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elk asynchroon bericht is een opdracht of een feit. Soms is de enige bedoeling het overdragen van gegevens, zonder dat de zender iets voorschrijft en zonder dat het een op-zichzelf-staande gebeurtenis is. Het klassieke voorbeeld bij Meridiaan is de jaaropgave: eenmaal per jaar wordt voor elke deelnemer een volledig dossier samengesteld en doorgezet naar de communicatieafdeling, die er een document van maakt.</p>
+<p>Een document message onderscheidt zich van een event message door de afwezigheid van een "dit is gebeurd"-connotatie: het dossier zelf is geen gebeurtenis, het is gewoon informatie die op dit moment wordt overgedragen omdat er een taak (het genereren van de jaaropgave) om vraagt. Het onderscheidt zich van een command message doordat er niets wordt opgedragen — de ontvanger bepaalt zelf, of via zijn eigen proces, wat er met de gegevens gebeurt.</p>
+<p>Deze nuance is voor de meeste ontwerpen minder kritisch dan het command/event-onderscheid uit deel 2 — verwar een document zelden met een event, want de praktische gevolgen zijn kleiner. Toch is het onderscheid nuttig om scherp te houden: een document message hoeft geen reply-to en geen verwachting van een antwoord te bevatten, wat het ontwerp van het bijbehorende endpoint eenvoudiger maakt dan bij een command.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 3.4 — Ontwerp de statusopvraging</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.4 — Ontwerp de statusopvraging</p>
+        <div class="card">
+          <div class="prose">
+<p>Ontwerp, op basis van 3.3 in de reader, de volledige berichtenstroom voor het scenario: werkgever dient een mutatie in, krijgt direct een referentienummer, en kan op elk moment de status opvragen.</p>
+<p>Teken (in tekst, geen figuur nodig) de kanalen, berichttypen en de rol van de correlatie-ID.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<ol>
+<li>Werkgeversportaal → <strong>mutatiekanaal</strong> (point-to-point): command message, bericht-ID = X, correlatie-ID = X, reply-to = mutatie-antwoordkanaal.</li>
+<li>Portaal toont direct: "Ontvangen, referentie X." Geen wachten.</li>
+<li>KERN verwerkt, plaatst antwoord op <strong>mutatie-antwoordkanaal</strong>: bevat correlatie-ID = X en het resultaat.</li>
+<li>Portaal-endpoint ontvangt het antwoord asynchroon, werkt lokale status bij onder referentie X.</li>
+<li>Werkgever vraagt op elk moment de status op: Portaal → <strong>statuskanaal</strong> (point-to-point): command "wat is status van X", correlatie-ID = Y (nieuw, want dit is een ander verzoek), reply-to = status-antwoordkanaal.</li>
+<li>Status-endpoint antwoordt onmiddellijk (leest lokaal opgeslagen status), correlatie-ID = Y.</li>
+</ol>
+<p><strong>Wat je hier moet meenemen:</strong> er zijn twee afzonderlijke correlatie-ID's nodig (X voor de oorspronkelijke mutatie, Y voor elke statusvraag) — deelnemers maken hier vaak de fout om X te hergebruiken voor de statusvraag, wat werkt zolang er maar één statusvraag per mutatie is, maar breekt zodra de gebruiker twee keer ververst.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">3.5 Terug naar de testcoördinator</h2><span class="chip time">Sectie 6 van 8</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met request-reply, correlatie en de drie berichtstypen op hun plaats, kon Caspar de vraag van de testcoördinator volledig beantwoorden:</p>
+<ul>
+<li>Het Werkgeversportaal verstuurt een <strong>command message</strong> met bericht-ID, reply-to en correlatie-ID.</li>
+<li>KERN verwerkt en stuurt een <strong>antwoordbericht</strong> (zelf ook een soort command, namelijk "toon dit resultaat", of eenvoudiger: als document beschouwd — de cursus behandelt dit verder niet als apart type om de terminologie niet nodeloos uit te breiden) terug op het aangewezen antwoordkanaal, met dezelfde correlatie-ID.</li>
+<li>Ondertussen toont het portaal direct een ontvangstbevestiging, zonder te blokkeren.</li>
+<li>Bij binnenkomst van het antwoord wordt de lokaal opgeslagen status bijgewerkt, zichtbaar via een statuspagina die de gebruiker zelf kan raadplegen — zelf ook een (razendsnel) request-reply-patroon.</li>
+</ul>
+<p>Dit is het eerste volledig sluitende asynchrone ontwerp van de cursus. Het bevat nog geen routing, geen transformatie en geen foutafhandeling voor het geval KERN helemaal niet reageert — dat komt in de volgende delen.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 3.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Opdracht 3.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Neem de koppeling uit opdracht 2.5. Ontwerp nu een volledig request-reply-patroon eromheen, inclusief de drie header-velden uit 3.1, en beschrijf hoe een gebruiker (of het opvolgende systeem) op de hoogte blijft zonder dat er ergens synchroon gewacht wordt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende valkuil uit eerdere groepen: deelnemers ontwerpen het verzoekkanaal en het antwoordkanaal correct, maar vergeten de directe ontvangstbevestiging — waardoor de eindgebruiker alsnog het gevoel heeft "in het luchtledige" te zenden totdat het echte antwoord er is. Bespreek dit expliciet als het optreedt: het technische patroon kan volledig correct zijn en toch een slechte gebruikerservaring opleveren als de bevestigingsstap wordt overgeslagen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 3</h2><span class="chip time">Sectie 7 van 8</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Een bruikbaar command message bevat, naast de payload: een unieke bericht-ID, een reply-to-adres (indien een antwoord verwacht wordt), en een correlatie-ID.</li>
+<li>Request-reply is de asynchrone tegenhanger van een aanroep-met-antwoord: verzoekkanaal, antwoordkanaal, en correlatie die ze verbindt.</li>
+<li>De grootste valkuil is request-reply bouwen als vermomd blocking call — synchroon wachten op het antwoordkanaal lost niets op van wat deel 1 signaleerde.</li>
+<li>Het juiste patroon voor een interactieve gebruiker: directe ontvangstbevestiging, asynchrone statusbijwerking, optioneel een tweede, razendsnelle request-reply voor statusopvraging.</li>
+<li>Document messages dragen gegevens zonder opdracht en zonder gebeurtenis-connotatie; het onderscheid met event is minder kritisch dan command/event, maar wel nuttig voor een eenvoudiger endpoint-ontwerp.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 3</div>
+        <p class="quiz__src">Uit Werkboek deel 3, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Noem de drie header-velden die een command message bruikbaar maken voor terugkoppeling.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bericht-ID, reply-to-adres, correlatie-ID.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat zijn de drie samenwerkende onderdelen van request-reply?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Verzoekkanaal, antwoordkanaal, correlatie die ze verbindt.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Request-reply is geen synchrone aanroep in een jasje — de aanvrager gaat na verzending door en verwerkt het antwoord wanneer het komt.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Beschrijf de valkuil van request-reply als vermomd blocking call, en hoe je hem herkent.</span><span class="qx">Toon antwoord</span></summary><div class="ans">De aanvrager blokkeert alsnog synchroon op het antwoordkanaal, vaak met dezelfde time-out-problematiek als de oorspronkelijke synchrone aanroep — messaging is toegevoegd, maar het architecturale probleem is niet opgelost.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Wat is het juiste antwoord voor een interactieve gebruiker in plaats van blokkerend wachten?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Directe ontvangstbevestiging tonen, correlatie-ID lokaal opslaan, status asynchroon bijwerken zodra het antwoord binnenkomt, eventueel met een aparte, snelle request-reply voor statusopvraging.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat onderscheidt een document message van een event message?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een document message draagt gegevens zonder opdracht en zonder "dit is gebeurd"-connotatie; een event message meldt uitdrukkelijk dat er iets is gebeurd.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom heeft een statusopvraging een eigen, nieuwe correlatie-ID nodig, en niet die van de oorspronkelijke mutatie?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat een statusopvraging een ander, nieuw verzoek is dan de oorspronkelijke mutatie — hergebruik van dezelfde correlatie-ID werkt alleen zolang er precies één statusvraag per mutatie wordt gesteld en breekt zodra dat er meer worden.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 8 van 8</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 4 opent de eerste patroonfamilie: routing. Nu berichten goed geconstrueerd zijn, is de volgende vraag hoe een bericht zijn weg vindt naar de juiste ontvanger — te beginnen met de content-based router en de message filter.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 4</h3>
+      <p>Deel 4 — Basisrouting: content-based router en message filter — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-04.html">Deel 4 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 3 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-03/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
+  var KEY="eductus_eip3_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

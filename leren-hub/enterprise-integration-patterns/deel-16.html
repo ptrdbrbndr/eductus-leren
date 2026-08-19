@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 16 — Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 16 (Niveau 2 — Het landschap): Bij een presentatie aan een nieuwe lichting ontwikkelaars die bij het Programma Mutatieplatform kwam werken, kreeg Caspar een vraag die, na vijftien delen patroononderwijs, verrassend lastig bleek te beantwoorden zonder een schuin oog naar een specif…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-16.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 16</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 16 van 30</p>
+  <h1>Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen</h1>
+  <p class="hero__lead">Bij een presentatie aan een nieuwe lichting ontwikkelaars die bij het Programma Mutatieplatform kwam werken, kreeg Caspar een vraag die, na vijftien delen patroononderwijs, verrassend lastig bleek te beantwoorden zonder een schuin oog naar een specifieke technologie:&quot;Als ik een bericht op een kanaal plaats, waar staat het dan letterlijk, en hoe weet een tweede consument dat hij het niet ook moet oppikken?&quot;</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → <b>⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen (hier)</b> → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">16.0 De vraag die Caspar niet kon beantwoorden zonder een tekening</a></li>
+      <li><a href="#s2" data-target="s2">16.1 Twee families van brokerarchitectuur</a></li>
+      <li><a href="#s3" data-target="s3">16.2 Exchange en queue: het binnenwerk van punt-tot-punt en publish-subscribe</a></li>
+      <li><a href="#s4" data-target="s4">16.3 Partities: hoe volgorde en parallellie samen bestaan</a></li>
+      <li><a href="#s5" data-target="s5">16.4 Guaranteed delivery: waar persistentie werkelijk zit</a></li>
+      <li><a href="#s6" data-target="s6">16.5 Consumer groups: hoe meerdere onafhankelijke lezers hetzelfde kanaal delen</a></li>
+      <li><a href="#s7" data-target="s7">Samenvatting van deel 16</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">16.0 De vraag die Caspar niet kon beantwoorden zonder een tekening</h2><span class="chip time">Sectie 1 van 8</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Bij een presentatie aan een nieuwe lichting ontwikkelaars die bij het Programma Mutatieplatform kwam werken, kreeg Caspar een vraag die, na vijftien delen patroononderwijs, verrassend lastig bleek te beantwoorden zonder een schuin oog naar een specifieke technologie: <em>"Als ik een bericht op een kanaal plaats, waar staat het dan letterlijk, en hoe weet een tweede consument dat hij het niet ook moet oppikken?"</em></p>
+<p>Elke voorgaande deel had het woord "kanaal" gebruikt als een abstractie — een naam, een contract, een logische pijp. Dat was een bewuste en correcte keuze: de patronen uit deel 1 tot en met 15 gelden ongeacht welke technologie een kanaal implementeert. Maar de vraag van de nieuwe ontwikkelaar wees op iets reëels: op een gegeven moment moet die abstractie ergens landen in een concreet mechanisme, en dat mechanisme heeft een eigen vocabulaire — <strong>exchanges</strong>, <strong>queues</strong>, <strong>topics</strong>, <strong>partities</strong>, <strong>consumer groups</strong> — dat van technologie tot technologie verschilt, maar onderliggend een klein aantal gedeelde concepten deelt.</p>
+<p>Dit deel blijft, in lijn met de rest van de cursus, toolneutraal — de vertaling naar specifieke producten (en welke daarvan momenteel actief onderhouden worden) staat in de Toolbijlage. Maar zonder dít deel blijft "kanaal" een woord zonder mechanisme, en dat maakt het onmogelijk om ontwerpkeuzes uit eerdere delen (partitionering in deel 8, guaranteed delivery in deel 8, de kanaaltypen uit deel 2 en 6) daadwerkelijk te implementeren.</p>
+<figure><img alt='Een "kanaal"-wolk zoals eerder in de cursus getekend, die in dit deel wordt "opengeklapt" tot een concreet binnenwerk: exchange, queue(s), en de regels die bepalen hoe berichten van de één naar de ander stromen.' loading="lazy" src="figuren/figuur-16-1-kanaal-opengeklapt.svg"/><figcaption>Figuur 16-1 — Een "kanaal"-wolk zoals eerder in de cursus getekend, die in dit deel wordt "opengeklapt" tot een concreet binnenwerk: exchange, queue(s), en de regels die bepalen hoe berichten van de één naar de ander stromen.</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">16.1 Twee families van brokerarchitectuur</h2><span class="chip time">Sectie 2 van 8</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Onder de vele specifieke technologieën vallen brokers grofweg uiteen in twee families, elk met een eigen fundamentele manier om berichten op te slaan en te verdelen. Het is essentieel deze twee te onderscheiden, omdat de keuze tussen hen direct bepaalt welke patronen uit eerdere delen eenvoudig of juist lastig te implementeren zijn.</p>
+<p><strong>De queue-gebaseerde broker.</strong> Berichten worden geplaatst op een expliciete wachtrij (queue); zodra een consument een bericht ophaalt en bevestigt, verdwijnt het uit de wachtrij — het is, van nature, een point-to-point-mechanisme (deel 2, deel 6). Publish-subscribe wordt in dit model doorgaans gerealiseerd door berichten via een tussenliggend routeringsmechanisme (vaak een "exchange" genoemd, zie 16.2) naar meerdere, aparte wachtrijen te kopiëren — één per abonnee. Elke abonnee krijgt dus feitelijk zijn eigen, aparte wachtrij, gevuld met kopieën van hetzelfde bericht.</p>
+<p><strong>De log-gebaseerde broker.</strong> Berichten worden niet verwijderd zodra ze zijn opgehaald, maar blijven, voor een ingestelde bewaartermijn (soms onbeperkt), staan in een doorlopend, append-only logboek. Consumenten houden zelf bij tot waar in dat logboek ze gevorderd zijn (een "offset"), in plaats van dat de broker berichten actief "verwijdert" na aflevering. Dit model leent zich van nature voor de bewaareigenschap die deel 11 aan de event backbone toeschreef: nieuwe consumenten kunnen simpelweg vanaf een eerder punt in het logboek beginnen te lezen, inclusief helemaal vanaf het begin, zonder dat de broker daarvoor iets speciaals hoeft te doen.</p>
+<blockquote><p><strong>Kernzin 17 van de cursus: de keuze tussen queue-gebaseerd en log-gebaseerd is niet een implementatiedetail — het bepaalt rechtstreeks of het inhaalprobleem uit deel 6 (de rapportagetabel die een week miste) triviaal op te lossen is, of een aparte constructie vergt.</strong></p></blockquote>
+<p>Bij Meridiaan is, in lijn met de architectuurkeuzes uit deel 11, voor een gelaagde inzet gekozen: het broker-gedeelte van het landschap (command-gedreven verkeer) gebruikt een queue-gebaseerde technologie, terwijl de event backbone (mutatie-gebeurd-verkeer, met de bewaareis uit deel 11) op een log-gebaseerde technologie draait.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 16.1 — Queue-gebaseerd of log-gebaseerd?</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.1 — Queue-gebaseerd of log-gebaseerd?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario welke brokerfamilie beter past, en motiveer met kernzin 17.</p>
+<p>a. Het mutatiekanaal naar KERN: command-gedreven, elke mutatie precies één keer verwerkt, geen behoefte aan historische herhaling.</p>
+<p>b. Het mutatie-gebeurd-kanaal: event-gedreven, met de expliciete wens dat toekomstige, nog niet bestaande systemen historische gebeurtenissen kunnen "inhalen".</p>
+<p>c. Een kanaal waarvan nu nog onduidelijk is of er ooit nieuwe abonnees bijkomen die historie nodig hebben.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Queue-gebaseerd.</strong> Van nature geschikt voor point-to-point, command-gedreven verkeer zonder bewaarbehoefte — precies het profiel dat deel 11 aan een broker toeschreef.</p>
+<p>b. <strong>Log-gebaseerd.</strong> De expliciete bewaarbehoefte is precies waar dit model voor ontworpen is — het lost het inhaalprobleem uit deel 6 triviaal op, in plaats van dat er een aparte constructie voor nodig is.</p>
+<p>c. <strong>Waarschijnlijk log-gebaseerd, uit voorzorg.</strong> Als er twijfel bestaat over toekomstige bewaarbehoefte, is de kostprijs van een log-gebaseerde broker (iets zwaardere infrastructuur, zoals deel 11 al aangaf) doorgaans lager dan de kostprijs van achteraf een queue-gebaseerd kanaal te moeten migreren zodra de bewaarbehoefte alsnog blijkt te bestaan — al is dit een afweging die per situatie opnieuw gemaakt moet worden, geen automatisme.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze tussen de twee families is, net als de architectuurstijlkeuze uit deel 11, een keuze die vooraf bewust gemaakt moet worden op basis van de aard van het verkeer, niet een toevallige of achteraf moeilijk te herzien technische default.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">16.2 Exchange en queue: het binnenwerk van punt-tot-punt en publish-subscribe</h2><span class="chip time">Sectie 3 van 8</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Om de vraag van de nieuwe ontwikkelaar volledig te beantwoorden, is het nuttig het binnenwerk van een queue-gebaseerde broker te ontleden in twee onderdelen die vaak worden samengevoegd in het woord "kanaal", maar functioneel verschillend zijn.</p>
+<p>Een <strong>exchange</strong> (soms anders genoemd, afhankelijk van technologie) is het punt waar een zender een bericht aflevert, en dat bepaalt — op basis van regels die sterk lijken op de content-based router uit deel 4 — naar welke wachtrij(en) het bericht vervolgens wordt gekopieerd of doorgestuurd. Een <strong>queue</strong> is de daadwerkelijke opslagplaats waaruit een consument berichten ophaalt.</p>
+<p>Dit tweeledige model verklaart direct waarom point-to-point en publish-subscribe (deel 2, 6) technisch te realiseren zijn met hetzelfde onderliggende mechanisme: bij point-to-point routeert de exchange elk bericht naar precies één queue (met eventueel meerdere consumenten die concurrerend uit dezelfde queue putten, voor schaalbaarheid — maar elk individueel bericht gaat naar precies één van hen); bij publish-subscribe routeert de exchange een kopie van elk bericht naar elke abonnee-specifieke queue.</p>
+<p>Dit verklaart ook direct het antwoord op de oorspronkelijke vraag van de nieuwe ontwikkelaar: een tweede consument "weet" niet zelf dat hij een bericht niet ook moet oppikken — hij pikt simpelweg uit zijn eigen wachtrij, die door de exchange al gescheiden is gehouden van de wachtrijen van andere consumenten. Het onderscheid tussen "één keer verwerkt" en "elke abonnee ontvangt een kopie" zit dus niet in slim consumentgedrag, maar in hoe de exchange de berichten vooraf al heeft verdeeld.</p>
+<figure><img alt="Twee varianten naast elkaar: (a) exchange die naar één queue routeert, met twee concurrerende consumenten die om de beurt berichten oppikken (point-to-point met schaalbaarheid), en (b) exchange die naar drie aparte queues kopieert, elk met zijn eigen consument (publish-subscribe)." loading="lazy" src="figuren/figuur-16-2-p2p-versus-pubsub.svg"/><figcaption>Figuur 16-2 — Twee varianten naast elkaar: (a) exchange die naar één queue routeert, met twee concurrerende consumenten die om de beurt berichten oppikken (point-to-point met schaalbaarheid), en (b) exchange die naar drie aparte queues kopieert, elk met zijn eigen consument (publish-subscribe).</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 16.2 — Exchange en queue toepassen</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.2 — Exchange en queue toepassen</p>
+        <div class="card">
+          <div class="prose">
+<p>Een nieuwe collega begrijpt niet waarom, bij een queue-gebaseerde broker, het toevoegen van een derde publish-subscribe-abonnee aan het mutatie-gebeurd-kanaal betekent dat er een derde, nieuwe queue moet worden aangemaakt, terwijl "het toch hetzelfde kanaal is".</p>
+<p>Leg, met het exchange/queue-model uit 16.2, uit waarom dit zo werkt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Bij een queue-gebaseerde broker is "het kanaal" in de abstracte zin (deel 2) technisch gerealiseerd als een exchange die berichten routeert naar één of meerdere queues. Bij publish-subscribe krijgt elke abonnee zijn eigen, aparte queue, gevuld met een kopie van elk bericht dat de exchange ontvangt. Een derde abonnee toevoegen betekent dus letterlijk: een derde queue aanmaken, en de exchange configureren om ook daarnaartoe te kopiëren — het "ene kanaal" op abstractieniveau vertaalt zich naar meerdere, fysiek gescheiden opslagplekken op infrastructuurniveau, precies zoveel als er abonnees zijn.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de abstractie "kanaal" uit deel 2 blijft correct en bruikbaar voor ontwerpdoeleinden, maar verbergt bewust een concreet mechanisme dat, zodra je infrastructuur moet configureren of capaciteit moet plannen, wel expliciet gemaakt moet worden — dit is precies waarom dit deel nodig was naast de voorgaande vijftien.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">16.3 Partities: hoe volgorde en parallellie samen bestaan</h2><span class="chip time">Sectie 4 van 8</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 8 introduceerde partitionering als oplossing voor het volgordeprobleem, met de deelnemersnummer als partitioneringssleutel bij Meridiaan. Dit deel maakt expliciet hoe dat technisch werkt binnen een log-gebaseerde broker, waar het concept van nature past.</p>
+<p>Een log-gebaseerde broker verdeelt een kanaal (in deze context vaak "topic" genoemd) in meerdere, parallelle <strong>partities</strong> — elke partitie is zelf een apart, geordend logboek. Berichten met dezelfde partitioneringssleutel worden consistent naar dezelfde partitie gestuurd (typisch via een hash-functie op de sleutel), waardoor binnen die ene partitie de volgorde van binnenkomst gegarandeerd behouden blijft — precies de garantie die deel 8 nodig had. Tussen verschillende partities is er geen garantie op onderlinge volgorde, wat overeenkomt met de conclusie uit deel 8 dat volgorde alleen ertoe doet binnen de grens van hetzelfde object.</p>
+<p>Een queue-gebaseerde broker kent doorgaans geen ingebouwd partitiebegrip op dezelfde manier — volgordeborging per object wordt daar meestal gerealiseerd door bewust één specifieke queue (of een consistente routering naar dezelfde queue) te koppelen aan een specifieke sleutel, een patroon dat in essentie hetzelfde doel dient maar met andere technische middelen.</p>
+<blockquote><p><strong>Vuistregel: de partitioneringssleutel-keuze uit deel 8 is toolneutraal en blijft ongewijzigd van toepassing — alleen het technische mechanisme waarmee die keuze wordt gerealiseerd (partities bij log-gebaseerd, queue-toewijzing bij queue-gebaseerd) verschilt per technologiefamilie.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 16.3 — Partitioneringssleutel, nu technisch</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.3 — Partitioneringssleutel, nu technisch</p>
+        <div class="card">
+          <div class="prose">
+<p>Herneem de partitioneringssleutel-keuze uit deel 8 (deelnemersnummer, niet werkgevers-ID of mutatietype). Beschrijf, in het licht van 16.3, wat er technisch zou gebeuren als bij een log-gebaseerde broker per ongeluk géén partitioneringssleutel wordt opgegeven (berichten worden dan doorgaans willekeurig of round-robin over partities verdeeld).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Zonder een consistente partitioneringssleutel zouden opeenvolgende berichten van dezelfde deelnemer willekeurig over verschillende partities terechtkomen. Omdat volgorde alleen gegarandeerd is <em>binnen</em> een partitie, niet ertussen, zou dit betekenen dat de drie adreswijzigingen uit het incident van deel 8 opnieuw, nu structureel in plaats van incidenteel, in een onvoorspelbare volgorde bij verschillende verwerkers terecht zouden kunnen komen — precies het probleem dat deel 8 probeerde op te lossen, nu veroorzaakt door een ontbrekende technische configuratie in plaats van door toevallige piekbelasting.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de ontwerpbeslissing uit deel 8 (kies een partitioneringssleutel die samenvalt met de commutativiteitsgrens) is waardeloos als hij niet ook daadwerkelijk technisch wordt doorgevoerd in de brokerconfiguratie — een goed ontwerp op papier kan alsnog falen door een vergeten of verkeerd ingestelde partitioneringssleutel in de praktijk.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">16.4 Guaranteed delivery: waar persistentie werkelijk zit</h2><span class="chip time">Sectie 5 van 8</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 8 introduceerde guaranteed delivery als de garantie dat een bericht, eenmaal aangenomen door het kanaal, niet meer verloren gaat vóór aflevering. Dit deel maakt zichtbaar wáár die garantie technisch wordt waargemaakt: bij vrijwel elke brokertechnologie is dit een expliciete configuratiekeuze tussen <strong>in-memory</strong> opslag (snel, maar verloren bij een herstart of crash van de broker) en <strong>persistente</strong> opslag (op schijf weggeschreven, overleeft een herstart, ten koste van doorvoersnelheid).</p>
+<p>Dit is precies de instelling die bij Meridiaan tijdens de geplande broker-herstart in deel 8 ontbrak, en die na dat incident expliciet is ingeschakeld. Het is de moeite waard te benadrukken dat dit een instelling is die per kanaal, en soms zelfs per bericht, kan verschillen — niet elk kanaal heeft dezelfde behoefte aan guaranteed delivery. Een hartslag-bericht (opdracht 7.1a) heeft er weinig aan; een salariscorrectie (de rode draad van niveau 1) des te meer. De keuze hoort dus, net als de leveringsgarantie zelf (deel 7), per soort verkeer bewust gemaakt te worden, niet landschapsbreed op één standaardinstelling gezet.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 16.4 — Guaranteed delivery: een bewuste afweging per kanaal</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.4 — Guaranteed delivery: een bewuste afweging per kanaal</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk van de volgende drie kanalen of persistente (guaranteed delivery) of in-memory opslag passender is, en motiveer.</p>
+<p>a. Het salariscorrectiekanaal naar KERN.</p>
+<p>b. Een hartslag-signaal dat elke tien seconden een systeem-nog-in-leven-melding stuurt (vergelijk opdracht 7.1a).</p>
+<p>c. Het mutatie-gebeurd-kanaal, gezien de bewaareis uit deel 11.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Persistent, guaranteed delivery.</strong> Een verloren salariscorrectie is, zoals in niveau 1 uitgebreid vastgesteld, vrijwel nooit acceptabel — dit kanaal verdient de zwaarste betrouwbaarheidsgarantie.</p>
+<p>b. <strong>In-memory volstaat.</strong> Een gemist hartslagbericht wordt, zoals bij at-most-once in deel 7, vanzelf binnen tien seconden gecorrigeerd door het volgende hartslagbericht — de kosten van persistente opslag zijn hier niet gerechtvaardigd door het risico.</p>
+<p>c. <strong>Persistent, en bovendien met een lange bewaartermijn</strong> (niet alleen guaranteed delivery in de zin van "niet verloren tussen zender en eerste consument", maar ook langdurige beschikbaarheid voor toekomstige consumenten, zoals deel 11 vaststelde voor de event backbone) — dit is een zwaardere eis dan alleen guaranteed delivery, en precies de reden dat dit kanaal op een log-gebaseerde broker (16.1) hoort.</p>
+<p><strong>Wat je hier moet meenemen:</strong> guaranteed delivery is geen landschapsbrede aan/uit-schakelaar, maar een instelling die per kanaal, op basis van de aard van dat specifieke verkeer, bewust gekozen moet worden — dezelfde discipline die deel 7 al vroeg voor leveringsgaranties in het algemeen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">16.5 Consumer groups: hoe meerdere onafhankelijke lezers hetzelfde kanaal delen</h2><span class="chip time">Sectie 6 van 8</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een laatste concept dat het binnenwerk van veel moderne, met name log-gebaseerde, brokers verklaart: een <strong>consumer group</strong> is een naamgeving voor een verzameling consumenten die zich gezamenlijk gedragen als één logische ontvanger — berichten worden onderling verdeeld over de leden van de groep (voor schaalbaarheid, vergelijkbaar met concurrerende consumenten op één queue), terwijl een andere consumer group, die naar hetzelfde kanaal luistert, een eigen, onafhankelijke kopie van alle berichten ontvangt.</p>
+<p>Dit mechanisme is de technische realisatie van iets dat deel 6 al conceptueel beschreef: meerdere, onafhankelijke publish-subscribe-abonnees (bijvoorbeeld het Nabestaandenloket en de audit-trail, elk een eigen consumer group) kunnen tegelijk van hetzelfde kanaal lezen, elk in hun eigen tempo, zonder elkaar te beïnvloeden — terwijl binnen elke groep afzonderlijk parallellie mogelijk is (meerdere instanties van het Nabestaandenloket die samen, verdeeld, de belasting aankunnen).</p>
+<figure><img alt="Eén kanaal, twee consumer groups (Nabestaandenloket, audit-trail), elk met een eigen, onafhankelijke leespositie; binnen de Nabestaandenloket-groep twee instanties die de belasting onderling verdelen." loading="lazy" src="figuren/figuur-16-3-consumer-groups.svg"/><figcaption>Figuur 16-3 — Eén kanaal, twee consumer groups (Nabestaandenloket, audit-trail), elk met een eigen, onafhankelijke leespositie; binnen de Nabestaandenloket-groep twee instanties die de belasting onderling verdelen.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 16.5 — Consumer groups toepassen</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.5 — Consumer groups toepassen</p>
+        <div class="card">
+          <div class="prose">
+<p>Het Nabestaandenloket draait, voor schaalbaarheid, met drie parallelle instanties die samen de belasting van het mutatie-gebeurd-kanaal verwerken. De audit-trail draait met één instantie. Beschrijf, met het consumer group-concept uit 16.5, hoe dit zich verhoudt tot de garanties uit deel 6 (elke abonnee onafhankelijk).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Het Nabestaandenloket en de audit-trail vormen elk hun eigen, onafhankelijke consumer group — elk ontvangt een volledige, eigen kopie van alle berichten op het kanaal, precies zoals deel 6 vereist voor onafhankelijke publish-subscribe-abonnees. Binnen de Nabestaandenloket-groep verdelen de drie instanties de berichten onderling (vergelijkbaar met concurrerende consumenten op een queue) — elk individueel bericht wordt door precies één van de drie Nabestaandenloket-instanties verwerkt, maar de groep als geheel ontvangt, net als de audit-trail, alle berichten.</p>
+<p>Dit betekent dat de drie vragen uit deel 6 (historie, tijdelijke afwezigheid, volgorde-afhankelijkheid) op het niveau van de <strong>groep</strong> worden beantwoord, niet op het niveau van de individuele instantie — als één van de drie Nabestaandenloket-instanties tijdelijk uitvalt, nemen de andere twee de belasting over zonder dat de groep als geheel iets mist (mits de brokerconfiguratie dat ondersteunt), terwijl de audit-trail, als aparte groep, hier volledig buiten staat.</p>
+<p><strong>Wat je hier moet meenemen:</strong> consumer groups bieden een extra laag parallellie (binnen de groep) bovenop de onafhankelijkheid tussen groepen (deel 6) — het technisch mechanisme voegt schaalbaarheid toe zonder de conceptuele garanties uit deel 6 te wijzigen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 16</h2><span class="chip time">Sectie 7 van 8</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Brokers vallen grofweg uiteen in queue-gebaseerd (berichten verdwijnen na aflevering, van nature point-to-point) en log-gebaseerd (berichten blijven bewaard in een doorlopend logboek, van nature geschikt voor de bewaareigenschap van een event backbone).</li>
+<li>Een exchange bepaalt de routering naar wachtrijen; een queue is de daadwerkelijke opslag waar een consument uit put — samen verklaren ze technisch hoe point-to-point en publish-subscribe met hetzelfde onderliggende mechanisme kunnen worden gerealiseerd.</li>
+<li>Partities in een log-gebaseerde broker zijn het technische mechanisme achter de partitioneringssleutel-keuze uit deel 8: volgorde gegarandeerd binnen een partitie, geen garantie ertussen.</li>
+<li>Guaranteed delivery wordt technisch gerealiseerd via persistente (in plaats van in-memory) opslag, een instelling die per kanaal bewust moet worden gekozen, niet landschapsbreed op één standaard gezet.</li>
+<li>Consumer groups realiseren technisch wat deel 6 conceptueel beschreef: meerdere, onafhankelijke abonnees op hetzelfde kanaal, elk met interne parallellie mogelijk.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 16</div>
+        <p class="quiz__src">Uit Werkboek deel 16, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin over queue-gebaseerd versus log-gebaseerd, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De keuze tussen queue-gebaseerd en log-gebaseerd is niet een implementatiedetail — het bepaalt rechtstreeks of het inhaalprobleem uit deel 6 triviaal op te lossen is of een aparte constructie vergt.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het verschil tussen een exchange en een queue?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een exchange bepaalt de routering van een bericht naar één of meerdere queues; een queue is de daadwerkelijke opslagplaats waaruit een consument berichten ophaalt.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Hoe verklaart het exchange/queue-model technisch het verschil tussen point-to-point en publish-subscribe?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij point-to-point routeert de exchange elk bericht naar precies één queue; bij publish-subscribe routeert de exchange een kopie naar elke abonnee-specifieke queue — hetzelfde onderliggende mechanisme, andere routeringsconfiguratie.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat zijn partities, en welke ontwerpbeslissing uit deel 8 realiseren ze technisch?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Partities zijn parallelle, geordende logboeken binnen een log-gebaseerde broker; ze realiseren technisch de partitioneringssleutel-keuze uit deel 8 — volgorde gegarandeerd binnen een partitie, niet ertussen.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waar wordt guaranteed delivery (deel 8) technisch gerealiseerd, en waarom is dit geen landschapsbrede instelling?</span><span class="qx">Toon antwoord</span></summary><div class="ans">In de keuze tussen in-memory en persistente opslag, per kanaal in te stellen. Het is geen landschapsbrede instelling omdat niet elk kanaal dezelfde behoefte aan die garantie heeft — een hartslagbericht heeft er weinig aan, een salariscorrectie des te meer.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is een consumer group, en welk deel 6-concept realiseert het technisch?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een consumer group is een verzameling consumenten die zich gezamenlijk als één logische ontvanger gedraagt, met interne verdeling van berichten. Het realiseert technisch de onafhankelijkheid tussen publish-subscribe-abonnees uit deel 6, met interne schaalbaarheid als extra laag.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom bleef "kanaal" tot dit deel toe een abstractie, en waarom was dat een bewuste keuze in plaats van een omissie?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat de patronen uit deel 1 tot en met 15 ongeacht technologie gelden — het toolneutraal houden van "kanaal" was een bewuste keuze om de patronen breed toepasbaar te houden, niet gebonden aan één specifieke technologiekeuze. Dit deel voegt het concrete mechanisme toe zonder de eerdere abstractie ongeldig te maken.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 8 van 8</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 17 verlaat de infrastructuur en keert terug naar architectuurkeuzes op procesniveau: orkestratie versus choreografie — twee fundamenteel verschillende manieren om te bepalen wie in een keten van stappen de regie voert, en wanneer welke van de twee tot een beheersbaarder landschap leidt dan de andere.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 17</h3>
+      <p>Deel 17 — Orkestratie versus choreografie — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-17.html">Deel 17 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 16 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-16/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
+  var KEY="eductus_eip16_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

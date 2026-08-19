@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 17 — Orkestratie versus choreografie | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 17 (Niveau 2 — Het landschap): Een deelnemersproces bij Meridiaan — het starten van een pensioenuitkering na pensionering — bleek, bij nader onderzoek naar aanleiding van een klacht, uit zes stappen te bestaan die over vijf verschillende systemen waren verspreid: KERN registreerde…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-17.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 17</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 17 van 30</p>
+  <h1>Orkestratie versus choreografie</h1>
+  <p class="hero__lead">Een deelnemersproces bij Meridiaan — het starten van een pensioenuitkering na pensionering — bleek, bij nader onderzoek naar aanleiding van een klacht, uit zes stappen te bestaan die over vijf verschillende systemen waren verspreid: KERN registreerde de pensioendatum, de externe administrateur berekende het uitkeringsbedrag, de risicomanagementafdeling voerde een fraudecontrole uit, de uitkeringsadministratie startte de daadwerkelijke betaling, het Werkgeversportaal informeerde de voormalige werkgever, en de communicatieafdeling verstuurde een bevestigingsbrief.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → <b>⑦ Orkestratie versus choreografie (hier)</b> → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">17.0 Wie besliste dat de uitkering mocht doorgaan?</a></li>
+      <li><a href="#s2" data-target="s2">17.1 Choreografie: wat er al was, zonder dat iemand het zo noemde</a></li>
+      <li><a href="#s3" data-target="s3">17.2 Orkestratie: één component die het script kent</a></li>
+      <li><a href="#s4" data-target="s4">17.3 Geen zuivere keuze: het uitkeringsproces heronderzocht</a></li>
+      <li><a href="#s5" data-target="s5">17.4 De relatie met eerdere delen</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 17</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">17.0 Wie besliste dat de uitkering mocht doorgaan?</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een deelnemersproces bij Meridiaan — het starten van een pensioenuitkering na pensionering — bleek, bij nader onderzoek naar aanleiding van een klacht, uit zes stappen te bestaan die over vijf verschillende systemen waren verspreid: KERN registreerde de pensioendatum, de externe administrateur berekende het uitkeringsbedrag, de risicomanagementafdeling voerde een fraudecontrole uit, de uitkeringsadministratie startte de daadwerkelijke betaling, het Werkgeversportaal informeerde de voormalige werkgever, en de communicatieafdeling verstuurde een bevestigingsbrief.</p>
+<p>Elke stap reageerde, via het mutatie-gebeurd-kanaal (deel 2, deel 6), op de gebeurtenis die de vorige stap produceerde: KERN publiceerde "pensioendatum geregistreerd", de administrateur luisterde daarop en publiceerde na berekening "uitkeringsbedrag vastgesteld", risicomanagement luisterde daarop, enzovoort — een keten van reacties op reacties, zonder één component die het geheel overzag.</p>
+<p>Toen de klacht binnenkwam — een deelnemer wiens uitkering vier weken te laat startte — kon niemand in één oogopslag zien waar in de keten van zes stappen de vertraging zat, wélke stap op wélke andere stap wachtte, of wat er zou moeten gebeuren als een stap werd overgeslagen. Elk team kende alleen zijn eigen stap; niemand kende het geheel. Dit is een ander probleem dan deel 15 behandelde: niet "waar is dit specifieke bericht", maar <strong>"wie is verantwoordelijk voor het feit dat dit hele proces correct doorloopt"</strong>.</p>
+<figure><img alt="Zes stappen in een keten, elk met een pijl naar de volgende, zonder één centraal punt dat de keten als geheel overziet — vergelijk met een estafette zonder coach die het geheel volgt." loading="lazy" src="figuren/figuur-17-1-estafette-zonder-coach.svg"/><figcaption>Figuur 17-1 — Zes stappen in een keten, elk met een pijl naar de volgende, zonder één centraal punt dat de keten als geheel overziet — vergelijk met een estafette zonder coach die het geheel volgt.</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">17.1 Choreografie: wat er al was, zonder dat iemand het zo noemde</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Wat er bij Meridiaan al bestond, is een architectuurstijl die <strong>choreografie</strong> heet: elke component reageert zelfstandig op gebeurtenissen van andere componenten, zonder een centrale regisseur. Elke "danser" (component) kent zijn eigen bewegingen en reageert op signalen van anderen, maar niemand staat aan de zijlijn met het complete script.</p>
+<p>Dit is, zoals de naam al suggereert, direct verwant aan de publish-subscribe-architectuur uit deel 2 en 6, en aan de event backbone uit deel 11 — choreografie is in essentie wat er ontstaat wanneer je meerdere event-gedreven stappen simpelweg na elkaar laat reageren, zonder een aanvullende laag toe te voegen. De sterke punten van choreografie zijn precies de sterke punten van publish-subscribe: lage koppeling (elke component hoeft alleen te weten op welke gebeurtenissen hij reageert, niet wie er nog meer in de keten zit), en eenvoudige uitbreidbaarheid (een nieuwe stap toevoegen betekent alleen: abonneer op het juiste event, publiceer het volgende — geen bestaande componenten hoeven aangepast te worden).</p>
+<p>Het probleem dat 17.0 blootlegde, is echter ook inherent aan choreografie: <strong>er is geen enkele plek waar het geheel van het proces expliciet is vastgelegd.</strong> De volgorde van de zes stappen bestaat alleen impliciet, verspreid over zes losse abonnementsconfiguraties bij vijf teams — precies zoals de verborgen volgorde-aanname uit deel 6 (audit-trail die impliciet op het Nabestaandenloket wachtte) een risico bleek te zijn wanneer hij nergens was vastgelegd. Choreografie schaalt dit risico op: bij twee stappen is een impliciete afhankelijkheid nog te overzien; bij zes stappen, verspreid over vijf teams, is dat niet meer het geval.</p>
+<blockquote><p><strong>Kernzin 18 van de cursus: choreografie maakt elke individuele stap eenvoudig, ten koste van het overzicht over het geheel — de prijs wordt onzichtbaar totdat iemand moet uitleggen waarom het geheel niet werkt.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 17.1 — Waarom niveau 1 en deel 15 dit niet oplossen</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.1 — Waarom niveau 1 en deel 15 dit niet oplossen</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg uit waarom noch een niveau 1-patroon (bijvoorbeeld idempotentie of het dead letter channel), noch een systeembeheerpatroon uit deel 15 (bijvoorbeeld de wire tap) het probleem van 17.0 (niemand weet wie verantwoordelijk is voor het geheel van het proces) had opgelost.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>De niveau 1-patronen lossen problemen op van individuele berichten of koppelingen (is dit bericht verwerkt, kan ik het terugvinden als het mislukt) — ze zeggen niets over de relatie tussen meerdere, opeenvolgende berichten die samen één zakelijk proces vormen. Een wire tap uit deel 15 zou weliswaar kunnen laten zien welk bericht op welk kanaal het laatst is gezien (vergelijkbaar met het incident van deel 15), maar dat toont alleen de laatste waargenomen stap, niet of die stap logisch correct is binnen het geheel van het zesstappenproces, en niet wie er verantwoordelijk is voor het bewaken van dat geheel.</p>
+<p>Het probleem van 17.0 is fundamenteel anders: het gaat niet om zichtbaarheid van individuele berichten (dat lost deel 15 op), maar om <strong>eigenaarschap van het proces als geheel</strong> — een vraag die geen van de voorgaande zestien delen expliciet stelde, omdat ze zich allemaal richtten op individuele koppelingen of op landschapsbrede infrastructuur, niet op de sequentie van stappen die samen één zakelijk resultaat vormen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> dit deel introduceert een nieuw soort probleem (proceseigenaarschap), niet een uitbreiding van een eerder probleem — vandaar dat eerdere patronen, hoe waardevol ook, hier structureel tekortschieten.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">17.2 Orkestratie: één component die het script kent</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Orkestratie</strong> kiest de tegenovergestelde aanpak: één centrale component — de <strong>orkestrator</strong> — kent het volledige proces expliciet, en stuurt elke stap actief aan door commands te versturen naar de betrokken systemen, in plaats van dat elke stap zelfstandig op events reageert. De orkestrator is, in termen van deel 3, de partij die elke stap als een command-met-verwachte-reactie behandelt, en op basis van dat antwoord beslist wat de volgende stap is.</p>
+<p>Toegepast op het uitkeringsproces zou een orkestrator: een command "registreer pensioendatum" naar KERN sturen, wachten (asynchroon, non-blocking — deel 3) op bevestiging, dan een command "bereken uitkeringsbedrag" naar de externe administrateur sturen, enzovoort, met op elk moment één plek waar het complete proces, inclusief de huidige voortgang, expliciet zichtbaar is.</p>
+<p>Dit lost het probleem van 17.0 rechtstreeks op: bij een klacht over een vertraagde uitkering kan de orkestrator direct worden geraadpleegd (vergelijkbaar met de control bus uit deel 15) om te zien op welke stap het proces op dit moment wacht. Het brengt echter een eigen prijs met zich mee die het spiegelbeeld is van choreografie's zwakte:</p>
+<p><strong>De orkestrator wordt een centrale afhankelijkheid voor het hele proces</strong> — vergelijkbaar met de broker-afweging uit deel 11 (gedeelde infrastructuur, storing raakt potentieel alles), nu toegepast op procesniveau in plaats van transportniveau.</p>
+<p><strong>Elke wijziging aan het proces vergt een wijziging in de orkestrator</strong>, wat de lage koppeling van choreografie tenietdoet: een nieuwe stap toevoegen aan een georkestreerd proces betekent het aanpassen van de centrale orkestratielogica, niet simpelweg het abonneren op een bestaand event.</p>
+<blockquote><p><strong>Vuistregel: kies orkestratie wanneer het proces zelf, als geheel, een eigenaar en een expliciet te bewaken voortgang verdient; kies choreografie wanneer de stappen onafhankelijk moeten kunnen evolueren en geen enkele partij het geheel hoeft te "bezitten".</strong></p></blockquote>
+<figure><img alt="Twee diagrammen naast elkaar: choreografie als een ketting van pijlen zonder centrum, orkestratie als een ster met de orkestrator in het midden die elke stap aanstuurt en bevestiging terugkrijgt." loading="lazy" src="figuren/figuur-17-2-choreografie-versus-orkestratie.svg"/><figcaption>Figuur 17-2 — Twee diagrammen naast elkaar: choreografie als een ketting van pijlen zonder centrum, orkestratie als een ster met de orkestrator in het midden die elke stap aanstuurt en bevestiging terugkrijgt.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 17.2 — Choreografie of orkestratie?</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.2 — Choreografie of orkestratie?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk (deel)proces of choreografie of orkestratie beter past, en motiveer met de vuistregel uit 17.2.</p>
+<p>a. Vier stappen die strikt na elkaar moeten gebeuren, waarbij elke stap afhangt van het succesvolle resultaat van de vorige (zoals de kern van het uitkeringsproces).</p>
+<p>b. Drie onafhankelijke systemen die allemaal moeten reageren op "deelnemer overleden", zonder dat de een op de ander hoeft te wachten.</p>
+<p>c. Een goedkeuringsproces met vijf mogelijke routes, afhankelijk van bedrag en type besluit, waarbij het management expliciet wil kunnen zien in welke fase elk lopend besluit zich bevindt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Orkestratie.</strong> Bindende, onderling afhankelijke volgorde die bewaking verdient — precies het profiel dat de vuistregel voor orkestratie beschrijft.</p>
+<p>b. <strong>Choreografie.</strong> Onafhankelijke reacties op een afgerond feit, geen onderlinge afhankelijkheid — het schoolvoorbeeld van choreografie, en identiek aan het publish-subscribe-scenario uit deel 6 (opdracht 6.4a).</p>
+<p>c. <strong>Orkestratie.</strong> De expliciete wens tot voortgangsbewaking ("in welke fase bevindt dit besluit zich") is precies de reden die 17.2 in de reader geeft voor orkestratie — zonder een centrale orkestrator zou die vraag niet te beantwoorden zijn zonder alle betrokken teams te bevragen, zoals bij het incident van 17.0.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het aantal stappen (vier bij a, drie bij b, vijf bij c) is niet de doorslaggevende factor — de aanwezigheid van bindende onderlinge afhankelijkheid en de behoefte aan expliciete voortgangsbewaking zijn dat wel.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">17.3 Geen zuivere keuze: het uitkeringsproces heronderzocht</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Net als bij de architectuurstijlkeuze in deel 11 is de praktijk zelden zuiver. Bij Meridiaan is, na het incident van 17.0, niet gekozen voor volledige orkestratie van het hele uitkeringsproces, maar voor een gelaagde aanpak die de sterke punten van beide stijlen combineert:</p>
+<p><strong>Een orkestrator is geïntroduceerd voor de kern van het proces</strong> — de vijf stappen die strikt opeenvolgend en onderling afhankelijk zijn (pensioendatum → bedrag → fraudecontrole → betaling), met expliciete voortgangsbewaking en een directe koppeling naar de control bus voor statusopvragingen.</p>
+<p><strong>De laatste stap (communicatie naar de voormalige werkgever en de bevestigingsbrief) bleef choreografisch</strong> — deze twee acties zijn onderling onafhankelijk van elkaar (de een hoeft niet te wachten op de ander) en hebben geen invloed op de kern van het proces zelf; ze reageren simpelweg op het "uitkering gestart"-event, zoals ze altijd al deden, zonder dat de orkestrator ze expliciet hoeft aan te sturen.</p>
+<p>Deze keuze weerspiegelt een criterium dat verder reikt dan "hoeveel stappen zijn er": <strong>is er een bindende, onderling afhankelijke volgorde die bewaakt moet worden (orkestreer die), of zijn er onafhankelijke reacties op een afgerond feit (laat die choreografisch)?</strong> Bij Meridiaan bleken de eerste vier stappen strikt van elkaar afhankelijk (je kunt geen fraudecontrole doen zonder bedrag, geen betaling zonder goedgekeurde fraudecontrole), terwijl de laatste twee onafhankelijke, parallelle reacties op hetzelfde eindresultaat waren.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 17.3 — De prijs van orkestratie</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.3 — De prijs van orkestratie</p>
+        <div class="card">
+          <div class="prose">
+<p>Een architect stelt voor om, na het incident van 17.0, gewoon het hele uitkeringsproces (alle zes stappen) te orkestreren — "dan hebben we in ieder geval overal overzicht."</p>
+<p>a. Wat gaat hiermee verloren, gegeven wat deel 17.2 zegt over de prijs van orkestratie?</p>
+<p>b. Waarom koos Meridiaan uiteindelijk voor een gelaagde aanpak (vijf stappen georkestreerd, twee choreografisch) in plaats van alles te orkestreren?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Twee dingen: de orkestrator wordt een centrale afhankelijkheid voor het hele proces (vergelijkbaar met de broker-afweging uit deel 11), en de lage koppeling die choreografie bood — vooral relevant voor de twee laatste, onderling onafhankelijke stappen (communicatie naar werkgever, bevestigingsbrief) — gaat verloren. Elke toekomstige wijziging aan die twee onafhankelijke acties zou dan onnodig door de centrale orkestratielogica moeten lopen, in plaats van simpelweg een nieuw abonnement op het bestaande "uitkering gestart"-event te zijn.</p>
+<p>b. Omdat niet elke stap dezelfde eigenschap heeft: de eerste vier stappen zijn strikt onderling afhankelijk en verdienen daarom orkestratie, terwijl de laatste twee onafhankelijke, parallelle reacties zijn zonder bindende volgorde-eis — precies het criterium uit 17.2. Alles orkestreren zou de eenvoud van die laatste twee onnodig opofferen aan overzicht dat daar niet nodig is.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "overal overzicht" klinkt aantrekkelijk maar is geen doel op zich — de vraag is steeds of een specifieke stap daadwerkelijk bindende afhankelijkheid en bewaking nodig heeft, niet of overzicht in het algemeen prettig zou zijn.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">17.4 De relatie met eerdere delen</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deze keuze is geen nieuw, geïsoleerd concept — hij bouwt direct voort op onderscheidingen die de cursus al eerder maakte:</p>
+<p><strong>Orkestratie is verwant aan het recipient list-patroon uit deel 12</strong>, maar met een cruciaal verschil: een recipient list stuurt één bericht naar meerdere, onafhankelijke bestemmingen tegelijk (parallelle verspreiding), terwijl een orkestrator stappen doorgaans <strong>sequentieel</strong> aanstuurt, waarbij de uitkomst van de ene stap bepaalt of en hoe de volgende wordt gestart.</p>
+<p><strong>Choreografie is, zoals in 17.1 vastgesteld, in essentie meerdere event-gedreven stappen die simpelweg na elkaar reageren</strong> — geen nieuw mechanisme, maar een naam voor een specifiek gebruikspatroon van publish-subscribe (deel 2, deel 6) over meerdere stappen heen.</p>
+<p><strong>De keuze tussen beide is, net als de architectuurstijlkeuze in deel 11, een schaal- en eigenaarschapsvraag</strong>, geen technische beperking: dezelfde messaging-infrastructuur (deel 16) kan zowel choreografie als orkestratie faciliteren; het verschil zit in hoe de logica van "wat gebeurt er wanneer" wordt georganiseerd, niet in welke broker-technologie eronder ligt.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 17.4 — Orkestratie versus recipient list</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.4 — Orkestratie versus recipient list</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg, met het onderscheid uit 17.4, uit waarom een orkestrator die vijf stappen sequentieel aanstuurt géén recipient list (deel 12) is, ook al lijken beide op "één component die meerdere bestemmingen aanstuurt".</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Een recipient list stuurt één bericht naar een berekende verzameling bestemmingen die <strong>parallel en onafhankelijk</strong> van elkaar worden bediend — de accountant, het controleteam en risicomanagement uit deel 12 ontvangen allemaal tegelijk hun eigen kopie, zonder dat de een op de ander wacht. Een orkestrator daarentegen stuurt stappen doorgaans <strong>sequentieel</strong> aan: de uitkomst van stap 1 (pensioendatum geregistreerd) bepaalt of, en met welke gegevens, stap 2 (bedrag berekenen) wordt gestart — er is een bindende volgordelijke afhankelijkheid die bij een recipient list expliciet afwezig is.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "één component, meerdere bestemmingen" is niet genoeg om twee patronen gelijk te stellen — de vraag of de bestemmingen parallel-onafhankelijk zijn (recipient list) of sequentieel-afhankelijk (orkestratie) is doorslaggevend voor welk patroon werkelijk van toepassing is.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 17</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Choreografie laat elke component zelfstandig reageren op gebeurtenissen van andere componenten, zonder centrale regie — lage koppeling en eenvoudige uitbreidbaarheid, ten koste van het ontbreken van één plek waar het geheel van een proces expliciet is vastgelegd.</li>
+<li>Orkestratie introduceert een centrale orkestrator die het volledige proces expliciet kent en elke stap actief aanstuurt — expliciet overzicht en voortgangsbewaking, ten koste van een centrale afhankelijkheid en minder losse koppeling.</li>
+<li>De vuistregel: orkestreer processen met een bindende, onderling afhankelijke volgorde die bewaking verdient; laat onafhankelijke reacties op een afgerond feit choreografisch.</li>
+<li>In de praktijk combineren processen vaak beide, net als bij de architectuurstijlkeuze uit deel 11 — georkestreerde kernprocessen met choreografische, onafhankelijke uitlopers.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 17.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Opdracht 17.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf een meerstaps proces uit je eigen werk dat over meerdere systemen of teams is verspreid. Bepaal, met de vuistregel uit 17.2, welke stappen bindend afhankelijk zijn (orkestratie-kandidaat) en welke onafhankelijke reacties zijn (choreografie-kandidaat). Is er op dit moment één plek waar het geheel van dit proces expliciet is vastgelegd, of is de kennis, zoals bij Meridiaan vóór het incident, verspreid over meerdere teams?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers ontdekken vaak, net als bij Meridiaan, dat een bestaand meerstaps proces volledig choreografisch is gegroeid zonder dat dit ooit een bewuste architectuurkeuze was — het "gebeurde gewoon" doordat elke stap onafhankelijk werd gebouwd door een ander team, met als resultaat precies het probleem van 17.0: niemand kent het geheel.</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 17</div>
+        <p class="quiz__src">Uit Werkboek deel 17, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is het verschil tussen choreografie en orkestratie, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij choreografie reageert elke component zelfstandig op gebeurtenissen van anderen, zonder centrale regie; bij orkestratie kent één centrale orkestrator het volledige proces en stuurt elke stap actief aan.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin over choreografie, en welke prijs betaal je ervoor?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Choreografie maakt elke individuele stap eenvoudig, ten koste van het overzicht over het geheel — de prijs wordt onzichtbaar totdat iemand moet uitleggen waarom het geheel niet werkt.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is de prijs van orkestratie, en waarmee is die vergelijkbaar uit deel 11?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De orkestrator wordt een centrale afhankelijkheid voor het hele proces, en elke wijziging vergt een aanpassing van de centrale orkestratielogica — vergelijkbaar met de broker-afweging uit deel 11 (gedeelde infrastructuur, storing raakt potentieel alles).</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Noem de vuistregel voor het kiezen tussen orkestratie en choreografie.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Kies orkestratie wanneer het proces zelf, als geheel, een eigenaar en expliciete voortgangsbewaking verdient; kies choreografie wanneer de stappen onafhankelijk moeten kunnen evolueren en geen enkele partij het geheel hoeft te bezitten.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waarom is een georkestreerd proces geen recipient list, ook al sturen beide meerdere bestemmingen aan?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een recipient list stuurt bestemmingen parallel en onafhankelijk aan; een orkestrator stuurt stappen doorgaans sequentieel aan, waarbij de uitkomst van de ene stap bepaalt of en hoe de volgende wordt gestart — een bindende afhankelijkheid die bij een recipient list ontbreekt.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Waarom koos Meridiaan voor een gelaagde aanpak in plaats van het hele uitkeringsproces te orkestreren?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat niet elke stap dezelfde eigenschap had: de eerste vier stappen waren strikt onderling afhankelijk (orkestratie-waardig), terwijl de laatste twee onafhankelijke, parallelle reacties waren zonder bindende volgorde-eis (choreografie-waardig blijven).</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Welk soort probleem introduceert dit deel dat door geen van de voorgaande zestien delen werd opgelost?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Proceseigenaarschap — wie is verantwoordelijk voor het feit dat een keten van stappen als geheel correct doorloopt, in tegenstelling tot eerdere delen die zich richtten op individuele berichten, koppelingen, of landschapsbrede infrastructuur.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 18 behandelt distributed transactions in asynchrone context: het saga-patroon en compenserende transacties — wat er gebeurt wanneer een georkestreerd of choreografisch proces halverwege moet worden teruggedraaid, met expliciete afstemming op het distributed-transactions-onderdeel van de API-cursus.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 18</h3>
+      <p>Deel 18 — Distributed transactions in async context: saga&#39;s en compenserende transacties — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-18.html">Deel 18 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 17 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-17/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip17_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

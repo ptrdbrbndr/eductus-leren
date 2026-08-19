@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 25 (Niveau 3 — Event streaming en stelselschaal): Het invaarproces voor één deelnemer blijkt, uitgewerkt, een keten van minstens vijf systemen te doorlopen: KERN levert de brondata (huidige aanspraak, deelnemersgegevens), een apartdatakwaliteitscontrolesysteem(nieuw gebouwd specifiek voor de Stelsel…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-25.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 25</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 3 (Event streaming en stelselschaal) · Deel 25 van 30</p>
+  <h1>Complexe eventketens: de event backbone voor invaren en datakwaliteit</h1>
+  <p class="hero__lead">Het invaarproces voor één deelnemer blijkt, uitgewerkt, een keten van minstens vijf systemen te doorlopen: KERN levert de brondata (huidige aanspraak, deelnemersgegevens), een apartdatakwaliteitscontrolesysteem(nieuw gebouwd specifiek voor de Stelselovergang) valideert of die brondata voldoende betrouwbaar is om in te varen, eenrekenkern(eveneens nieuw, gespecialiseerd in de complexe Wtp-rekenregels) berekent de nieuwe aanspraak, eeninvaaradministratie(event-sourced, zoals in deel 24 geïntroduceerd) legt het resultaat onveranderlijk vast, en tot slot hetWerkgeversportaal en Nabestaandenloketdie de deelnemer en diens eventuele nabestaanden informeren.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>6</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 3: ① Event-driven architectuur en event streaming fundamenten → ② Event sourcing als drager → <b>③ Complexe eventketens: de event backbone voor invaren en datakwaliteit (hier)</b> → ④ Poison messages en retry-topologie op schaal → ⑤ Resilience patterns in ketens: circuit breaker, bulkhead, backpressure → ⑥ Governance en lifecycle van een event backbone → ⑦ Auditability en verantwoording richting DNB/AFM vanuit messaging-logs → ⑧ Masterproef: de verdwenen bevestiging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">25.0 Vijf systemen, één deelnemer, één invaarmoment</a></li>
+      <li><a href="#s2" data-target="s2">25.1 Waarom datakwaliteit een eigen stap in de keten is, niet een zijdelingse controle</a></li>
+      <li><a href="#s3" data-target="s3">25.2 Saga-compensatie wanneer &quot;compenseren&quot; een formeel traject wordt</a></li>
+      <li><a href="#s4" data-target="s4">25.3 De event backbone als gedeelde, wettelijke infrastructuur</a></li>
+      <li><a href="#s5" data-target="s5">Samenvatting van deel 25</a></li>
+      <li><a href="#s6" data-target="s6">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">25.0 Vijf systemen, één deelnemer, één invaarmoment</h2><span class="chip time">Sectie 1 van 6</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het invaarproces voor één deelnemer blijkt, uitgewerkt, een keten van minstens vijf systemen te doorlopen: KERN levert de brondata (huidige aanspraak, deelnemersgegevens), een apart <strong>datakwaliteitscontrolesysteem</strong> (nieuw gebouwd specifiek voor de Stelselovergang) valideert of die brondata voldoende betrouwbaar is om in te varen, een <strong>rekenkern</strong> (eveneens nieuw, gespecialiseerd in de complexe Wtp-rekenregels) berekent de nieuwe aanspraak, een <strong>invaaradministratie</strong> (event-sourced, zoals in deel 24 geïntroduceerd) legt het resultaat onveranderlijk vast, en tot slot het <strong>Werkgeversportaal en Nabestaandenloket</strong> die de deelnemer en diens eventuele nabestaanden informeren.</p>
+<p>Dit is, structureel, geen nieuw probleem — het is het proceseigenaarschap-vraagstuk van deel 17 (orkestratie versus choreografie) en het compensatievraagstuk van deel 18 (saga's), nu toegepast op een keten waarvan <strong>elke stap zelf al de strengere event-sourcing-eisen van deel 23-24 moet naleven.</strong> Wat deze keten uniek maakt, is niet een nieuw patroon, maar de <strong>stapeling</strong> van eisen: elke stap moet niet alleen correct zijn (zoals altijd), maar ook zijn eigen correctheid onweerlegbaar kunnen bewijzen, jarenlang, aan een externe toezichthouder.</p>
+<figure><img alt='Vijf systemen in een keten, elk met een eigen "bewijslast"-label: brondata (herkomst), datakwaliteit (validatiecriteria), rekenkern (toegepaste regels + versie), invaaradministratie (onveranderlijk vastgelegd), communicatie (bevestiging van kennisgeving).' loading="lazy" src="figuren/figuur-25-1-vijf-systemen-bewijslast.svg"/><figcaption>Figuur 25-1 — Vijf systemen in een keten, elk met een eigen "bewijslast"-label: brondata (herkomst), datakwaliteit (validatiecriteria), rekenkern (toegepaste regels + versie), invaaradministratie (onveranderlijk vastgelegd), communicatie (bevestiging van kennisgeving).</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">25.1 Waarom datakwaliteit een eigen stap in de keten is, niet een zijdelingse controle</h2><span class="chip time">Sectie 2 van 6</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Bij een gewone mutatie (niveau 1-2) was datavalidatie doorgaans een filter of enrichment-stap (deel 4, 13) — belangrijk, maar functioneel ondergeschikt aan de hoofdstroom. Bij invaren is datakwaliteit een <strong>eigen, gelijkwaardige stap in de keten</strong>, om een reden die rechtstreeks uit de wettelijke context volgt: een aanspraak die wordt ingevaren op basis van onbetrouwbare brondata, kan niet zomaar achteraf worden gecorrigeerd zoals een gewone mutatie — het invaarmoment zelf is, zoals deel 23 vaststelde, een onomkeerbaar, wettelijk feit. Een fout die pas na het invaren aan het licht komt, vergt niet een eenvoudige correctie maar een formeel hersteltraject, potentieel met toezichtimplicaties.</p>
+<p>Dit verklaart de architectuurkeuze bij Meridiaan: het datakwaliteitscontrolesysteem is een <strong>verplichte, blokkerende stap</strong> vóór de rekenkern, georkestreerd (deel 17) in plaats van choreografisch — niet omdat orkestratie in het algemeen beter is (deel 17 stelde dat expliciet niet), maar omdat de vuistregel uit dat deel hier ondubbelzinnig naar orkestratie wijst: een bindende, onderling afhankelijke volgorde (geen berekening zonder gevalideerde data) die expliciete bewaking verdient.</p>
+<blockquote><p><strong>Kernzin 25 van de cursus: bij wettelijk onomkeerbare stappen is de vuistregel voor orkestratie versus choreografie (deel 17) niet langer een architectuurvoorkeur maar een compliance-eis — de bindende afhankelijkheid bestaat niet alleen technisch, maar ook juridisch.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 25.1 — Orkestratie of choreografie, met de compliance-lens</div>
+        <p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.1 — Orkestratie of choreografie, met de compliance-lens</p>
+        <div class="card">
+          <div class="prose">
+<p>Beoordeel, met kernzin 25, of de volgende deelstappen van het invaarproces georkestreerd of choreografisch moeten zijn.</p>
+<p>a. Datakwaliteitscontrole → rekenkern (berekening mag alleen op gevalideerde data).</p>
+<p>b. Invaaradministratie → Werkgeversportaal-notificatie én Nabestaandenloket-notificatie (twee onafhankelijke, informerende reacties op hetzelfde, al afgeronde invaarfeit).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Orkestratie</strong>, verplicht. Dit is een bindende afhankelijkheid die niet alleen technisch maar ook juridisch is: berekenen op ongevalideerde data zou een aanspraak op onbetrouwbare basis kunnen invaren.</p>
+<p>b. <strong>Choreografie</strong>, net als de vergelijkbare stappen in deel 17. Beide notificaties zijn onafhankelijke reacties op een reeds afgerond, onomkeerbaar feit — er is geen bindende volgorde-eis tussen hen, en orkestratie zou hier onnodige koppeling toevoegen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de compliance-context van dit deel verandert de vuistregel uit deel 17 niet — hij scherpt hem aan voor specifiek de stappen vóór het onomkeerbare punt, terwijl stappen erna (die alleen informeren, niet meer beslissen) dezelfde afweging houden als in niveau 2.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">25.2 Saga-compensatie wanneer &quot;compenseren&quot; een formeel traject wordt</h2><span class="chip time">Sectie 3 van 6</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 18 introduceerde saga-compensatie met de vuistregel dat compensatie zwaarder wordt naarmate een proces verder is gevorderd. Bij invaren is deze asymmetrie extremer dan bij enige eerdere casus in de cursus: een compensatie ná het invaarmoment zelf is, formeel, geen "compenserende actie" in de zin van deel 18 meer, maar een <strong>hersteltraject met eigen wettelijke kaders</strong> — Meridiaan kan een invaarbesluit niet stilletjes corrigeren met een nieuw, tegenovergesteld event zoals bij een gewone salariscorrectie; er gelden specifieke procedures voor herstel van een onjuist ingevaren aanspraak, vaak met kennisgevingsplicht aan de deelnemer en soms aan de toezichthouder.</p>
+<p>Dit heeft een directe technische consequentie voor het ontwerp van de saga: <strong>de compensatiegrens moet vóór het onomkeerbare punt liggen, niet erna.</strong> Bij Meridiaan is daarom, tussen de rekenkern en de invaaradministratie, een expliciete, laatste <strong>goedkeuringsstap</strong> ingebouwd — een moment waarop een mens (of een geautomatiseerde, maar apart auditeerbare, laatste controle) de berekening beoordeelt vóórdat het onomkeerbare invaar-event wordt gepubliceerd. Alles vóór dit punt kan, volgens de gewone saga-logica van deel 18, worden gecompenseerd met een nieuw event. Alles ná dit punt niet meer — het formele hersteltraject wordt dan de enige weg, en dat traject valt buiten de scope van wat deze cursus als "compensatie" beschrijft.</p>
+<figure><img alt='De keten van 25.0 met een verticale streep tussen de goedkeuringsstap en de invaaradministratie, gelabeld "compenseerbaar" links en "onomkeerbaar — formeel hersteltraject" rechts.' loading="lazy" src="figuren/figuur-25-2-compenseerbaar-onomkeerbaar.svg"/><figcaption>Figuur 25-2 — De keten van 25.0 met een verticale streep tussen de goedkeuringsstap en de invaaradministratie, gelabeld "compenseerbaar" links en "onomkeerbaar — formeel hersteltraject" rechts.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 25.2 — De compensatiegrens plaatsen</div>
+        <p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.2 — De compensatiegrens plaatsen</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan overweegt de goedkeuringsstap (25.2) te verplaatsen naar ná de publicatie van het invaar-event, "om het proces te versnellen". Leg uit wat hiermee misgaat.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Als de goedkeuring pas ná publicatie van het invaar-event plaatsvindt, ligt de compensatiegrens ná het onomkeerbare punt — een afkeuring zou dan geen gewone saga-compensatie (deel 18) meer kunnen zijn, maar direct het formele hersteltraject vereisen, ook al is de fout misschien pas enkele seconden na publicatie ontdekt. Dit zou de kosten en de wettelijke consequenties van elke afkeuring onnodig verzwaren, puur door de volgorde van stappen, niet door de aard van de fout zelf.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "versnellen" door de goedkeuringsstap te verplaatsen, verschuift geen kosten weg, maar verplaatst ze naar een duurdere categorie (formeel hersteltraject in plaats van eenvoudige compensatie) — precies het soort schijnoptimalisatie dat bij zorgvuldige analyse averechts blijkt.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">25.3 De event backbone als gedeelde, wettelijke infrastructuur</h2><span class="chip time">Sectie 4 van 6</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Alle vijf systemen uit 25.0 publiceren en consumeren events op één, gedeelde event backbone (deel 11, nu met de eisen van deel 23) — niet vijf losse kanalen, maar één infrastructuur die de volledige, herleidbare keten van elk individueel invaarproces bewaart. Dit is een bewuste architectuurkeuze: door alle vijf systemen op dezelfde backbone te laten publiceren, kan een DNB-auditor, gegeven een deelnemersnummer, de volledige keten reconstrueren — van brondata via validatie en berekening tot goedkeuring en invaren — als één samenhangende trace (deel 21, nu toegepast op een wettelijk bewijsdoel in plaats van op incidentdiagnose).</p>
+<p>Dit stelt een aanvullende eis aan de trace-ID-conventie uit deel 21: waar die conventie in niveau 2 primair diende om een incidentonderzoek te versnellen, dient dezelfde conventie hier om een <strong>compleet, wettelijk reconstrueerbaar bewijsdossier</strong> te vormen. De technische mechaniek is identiek; het doel, en daarmee de zorgvuldigheid waarmee hij wordt gehandhaafd, is fundamenteel verzwaard.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 25.3 — Eén backbone of vijf losse kanalen?</div>
+        <p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.3 — Eén backbone of vijf losse kanalen?</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg uit waarom Meridiaan één, gedeelde event backbone gebruikt voor alle vijf systemen in de invaarketen, in plaats van vijf losse, systeemspecifieke kanalen (zoals bij afzonderlijke, niet-gerelateerde processen wellicht wel verdedigbaar zou zijn).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Bij vijf losse kanalen zou een DNB-auditor, om de volledige keten van één deelnemer te reconstrueren, vijf afzonderlijke systemen moeten raadplegen en de resultaten handmatig moeten samenvoegen — precies het probleem dat deel 15 en 21 al identificeerden bij incidentonderzoek, nu toegepast op een wettelijke auditcontext waar het niet kunnen reconstrueren van de keten zelf al een compliance-risico is. Eén gedeelde backbone, met de trace-ID-conventie uit deel 21, maakt het mogelijk om, gegeven een deelnemersnummer, de volledige keten als één samenhangende trace te tonen — een directe toepassing van wat deel 21 voor incidentdiagnose bouwde, nu voor een zwaarder wegend doel.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de architectuurkeuze (deel 11) die voor operationele doeleinden een afweging tussen stijlen was, wordt hier mede bepaald door een externe, wettelijke eis — het gedeelde backbone-ontwerp is niet louter een technische voorkeur maar een compliance-vereiste.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 25</h2><span class="chip time">Sectie 5 van 6</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>De invaarketen combineert vijf systemen, waarvan de eisen uit deel 17 (orkestratie/choreografie) en deel 18 (saga's) onveranderd gelden, maar met een stapeling van de strengere eisen uit deel 23-24.</li>
+<li>Datakwaliteitscontrole is bij invaren een verplichte, blokkerende, georkestreerde stap — omdat de bindende afhankelijkheid niet alleen technisch maar ook juridisch is.</li>
+<li>De saga-compensatiegrens moet vóór het onomkeerbare invaarmoment liggen; daarna is compensatie in de zin van deel 18 niet meer mogelijk, alleen een formeel hersteltraject buiten de scope van deze cursus.</li>
+<li>Eén gedeelde event backbone, gevoed door alle vijf systemen, maakt een compleet, wettelijk reconstrueerbaar bewijsdossier mogelijk via dezelfde trace-ID-conventie als deel 21, nu voor een wettelijk in plaats van operationeel doel.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 25</div>
+        <p class="quiz__src">Uit Werkboek deel 25, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij wettelijk onomkeerbare stappen is de vuistregel voor orkestratie versus choreografie niet langer een architectuurvoorkeur maar een compliance-eis — de bindende afhankelijkheid bestaat niet alleen technisch, maar ook juridisch.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Waarom is datakwaliteitscontrole bij invaren een verplichte, georkestreerde stap in plaats van een gewone filter?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat berekenen op onbetrouwbare data een aanspraak op onjuiste basis zou kunnen invaren — een fout die, eenmaal ingevaren, niet meer eenvoudig te corrigeren is.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is de compensatiegrens, en waarom moet die vóór het onomkeerbare invaarmoment liggen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De compensatiegrens is het laatste moment waarop een gewone saga-compensatie (nieuw, tegenovergesteld event) nog mogelijk is; hij moet vóór het onomkeerbare invaarmoment liggen omdat compensatie ná dat moment niet meer volstaat — dan is een formeel hersteltraject nodig.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat gebeurt er als een fout pas ná het invaarmoment wordt ontdekt?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Dan is gewone saga-compensatie (deel 18) niet meer toereikend — er is een formeel hersteltraject nodig, met eigen wettelijke kaders, vaak inclusief kennisgevingsplicht, dat buiten de scope van deze cursus valt.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waarom gebruikt Meridiaan één gedeelde event backbone voor alle vijf systemen in de invaarketen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Om een DNB-auditor, gegeven een deelnemersnummer, de volledige keten als één samenhangende trace te kunnen tonen, in plaats van vijf losse systemen te moeten raadplegen en handmatig samen te voegen.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 6 van 6</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 26 behandelt wat er gebeurt als een bericht in deze keten, ondanks alle zorgvuldigheid, niet te verwerken blijkt: poison messages en retry-topologie op schaal — een verdieping van deel 9, nu toegepast op een keten waar een verkeerd afgehandeld bericht geen operationeel ongemak maar een compliance-risico is.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 26</h3>
+      <p>Deel 26 — Poison messages en retry-topologie op schaal — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-26.html">Deel 26 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 25 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-25/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6"];
+  var KEY="eductus_eip25_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

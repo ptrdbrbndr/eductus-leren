@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 12 — Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 12 (Niveau 2 — Het landschap): Met de broker-architectuur uit deel 11 op zijn plaats kreeg Caspar een routeringsvraag die de content-based router uit deel 4 niet kon beantwoorden. Een salariscorrectie boven een bepaalde drempel moest, bleek uit een nieuwe compliance-eis voor de Wt…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-12.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 12</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 12 van 30</p>
+  <h1>Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator</h1>
+  <p class="hero__lead">Met de broker-architectuur uit deel 11 op zijn plaats kreeg Caspar een routeringsvraag die de content-based router uit deel 4 niet kon beantwoorden. Een salariscorrectie boven een bepaalde drempel moest, bleek uit een nieuwe compliance-eis voor de Wtp-voorbereiding, niet alleen naar KERN voor verwerking, maar gelijktijdig naar: het interne controleteam, een externe accountant (alleen voor correcties boven €10.000), de risicomanagementafdeling, en — uitsluitend als de deelnemer een lopende uitkering had — ook naar de uitkeringsadministratie.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>2</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → <b>② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator (hier)</b> → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">12.0 Een salariscorrectie die naar zes bestemmingen tegelijk moest</a></li>
+      <li><a href="#s2" data-target="s2">12.1 De dynamic router</a></li>
+      <li><a href="#s3" data-target="s3">12.2 De recipient list</a></li>
+      <li><a href="#s4" data-target="s4">12.3 Splitter en aggregator: het omgekeerde probleem, en de terugkeer</a></li>
+      <li><a href="#s5" data-target="s5">12.4 Hoe de drie patronen zich tot elkaar verhouden</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 12</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">12.0 Een salariscorrectie die naar zes bestemmingen tegelijk moest</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met de broker-architectuur uit deel 11 op zijn plaats kreeg Caspar een routeringsvraag die de content-based router uit deel 4 niet kon beantwoorden. Een salariscorrectie boven een bepaalde drempel moest, bleek uit een nieuwe compliance-eis voor de Wtp-voorbereiding, niet alleen naar KERN voor verwerking, maar gelijktijdig naar: het interne controleteam, een externe accountant (alleen voor correcties boven €10.000), de risicomanagementafdeling, en — uitsluitend als de deelnemer een lopende uitkering had — ook naar de uitkeringsadministratie.</p>
+<p>Dit is geen content-based router-probleem: de bestemmingen zijn niet één van meerdere vaste opties (zoals in deel 4: adreswijziging óf dienstverbandmutatie óf salariscorrectie), maar een <strong>variabele combinatie</strong> van meerdere, soms afhankelijk van meerdere criteria tegelijk. En het is ook geen publish-subscribe-vraagstuk uit deel 6, want niet elke geïnteresseerde partij is voor elk bericht evenzeer relevant — de externe accountant is bijvoorbeeld alleen relevant bóven €10.000, iets wat een gewoon abonnement niet kan uitdrukken.</p>
+<figure><img alt='Eén salariscorrectiebericht met een vertakking naar zes mogelijke bestemmingen, waarbij drie takken een voorwaarde tonen ("&gt;€10.000", "alleen bij lopende uitkering") en drie takken altijd actief zijn.' loading="lazy" src="figuren/figuur-12-1-vertakking-zes-bestemmingen.svg"/><figcaption>Figuur 12-1 — Eén salariscorrectiebericht met een vertakking naar zes mogelijke bestemmingen, waarbij drie takken een voorwaarde tonen ("&gt;€10.000", "alleen bij lopende uitkering") en drie takken altijd actief zijn.</figcaption></figure>
+<p>Dit deel behandelt drie patronen die dit soort samengestelde en dynamische routeringsvragen oplossen: de <strong>dynamic router</strong>, de <strong>recipient list</strong>, en het paar <strong>splitter/aggregator</strong>.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">12.1 De dynamic router</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De content-based router uit deel 4 werkt met een <strong>vaste</strong> set regels: mutatietype X gaat naar kanaal Y, ingebouwd en te wijzigen alleen door de router zelf aan te passen. Een <strong>dynamic router</strong> verschilt hierin fundameneel: de routeringsregels worden niet in de router zelf vastgelegd, maar op een andere plek beheerd — bijvoorbeeld in een configuratietabel, een extern regelbestand, of een raadpleegbare service — en de router leest die regels bij elke beslissing opnieuw uit.</p>
+<p>Het voordeel is niet snelheid of elegantie, maar <strong>wijzigbaarheid zonder hercompilatie of herimplementatie van de router zelf</strong>. Bij Meridiaan bleek dit relevant zodra de compliance-eis (welke drempel, welke bestemmingen) meermaals wijzigde tijdens de eerste maanden van de Wtp-voorbereiding — elke wijziging in de router zelf zou een releasecyclus hebben gevergd, terwijl een wijziging in de configuratietabel binnen een uur kon worden doorgevoerd door het compliance-team zelf, zonder ontwikkelaarsinzet.</p>
+<p>Dit voordeel heeft een prijs die niet onderschat mag worden: <strong>een dynamic router is per definitie minder voorspelbaar op basis van de code alleen.</strong> Waar een content-based router zijn volledige gedrag toont in zijn eigen broncode, moet een dynamic router altijd samen met zijn actuele configuratie worden gelezen om te begrijpen wat hij op een gegeven moment doet. Dit vraagt aanvullende discipline: versiebeheer op de configuratie zelf, en — cruciaal, gezien deel 9 — dezelfde zichtbaarheidseisen als voor foutafhandeling: als een dynamic router een bericht routeert op basis van regels die niemand meer kan reconstrueren zoals ze een maand geleden waren, is een audit achteraf onmogelijk.</p>
+<blockquote><p><strong>Kernzin 11 van de cursus: wijzigbaarheid zonder codewijziging is waardevol precies wanneer de regels vaker veranderen dan de code eromheen — en wordt een risico zodra niemand meer bijhoudt wat de regels op enig moment waren.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 12.1 — Content-based router, dynamic router, of recipient list?</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.1 — Content-based router, dynamic router, of recipient list?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario welk patroon het beste past: de statische content-based router uit deel 4, een dynamic router, of een recipient list.</p>
+<p>a. Mutaties worden naar drie vaste kanalen gerouteerd op basis van mutatietype, een indeling die al twee jaar ongewijzigd is.</p>
+<p>b. Een salariscorrectie moet naar KERN, en gelijktijdig — afhankelijk van bedrag en uitkeringsstatus — naar nul tot drie aanvullende bestemmingen.</p>
+<p>c. Het compliance-team wil zelf, zonder ontwikkelaarsinzet, kunnen aanpassen welke drempel geldt voor doorsturen naar de externe accountant.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Content-based router (statisch)</strong>, zoals in deel 4. De regels zijn stabiel; er is geen aantoonbare noodzaak voor de extra complexiteit van externe configuratie.</p>
+<p>b. <strong>Recipient list.</strong> Meerdere, berekende bestemmingen tegelijk op basis van inhoud — het schoolvoorbeeld uit 12.0.</p>
+<p>c. <strong>Dynamic router (of, specifieker hier, een dynamische component binnen de recipient list-berekening)</strong> — de eis is expliciet dat de regel wijzigbaar moet zijn zonder ontwikkelaarsinzet, wat vraagt om regels die extern beheerd worden.</p>
+<p><strong>Wat je hier moet meenemen:</strong> situatie c laat zien dat "dynamisch" niet alleen bij een enkelvoudige router hoort — hetzelfde principe (regels extern beheren in plaats van in code) is ook toepasbaar op de bestemmingslijstberekening van een recipient list. De twee patronen (dynamic router, recipient list) zijn onafhankelijke assen: één-bestemming-of-veel, en vast-of-wijzigbaar.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">12.2 De recipient list</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Waar een content-based router (statisch of dynamisch) een bericht naar <strong>één</strong> bestemming uit meerdere mogelijke opties stuurt, stuurt een <strong>recipient list</strong> een bericht naar <strong>een berekende verzameling</strong> van bestemmingen tegelijk — precies het probleem van de salariscorrectie in 12.0.</p>
+<p>De kern van een recipient list is een functie die, gegeven de inhoud van het bericht, de lijst van bestemmingen berekent. Voor de casus van 12.0 zou die functie er, informeel, zo uitzien:</p>
+<ul>
+<li>Altijd: KERN, interne controleteam, risicomanagementafdeling</li>
+<li>Als bedrag &gt; €10.000: voeg toe: externe accountant</li>
+<li>Als deelnemer een lopende uitkering heeft: voeg toe: uitkeringsadministratie</li>
+</ul>
+<p>Een recipient list moet, om houdbaar te blijven, aan een vergelijkbare eis voldoen als de content-based router uit deel 4: de berekening van de bestemmingslijst hoort declaratief en transparant te zijn, niet verstopt in een lange keten van imperatieve code. Bij Meridiaan is dit opgelost door de recipient list-logica in dezelfde configuratietabel als de dynamic router uit 12.1 onder te brengen, met dit verschil: waar de dynamic router één bestemming teruggeeft, geeft deze berekening een lijst terug.</p>
+<p><strong>Een essentieel verschil met eenvoudige publish-subscribe (deel 6):</strong> bij publish-subscribe bepaalt elke abonnee zelf, onafhankelijk, of hij een bericht relevant vindt — de zender weet niet eens hoeveel abonnees er zijn. Bij een recipient list bepaalt de <strong>zendende kant</strong> (of een component vlak na de zender) welke ontvangers relevant zijn, gebaseerd op de inhoud van dit specifieke bericht. Dit is een bewuste, expliciete beslissing per bericht, niet een impliciet abonnement. De keuze tussen beide hangt af van waar de kennis hoort te zitten: als de regel "wie is geïnteresseerd" logisch bij de boodschap zelf hoort (zoals hier: een compliance-eis die bepaalt wie een salariscorrectie moet zien), is een recipient list passender; als de regel logisch bij de ontvanger hoort ("ik wil alle mutatie-gebeurtenissen zien, ongeacht type"), is publish-subscribe passender.</p>
+<figure><img alt="De recipient list als vertakkingscomponent: één inkomend bericht, een berekeningsstap die de bestemmingslijst bepaalt op basis van bedrag en uitkeringsstatus, en een variabel aantal uitgaande pijlen." loading="lazy" src="figuren/figuur-12-2-recipient-list.svg"/><figcaption>Figuur 12-2 — De recipient list als vertakkingscomponent: één inkomend bericht, een berekeningsstap die de bestemmingslijst bepaalt op basis van bedrag en uitkeringsstatus, en een variabel aantal uitgaande pijlen.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 12.2 — Wijzigbaarheid tegen een prijs</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.2 — Wijzigbaarheid tegen een prijs</p>
+        <div class="card">
+          <div class="prose">
+<p>Een dynamic router werd bij Meridiaan drie maanden na invoering geraadpleegd tijdens een audit: waarom was salariscorrectie X van vier maanden geleden niet naar de externe accountant gestuurd, terwijl het bedrag boven de huidige drempel van €10.000 lag?</p>
+<p>a. Wat is de meest waarschijnlijke verklaring, gegeven dat de drempel meermaals is gewijzigd?</p>
+<p>b. Wat had dit voorkomen?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. De meest waarschijnlijke verklaring is dat de drempel vier maanden geleden lager of hoger was dan de huidige €10.000 — het bericht is destijds correct gerouteerd volgens de op dát moment geldende regel, die inmiddels is gewijzigd. Zonder versiebeheer op de configuratie is dit niet meer te reconstrueren, en lijkt het bericht ten onrechte "verkeerd gerouteerd".</p>
+<p>b. Versiebeheer op de configuratietabel zelf, met een tijdstempel per wijziging, zodat een audit achteraf kan vaststellen welke regel op het moment van routering daadwerkelijk gold — precies de eis die kernzin 11 stelt naast de wijzigbaarheid.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de kracht van een dynamic router (snel wijzigbaar) is tegelijk de bron van dit risico (moeilijk te reconstrueren gedrag uit het verleden) — beide zijn onlosmakelijk verbonden, en de oplossing is niet "minder dynamisch maken" maar "de wijzigingen zelf ook auditeerbaar maken".</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">12.3 Splitter en aggregator: het omgekeerde probleem, en de terugkeer</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elk routeringsvraagstuk gaat over "één bericht naar meerdere bestemmingen sturen". Soms is het omgekeerde nodig: <strong>één bericht bevat meerdere, zelfstandig te verwerken onderdelen</strong>, die elk apart door de keten moeten, waarna de resultaten weer moeten worden samengevoegd tot één antwoord.</p>
+<p>Bij Meridiaan deed dit zich voor bij de jaarlijkse batchcorrectie: een werkgever levert één bestand aan met tweehonderd individuele salariscorrecties voor tweehonderd verschillende deelnemers. Deze moeten stuk voor stuk door dezelfde validatie- en verwerkingsketen als een individuele correctie (inclusief de recipient list uit 12.2, want ook een individuele correctie uit deze batch kan boven €10.000 uitkomen), maar de werkgever wil uiteindelijk één samengevat resultaat: hoeveel zijn er geslaagd, hoeveel gefaald, en waarom.</p>
+<p>Een <strong>splitter</strong> breekt het ene binnenkomende bericht op in <em>n</em> afzonderlijke berichten — in dit geval tweehonderd individuele salariscorrectieberichten, elk met een eigen bericht-ID (deel 3, cruciaal voor idempotentie) en een gedeeld <strong>correlatiekenmerk</strong> dat aangeeft tot welke oorspronkelijke batch ze behoren. Elk van de tweehonderd doorloopt vervolgens zelfstandig de bestaande keten — dezelfde router, dezelfde translator, dezelfde recipient list als een individuele correctie, zonder dat die componenten ook maar hoeven te weten dat dit bericht uit een batch komt.</p>
+<p>Een <strong>aggregator</strong> doet het omgekeerde: hij verzamelt de resultaten van alle berichten met hetzelfde batchcorrelatiekenmerk, en combineert ze tot één samengevat resultaat zodra — en dit is de lastigste ontwerpvraag van het patroon — <strong>bekend is wanneer de verzameling compleet is</strong>. Drie strategieën zijn gangbaar:</p>
+<p><strong>Tellen.</strong> De splitter geeft bij het opsplitsen ook het totale aantal onderdelen mee (in dit geval: 200); de aggregator weet dan precies wanneer hij compleet is.</p>
+<p><strong>Time-out.</strong> De aggregator wacht een vooraf bepaalde tijd en meldt daarna het resultaat als (mogelijk) onvolledig — nuttig wanneer het totale aantal onderdelen vooraf niet bekend is, maar met het risico dat een langzame deelverwerking ten onrechte als "gefaald" wordt gerapporteerd.</p>
+<p><strong>Een expliciet afsluitbericht.</strong> Een apart, laatste bericht in de reeks markeert het einde van de batch — vergelijkbaar met tellen, maar bruikbaar wanneer het totale aantal pas tijdens verwerking bekend wordt.</p>
+<p>Bij Meridiaan is voor tellen gekozen, omdat het totale aantal deelnemers in een batchbestand al bij binnenkomst bekend is — de meest robuuste van de drie strategieën, wanneer beschikbaar.</p>
+<blockquote><p><strong>Kernzin 12 van de cursus: een splitter zonder een bijbehorend, expliciet ontworpen aggregatiemechanisme is een gebroken belofte — de afzonderlijke delen bestaan, maar niemand weet ooit zeker of het geheel compleet is teruggekomen.</strong></p></blockquote>
+<figure><img alt="Eén batchbericht (200 correcties) → splitter → 200 afzonderlijke berichten, elk door de volledige keten (router, translator, recipient list) → aggregator die wacht op alle 200 (tellen-strategie) → één samengevat resultaatbericht terug naar de werkgever." loading="lazy" src="figuren/figuur-12-3-split-aggregate-batch.svg"/><figcaption>Figuur 12-3 — Eén batchbericht (200 correcties) → splitter → 200 afzonderlijke berichten, elk door de volledige keten (router, translator, recipient list) → aggregator die wacht op alle 200 (tellen-strategie) → één samengevat resultaatbericht terug naar de werkgever.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 12.3 — Recipient list versus publish-subscribe</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.3 — Recipient list versus publish-subscribe</p>
+        <div class="card">
+          <div class="prose">
+<p>Een collega stelt voor om de recipient list uit 12.0 te vervangen door gewoon publish-subscribe: alle mogelijke bestemmingen (controleteam, accountant, risicomanagement, uitkeringsadministratie) abonneren zich op het salariscorrectiekanaal, en elke ontvanger bepaalt zelf of het bericht relevant is (bijvoorbeeld: de accountant-integratie checkt zelf of het bedrag boven €10.000 ligt, en negeert het bericht anders).</p>
+<p>a. Zou dit technisch kunnen werken?</p>
+<p>b. Welk nadeel heeft deze aanpak ten opzichte van de recipient list, gebruikmakend van het onderscheid uit 12.2?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Ja, technisch is dit uitvoerbaar — elke ontvanger kan zelf de relevantiecontrole doen.</p>
+<p>b. Het nadeel: de bedrijfsregel ("boven €10.000 → accountant") staat dan verspreid over meerdere, onafhankelijke ontvangercomponenten, in plaats van centraal op één plek. Als de drempel wijzigt (zoals in 12.0 en 12.2 gebeurde), moet die wijziging nu bij elke ontvanger apart worden doorgevoerd, met het risico dat de accountant-integratie en de risicomanagementafdeling — als die ooit een vergelijkbare drempel zou krijgen — elk een eigen, mogelijk inconsistente versie van de regel bijhouden. Dit is dezelfde valkuil als het incident uit deel 11 (idempotentiestrategie die onbedoeld verschilde tussen koppelingen) maar nu toegepast op routeringsregels: verspreide kennis leidt tot verspreide, potentieel inconsistente antwoorden op dezelfde vraag.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze tussen recipient list en publish-subscribe is niet alleen een technische voorkeur, maar een beslissing over wáár een bedrijfsregel hoort te wonen — centraal bij de boodschap, of verspreid bij elke ontvanger.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">12.4 Hoe de drie patronen zich tot elkaar verhouden</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De drie patronen van dit deel lossen, net als in deel 5 (translator/envelope wrapper/normalizer), aantoonbaar verschillende problemen op:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Patroon</th><th>Probleem</th><th>Richting</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Dynamic router</strong></td><td>Eén bestemming, regels wijzigen vaker dan code</td><td>Eén-op-één, wijzigbaar</td></tr>
+<tr><td><strong>Recipient list</strong></td><td>Meerdere, berekende bestemmingen tegelijk</td><td>Eén-op-veel, door de zendende kant bepaald</td></tr>
+<tr><td><strong>Splitter/aggregator</strong></td><td>Eén bericht met meerdere zelfstandige onderdelen</td><td>Eén-naar-veel-en-weer-terug</td></tr>
+</tbody></table></div>
+<p>Ze zijn bovendien combineerbaar: bij Meridiaan doorloopt elk van de tweehonderd door de splitter geproduceerde berichten óók de recipient list uit 12.2, wat betekent dat één batchbericht in potentie kan uitmonden in honderden individuele afleveringen, verspreid over meerdere bestemmingen, voordat de aggregator alles weer samenbrengt tot één antwoord aan de werkgever.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 12.4 — Aggregatiestrategie kiezen</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.4 — Aggregatiestrategie kiezen</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario welke aggregatiestrategie (tellen, time-out, expliciet afsluitbericht) het meest passend is, en motiveer.</p>
+<p>a. Een batchbestand met een vooraf bekend aantal regels (zoals de 200 salariscorrecties uit 12.3).</p>
+<p>b. Een reeks deelresultaten van een extern systeem dat berichten aanlevert zodra ze beschikbaar zijn, zonder ooit vooraf te melden hoeveel er in totaal komen, en zonder een duidelijk "einde"-signaal.</p>
+<p>c. Een externe partij die na een reeks berichten altijd een apart "batch compleet"-bericht verstuurt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Tellen</strong> — het totale aantal is al bij binnenkomst bekend, dit is de robuustste strategie wanneer beschikbaar, zoals bij Meridiaan gekozen.</p>
+<p>b. <strong>Time-out</strong>, bij gebrek aan een beter alternatief — zonder vooraf bekend aantal en zonder afsluitsignaal is dit de enige van de drie strategieën die hier werkt, met het geaccepteerde risico dat een langzame deelverwerking ten onrechte als incompleet wordt gerapporteerd.</p>
+<p>c. <strong>Expliciet afsluitbericht</strong> — de externe partij levert dit al, dus is dit zowel de meest voor de hand liggende als de meest betrouwbare keuze; geen noodzaak om zelf te tellen of een time-out te riskeren.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze voor een aggregatiestrategie is geen vrije voorkeur van de bouwer van de aggregator, maar wordt grotendeels bepaald door wat de bron van de deelberichten al aanbiedt — tellen kan alleen als het aantal vooraf bekend is, een afsluitbericht alleen als de bron dat daadwerkelijk verstuurt.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 12</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Een dynamic router leest zijn routeringsregels uit een extern beheerde bron in plaats van vast in de code, met als voordeel snelle wijzigbaarheid en als prijs de noodzaak van versiebeheer en auditeerbaarheid van die regels.</li>
+<li>Een recipient list stuurt een bericht naar een berekende verzameling bestemmingen, bepaald door de zendende kant op basis van de inhoud — anders dan publish-subscribe, waar elke ontvanger zelf beslist.</li>
+<li>Een splitter breekt één bericht op in zelfstandige onderdelen die elk de volledige keten doorlopen; een aggregator voegt de resultaten weer samen, met tellen, time-out, of een expliciet afsluitbericht als strategieën om te weten wanneer de verzameling compleet is.</li>
+<li>Een splitter zonder bijbehorende aggregatiestrategie laat onbeantwoord of het geheel ooit compleet terugkomt.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 12.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf een scenario uit je eigen werk waarbij één bericht of bestand meerdere zelfstandige onderdelen bevat die apart verwerkt moeten worden (een splitter-kandidaat), of waarbij één gebeurtenis naar een variabele set bestemmingen moet (een recipient list-kandidaat). Ontwerp het patroon, inclusief — bij een splitter — de aggregatiestrategie.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers die een splitter-scenario kiezen, vergeten in eerste instantie vaak de aggregatiestrategie volledig — ze ontwerpen het opsplitsen, maar niet het weer samenvoegen, precies de valkuil die kernzin 12 benoemt ("een gebroken belofte").</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 12</div>
+        <p class="quiz__src">Uit Werkboek deel 12, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is het verschil tussen een content-based router (deel 4) en een dynamic router?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een content-based router heeft vaste, in de code vastgelegde regels; een dynamic router leest zijn regels uit een extern beheerde bron, wijzigbaar zonder codewijziging.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin over dynamic routers, in eigen woorden — inclusief de prijs die ervoor betaald wordt?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Wijzigbaarheid zonder codewijziging is waardevol wanneer regels vaker veranderen dan de code eromheen, maar wordt een risico zodra niemand meer bijhoudt wat de regels op enig moment waren — versiebeheer op de configuratie is daarom noodzakelijk.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is het verschil tussen een recipient list en gewone publish-subscribe?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij een recipient list bepaalt de zendende kant, op basis van de inhoud van dit specifieke bericht, welke ontvangers relevant zijn; bij publish-subscribe bepaalt elke ontvanger zelf, onafhankelijk, of hij een bericht relevant vindt.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat doet een splitter, en wat doet een aggregator?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een splitter breekt één binnenkomend bericht op in meerdere, zelfstandige onderdelen die elk apart de keten doorlopen; een aggregator verzamelt de resultaten van bij elkaar horende onderdelen en combineert ze tot één resultaat.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Noem de drie strategieën waarmee een aggregator weet wanneer een verzameling compleet is, en wanneer je welke gebruikt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Tellen (totale aantal vooraf bekend — meest robuust wanneer beschikbaar), time-out (aantal niet vooraf bekend, geen afsluitsignaal — risico op onterecht "incompleet"), expliciet afsluitbericht (de bron levert zelf een eindsignaal).</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is de kernzin over splitters, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een splitter zonder een bijbehorend, expliciet ontworpen aggregatiemechanisme is een gebroken belofte — de afzonderlijke delen bestaan, maar niemand weet ooit zeker of het geheel compleet is teruggekomen.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Kunnen recipient list en splitter/aggregator in dezelfde keten worden gecombineerd? Geef het voorbeeld uit dit deel.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Ja — bij Meridiaan doorloopt elk van de door de splitter geproduceerde individuele berichten ook de recipient list, waardoor één batchbericht kan uitmonden in honderden individuele afleveringen over meerdere bestemmingen, voordat de aggregator alles weer samenbrengt.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 13 verdiept de transformatie-patroonfamilie van niveau 1 op vergelijkbare wijze: de content enricher, content filter en claim check — nodig zodra transformatie niet langer alleen formaten omzet, maar ontbrekende gegevens moet aanvullen of grote payloads efficiënt door de keten moet leiden.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 13</h3>
+      <p>Deel 13 — Transformatie diepgaand: content enricher, content filter, claim check — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-13.html">Deel 13 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 12 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-12/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip12_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

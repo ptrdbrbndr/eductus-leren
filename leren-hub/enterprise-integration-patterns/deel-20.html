@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 20 — Contractbeheer voor asynchrone koppelingen | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 20 (Niveau 2 — Het landschap): Deze reader gebruikt doorlopend een casus: Meridiaan Pensioen N.V., een Nederlandse pensioenuitvoerder, verstuurt via een event-gedreven kanaal het bericht &quot;mutatie geregistreerd&quot; naar meerdere, onafhankelijke afnemers — onder andere een Nabestaanden…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-20.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 20</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 20 van 30</p>
+  <h1>Contractbeheer voor asynchrone koppelingen</h1>
+  <p class="hero__lead">Deze reader gebruikt doorlopend een casus: Meridiaan Pensioen N.V., een Nederlandse pensioenuitvoerder, verstuurt via een event-gedreven kanaal het bericht &quot;mutatie geregistreerd&quot; naar meerdere, onafhankelijke afnemers — onder andere een Nabestaandenloket en een audit-systeem. Dit is eenevent message: een feit (&quot;dit is gebeurd&quot;), gepubliceerd op een kanaal waarop meerdere partijen zich onafhankelijk van elkaar kunnen abonneren, zonder dat de zender weet wie er allemaal luistert of wat ze met het bericht doen. Dat is voldoende achtergrond om dit deel zelfstandig te volgen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>0</b><span>figuren</span></div>
+    <div class="stat"><b>11</b><span>controlevragen</span></div>
+    <div class="stat"><b>0</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → <b>⑩ Contractbeheer voor asynchrone koppelingen (hier)</b> → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">20.0 Context in het kort</a></li>
+      <li><a href="#s2" data-target="s2">20.1 Een veld dat &quot;gewoon&quot; werd hernoemd</a></li>
+      <li><a href="#s3" data-target="s3">20.2 Schema-evolutie: wijzigingen die wél en niet veilig zijn</a></li>
+      <li><a href="#s4" data-target="s4">20.3 Het fundamentele probleem: je weet niet wie er luistert</a></li>
+      <li><a href="#s5" data-target="s5">20.4 Consumer-driven contracts</a></li>
+      <li><a href="#s6" data-target="s6">20.5 Wat Meridiaan er uiteindelijk mee deed</a></li>
+      <li><a href="#s7" data-target="s7">Samenvatting van deel 20</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">20.0 Context in het kort</h2><span class="chip time">Sectie 1 van 8</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deze reader gebruikt doorlopend een casus: Meridiaan Pensioen N.V., een Nederlandse pensioenuitvoerder, verstuurt via een event-gedreven kanaal het bericht "mutatie geregistreerd" naar meerdere, onafhankelijke afnemers — onder andere een Nabestaandenloket en een audit-systeem. Dit is een <strong>event message</strong>: een feit ("dit is gebeurd"), gepubliceerd op een kanaal waarop meerdere partijen zich onafhankelijk van elkaar kunnen abonneren, zonder dat de zender weet wie er allemaal luistert of wat ze met het bericht doen. Dat is voldoende achtergrond om dit deel zelfstandig te volgen.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">20.1 Een veld dat &quot;gewoon&quot; werd hernoemd</h2><span class="chip time">Sectie 2 van 8</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het integratieteam van Meridiaan besloot op een dinsdag het veld <code>bedrag</code> in het mutatiebericht te hernoemen naar <code>mutatiebedrag</code>, om het contract eenduidiger te maken nu er ook een <code>premiebedrag</code>-veld was bijgekomen. De wijziging leek triviaal — een simpele hernoeming, geen verandering van betekenis of type. Diezelfde week bleek de rapportagetabel van de risicomanagementafdeling, die het <code>bedrag</code>-veld gebruikte, stilzwijgend nullen te tonen in plaats van bedragen: het veld dat de code verwachtte, bestond simpelweg niet meer.</p>
+<p>Dit is het scenario waar dit deel om draait, en het is fundamenteel anders dan een vergelijkbare wijziging in een synchrone API. Bij een REST-endpoint zou een consument die een verplicht veld verwacht, direct een fout krijgen bij de eerstvolgende aanroep — zichtbaar, onmiddellijk, en gekoppeld aan een specifieke aanroeper die je kunt informeren. Bij een event-gedreven kanaal weet de zender niet eens hoeveel abonnees er zijn, laat staan wie ze zijn of welke velden ze precies gebruiken. Er is geen moment van "aanroepen" waarop een fout zichtbaar wordt — er is alleen een stroom berichten die, na de wijziging, gewoon doorgaat, terwijl ergens, onopgemerkt, een consument stilletjes verkeerde of ontbrekende data verwerkt.</p>
+<blockquote><p><strong>Kernzin — contractbeheer: bij een synchrone API breekt een contractwijziging zichtbaar en onmiddellijk; bij een event-gedreven kanaal breekt hij stil en vertraagd, bij een consument die de zender vaak niet eens kent.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 20.1 — Achterwaarts-compatibel of niet</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.1 — Achterwaarts-compatibel of niet</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elke wijziging aan het mutatiebericht of hij achterwaarts-compatibel is.</p>
+<p>a. Een nieuw veld <code>valuta</code> wordt toegevoegd, met een standaardwaarde "EUR" voor bestaande consumenten die het veld niet kennen.</p>
+<p>b. Het veld <code>bedrag</code> (een geheel getal in centen) wordt gewijzigd naar een decimaal getal in euro's.</p>
+<p>c. Het veld <code>opmerking</code> (optioneel, tekst) wordt verplicht gemaakt.</p>
+<p>d. Het veld <code>deelnemerNaam</code> wordt uitgebreid van maximaal 50 naar maximaal 100 tekens.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Achterwaarts-compatibel.</strong> Nieuw, optioneel veld — bestaande consumenten die het niet kennen, blijven ongestoord functioneren.</p>
+<p>b. <strong>Niet achterwaarts-compatibel.</strong> Een datatypewijziging — een consument die een geheel getal in centen verwacht, zal een decimaal getal in euro's verkeerd interpreteren (bijvoorbeeld 34.000 in plaats van 340,00), met potentieel ernstige gevolgen gezien de financiële aard van het veld.</p>
+<p>c. <strong>Niet achterwaarts-compatibel.</strong> Een consument die er tot nu toe van uitging dat dit veld afwezig mag zijn, hoeft daar niets aan te veranderen — maar de zender zelf riskeert nu berichten te weigeren of anders te behandelen als het veld ontbreekt bij oudere zenders/systemen die het veld nog niet altijd meesturen. Bovendien, als bestaande producenten van het bericht (indien er meerdere zijn) het veld nog niet altijd vullen, ontstaat een asymmetrisch compatibiliteitsprobleem.</p>
+<p>d. <strong>Achterwaarts-compatibel</strong>, mits consumenten niet stilzwijgend afkappen op 50 tekens op een manier die betekenis verandert (zoals in 20.2 van de reader aangegeven) — een verruiming van een tekstveld is doorgaans veilig.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de vier categorieën uit de tabel in 20.2 (toevoegen, verruimen, hernoemen, verwijderen, type wijzigen, verplicht maken) zijn een bruikbare eerste toets, maar situatie c laat zien dat ook "verplicht maken" grondiger beoordeeld moet worden dan de tabel alleen suggereert — het raakt niet alleen consumenten maar ook bestaande producenten van het bericht.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">20.2 Schema-evolutie: wijzigingen die wél en niet veilig zijn</h2><span class="chip time">Sectie 3 van 8</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Schema-evolutie</strong> is de discipline van het laten wijzigen van een berichtformaat over de tijd, zonder bestaande consumenten te breken. De kern van deze discipline is het onderscheid tussen twee soorten wijzigingen:</p>
+<p><strong>Achterwaarts-compatibele wijzigingen</strong> laten bestaande consumenten ongestoord doorwerken, ook als zij de wijziging niet kennen. Het <strong>toevoegen</strong> van een nieuw, optioneel veld is het klassieke voorbeeld: een consument die het nieuwe veld niet kent, negeert het simpelweg en blijft functioneren zoals voorheen. Ook het <strong>verruimen</strong> van een bestaand veld (bijvoorbeeld een tekstveld dat langer mag worden) is doorgaans veilig, mits consumenten niet stilzwijgend afkappen op de oude, kortere lengte op een manier die betekenis verandert.</p>
+<p><strong>Niet-achterwaarts-compatibele wijzigingen</strong> breken bestaande consumenten, vaak zonder directe foutmelding. Het <strong>hernoemen</strong> van een veld (zoals bij Meridiaan) is hiervan het meest voorkomende voorbeeld: voor de consument bestaat het oude veld simpelweg niet meer, en de meeste implementaties geven hierbij geen fout maar stilzwijgend een lege of standaardwaarde — precies het "nullen in plaats van bedragen"-scenario. Ook het <strong>verwijderen</strong> van een veld, het <strong>wijzigen van een datatype</strong> (bijvoorbeeld van tekst naar getal), en het <strong>verplicht maken</strong> van een voorheen optioneel veld vallen in deze categorie.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Wijziging</th><th>Achterwaarts-compatibel?</th></tr>
+</thead>
+<tbody>
+<tr><td>Nieuw, optioneel veld toevoegen</td><td>Ja</td></tr>
+<tr><td>Bestaand veld verruimen (langer, breder bereik)</td><td>Doorgaans ja</td></tr>
+<tr><td>Veld hernoemen</td><td>Nee</td></tr>
+<tr><td>Veld verwijderen</td><td>Nee</td></tr>
+<tr><td>Datatype wijzigen</td><td>Nee</td></tr>
+<tr><td>Optioneel veld verplicht maken</td><td>Nee</td></tr>
+</tbody></table></div>
+<p>De praktische consequentie: <strong>hernoemen is bijna nooit de juiste eerste stap.</strong> In plaats daarvan: voeg het nieuwe veld (<code>mutatiebedrag</code>) toe naast het oude (<code>bedrag</code>), laat beide een periode lang naast elkaar bestaan met identieke inhoud, en verwijder het oude veld pas nadat is vastgesteld dat geen enkele consument het nog gebruikt — een proces dat expliciete tijd en, zoals paragraaf 20.3 laat zien, expliciete kennis van wie er nog luistert vereist.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 20.2 — De juiste volgorde bij een hernoeming</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.2 — De juiste volgorde bij een hernoeming</p>
+        <div class="card">
+          <div class="prose">
+<p>Het integratieteam wil alsnog <code>bedrag</code> hernoemen naar <code>mutatiebedrag</code>, maar nu volgens de juiste discipline uit 20.2. Beschrijf de stappen, inclusief een indicatie van wanneer het oude veld verwijderd mag worden.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<ol>
+<li>Voeg het nieuwe veld <code>mutatiebedrag</code> toe naast het bestaande <code>bedrag</code>, met exact dezelfde inhoud bij elke publicatie (beide velden gevuld, identieke waarde).</li>
+<li>Communiceer naar bekende consumenten (via het register uit 20.3, of consumer-driven contracts uit 20.4) dat <code>mutatiebedrag</code> de voorkeursvorm is en <code>bedrag</code> op termijn verdwijnt.</li>
+<li>Laat beide velden een vastgestelde overgangsperiode naast elkaar bestaan (bij Meridiaan: minimaal een kwartaal, om ook periodieke rapportages de kans te geven mee te bewegen).</li>
+<li>Controleer, via het consumentenregister of contractverificatie, of er nog actief gebruik is van <code>bedrag</code> vóórdat het wordt verwijderd.</li>
+<li>Verwijder <code>bedrag</code> pas nadat is vastgesteld dat geen enkele bekende consument het nog gebruikt — en niet eerder, ook niet als de overgangsperiode is verstreken, als er nog onduidelijkheid bestaat.</li>
+</ol>
+<p><strong>Wat je hier moet meenemen:</strong> een "veilige" hernoeming is geen enkele stap maar een proces met een tijdscomponent — de fout bij het oorspronkelijke incident was niet dat hernoemen an sich onmogelijk is, maar dat het in één stap, zonder overgang, werd doorgevoerd.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">20.3 Het fundamentele probleem: je weet niet wie er luistert</h2><span class="chip time">Sectie 4 van 8</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De reden dat schema-evolutie bij event-gedreven kanalen moeilijker is dan bij synchrone API's, zit niet alleen in de timing van foutmeldingen (20.1) maar in een dieper gelegen eigenschap: <strong>de zender kent zijn consumenten niet.</strong> Dat is precies de kracht van publish-subscribe — lage koppeling, iedereen kan zich onafhankelijk abonneren — maar het maakt de vraag "wie raakt deze wijziging?" onbeantwoordbaar zonder aanvullende discipline.</p>
+<p>Bij een synchrone API-gateway is er vaak een registratie van geautoriseerde consumenten, of op zijn minst een logbestand van wie welke endpoint aanroept. Bij een puur event-gedreven kanaal bestaat die registratie niet automatisch — het integratieteam van Meridiaan wist letterlijk niet dat de risicomanagement-rapportagetabel het <code>bedrag</code>-veld gebruikte, totdat de schade al was opgetreden.</p>
+<p>Twee praktische maatregelen verkleinen dit risico:</p>
+<p><strong>Een expliciet, bijgehouden register van bekende consumenten</strong>, ook al is abonneren technisch vrij — teams die een nieuw abonnement starten, worden verzocht zich te melden bij de eigenaar van het kanaal, vergelijkbaar met de eigenaarschapseis die eerder in deze cursusfamilie voor foutkanalen werd gesteld. Dit is geen technische afdwinging (die zou de lage koppeling ondermijnen) maar een organisatorische afspraak.</p>
+<p><strong>Consumer-driven contracts</strong>, uitgewerkt in 20.4, die het probleem omdraaien: in plaats van dat de zender moet raden wie er luistert, specificeert elke consument expliciet wat hij verwacht, en die verwachtingen worden geautomatiseerd getoetst vóórdat een wijziging wordt doorgevoerd.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 20.3 — Consumer-driven contract opstellen</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.3 — Consumer-driven contract opstellen</p>
+        <div class="card">
+          <div class="prose">
+<p>Stel, als risicomanagementafdeling, een consumer-driven contract op voor het mutatiebericht, waarin alleen wordt vermeld welke velden daadwerkelijk worden gebruikt voor de maandelijkse rapportage (bijvoorbeeld: bedrag, mutatietype, deelnemersnummer — niet elk veld dat toevallig in het bericht staat).</p>
+<p>Beantwoord ook: wat is het risico als dit contract wordt opgesteld maar nooit wordt bijgewerkt wanneer de rapportage-logica later ook een ander veld gaat gebruiken?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Een minimaal contract zou kunnen zijn: <code>{consumer: "risicomanagement-rapportage", vereisteVelden: ["bedrag", "mutatietype", "deelnemersnummer"]}</code>. Dit is bewust beperkt tot wat daadwerkelijk gebruikt wordt, niet het volledige berichtformaat — een contract dat "alle velden" claimt te gebruiken, zou elke toekomstige wijziging blokkeren, ook onschuldige, wat het patroon onbruikbaar maakt.</p>
+<p>Het risico bij een verouderd contract: als de rapportage-logica later ook <code>mutatiedatum</code> gaat gebruiken zonder het contract bij te werken, biedt de geautomatiseerde toets geen enkele bescherming meer voor dat nieuwe, ongedeclareerde veld — precies hetzelfde risico als het oorspronkelijke incident, nu ontstaan doordat het contract niet actueel werd gehouden in plaats van doordat er helemaal geen contract was. Het patroon is dus geen eenmalige actie maar, net als de rest van deze discipline, een doorlopende verantwoordelijkheid.</p>
+<p><strong>Wat je hier moet meenemen:</strong> een consumer-driven contract is alleen zo goed als de discipline om het actueel te houden — het technische mechanisme (geautomatiseerde toetsing) lost niets op als de menselijke kant (het contract bijwerken bij elke wijziging aan de consumentlogica) wordt verwaarloosd.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">20.4 Consumer-driven contracts</h2><span class="chip time">Sectie 5 van 8</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>consumer-driven contract</strong> is een expliciete, door de consument zelf opgestelde specificatie van welke velden hij daadwerkelijk gebruikt uit een bericht — niet het volledige berichtformaat, maar precies dat deel waarvan de consument afhankelijk is. Deze contracten worden verzameld op een centrale plek (bijvoorbeeld een gedeelde repository), en vóórdat de zender een wijziging aan het berichtformaat doorvoert, wordt die wijziging automatisch getoetst tegen <strong>elk</strong> bekend consumer-driven contract.</p>
+<p>Toegepast op het incident van 20.1: als de risicomanagement-rapportagetabel een consumer-driven contract had gepubliceerd dat expliciet vermeldde "ik gebruik het veld <code>bedrag</code>", dan zou de geautomatiseerde toets vóór het doorvoeren van de hernoeming direct hebben gefaald — niet pas na de productie-incident, maar al in de ontwikkel- of testfase van de wijziging zelf.</p>
+<p>Dit patroon keert het fundamentele probleem uit 20.3 letterlijk om: in plaats van dat de zender raadt wie er luistert en wat ze nodig hebben, <strong>verklaren consumenten expliciet wat ze nodig hebben</strong>, en die verklaringen worden een geautomatiseerd onderdeel van het wijzigingsproces. De prijs hiervoor is discipline aan de consumentkant: een consument die zijn contract nooit publiceert of nooit actualiseert, blijft even onzichtbaar als voorheen — het patroon werkt alleen als beide kanten (zender én consument) de afspraak naleven.</p>
+<blockquote><p><strong>Vuistregel: bij een synchrone API is compatibiliteit vaak impliciet af te dwingen doordat elke aanroep direct feedback geeft; bij event-gedreven kanalen moet compatibiliteit expliciet worden georganiseerd, via schema-evolutiediscipline en, waar mogelijk, consumer-driven contracts.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 20.4 — Synchroon versus asynchroon, opnieuw bekeken</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Opdracht 20.4 — Synchroon versus asynchroon, opnieuw bekeken</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg, in eigen woorden, uit waarom het incident van 20.1 (stilzwijgend nullen bij de rapportagetabel) bij een vergelijkbare wijziging in een synchrone REST-API waarschijnlijk sneller aan het licht was gekomen.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Bij een synchrone REST-API zou een consument die een specifiek veld verwacht, dat veld ophalen op het moment van een expliciete aanroep — en als het veld niet meer bestaat (bijvoorbeeld een 4xx-fout bij strikte validatie, of een direct zichtbaar ontbrekend veld in de response), wordt dat vaak vrijwel onmiddellijk zichtbaar bij de eerstvolgende aanroep, en is er een directe relatie tussen de aanroeper en de API-eigenaar (via het aanroeppatroon of API-sleutel) die het makkelijker maakt te achterhalen wie er geraakt wordt. Bij het event-gedreven kanaal is er geen "aanroepmoment" dat een fout direct zichtbaar maakt — de rapportagetabel bleef gewoon draaien, met stilzwijgend foutieve waarden, zonder dat er ooit een foutmelding ontstond die iemand aan het incident had kunnen koppelen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> dit is geen argument tegen event-gedreven architectuur — de voordelen (lage koppeling, deel 6) blijven bestaan — maar het is de reden waarom dit deel een aparte discipline (schema-evolutie, consumer-driven contracts) nodig heeft die bij synchrone API's minder acuut is, omdat daar de feedback-loop van nature korter is.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">20.5 Wat Meridiaan er uiteindelijk mee deed</h2><span class="chip time">Sectie 6 van 8</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Na het incident is bij Meridiaan een tweeledige aanpak ingevoerd. Ten eerste: elke veldwijziging op een event-gedreven kanaal volgt voortaan het additief-eerst-principe uit 20.2 — nieuwe velden toevoegen, oude pas verwijderen na een vastgestelde overgangsperiode (bij Meridiaan: minimaal een kwartaal, om ook kwartaalrapportages de kans te geven om mee te bewegen). Ten tweede: elk team dat een nieuw abonnement op een event-gedreven kanaal start, publiceert een minimaal contract (welke velden worden gebruikt) in een gedeeld register, dat het integratieteam raadpleegt vóórdat een wijziging aan het kanaal wordt goedgekeurd.</p>
+<p>Geen van beide maatregelen is technisch geavanceerd — de waarde zit in de discipline, niet in het gereedschap. Dat is precies waarom dit onderwerp, ondanks zijn schijnbare eenvoud, een eigen deel verdient: het probleem is niet moeilijk om te <em>begrijpen</em>, het is moeilijk om <em>consequent toe te passen</em> in een landschap waar het verleidelijk is om "even snel een veld te hernoemen".</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 20</h2><span class="chip time">Sectie 7 van 8</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Een contractwijziging op een event-gedreven kanaal breekt stil en vertraagd, bij consumenten die de zender vaak niet eens kent — anders dan bij een synchrone API, waar een breking direct en zichtbaar is.</li>
+<li>Achterwaarts-compatibele wijzigingen (nieuw optioneel veld, verruiming) laten bestaande consumenten ongestoord doorwerken; niet-compatibele wijzigingen (hernoemen, verwijderen, type wijzigen, optioneel verplicht maken) breken hen, vaak zonder foutmelding.</li>
+<li>Het fundamentele probleem is dat de zender zijn consumenten niet kent — een expliciet consumentenregister en consumer-driven contracts keren dit om door consumenten hun afhankelijkheden zelf te laten verklaren.</li>
+<li>De discipline (additief-eerst, overgangsperiodes, expliciete registratie) is organisatorisch, niet primair technisch — en juist daarom makkelijk te verwaarlozen totdat een incident de kosten ervan zichtbaar maakt.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 20</div>
+        <p class="quiz__src">Uit Werkboek deel 20, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin over contractbeheer, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij een synchrone API breekt een contractwijziging zichtbaar en onmiddellijk; bij een event-gedreven kanaal breekt hij stil en vertraagd, bij een consument die de zender vaak niet eens kent.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Noem drie voorbeelden van achterwaarts-compatibele wijzigingen en drie van niet-compatibele wijzigingen.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Achterwaarts-compatibel: nieuw optioneel veld toevoegen, een tekstveld verruimen, een bereik verbreden. Niet-compatibel: een veld hernoemen, een veld verwijderen, een datatype wijzigen, een optioneel veld verplicht maken.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is de juiste volgorde bij het hernoemen van een veld, en waarom is direct hernoemen riskant?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Eerst het nieuwe veld toevoegen naast het oude, een overgangsperiode aanhouden, controleren of het oude veld nog gebruikt wordt, en pas dan het oude veld verwijderen. Direct hernoemen is riskant omdat het oude veld voor bestaande consumenten simpelweg verdwijnt, vaak zonder foutmelding maar met stilzwijgend foutieve waarden.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat is het fundamentele probleem waardoor schema-evolutie bij event-gedreven kanalen lastiger is dan bij synchrone API's?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De zender kent zijn consumenten niet — bij publish-subscribe kan iedereen zich onafhankelijk abonneren, zonder dat de zender weet wie er luistert of welke velden ze gebruiken.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Wat is een consumer-driven contract, en hoe keert het het fundamentele probleem om?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een expliciete, door de consument opgestelde specificatie van welke velden hij gebruikt, geautomatiseerd getoetst vóór elke wijziging. Het keert het probleem om: in plaats van dat de zender raadt wie er luistert, verklaren consumenten expliciet wat ze nodig hebben.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is het risico van een consumer-driven contract dat nooit wordt bijgewerkt?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Het contract biedt geen bescherming meer voor nieuw gebruikte, niet-gedeclareerde velden — hetzelfde risico als geen contract hebben, nu ontstaan door veroudering in plaats van afwezigheid.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Is de oplossing voor dit deel primair technisch of organisatorisch? Licht toe.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Primair organisatorisch — de technische mechanismen (schema-evolutieregels, geautomatiseerde contracttoetsing) zijn niet geavanceerd; de waarde zit in de discipline om ze consequent toe te passen, ook wanneer een snelle hernoeming verleidelijk lijkt.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 8 van 8</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 21 keert terug naar de hoofdlijn van de cursus en verdiept observability in ketens: distributed tracing, correlation, en message history in productie — hoe je, in een landschap dat inmiddels tien delen aan patronen diep is, ziet wat er in productie daadwerkelijk gebeurt, real-time.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 21</h3>
+      <p>Deel 21 — Observability in ketens: distributed tracing, correlation, message history in productie — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-21.html">Deel 21 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 20 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-20/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
+  var KEY="eductus_eip20_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

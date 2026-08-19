@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 30 — Masterproef: de verdwenen bevestiging | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 30 (Niveau 3 — Event streaming en stelselschaal): Het is oktober 2027. De wettelijke deadline van 1 januari 2028 nadert. Meridiaan heeft, in de weken vóór de laatste, grote invaargolf, een asynchrone keten in productie die — op basis van alle patronen uit deze cursus — als robuust is beoordeeld: onv…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-30.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 3 (Event streaming en stelselschaal) · Deel 30 van 30</p>
+  <h1>Masterproef: de verdwenen bevestiging</h1>
+  <p class="hero__lead">Het is oktober 2027. De wettelijke deadline van 1 januari 2028 nadert. Meridiaan heeft, in de weken vóór de laatste, grote invaargolf, een asynchrone keten in productie die — op basis van alle patronen uit deze cursus — als robuust is beoordeeld: onveranderlijke events (deel 23), een georkestreerde, blokkerende datakwaliteitscontrole met een expliciete compensatiegrens (deel 25), poison-message-isolatie en resilience-maatregelen (deel 26-27), en een volledige, auditeerbare event backbone (deel 28-29).</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>1</b><span>figuren</span></div>
+    <div class="stat"><b>0</b><span>controlevragen</span></div>
+    <div class="stat"><b>0</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 3: ① Event-driven architectuur en event streaming fundamenten → ② Event sourcing als drager → ③ Complexe eventketens: de event backbone voor invaren en datakwaliteit → ④ Poison messages en retry-topologie op schaal → ⑤ Resilience patterns in ketens: circuit breaker, bulkhead, backpressure → ⑥ Governance en lifecycle van een event backbone → ⑦ Auditability en verantwoording richting DNB/AFM vanuit messaging-logs → <b>⑧ Masterproef: de verdwenen bevestiging (hier)</b></div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">30.0 Vlak voor de deadline</a></li>
+      <li><a href="#s2" data-target="s2">30.1 De twee opties, en waarom geen van beide zonder risico is</a></li>
+      <li><a href="#s3" data-target="s3">30.2 De masterproef-opdracht</a></li>
+      <li><a href="#s4" data-target="s4">30.3 De boardrollen</a></li>
+      <li><a href="#s5" data-target="s5">30.4 De rubric die &quot;nee, dit niet&quot; beloont</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 30</a></li>
+      <li><a href="#s7" data-target="s7">Einde van de cursus</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">30.0 Vlak voor de deadline</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het is oktober 2027. De wettelijke deadline van 1 januari 2028 nadert. Meridiaan heeft, in de weken vóór de laatste, grote invaargolf, een asynchrone keten in productie die — op basis van alle patronen uit deze cursus — als robuust is beoordeeld: onveranderlijke events (deel 23), een georkestreerde, blokkerende datakwaliteitscontrole met een expliciete compensatiegrens (deel 25), poison-message-isolatie en resilience-maatregelen (deel 26-27), en een volledige, auditeerbare event backbone (deel 28-29).</p>
+<p>Op een donderdagochtend meldt het operationeel beheerteam een afwijking: voor een deel van de laatste batch — precies hoeveel is nog onduidelijk, ergens tussen de honderd en de vierduizend deelnemers — is een invaar-event <strong>verzonden</strong>, maar is de <strong>bevestiging</strong> dat de externe pensioenadministrateur (die de definitieve validatie namens Meridiaan uitvoert) het event heeft ontvangen en verwerkt, <strong>nooit teruggekomen</strong>. Dit is niet het incident van deel 26 (poison message) — geen enkel bericht loopt vast. Het is ook niet het incident van deel 19 (dual-write) — de events staan onveranderlijk vastgelegd in de invaaradministratie. Het probleem zit specifiek in de <strong>koppeling met de externe administrateur</strong>: door een netwerkpartitie tussen Meridiaan en die administrateur, gecombineerd met een niet volledig sluitende consumer group-configuratie (deel 16) bij de administrateur zelf, is onduidelijk of de events daadwerkelijk zijn aangekomen en verwerkt, of onderweg zijn vastgelopen.</p>
+<p><strong>De DNB-rapportagedeadline voor deze batch is over vier dagen.</strong></p>
+<p>Het bestuur van Meridiaan staat voor een keuze tussen twee risicovolle opties, en heeft Caspar gevraagd — samen met het volledige integratieteam — een onderbouwd advies te presenteren.</p>
+<figure><img alt="Een tijdlijn: batch verzonden (dinsdag), netwerkpartitie ontdekt (donderdag), DNB-deadline (maandag), met tussen donderdag en maandag een groot vraagteken over de status van tussen de honderd en vierduizend deelnemers." loading="lazy" src="figuren/figuur-30-1-tijdlijn-netwerkpartitie-deadline.svg"/><figcaption>Figuur 30-1 — Een tijdlijn: batch verzonden (dinsdag), netwerkpartitie ontdekt (donderdag), DNB-deadline (maandag), met tussen donderdag en maandag een groot vraagteken over de status van tussen de honderd en vierduizend deelnemers.</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">30.1 De twee opties, en waarom geen van beide zonder risico is</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Optie A: een her-run.</strong> Stuur alle events uit de betrokken batch opnieuw naar de externe administrateur, met het risico dat een deel daarvan al wél was aangekomen en verwerkt — een dubbele verwerking, ondanks de idempotentiemaatregelen uit deel 7, omdat niet volledig zeker is of de administrateur's eigen idempotentiebewaking (die buiten Meridiaans directe controle valt) foutloos functioneert onder deze specifieke, ongebruikelijke omstandigheid.</p>
+<p><strong>Optie B: wachten en onderzoeken.</strong> Wacht tot volledige zekerheid is verkregen over welke events daadwerkelijk zijn aangekomen, voordat een gerichte, selectieve her-run wordt gedaan — met het risico dat dit onderzoek langer duurt dan de vier resterende dagen, waardoor de DNB-rapportagedeadline voor deze specifieke batch wordt gemist.</p>
+<p>Geen van beide opties is zonder risico, en — dit is de kern van de masterproef-opdracht — <strong>een goed advies kiest niet automatisch de optie die het minst eng klinkt, maar de optie die het beste te verdedigen is, met expliciete erkenning van wat er misgaat als die keuze verkeerd uitpakt.</strong> Dit is precies de rubric-eis die de familie van cursussen consequent hanteert: een onderbouwd "nee, dit niet" is sterker dan een oppervlakkig "ja, we doen alles".</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">30.2 De masterproef-opdracht</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Vorm:</strong> een boardsimulatie over twee dagdelen, met vier rollen, waarbij de helft van de kritische vragen vooraf met de presentatoren wordt gedeeld en de andere helft onvoorzien is.</p>
+<p><strong>Dagdeel A — voorbereiding en eerste verdediging.</strong> Groepen van drie tot vier deelnemers krijgen het volledige scenario van 30.0, plus toegang tot (fictieve) technische gegevens: hoeveel events zijn verzonden, wat is er bekend over de netwerkpartitie, wat zegt de eigen event backbone (deel 23, 28) over de laatst bevestigde consumer group-positie bij de administrateur (deel 16). De groep bereidt een advies voor van maximaal twintig minuten, met een expliciete aanbeveling (A, B, of een derde, zelf onderbouwde optie) en een risicomatrix die voor elke optie benoemt: wat kan er misgaan, hoe waarschijnlijk is dat, en welke maatregel is genomen om dat risico te beperken.</p>
+<p><strong>Dagdeel B — bevraging en verdediging.</strong> De boardrollen (zie 30.3) bevragen elke groep gedurende dertig minuten. De helft van de vragen is vooraf, bij de opdracht, aan de groep bekendgemaakt (zodat een grondige voorbereiding mogelijk en beloond wordt); de andere helft wordt pas tijdens de sessie zelf gesteld, gebaseerd op specifieke zwakke plekken in het gepresenteerde advies — precies zoals een echt bestuur zou doorvragen op wat het meest onzeker aanvoelt.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">30.3 De boardrollen</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>De CEO</strong> — vraagt door op de reputatie- en deadline-consequenties: "wat gebeurt er, extern en intern, als we deze deadline missen? Is dat werkelijk erger dan het risico van optie A?" Deze rol heeft, vooraf gedeeld, de vraag: "leg in twee zinnen uit waarom uw advies verdedigbaar is tegenover een bestuur dat vooral naar de deadline kijkt."</p>
+<p><strong>De sleutelfunctiehouder risicobeheer</strong> (vergelijkbaar met de rol uit de risicomanagementcursus, voor deelnemers die die cursus ook volgen) — vraagt door op de risicoafweging zelf: "hebt u de kans en impact van beide opties werkelijk kwantitatief onderbouwd, of is dit een onderbuikgevoel in tabelvorm?" Vooraf gedeelde vraag: "welk kwantitatief bewijs heeft u voor de geschatte omvang van het probleem (honderd tot vierduizend deelnemers) — is die bandbreedte zelf al onderzocht of aangenomen?"</p>
+<p><strong>De compliance-vertegenwoordiger</strong> — vraagt door op de wettelijke consequenties van beide opties: "als we voor optie B kiezen en de deadline toch wordt gemist, wat is dan het formele vervolgtraject richting DNB, en hebben we dat al voorbereid?" Onvoorzien: deze rol stelt tijdens de sessie zelf een vraag die specifiek inspeelt op een zwak punt in het gepresenteerde advies.</p>
+<p><strong>De externe pensioenadministrateur (vertegenwoordigd door een rolspeler)</strong> — vraagt door vanuit het perspectief van de partij die de her-run daadwerkelijk zou moeten verwerken: "hoe zeker bent u dat wíj, aan onze kant, een dubbele aanlevering correct zouden afhandelen? Heeft u dat ooit met ons getest?" Deze rol dwingt de presentatoren om te erkennen dat een deel van de onzekerheid buiten hun eigen technische controle ligt — een expliciete grens die deel 11 en 25 al aankondigden bij externe partijen.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">30.4 De rubric die &quot;nee, dit niet&quot; beloont</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Vier criteria</strong>, elk beoordeeld op een schaal van 1 tot 4, met een nadrukkelijk <strong>vijfde, doorslaggevend element</strong>:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Criterium</th><th>Wat wordt beoordeeld</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Vakmanschap</strong></td><td>Is de technische analyse (netwerkpartitie, consumer group-status, idempotentierisico) correct, gebaseerd op de patronen uit niveau 1-3?</td></tr>
+<tr><td><strong>Volledigheid van de risicoafweging</strong></td><td>Zijn beide opties (en eventuele alternatieven) met hun risico's, waarschijnlijkheden en mitigerende maatregelen volledig in kaart gebracht?</td></tr>
+<tr><td><strong>Verdedigbaarheid onder druk</strong></td><td>Kan de groep de onvoorziene vragen beantwoorden zonder terug te vallen op vage geruststellingen?</td></tr>
+<tr><td><strong>Aantoonbare toepassing van niveau 1-3</strong></td><td>Wordt expliciet gemaakt welk patroon (idempotentie, compensatiegrens, auditeerbaarheid) het advies onderbouwt?</td></tr>
+</tbody></table></div>
+<p><strong>Het doorslaggevende element</strong>, dat boven de vier criteria staat: <strong>een groep die met overtuigende, technisch onderbouwde argumenten kiest voor optie B — wachten, ook al kost dat de deadline — scoort hoger dan een groep die klakkeloos voor optie A kiest omdat "dat de deadline redt".</strong> Omgekeerd geldt hetzelfde: een groep die met even overtuigende argumenten voor optie A kiest, ondanks het dubbele-verwerkingsrisico, en precies kan uitleggen welke aanvullende maatregel (bijvoorbeeld: een expliciete, extra idempotentiecontrole vóór verzending, in samenspraak met de administrateur) dat risico beperkt, scoort even hoog.</p>
+<p>Wat <strong>niet</strong> hoog scoort: een advies dat beide risico's onderschat, of dat "een beetje van allebei doet" zonder een scherpe, verdedigbare keuze — precies de valkuil die de rubric van de familie consequent bestraft: een oppervlakkig "ja, we doen het allemaal een beetje" tegenover een onderbouwd, doordacht "nee, dit niet, en hier is waarom."</p>
+<blockquote><p><strong>De laatste kernzin van de cursus: het beste advies in een crisis is niet het advies dat het meest geruststellend klinkt, maar het advies dat het eerlijkst is over wat er nog steeds fout kan gaan — en precies dát is wat negentien delen aan patronen je in staat stellen te formuleren, in plaats van te gissen.</strong></p></blockquote>
+      </div>
+
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 30</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>De masterproef presenteert een scenario waarin geen enkele eerdere garantie (idempotentie, onveranderlijkheid, auditeerbaarheid) het probleem zelf oplost — de keten heeft een externe, buiten Meridiaans volledige controle liggende onzekerheid blootgelegd.</li>
+<li>Twee dagdelen: voorbereiding en eerste verdediging (dagdeel A), bevraging door vier boardrollen met deels vooraf gedeelde, deels onvoorziene vragen (dagdeel B).</li>
+<li>De rubric beloont expliciet een onderbouwd "nee, dit niet" boven een oppervlakkig "ja, we doen alles" — de scherpte en eerlijkheid van de afweging telt zwaarder dan welke specifieke optie wordt gekozen.</li>
+<li>Dit is het sluitstuk van de hele cursus: het vermogen om, onder tijdsdruk en met onvolledige informatie, een verdedigbaar advies te formuleren dat expliciet erkent wat onzeker blijft.</li>
+</ul>
+      </div>
+
+      <div class="callout note"><span class="lbl">Over dit werkboek</span><p>De masterproef kent geen modelantwoorden — alleen beter en slechter onderbouwde adviezen. Het volledige scenariodossier en de voorbereidingsopdracht staan hieronder, letterlijk uit het werkboek.</p></div>
+      <div class="card"><h4>Het technische dossier</h4><div class="prose">
+<p>Gebruik de volgende (fictieve) gegevens als basis voor je analyse.</p>
+<p><strong>Wat er is gebeurd:</strong></p>
+<ul>
+<li>Dinsdag 08:00–14:00: batch van 4.212 invaar-events verzonden naar de externe pensioenadministrateur, via de event backbone (deel 23, 28), elk met een uniek bericht-ID en trace-ID (deel 21).</li>
+<li>Dinsdag 14:15: een netwerkpartitie tussen Meridiaan en de administrateur, duur onbekend, hersteld op een niet exact vastgesteld tijdstip tussen dinsdag 14:15 en woensdag 06:00.</li>
+<li>Donderdag 09:00: het operationeel beheerteam ontdekt, via de smart proxy (deel 15) die de koppeling met de administrateur bewaakt, dat voor een deel van de batch geen bevestiging is geregistreerd — de smart proxy signaleerde dit niet eerder omdat de ingestelde termijn voor "geen antwoord" op 48 uur stond, afgestemd op normale piekbelasting, niet op een netwerkpartitie van deze duur.</li>
+<li>De administrateur's eigen consumer group-configuratie (deel 16) blijkt, bij navraag, een bekende, niet eerder gemelde beperking te hebben: bij een herstart van hun kant (die tijdens de partitie kan zijn opgetreden) is niet volledig gegarandeerd dat elke consumer zijn leespositie correct heeft hervat.</li>
+<li>Meridiaans eigen event backbone toont onomstotelijk: alle 4.212 events zijn verzonden en, volgens guaranteed delivery (deel 8, 16), niet verloren gegaan aan Meridiaans kant. De onzekerheid zit uitsluitend in wat de administrateur ermee heeft gedaan.</li>
+</ul>
+<p><strong>Wat nog niet bekend is:</strong></p>
+<ul>
+<li>Exact hoeveel van de 4.212 events daadwerkelijk zijn verwerkt door de administrateur.</li>
+<li>Of een her-run bij de administrateur, met hun huidige consumer group-configuratie, gegarandeerd idempotent zou worden afgehandeld.</li>
+<li>Hoe lang een grondig, gezamenlijk onderzoek (Meridiaan + administrateur) zou duren om exacte zekerheid te krijgen.</li>
+</ul>
+</div></div>
+      <div class="card"><h4>Voorbereidingsopdracht voor dagdeel A</h4><div class="prose">
+<p>Bereid, in je groep van drie tot vier, een advies voor van maximaal twintig minuten. Gebruik hiervoor expliciet:</p>
+<ol>
+<li><strong>Een risicomatrix</strong> voor zowel optie A (her-run) als optie B (wachten), met voor elke optie: het risico, de geschatte waarschijnlijkheid, de impact, en de mitigerende maatregel.</li>
+<li><strong>Een expliciete aanbeveling</strong> — A, B, of een zelf onderbouwd derde alternatief (bijvoorbeeld: een gedeeltelijke her-run, gecombineerd met een verkort onderzoek).</li>
+<li><strong>Een koppeling naar minstens vijf patronen</strong> uit niveau 1-3 die je advies onderbouwen — bijvoorbeeld: waarom idempotentie (deel 7) het dubbele-verwerkingsrisico bij optie A wel of niet voldoende beperkt; waarom de compensatiegrens (deel 25) hier al dan niet van toepassing is (is dit invaarmoment al onomkeerbaar, of nog niet, gegeven dat de bevestiging ontbreekt?).</li>
+<li><strong>Een expliciete erkenning van wat onzeker blijft</strong>, ook na je advies — geen enkel advies in dit scenario kan alle onzekerheid wegnemen, en de rubric beloont het erkennen daarvan boven het suggereren van schijnzekerheid.</li>
+</ol>
+</div></div>
+      <div class="card"><h4>De vooraf gedeelde vragen (helft van de bevraging in dagdeel B)</h4><div class="prose">
+<p>Deze vragen worden vooraf aan alle groepen bekendgemaakt, zodat gerichte voorbereiding mogelijk is.</p>
+<ol>
+<li><strong>CEO:</strong> "Leg in twee zinnen uit waarom uw advies verdedigbaar is tegenover een bestuur dat vooral naar de deadline kijkt."</li>
+<li><strong>Sleutelfunctiehouder risicobeheer:</strong> "Welk kwantitatief bewijs heeft u voor de geschatte omvang van het probleem (honderd tot vierduizend deelnemers) — is die bandbreedte zelf al onderzocht of aangenomen?"</li>
+<li><strong>Compliance:</strong> "Als optie B wordt gekozen en de deadline toch wordt gemist, wat is dan het formele vervolgtraject richting DNB, en is dat al voorbereid?"</li>
+<li><strong>Externe administrateur (rolspeler):</strong> "Hoe zeker bent u dat wíj, aan onze kant, een dubbele aanlevering correct zouden afhandelen? Heeft u dat ooit met ons getest?"</li>
+</ol>
+<p>De andere helft van de vragen wordt tijdens dagdeel B zelf gesteld door de docent of medecursisten in de boardrollen, gericht op specifieke zwakke plekken die in de presentatie van elke groep naar voren komen.</p>
+</div></div>
+      <div class="card"><h4>Zelfevaluatie-checklist vóór de verdediging</h4><div class="prose">
+<ul>
+<li>☐ Heb je voor beide opties (niet alleen je voorkeursoptie) een volledige risicoanalyse gemaakt?</li>
+<li>☐ Heb je expliciet benoemd welke onzekerheid buiten Meridiaans eigen technische controle ligt (de administrateur's consumer group-configuratie)?</li>
+<li>☐ Heb je minstens vijf specifieke patronen uit de cursus genoemd, niet alleen algemene principes?</li>
+<li>☐ Kun je uitleggen waarom de smart proxy (deel 15) dit probleem niet eerder signaleerde, en wat dat zegt over de ingestelde termijn?</li>
+<li>☐ Heb je een derde, eigen alternatief overwogen, of alleen tussen A en B gekozen?</li>
+<li>☐ Erken je expliciet wat er, zelfs na je advies, nog steeds onzeker blijft?</li>
+<li>☐ Zou je advies overeind blijven als het bestuur je confronteert met "maar wat als u het mis heeft"?</li>
+</ul>
+<p>Wie op alle zeven punten "ja" kan antwoorden, is klaar voor de bevraging.</p>
+</div></div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Einde van de cursus</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Dertig delen, drie niveaus, één doorlopende casus bij Meridiaan Pensioen N.V. — van Caspars eerste, zeven-keer-per-dag-vastlopende koppeling in deel 1, tot een bestuursadvies over een onomkeerbare, wettelijk verplichte keten in deel 30. De negenentwintig kernzinnen die onderweg zijn geformuleerd, vormen samen het instrumentarium waarmee elke nieuwe, nog niet eerder geziene integratie-uitdaging kan worden benaderd — niet als losse trucs, maar als een samenhangende manier van denken over wat er gebeurt zodra systemen niet langer wachten op elkaar, maar elkaar feiten toesturen.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Cursus afgerond</h3>
+      <p>Dit was het laatste deel van Enterprise Integration Patterns. Terug naar het cursusoverzicht voor een herhaling of naar alle Eductus-cursussen.</p>
+      <a class="btn" href="index.html">Terug naar cursusoverzicht →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 30 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-30/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip30_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

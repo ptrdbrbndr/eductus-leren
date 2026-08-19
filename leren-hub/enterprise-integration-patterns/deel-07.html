@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 7 — Betrouwbaarheid I: garanties en idempotentie | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 7 (Niveau 1 — Fundament): Zes weken na de introductie van router en filter (deel 4) deed zich een nieuw incident voor, dit keer niet door een ontwerpfout maar door iets dat op het eerste gezicht een storing leek: een kortstondige netwerkonderbreking tussen het Werkgeversporta…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-07.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 7</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 1 (Fundament) · Deel 7 van 30</p>
+  <h1>Betrouwbaarheid I: garanties en idempotentie</h1>
+  <p class="hero__lead">Zes weken na de introductie van router en filter (deel 4) deed zich een nieuw incident voor, dit keer niet door een ontwerpfout maar door iets dat op het eerste gezicht een storing leek: een kortstondige netwerkonderbreking tussen het Werkgeversportaal en het mutatiekanaal. De verzendcomponent van het portaal kreeg geen bevestiging terug dat zijn bericht was aangekomen, en deed — precies zoals het hoorde te doen bij een uitblijvende bevestiging — een nieuwe poging. Beide pogingen kwamen uiteindelijk aan bij KERN, seconden na elkaar.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>11</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 1: ① Van synchroon naar asynchroon: waarom messaging → ② Messagingfundamenten: kanaal, bericht, endpoint → ③ Message Construction: command, event, document en request-reply → ④ Basisrouting: content-based router en message filter → ⑤ Basistransformatie: translator, envelope wrapper, normalizer → ⑥ Point-to-point vs. publish-subscribe kanalen, verdiept → <b>⑦ Betrouwbaarheid I: garanties en idempotentie (hier)</b> → ⑧ Betrouwbaarheid II: volgorde en guaranteed delivery → ⑨ Foutafhandeling basis: dead letter channel en invalid message channel → ⑩ Examentraining en capstone: de verdediging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">7.0 De salariscorrectie die twee keer werd toegepast</a></li>
+      <li><a href="#s2" data-target="s2">7.1 Drie leveringsgaranties, drie prijskaartjes</a></li>
+      <li><a href="#s3" data-target="s3">7.2 Waarom at-least-once de praktische norm is</a></li>
+      <li><a href="#s4" data-target="s4">7.3 Idempotentie: hetzelfde bericht, hetzelfde resultaat</a></li>
+      <li><a href="#s5" data-target="s5">7.4 Idempotentie is geen vervanging voor correlatie</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 7</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">7.0 De salariscorrectie die twee keer werd toegepast</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zes weken na de introductie van router en filter (deel 4) deed zich een nieuw incident voor, dit keer niet door een ontwerpfout maar door iets dat op het eerste gezicht een storing leek: een kortstondige netwerkonderbreking tussen het Werkgeversportaal en het mutatiekanaal. De verzendcomponent van het portaal kreeg geen bevestiging terug dat zijn bericht was aangekomen, en deed — precies zoals het hoorde te doen bij een uitblijvende bevestiging — een nieuwe poging. Beide pogingen kwamen uiteindelijk aan bij KERN, seconden na elkaar.</p>
+<p>Het probleem: het ging om een salariscorrectie van €340. KERN had geen enkele manier om te herkennen dat het tweede bericht een herhaling was van het eerste, en verwerkte het simpelweg twee keer. De deelnemer kreeg een correctie van €680 in plaats van €340.</p>
+<p>Dit incident is fundamenteel anders dan de vorige. Het portaal deed niets fout — een retry na een uitgebleven bevestiging is precies het gedrag dat je van een betrouwbaar systeem verwacht, en zonder die retry zou het bericht bij een échte storing verloren zijn gegaan. Het probleem lag aan de ontvangende kant: KERN was niet ontworpen om met de consequentie van die retry om te gaan.</p>
+<figure><img alt="Tijdlijn: bericht 1 verzonden, netwerkonderbreking, geen bevestiging, bericht 1 (retry) verzonden, beide berichten komen aan bij KERN met 2 seconden verschil, beide worden verwerkt" loading="lazy" src="figuren/figuur-7-1-retry-tijdlijn.svg"/><figcaption>Figuur 7-1 — tijdlijn: bericht 1 verzonden, netwerkonderbreking, geen bevestiging, bericht 1 (retry) verzonden, beide berichten komen aan bij KERN met 2 seconden verschil, beide worden verwerkt</figcaption></figure>
+<p>Dit deel behandelt wat messaging-systemen wél en niet garanderen over aflevering, en waarom die garantie zelden is wat je écht nodig hebt — wat je nodig hebt is een garantie over <em>verwerking</em>, en dat is een andere vraag die je zelf moet beantwoorden.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">7.1 Drie leveringsgaranties, drie prijskaartjes</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elke messaging-technologie kiest, expliciet of impliciet, één van drie fundamentele leveringsgaranties. Het is essentieel deze te kennen omdat ze verschillende consequenties hebben, en geen van drie is "gewoon beter" — elke garantie heeft een prijs.</p>
+<p><strong>At-most-once ("hooguit één keer").</strong> Een bericht wordt verzonden en, als het onderweg verloren gaat, is dat definitief — er is geen retry. Dit is de garantie met het laagste risico op dubbele verwerking, maar met het hoogste risico op berichtverlies. Geschikt voor situaties waar een gemist bericht minder schadelijk is dan een dubbel verwerkt bericht, en waar hertransmissie sowieso via een ander mechanisme (bijvoorbeeld een periodieke volledige synchronisatie) wordt opgevangen.</p>
+<p><strong>At-least-once ("minstens één keer").</strong> Een bericht wordt hertransmitteerd totdat een bevestiging van aankomst is ontvangen. Dit garandeert dat een bericht nooit stilzwijgend verloren gaat, ten koste van het risico dat het bericht — zoals bij Caspars salariscorrectie — meer dan één keer aankomt. Dit is de meest gangbare garantie in praktijksystemen, en precies degene die bij Meridiaan actief was.</p>
+<p><strong>Exactly-once ("precies één keer").</strong> Een bericht komt gegarandeerd exact één keer aan, niet meer en niet minder. Dit klinkt als de ideale garantie, en is in de praktijk de duurste om echt waar te maken: volledige exactly-once-semantiek over onbetrouwbare netwerken vereist gedistribueerde coördinatie tussen zender, kanaal en ontvanger die aanzienlijke prestatiekosten met zich meebrengt, en veel systemen die "exactly-once" claimen, leveren in werkelijkheid een specifieke, beperktere garantie (bijvoorbeeld exactly-once binnen één technologie-ecosysteem, niet over de volle keten).</p>
+<blockquote>
+<p><strong>Kernzin 7 van de cursus: vraag niet "welke garantie is het beste", vraag "wat kan mijn systeem hebben — een gemist bericht, of een dubbel bericht — en bouw voor het scenario dat overblijft."</strong></p>
+</blockquote>
+<figure><img alt="Drie balansen naast elkaar: at-most-once (weegt door naar berichtverlies), at-least-once (weegt door naar dubbele aflevering), exactly-once (in balans, met een zwaar gewicht 'coördinatiekosten' eronder)" loading="lazy" src="figuren/figuur-7-2-drie-balansen.svg"/><figcaption>Figuur 7-2 — drie balansen naast elkaar: at-most-once (weegt door naar berichtverlies), at-least-once (weegt door naar dubbele aflevering), exactly-once (in balans, met een zwaar gewicht "coördinatiekosten" eronder)</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 7.1 — Welke garantie voor welk scenario</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.1 — Welke garantie voor welk scenario</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario welke leveringsgarantie het beste past, en motiveer met het risico dat je wilt vermijden.</p>
+<ol>
+<li>Een "hartslag"-bericht dat elke tien seconden aangeeft dat een systeem nog leeft, gebruikt voor monitoring.</li>
+<li>Een salariscorrectie.</li>
+<li>Een druk bezochte statistiekteller die het aantal paginaweergaven bijhoudt, waarbij een incidentele afwijking van een paar tellen geen enkele consequentie heeft.</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>At-most-once</strong> is hier verdedigbaar: als één hartslag verloren gaat, volgt er over tien seconden vanzelf een nieuwe. Het risico van at-least-once (dubbele hartslagen) voegt hier niets toe, en het risico van at-most-once (een gemiste hartslag) wordt door de aard van het bericht zelf binnen tien seconden gecorrigeerd.</p>
+<p>b. <strong>At-least-once</strong>, met verplichte idempotentie aan de ontvangende kant — precies de casus van dit deel. Berichtverlies is hier onacceptabel (een deelnemer die zijn correctie nooit krijgt), dus at-most-once valt af; volledige exactly-once is niet nodig zolang idempotentie het duplicatierisico van at-least-once opvangt.</p>
+<p>c. <strong>At-most-once</strong> is hier verdedigbaar, om dezelfde reden als a: het scenario zelf tolereert kleine afwijkingen, dus de eenvoud van at-most-once weegt op tegen het kleine risico op afwijking.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze hangt niet af van "hoe belangrijk voelt dit bericht", maar van de concrete vraag: wat kan dit specifieke systeem beter hebben — een gemist bericht of een dubbel bericht? Bij a en c is een gemist bericht draaglijker; bij b niet.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">7.2 Waarom at-least-once de praktische norm is</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In de meeste praktijksituaties, inclusief die van Meridiaan, is at-least-once de gekozen garantie — niet omdat het de beste garantie is in abstracte zin, maar omdat het de beste verhouding biedt tussen haalbaarheid en risico. Berichtverlies (het risico van at-most-once) is voor een financiële mutatie vrijwel nooit acceptabel: een verloren salariscorrectie betekent een deelnemer die zijn geld nooit krijgt, zonder dat iemand het merkt totdat een klacht binnenkomt. Dubbele aflevering (het risico van at-least-once) is daarentegen zichtbaar en, mits juist opgevangen, volledig beheersbaar.</p>
+<p>Dat laatste — "mits juist opgevangen" — is de kern van dit deel. At-least-once verplaatst het probleem niet weg, het maakt het expliciet en oplosbaar: in plaats van te hopen dat berichten niet verdubbelen (onmogelijk te garanderen bij netwerkonzekerheid), bouw je een ontvanger die correct omgaat met een verdubbeld bericht. Dat mechanisme heet <strong>idempotentie</strong>.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 7.2 — Idempotent of niet</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.2 — Idempotent of niet</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elke operatie of hij idempotent is. Zo nee: herschrijf hem naar een idempotente variant, indien mogelijk.</p>
+<ol>
+<li><code>voeg 50 punten toe aan de loyaliteitsrekening</code></li>
+<li><code>stel de status van mutatie X in op 'verwerkt'</code></li>
+<li><code>verstuur een bevestigingsmail naar de werkgever</code></li>
+<li><code>verwijder deelnemer Y uit de wachtlijst</code></li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Niet idempotent.</strong> Twee keer uitvoeren = 100 punten in plaats van 50. Herschrijf naar: <code>stel de loyaliteitsrekening in op [huidig totaal + 50, berekend op het moment van de oorspronkelijke transactie]</code> — in de praktijk vaak opgelost door de optelling zelf te koppelen aan een uniek transactie-ID dat maar één keer wordt toegepast (dus eigenlijk niveau 1-idempotentie: een verwerkingslog per transactie, niet een herschrijving van de optelling zelf, want "50 punten toevoegen" is inherent een optelling en moeilijk zuiver idempotent te herschrijven zonder de transactie-ID-benadering).</p>
+<p>b. <strong>Idempotent.</strong> Twee keer "stel in op 'verwerkt'" geeft hetzelfde eindresultaat als één keer. Dit is een voorbeeld van een operatie die van nature al idempotent is, zonder aanpassing nodig.</p>
+<p>c. <strong>Niet idempotent in het zichtbare effect</strong> (de werkgever krijgt twee mails), maar ook niet gevaarlijk in dezelfde zin als a — geen datacorruptie, wel een ongewenste dubbele communicatie. Herschrijf door een verwerkingslog op bericht-ID te gebruiken (niveau 1): controleer vóór verzending of deze specifieke mail al is verstuurd voor dit bericht-ID.</p>
+<p>d. <strong>Idempotent</strong>, mits de operatie zelf al zo is geformuleerd: "verwijderen" van iets dat al verwijderd is, heeft doorgaans geen extra effect (de deelnemer staat na de tweede uitvoering nog steeds niet op de wachtlijst). Let op: dit is alleen waar als "verwijderen" geen foutmelding of bijeffect geeft wanneer het element al afwezig is — een implementatie die een exception gooit bij een niet-bestaand element is in de praktijk alsnog niet idempotent.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "toevoegen" en "optellen" zijn typisch niet idempotent van aard; "instellen op" en "verwijderen" zijn dat vaak wel, mits zorgvuldig geïmplementeerd.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">7.3 Idempotentie: hetzelfde bericht, hetzelfde resultaat</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een verwerking is <strong>idempotent</strong> als het twee keer (of vaker) uitvoeren ervan exact hetzelfde resultaat oplevert als het één keer uitvoeren — niet "een vergelijkbaar resultaat", maar precies hetzelfde eindresultaat, zonder ongewenste bijeffecten van de herhaling.</p>
+<p>Dit is geen eigenschap van het bericht, en ook geen eigenschap van het kanaal — het is een eigenschap die de <strong>ontvanger</strong> moet bouwen. Het bericht-ID uit deel 3 (§3.1) is hiervoor de sleutel: bij binnenkomst van een bericht controleert de ontvanger eerst of dit bericht-ID al eerder is verwerkt. Zo ja, dan wordt het bericht genegeerd (of, preciezer: het eerder berekende resultaat wordt hergebruikt, zonder de onderliggende actie opnieuw uit te voeren) — precies wat KERN had moeten doen met de tweede salariscorrectie.</p>
+<p><strong>Drie niveaus van idempotentie-ontwerp, van eenvoudig naar robuust:</strong></p>
+<p><strong>Niveau 1: een eenvoudige verwerkingslog.</strong> De ontvanger houdt een lijst bij van reeds verwerkte bericht-ID's (met een redelijke bewaartermijn) en controleert daartegen vóór verwerking. Eenvoudig te bouwen, werkt goed zolang de controle en de daadwerkelijke verwerking niet uit elkaar kunnen vallen — bijvoorbeeld door een crash tussen "ID genoteerd" en "verwerking afgerond".</p>
+<p><strong>Niveau 2: idempotente operaties zelf.</strong> In plaats van (of aanvullend op) een verwerkingslog, wordt de verwerking zo ontworpen dat herhaling geen verschil maakt. "Verhoog het saldo met €340" is niet idempotent (twee keer uitvoeren = €680 verhoging); "stel het saldo in op €12.340" is dat wél (twee keer uitvoeren = zelfde eindstand). Waar mogelijk is deze vorm robuuster dan niveau 1, omdat ze niet afhankelijk is van een aparte, foutgevoelige boekhouding van bericht-ID's.</p>
+<p><strong>Niveau 3: idempotentie geborgd binnen dezelfde transactie.</strong> De sterkste vorm: het noteren van "dit bericht-ID is verwerkt" en de daadwerkelijke verwerking gebeuren atomair, binnen dezelfde databasetransactie, zodat een crash tussenin onmogelijk tot een inconsistente toestand leidt. Dit vereist dat de opslag van verwerkingslog en de opslag van het resultaat dezelfde transactionele grens delen — niet altijd triviaal wanneer meerdere systemen betrokken zijn, en een onderwerp dat in niveau 2 (deel 19, transactional messaging) dieper wordt behandeld.</p>
+<p>Bij Meridiaan is voor de salariscorrectieverwerking gekozen voor een combinatie van niveau 1 (een verwerkingslog op bericht-ID) en, waar mogelijk, niveau 2: in plaats van "verhoog met €340" wordt het command herschreven naar "corrigeer naar eindbedrag X", waardoor een eventuele dubbele verwerking sowieso geen extra effect zou hebben, zelfs als de verwerkingslog om welke reden dan ook zou falen.</p>
+<figure><img alt="Twee verwerkingsvarianten naast elkaar: 'verhoog met €340' (niet-idempotent, tweede uitvoering verdubbelt het effect) versus 'corrigeer naar €12.340' (idempotent, tweede uitvoering heeft geen extra effect)" loading="lazy" src="figuren/figuur-7-3-idempotentie-varianten.svg"/><figcaption>Figuur 7-3 — twee verwerkingsvarianten naast elkaar: "verhoog met €340" (niet-idempotent, tweede uitvoering verdubbelt het effect) versus "corrigeer naar €12.340" (idempotent, tweede uitvoering heeft geen extra effect)</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 7.3 — Welk niveau van idempotentie</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.3 — Welk niveau van idempotentie</p>
+        <div class="card">
+          <div class="prose">
+<p>Voor elk scenario: welk van de drie niveaus uit 7.3 (verwerkingslog, idempotente operatie, atomaire borging) is minimaal nodig, en waarom volstaat een lager niveau niet?</p>
+<ol>
+<li>Het versturen van een e-mailbevestiging (geen financiële consequentie bij een enkele dubbele mail).</li>
+<li>De salariscorrectie uit de hoofdcasus.</li>
+<li>Een mutatie die zowel een saldo aanpast als een audit-regel wegschrijft, waarbij beide altijd samen moeten kloppen.</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Niveau 1 (verwerkingslog)</strong> volstaat. Het risico van een enkele gemiste of dubbele mail door een randgeval in de log-controle is acceptabel gezien de lage impact.</p>
+<p>b. <strong>Niveau 1 én niveau 2 samen</strong>, zoals in de reader beschreven: een verwerkingslog als eerste linie, plus een idempotent geformuleerde operatie ("corrigeer naar eindbedrag") als vangnet mocht de log om welke reden dan ook falen. Niveau 1 alleen is kwetsbaar voor het randgeval waarin de crash tussen "ID genoteerd" en "verwerking afgerond" valt.</p>
+<p>c. <strong>Niveau 3 (atomaire borging)</strong> is hier het meest passend: saldo-aanpassing en audit-regel moeten samen kloppen, dus zowel de verwerkingslogregistratie als de daadwerkelijke verwerking (inclusief beide deelacties) horen binnen dezelfde transactionele grens te vallen. Een niveau 1-log die los van de transactie wordt bijgewerkt, loopt het risico dat een crash tussen de twee deelacties een inconsistente toestand achterlaat die de log niet detecteert.</p>
+<p><strong>Wat je hier moet meenemen:</strong> hoe hoger de consequentie van een inconsistentie, hoe dichter de idempotentieborging bij de daadwerkelijke verwerking moet liggen — bij lage impact is een aparte, losstaande log voldoende; bij hoge impact moet de borging in dezelfde transactie zitten.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">7.4 Idempotentie is geen vervanging voor correlatie</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een veelgemaakte begripsverwarring: idempotentie (dit deel) en correlatie (deel 2 en 3) lossen verschillende problemen op, ook al gebruiken ze allebei een identifier in de header.</p>
+<p><strong>Correlatie</strong> koppelt een antwoordbericht terug aan de oorspronkelijke aanvraag — het gaat over het bij elkaar houden van een vraag-en-antwoordpaar.</p>
+<p><strong>Idempotentie</strong> voorkomt dat hetzelfde bericht twee keer effect heeft — het gaat over het herkennen van een duplicaat van hetzelfde verzoek.</p>
+<p>Een command message heeft in de praktijk vaak beide nodig, met twee afzonderlijke identifiers: het bericht-ID (voor idempotentie: "is dit specifieke bericht al eerder verwerkt") en de correlatie-ID (voor het antwoord: "welk verzoek hoort bij dit antwoord"). Ze kunnen soms samenvallen in eenvoudige gevallen, maar het is een denkfout om aan te nemen dat ze altijd hetzelfde zijn — bijvoorbeeld bij een retry heeft de herhaalde poging typisch hetzelfde bericht-ID (het is immers hetzelfde verzoek) maar zou, als er per ongeluk een nieuwe correlatie-ID werd gegenereerd bij elke poging, de koppeling met het eerdere antwoord alsnog verloren gaan.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 7.4 — Idempotentie versus correlatie</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.4 — Idempotentie versus correlatie</p>
+        <div class="card">
+          <div class="prose">
+<p>Een ontwikkelaar stelt voor om de correlatie-ID te hergebruiken als bericht-ID voor idempotentiecontrole, "om niet twee velden te hoeven bijhouden". Leg aan de hand van 7.4 uit wanneer dit misgaat.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Zolang er een strikte één-op-één-relatie is tussen een verzoek en zijn eventuele retries (dezelfde correlatie-ID bij elke poging), lijkt dit te werken. Het gaat mis zodra die aanname niet standhoudt — bijvoorbeeld als het portaal bij een retry per ongeluk een nieuwe correlatie-ID genereert (wat op zich een begrijpelijke implementatiekeuze kan zijn als "elke poging is een nieuw verzoek vanuit het perspectief van wachten-op-antwoord"). Dan zou de idempotentiecontrole bij KERN het duplicaat niet herkennen — het lijkt qua correlatie-ID een nieuw verzoek, terwijl het feitelijk hetzelfde bericht is.</p>
+<p>Andersom: als een deelnemer bewust twee keer dezelfde statusvraag stelt (twee legitiem verschillende verzoeken, toevallig met identieke inhoud), zou hergebruik van bericht-ID als correlatie-ID de twee antwoorden mogelijk door elkaar halen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> twee losse identifiers kosten iets meer implementatiemoeite, maar voorkomen een subtiele en moeilijk te reproduceren fout die pas optreedt bij specifiek retry- of herhalingsgedrag — precies het soort fout dat in productie zichtbaar wordt en in een testomgeving met voorspelbaar gedrag onopgemerkt blijft.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 7</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Elke messaging-technologie kiest een leveringsgarantie: at-most-once (risico op verlies), at-least-once (risico op duplicatie), exactly-once (duur, en zelden volledig waargemaakt over de volle keten).</li>
+<li>At-least-once is de praktische norm omdat berichtverlies vrijwel nooit acceptabel is en duplicatie, mits opgevangen, beheersbaar is.</li>
+<li>Idempotentie is de eigenschap die de ontvanger moet bouwen: hetzelfde bericht twee keer verwerken levert hetzelfde resultaat op als één keer.</li>
+<li>Drie niveaus: een verwerkingslog op bericht-ID, idempotente operaties zelf ("stel in op X" in plaats van "verhoog met X"), en atomaire borging binnen één transactie.</li>
+<li>Idempotentie en correlatie lossen verschillende problemen op en gebruiken bij voorkeur afzonderlijke identifiers.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 7</div>
+        <p class="quiz__src">Uit Werkboek deel 7, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Noem de drie leveringsgaranties en het risico dat elk van hen accepteert.</span><span class="qx">Toon antwoord</span></summary><div class="ans">At-most-once (accepteert berichtverlies), at-least-once (accepteert dubbele aflevering), exactly-once (accepteert hoge coördinatiekosten, en is over de volle keten zelden volledig gegarandeerd).</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Vraag niet welke garantie het beste is, vraag wat je systeem kan hebben — een gemist bericht of een dubbel bericht — en bouw voor het scenario dat overblijft.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Waarom is at-least-once in de praktijk de meest gangbare keuze?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat berichtverlies voor de meeste zakelijke toepassingen vrijwel nooit acceptabel is, terwijl dubbele aflevering, mits opgevangen via idempotentie, volledig beheersbaar is.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat is idempotentie, en wiens verantwoordelijkheid is het om die te bouwen — de zender, het kanaal, of de ontvanger?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De eigenschap dat hetzelfde bericht twee keer verwerken hetzelfde resultaat oplevert als één keer. Het is de verantwoordelijkheid van de ontvanger, niet van het kanaal of de zender.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Noem de drie niveaus van idempotentie-ontwerp.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een eenvoudige verwerkingslog op bericht-ID; idempotente operaties zelf; atomaire borging binnen dezelfde transactie.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Waarom is "verhoog het saldo met €340" niet idempotent, en "stel het saldo in op €12.340" wel?</span><span class="qx">Toon antwoord</span></summary><div class="ans">"Verhoog met" is een relatieve wijziging waarbij herhaling het effect optelt; "stel in op" is een absolute toewijzing waarbij herhaling geen extra effect heeft, ongeacht hoe vaak de operatie wordt uitgevoerd.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Wat is het verschil tussen idempotentie en correlatie, en waarom gebruik je er bij voorkeur twee aparte identifiers voor?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Correlatie koppelt een antwoord terug aan zijn oorspronkelijke aanvraag; idempotentie herkent een duplicaat van hetzelfde verzoek. Ze lossen verschillende problemen op, en een retry kan bijvoorbeeld hetzelfde bericht-ID hebben maar per ongeluk een andere correlatie-ID, of omgekeerd — twee aparte identifiers voorkomen dat deze twee mechanismen elkaar in de weg zitten.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 8 werkt het tweede betrouwbaarheidsvraagstuk uit: volgorde. Als berichten via verschillende paden of met retries aankomen, is de volgorde van aankomst niet meer gegarandeerd gelijk aan de volgorde van verzending — en voor sommige mutaties, zoals opeenvolgende saldocorrecties, maakt die volgorde wel degelijk uit.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 8</h3>
+      <p>Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-08.html">Deel 8 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 7 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-07/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip7_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

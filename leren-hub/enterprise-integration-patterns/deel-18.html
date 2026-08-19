@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Distributed transactions in async context: saga&#39;s en compenserende transacties | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 18 (Niveau 2 — Het landschap): Twee maanden na de invoering van de gelaagde orkestratie uit deel 17 deed zich precies het scenario voor dat aan het eind van dat deel als vooruitblik werd genoemd: bij een uitkeringsproces was het bedrag al vastgesteld door de externe administrateur…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-18.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 18 van 30</p>
+  <h1>Distributed transactions in async context: saga&#39;s en compenserende transacties</h1>
+  <p class="hero__lead">Twee maanden na de invoering van de gelaagde orkestratie uit deel 17 deed zich precies het scenario voor dat aan het eind van dat deel als vooruitblik werd genoemd: bij een uitkeringsproces was het bedrag al vastgesteld door de externe administrateur (stap 2) en al gecommuniceerd aan de deelnemer via een voorlopige bevestiging, toen de fraudecontrole (stap 3) alsnog een ernstige onregelmatigheid signaleerde — een vermoedelijk vervalst identiteitsbewijs bij de aanvraag.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → <b>⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties (hier)</b> → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">18.0 De fraudecontrole die te laat kwam</a></li>
+      <li><a href="#s2" data-target="s2">18.1 Waarom ACID hier niet werkt, en wat daarvoor in de plaats komt</a></li>
+      <li><a href="#s3" data-target="s3">18.2 Het saga-patroon</a></li>
+      <li><a href="#s4" data-target="s4">18.3 Twee vormen van saga-coördinatie</a></li>
+      <li><a href="#s5" data-target="s5">18.4 Wanneer compensatie zelf niet volstaat</a></li>
+      <li><a href="#s6" data-target="s6">18.5 Afstemming met de API-cursus</a></li>
+      <li><a href="#s7" data-target="s7">Samenvatting van deel 18</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">18.0 De fraudecontrole die te laat kwam</h2><span class="chip time">Sectie 1 van 8</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Twee maanden na de invoering van de gelaagde orkestratie uit deel 17 deed zich precies het scenario voor dat aan het eind van dat deel als vooruitblik werd genoemd: bij een uitkeringsproces was het bedrag al vastgesteld door de externe administrateur (stap 2) en al gecommuniceerd aan de deelnemer via een voorlopige bevestiging, toen de fraudecontrole (stap 3) alsnog een ernstige onregelmatigheid signaleerde — een vermoedelijk vervalst identiteitsbewijs bij de aanvraag.</p>
+<p>Bij een klassieke, synchrone database-transactie zou dit soort situatie zich niet voordoen: alle stappen zouden binnen één transactiegrens vallen, en bij een probleem in stap 3 zou de hele transactie worden teruggedraaid (rollback), inclusief stap 1 en 2, alsof er nooit iets gebeurd was. Maar het uitkeringsproces speelt zich af over vijf onafhankelijke systemen, elk met hun eigen, lokale opslag — er bestaat geen enkele technische mogelijkheid om in één handeling alle vijf systemen tegelijk terug te draaien. KERN heeft de pensioendatum al vastgelegd. De externe administrateur heeft het bedrag al berekend en waarschijnlijk al in zijn eigen administratie vastgelegd. De deelnemer heeft al een voorlopige bevestiging gezien.</p>
+<figure><img alt='Vijf systemen, elk met een eigen lokale database, met een rode markering bij stap 3 (fraudecontrole) en drie pijlen terug naar stap 1 en 2 die doorgestreept zijn — er is geen technisch "terug" over systeemgrenzen heen.' loading="lazy" src="figuren/figuur-18-1-geen-technische-terugweg.svg"/><figcaption>Figuur 18-1 — Vijf systemen, elk met een eigen lokale database, met een rode markering bij stap 3 (fraudecontrole) en drie pijlen terug naar stap 1 en 2 die doorgestreept zijn — er is geen technisch "terug" over systeemgrenzen heen.</figcaption></figure>
+<p>Dit deel behandelt hoe je met dit fundamentele gegeven omgaat: niet door te doen alsof rollback over meerdere systemen mogelijk is, maar door expliciet te ontwerpen wat er gebeurt als een latere stap in een keten een eerdere, al voltooide stap ongedaan moet maken.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">18.1 Waarom ACID hier niet werkt, en wat daarvoor in de plaats komt</h2><span class="chip time">Sectie 2 van 8</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een klassieke databasetransactie belooft <strong>ACID</strong>: atomiciteit (alles of niets), consistentie, isolatie, en duurzaamheid. Atomiciteit is precies de eigenschap die hier ontbreekt: er is geen mechanisme dat vijf onafhankelijke systemen, elk met eigen beheer, eigen beschikbaarheid en eigen faalmomenten, in één ondeelbare handeling kan laten slagen of falen.</p>
+<p>Distributed-transactieprotocollen die dit wél proberen af te dwingen (zoals two-phase commit, kortweg 2PC) bestaan, maar hebben in de praktijk van asynchrone, over organisatiegrenzen heen lopende ketens zoals bij Meridiaan een fundamenteel probleem: ze vereisen dat alle betrokken systemen tijdens de hele transactieduur <strong>blokkerend</strong> wachten op een gecoördineerd commit-signaal — precies het soort synchrone, wachtende afhankelijkheid die deel 1 al onhoudbaar verklaarde zodra een keten schakels bevat met onvoorspelbare beschikbaarheid, zoals een externe partij. Dit is de reden dat de API-cursus, waar 2PC en de grenzen van gedistribueerde transacties binnen één beheersbare technische omgeving worden behandeld, expliciet vaststelt waar die grens ligt — en waarom deze cursus, voor ketens die over onafhankelijke, asynchrone systemen lopen, een ander antwoord geeft.</p>
+<blockquote><p><strong>Kernzin 19 van de cursus: waar ACID atomiciteit garandeert door te wachten tot iedereen tegelijk kan committen, garandeert een saga niets vooraf — hij accepteert dat elke stap definitief is, en ontwerpt vooraf wat er gebeurt als een latere stap alsnog moet worden teruggedraaid.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 18.1 — Waarom 2PC hier niet past</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.1 — Waarom 2PC hier niet past</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg uit, met kernzin 19 en het onderscheid uit 18.1, waarom two-phase commit (2PC) geen passende oplossing is voor het uitkeringsproces uit 18.0.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>2PC vereist dat alle betrokken systemen tijdens de hele transactieduur blokkerend wachten op een gecoördineerd commit-signaal. Bij het uitkeringsproces zijn vijf systemen betrokken, waarvan minstens één (de externe pensioenadministrateur) buiten Meridiaans directe beheer valt en historisch onbetrouwbaar is gebleken (deel 13). Blokkerend wachten op zo'n externe partij tijdens een lopende transactie zou precies het probleem van deel 1 herintroduceren: de hele keten erft de traagste, minst beschikbare schakel — nu vermenigvuldigd over vijf systemen in plaats van één koppeling.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de grens tussen 2PC (API-cursus) en saga (deze cursus) is niet arbitrair — hij volgt direct uit dezelfde analyse die deel 1 al maakte over wanneer synchroon wachten wel en niet houdbaar is, nu toegepast op transactieniveau.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">18.2 Het saga-patroon</h2><span class="chip time">Sectie 3 van 8</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>saga</strong> is een reeks lokale transacties, elk binnen één systeem en dus met normale ACID-garanties op dat lokale niveau, waarbij elke stap — als hij eenmaal is voltooid — als <strong>definitief en zichtbaar</strong> wordt beschouwd, niet als voorlopig binnen een grotere, nog-niet-afgeronde transactie. Als een latere stap mislukt, wordt niet de illusie van "terugdraaien" nagestreefd, maar wordt voor elke eerdere, al voltooide stap een expliciet ontworpen <strong>compenserende actie</strong> uitgevoerd — een nieuwe, eigen actie die het effect van de eerdere stap zoveel mogelijk ongedaan maakt, niet door de tijd terug te draaien, maar door een nieuw feit toe te voegen dat het eerdere feit corrigeert.</p>
+<p>Toegepast op 18.0: in plaats van te proberen "doen alsof de pensioendatum nooit is geregistreerd", registreert KERN een nieuwe, expliciete gebeurtenis: "uitkeringsproces gepauzeerd wegens fraudeonderzoek", die de eerdere registratie niet verwijdert maar aanvult met de nieuwe stand van zaken. De externe administrateur ontvangt een compenserende opdracht: "trek de eerdere berekening in, markeer als niet-actief". De deelnemer ontvangt een nieuw bericht dat de voorlopige bevestiging corrigeert: "uw uitkering is in onderzoek, de eerdere bevestiging was voorbarig" — geen verwijdering van het eerdere bericht (dat is, eenmaal verzonden, onomkeerbaar), maar een nieuw feit erbovenop.</p>
+<p>Dit is een fundamenteel andere mentale houding dan rollback: <strong>een saga voegt altijd nieuwe feiten toe, nooit oude feiten weg.</strong> Elke compenserende actie is zelf weer een command of event dat door de gewone messaging-infrastructuur (deel 1-16) reist, met dezelfde idempotentie- en betrouwbaarheidseisen als elke andere stap.</p>
+<figure><img alt="Dezelfde vijf stappen als 18-1, nu met bij stap 3 een vertakking naar drie compenserende acties (naar KERN, de administrateur, en de deelnemer), elk getekend als een nieuwe, toevoegende pijl in plaats van een terugdraaipijl." loading="lazy" src="figuren/figuur-18-2-compenserende-acties.svg"/><figcaption>Figuur 18-2 — Dezelfde vijf stappen als 18-1, nu met bij stap 3 een vertakking naar drie compenserende acties (naar KERN, de administrateur, en de deelnemer), elk getekend als een nieuwe, toevoegende pijl in plaats van een terugdraaipijl.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 18.2 — Compenseren, geen terugdraaien</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.2 — Compenseren, geen terugdraaien</p>
+        <div class="card">
+          <div class="prose">
+<p>Voor elk van de volgende drie stappen uit het uitkeringsproces: ontwerp een compenserende actie (geen "terugdraai"-actie) voor het geval de fraudecontrole achteraf een probleem signaleert.</p>
+<p>a. KERN heeft de pensioendatum geregistreerd.</p>
+<p>b. De externe administrateur heeft het uitkeringsbedrag berekend en intern vastgelegd.</p>
+<p>c. De uitkeringsadministratie heeft de eerste betaling al verwerkt (in tegenstelling tot de hoofdcasus, waar dit nog niet was gebeurd — bedenk dit als uitbreiding).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Geen verwijdering van de registratie, maar een nieuwe, aanvullende gebeurtenis: "uitkeringsproces gepauzeerd wegens fraudeonderzoek", die de pensioendatumregistratie laat staan (die blijft feitelijk correct — de deelnemer is en blijft gepensioneerd) maar het vervolgproces expliciet blokkeert.</p>
+<p>b. Een compenserende opdracht naar de administrateur: "trek de eerdere berekening in, markeer als niet-actief" — de berekening zelf blijft in de historie van de administrateur staan (voor auditdoeleinden), maar krijgt een status die aangeeft dat hij niet langer geldig is.</p>
+<p>c. Dit is het lastigste geval: geld is al uitbetaald. Een compenserende actie hier is geen simpele statuswijziging maar een nieuwe, actieve handeling: het starten van een terugvorderingsproces, met eigen communicatie naar de deelnemer, eigen juridische overwegingen, en mogelijk een aparte afweging of terugvordering in dit specifieke geval wenselijk is (bijvoorbeeld als de deelnemer te goeder trouw was). Dit laat zien dat "compenseren" bij een verder gevorderde stap aanzienlijk zwaarder kan zijn dan bij een vroege stap.</p>
+<p><strong>Wat je hier moet meenemen:</strong> hoe verder een saga is gevorderd voordat een compensatie nodig blijkt, hoe zwaarder en risicovoller de compenserende actie — dit pleit ervoor om, waar mogelijk, kritieke controles (zoals fraudecontrole) zo vroeg mogelijk in de keten te plaatsen, niet pas na onomkeerbare stappen zoals uitbetaling.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">18.3 Twee vormen van saga-coördinatie</h2><span class="chip time">Sectie 4 van 8</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Net als bij de keuze tussen orkestratie en choreografie uit deel 17, kan een saga op twee manieren worden gecoördineerd — en het is geen toeval dat deze twee vormen sterk lijken op de indeling uit dat deel, omdat een saga in essentie een speciaal geval is van precies dat onderscheid, toegepast op het probleem van terugdraaien.</p>
+<p><strong>Georkestreerde saga.</strong> Een centrale saga-orkestrator (vergelijkbaar met de orkestrator uit deel 17) kent niet alleen de normale volgorde van stappen, maar ook, voor elke stap, de bijbehorende compenserende actie. Bij een mislukking roept de orkestrator, in omgekeerde volgorde, de compenserende acties van elke al voltooide stap aan. Dit past bij Meridiaan's gekozen aanpak voor de eerste vier stappen van het uitkeringsproces (deel 17), waar orkestratie al was gekozen — de saga-logica is een natuurlijke uitbreiding van de bestaande orkestrator, niet een nieuw, apart mechanisme.</p>
+<p><strong>Choreografische saga.</strong> Elke stap in de keten kent zelf zijn eigen compenserende reactie op een "mislukking"-event van een latere stap, zonder centrale coördinatie — vergelijkbaar met hoe de choreografische stappen uit deel 17 zelfstandig op gebeurtenissen reageerden. Dit past beter bij ketens die al choreografisch zijn opgezet, maar heeft hetzelfde overzichtsrisico dat deel 17 al identificeerde: bij een langere keten met veel mogelijke compensatiepaden wordt het steeds lastiger om te overzien welke compensatie waar wordt getriggerd.</p>
+<p>Bij Meridiaan is, consistent met de gelaagde keuze uit deel 17, voor een georkestreerde saga gekozen voor de vier bindend-afhankelijke stappen, met expliciete compensatielogica in de bestaande orkestrator.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 18.3 — Georkestreerde of choreografische saga?</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.3 — Georkestreerde of choreografische saga?</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan koos voor een georkestreerde saga voor de vier bindend-afhankelijke stappen van het uitkeringsproces. Leg uit waarom dit consistent is met de keuze uit deel 17, en bedenk een scenario waarin een choreografische saga toch de betere keuze zou zijn.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Consistentie met deel 17: de vier stappen waren al georkestreerd vóórdat de saga-vraag zich voordeed (de fraudecontrole-mislukking kwam pas ná de keuze uit deel 17). Het toevoegen van compensatielogica aan een bestaande orkestrator is een natuurlijke uitbreiding — de orkestrator kende het proces al, en compensatielogica is in essentie "wat te doen bij een mislukking" toegevoegd aan wat hij al deed voor het reguliere pad.</p>
+<p>Een scenario waarin choreografische saga beter zou passen: een keten die zelf al choreografisch is opgezet (bijvoorbeeld de twee onafhankelijke, choreografische stappen uit deel 17 — communicatie naar werkgever, bevestigingsbrief), waar het toevoegen van een centrale saga-orkestrator juist een nieuwe, ongewenste centrale afhankelijkheid zou introduceren in een deel van het proces dat bewust laag gekoppeld was gehouden. Voor dat soort onafhankelijke, parallelle reacties zou elke stap zijn eigen compenserende reactie op een "geannuleerd"-event kunnen hebben, zonder centrale coördinatie.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze tussen georkestreerde en choreografische saga volgt, net als bij deel 17 zelf, uit de bestaande architectuurkeuze voor die specifieke stappen — het is geen nieuwe, onafhankelijke beslissing die los van deel 17 wordt genomen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">18.4 Wanneer compensatie zelf niet volstaat</h2><span class="chip time">Sectie 5 van 8</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elke stap is even makkelijk te compenseren, en dit deel zou onvolledig zijn zonder die grens te erkennen. Een geldbedrag terugstorten is, mits nog niet uitgekeerd, relatief eenvoudig te compenseren. Een reeds <strong>verzonden</strong> brief aan een deelnemer is dat niet — je kunt de brief niet terughalen, alleen een nieuwe, corrigerende brief sturen, met het onvermijdelijke gevolg dat de deelnemer tijdelijk, en zichtbaar, een onjuiste indruk heeft gehad.</p>
+<p>Deze asymmetrie — sommige effecten zijn volledig compenseerbaar, andere zijn slechts corrigeerbaar met een zichtbaar spoor van de fout — moet expliciet worden meegewogen bij het ontwerp van elke stap in een saga. Bij Meridiaan is daarom bewust gekozen om de "voorlopige bevestiging" aan de deelnemer (stap na de bedragberekening, vóór de fraudecontrole) in te richten met expliciete taal die de voorlopigheid benadrukt ("dit bedrag is indicatief, in afwachting van definitieve goedkeuring"), juist om de impact van een eventuele latere compensatie te verzachten — een ontwerpkeuze die niet uit de techniek volgt, maar uit een bewuste erkenning dat niet elke compensatie zonder gevolgen is.</p>
+<blockquote><p><strong>Vuistregel: ontwerp niet alleen de compenserende actie voor elke stap, maar ook de communicatie die de oorspronkelijke stap begeleidt — hoe voorlopiger je een vroege stap presenteert, hoe minder schadelijk een latere compensatie wordt.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 18.4 — De asymmetrie van compensatie</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.4 — De asymmetrie van compensatie</p>
+        <div class="card">
+          <div class="prose">
+<p>Een ontwikkelaar stelt voor om de voorlopige bevestiging aan de deelnemer pas te versturen nadat álle vijf stappen zijn afgerond, "dan hoeven we nooit te compenseren richting de deelnemer."</p>
+<p>a. Wat is het voordeel van dit voorstel?</p>
+<p>b. Wat is het nadeel, gegeven de bredere context van de cursus (denk aan deel 3)?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Het voordeel is precies wat de ontwikkelaar zegt: als de deelnemer pas bericht krijgt nadat alles definitief is afgerond, is er nooit een voorlopige, mogelijk foutieve boodschap die achteraf gecorrigeerd moet worden — de asymmetrie uit 18.4 in de reader (een verzonden brief is niet terug te halen) wordt volledig vermeden voor deze specifieke stap.</p>
+<p>b. Het nadeel is een herhaling van de valkuil uit deel 3: als het hele proces (vijf stappen, mogelijk dagen duren door de externe administrateur) moet voltooien voordat de deelnemer ook maar enige terugkoppeling krijgt, ontstaat opnieuw het probleem dat deel 3 oploste met de asynchrone ontvangstbevestiging — de deelnemer zou dagenlang niets horen, wat voor een interactieve gebruiker onwenselijk is, ook al is het technisch "veiliger" voor Meridiaan.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het vermijden van compensatie door simpelweg later te communiceren, lost het compensatieprobleem op ten koste van een ander, eerder in de cursus al vastgesteld probleem (gebrek aan tijdige terugkoppeling) — er is geen gratis oplossing, alleen een verschuiving van welk probleem je accepteert. De aanpak uit de reader (voorlopige bevestiging mét expliciete taal over voorlopigheid) is een bewuste middenweg tussen deze twee uitersten.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">18.5 Afstemming met de API-cursus</h2><span class="chip time">Sectie 6 van 8</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zoals in de opzet van deze cursus vastgesteld: de API-cursus behandelt distributed transactions binnen de grenzen van 2PC en vergelijkbare protocollen, primair toepasbaar binnen een beheerste, vaak synchrone technische omgeving met een beperkt aantal, onderling vertrouwde deelnemers. Deze cursus behandelt het saga-patroon specifiek voor de situatie waarin die voorwaarden niet gelden: asynchrone, over organisatiegrenzen heen lopende ketens met onafhankelijke systemen die niet gelijktijdig kunnen blokkeren op een gecoördineerd commit.</p>
+<p>De praktische vuistregel voor de grens: <strong>is er een technische mogelijkheid én organisatorische wenselijkheid om alle betrokken systemen tijdens de transactieduur te laten blokkeren op een gezamenlijk commit-moment?</strong> Zo ja, ligt 2PC (API-cursus) binnen bereik. Zo nee — zoals bij Meridiaan, waar een externe partij en meerdere interne systemen met eigen beschikbaarheidsprofielen zijn betrokken — is een saga (deze cursus) het aangewezen antwoord.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 18.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 18.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf een meerstaps proces uit je eigen werk (bij voorkeur hetzelfde als in opdracht 17.5) waarbij een latere stap soms een eerdere, al voltooide stap ongedaan zou moeten maken. Ontwerp voor minstens twee stappen een compenserende actie, en beoordeel of er stappen zijn waarvan het effect niet volledig compenseerbaar is (zoals de verzonden brief in de hoofdcasus).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers ontdekken vaak dat hun bestaande processen impliciet uitgaan van "dat gebeurt gewoon nooit" voor het scenario van een late mislukking, zonder ooit een compenserende actie te hebben ontworpen — tot het moment dat het scenario zich toch voordoet, zoals bij Meridiaan met de fraudecontrole.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 18</h2><span class="chip time">Sectie 7 van 8</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>ACID-atomiciteit is niet haalbaar over onafhankelijke, asynchrone systemen heen — 2PC-achtige protocollen vereisen blokkerend wachten dat in gedistribueerde, over organisatiegrenzen heen lopende ketens onhoudbaar is (afstemming met de API-cursus).</li>
+<li>Een saga behandelt elke lokale stap als definitief en zichtbaar; bij een latere mislukking wordt niet teruggedraaid maar gecompenseerd — een nieuw feit dat het effect van een eerdere stap corrigeert, zonder die eerdere stap te wissen.</li>
+<li>Saga's kunnen georkestreerd (centrale coördinatie van compensaties, vergelijkbaar met deel 17) of choreografisch (elke stap kent zijn eigen compensatiereactie) worden gecoördineerd.</li>
+<li>Niet elk effect is even goed compenseerbaar — de communicatie rond een vroege stap moet bewust rekening houden met de mogelijkheid van latere compensatie, om de schade daarvan te beperken.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 18</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Waar ACID atomiciteit garandeert door te wachten tot iedereen tegelijk kan committen, garandeert een saga niets vooraf — hij accepteert dat elke stap definitief is, en ontwerpt vooraf wat er gebeurt als een latere stap alsnog moet worden teruggedraaid.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Waarom werkt ACID-atomiciteit niet over onafhankelijke, asynchrone systemen heen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat er geen mechanisme is dat meerdere onafhankelijke systemen, elk met eigen beheer en beschikbaarheid, in één ondeelbare handeling kan laten slagen of falen — protocollen die dit proberen (2PC) vereisen blokkerend wachten dat in gedistribueerde, asynchrone ketens onhoudbaar is.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is een saga, en hoe verschilt zijn aanpak fundamenteel van een klassieke rollback?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een saga is een reeks lokale transacties waarbij elke stap, eenmaal voltooid, als definitief en zichtbaar wordt beschouwd. Bij een latere mislukking wordt niet teruggedraaid, maar wordt voor elke eerdere stap een compenserende actie uitgevoerd — een nieuw feit dat het effect corrigeert, in plaats van het oude feit te wissen.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Noem de twee vormen van saga-coördinatie en welke architectuurkeuze uit deel 17 ze elk weerspiegelen.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Georkestreerde saga (centrale coördinatie van compensaties, weerspiegelt orkestratie uit deel 17) en choreografische saga (elke stap kent zijn eigen compensatiereactie, weerspiegelt choreografie uit deel 17).</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waarom is niet elk effect even goed compenseerbaar, en wat is de vuistregel om daarmee om te gaan?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Sommige effecten (zoals een verzonden brief) zijn niet terug te halen, alleen te corrigeren met een zichtbaar spoor van de fout. De vuistregel: ontwerp niet alleen de compenserende actie, maar ook de communicatie die de oorspronkelijke stap begeleidt — hoe voorlopiger gepresenteerd, hoe minder schadelijk een latere compensatie.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Waar ligt de grens tussen 2PC (API-cursus) en saga (deze cursus)?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Is er technische mogelijkheid én organisatorische wenselijkheid om alle betrokken systemen te laten blokkeren op een gezamenlijk commit-moment? Zo ja: 2PC. Zo nee (asynchrone, over organisatiegrenzen heen lopende ketens met onafhankelijke systemen): saga.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom pleit de asymmetrie van compensatie ervoor om kritieke controles zo vroeg mogelijk in een keten te plaatsen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat compensatie zwaarder en risicovoller wordt naarmate een saga verder is gevorderd — een vroege stap compenseren is doorgaans eenvoudig (statuswijziging), een late stap (zoals een al uitbetaald bedrag) vergt een actieve, zwaardere handeling zoals terugvordering.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 8 van 8</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 19 — het tweede tweedagdelen-deel van de cursus — behandelt het outbox-pattern en transactional messaging: hoe zorg je ervoor dat een lokale databasewijziging en het versturen van het bijbehorende bericht altijd samen slagen of samen falen, nooit half — de bouwsteen die elke saga-stap in de praktijk pas werkelijk betrouwbaar maakt.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>Deel 19 — Outbox-pattern en transactional messaging — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-19.html">Deel 19 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-18/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
+  var KEY="eductus_eip18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

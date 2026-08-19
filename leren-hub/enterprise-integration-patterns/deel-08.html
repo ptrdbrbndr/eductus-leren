@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 8 — Betrouwbaarheid II: volgorde en guaranteed delivery | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 8 (Niveau 1 — Fundament): Een werkgever diende binnen twee minuten drie opeenvolgende adreswijzigingen in voor dezelfde deelnemer — een typefout, gecorrigeerd, en toen nog een keer gecorrigeerd omdat het huisnummer verkeerd bleek. Elk van de drie was, individueel bekeken, een…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-08.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 8</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 1 (Fundament) · Deel 8 van 30</p>
+  <h1>Betrouwbaarheid II: volgorde en guaranteed delivery</h1>
+  <p class="hero__lead">Een werkgever diende binnen twee minuten drie opeenvolgende adreswijzigingen in voor dezelfde deelnemer — een typefout, gecorrigeerd, en toen nog een keer gecorrigeerd omdat het huisnummer verkeerd bleek. Elk van de drie was, individueel bekeken, een volkomen geldig, idempotent command: &quot;stel adres in op X&quot;. Precies het soort operatie dat deel 7 aanraadt.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>11</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 1: ① Van synchroon naar asynchroon: waarom messaging → ② Messagingfundamenten: kanaal, bericht, endpoint → ③ Message Construction: command, event, document en request-reply → ④ Basisrouting: content-based router en message filter → ⑤ Basistransformatie: translator, envelope wrapper, normalizer → ⑥ Point-to-point vs. publish-subscribe kanalen, verdiept → ⑦ Betrouwbaarheid I: garanties en idempotentie → <b>⑧ Betrouwbaarheid II: volgorde en guaranteed delivery (hier)</b> → ⑨ Foutafhandeling basis: dead letter channel en invalid message channel → ⑩ Examentraining en capstone: de verdediging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">8.0 Een adres dat drie keer veranderde, in de verkeerde volgorde</a></li>
+      <li><a href="#s2" data-target="s2">8.1 Wanneer volgorde er wel toe doet, en wanneer niet</a></li>
+      <li><a href="#s3" data-target="s3">8.2 Hoe volgorde per object technisch geborgd wordt</a></li>
+      <li><a href="#s4" data-target="s4">8.3 Guaranteed delivery: de andere kant van betrouwbaarheid</a></li>
+      <li><a href="#s5" data-target="s5">8.4 Terug naar het adresincident</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 8</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">8.0 Een adres dat drie keer veranderde, in de verkeerde volgorde</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een werkgever diende binnen twee minuten drie opeenvolgende adreswijzigingen in voor dezelfde deelnemer — een typefout, gecorrigeerd, en toen nog een keer gecorrigeerd omdat het huisnummer verkeerd bleek. Elk van de drie was, individueel bekeken, een volkomen geldig, idempotent command: "stel adres in op X". Precies het soort operatie dat deel 7 aanraadt.</p>
+<p>Het probleem ontstond niet door duplicatie maar door volgorde. Het mutatiekanaal was, om de doorvoersnelheid te verhogen, ingericht met meerdere parallelle verwerkers die elk berichten van het kanaal oppikken zodra ze beschikbaar zijn. Bij normale belasting maakte dat niets uit — de drie berichten kwamen ruim uit elkaar aan en werden keurig op volgorde verwerkt. Op het moment van dit incident was er echter een tijdelijke piekbelasting, en de derde (en laatste, correcte) adreswijziging werd door een snellere verwerker opgepikt en afgerond vóórdat de tweede, door een tragere verwerker, klaar was. Het eindresultaat: het tweede, foutieve adres stond in KERN, niet het derde en correcte.</p>
+<p>Dit is een ander probleem dan deel 7 behandelde. Idempotentie beschermt tegen een dúbbel bericht met hetzelfde effect als één keer. Het beschermt niet tegen twee verschíllende berichten die, in de verkeerde volgorde uitgevoerd, een ander eindresultaat opleveren dan bedoeld.</p>
+<figure><img alt="Drie berichten met tijdstempels van verzending (1, 2, 3) en tijdstempels van verwerking door twee parallelle verwerkers, waarbij bericht 3 vóór bericht 2 wordt afgerond" loading="lazy" src="figuren/figuur-8-1-uit-volgorde-verwerkt.svg"/><figcaption>Figuur 8-1 — drie berichten met tijdstempels van verzending (1, 2, 3) en tijdstempels van verwerking door twee parallelle verwerkers, waarbij bericht 3 vóór bericht 2 wordt afgerond</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">8.1 Wanneer volgorde er wel toe doet, en wanneer niet</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elke reeks berichten heeft een gegarandeerde volgorde nodig — het onnodig afdwingen van volgorde kost doorvoersnelheid (parallelle verwerking wordt immers juist ingezet om sneller te zijn dan één verwerker die alles na elkaar afhandelt). De vraag die eerst beantwoord moet worden: <strong>zijn opeenvolgende berichten over hetzelfde object commutatief, of niet?</strong></p>
+<p>Commutatief betekent: het eindresultaat is hetzelfde ongeacht de volgorde waarin de berichten worden toegepast. Twee losse mutaties op verschillende deelnemers zijn per definitie commutatief ten opzichte van elkaar — ze raken elkaar niet. Maar drie opeenvolgende adreswijzigingen op <strong>dezelfde</strong> deelnemer zijn dat expliciet niet: het eindresultaat hangt volledig af van welke van de drie het laatst wordt toegepast.</p>
+<blockquote>
+<p><strong>Kernzin 8 van de cursus: volgorde doet er alleen toe binnen de grens van hetzelfde object — bewaak volgorde per deelnemer, per polis, per entiteit, nooit over het hele kanaal in het algemeen.</strong></p>
+</blockquote>
+<p>Dit onderscheid is essentieel omdat het de oplossing bepaalt. Volgorde over het <strong>hele kanaal</strong> afdwingen (alle berichten strikt na elkaar, door precies één verwerker) is een zware maatregel die de belangrijkste reden voor parallelle verwerking — doorvoersnelheid — grotendeels tenietdoet. Volgorde <strong>per object</strong> afdwingen is veel goedkoper, en is ook precies wat nodig is: het maakt niet uit of de adreswijziging van deelnemer 00482 wordt verwerkt vóór of ná een salarismutatie van deelnemer 00913, zolang de drie berichten die specifiek bij 00482 horen, in de juiste volgorde blijven.</p>
+<figure><img alt="Twee kolommen: 'volgorde over het hele kanaal' (één trage verwerker, alles serieel) versus 'volgorde per object' (meerdere parallelle verwerkers, maar berichten van hetzelfde object altijd naar dezelfde verwerker of anderszins in volgorde gehouden)" loading="lazy" src="figuren/figuur-8-2-twee-volgordestrategieen.svg"/><figcaption>Figuur 8-2 — twee kolommen: "volgorde over het hele kanaal" (één trage verwerker, alles serieel) versus "volgorde per object" (meerdere parallelle verwerkers, maar berichten van hetzelfde object altijd naar dezelfde verwerker of anderszins in volgorde gehouden)</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 8.1 — Idempotent, maar toch fout</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.1 — Idempotent, maar toch fout</p>
+        <div class="card">
+          <div class="prose">
+<p>Leg uit waarom de drie adreswijzigingen uit 8.0 elk individueel idempotent waren (volgens de definitie uit deel 7), en toch tot een foutief eindresultaat leidden. Wat zegt dit over de relatie tussen idempotentie en volgorde?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Elke afzonderlijke adreswijziging was idempotent: "stel adres in op X" geeft, twee keer uitgevoerd, hetzelfde resultaat als één keer — precies de definitie uit deel 7. Het probleem zat niet in herhaling van hetzélfde bericht, maar in de verkeerde volgorde van drie verschíllende berichten die elk een ander adres instelden. Idempotentie zegt niets over de relatie tússen verschillende berichten, alleen over het effect van herhaling van één en hetzelfde bericht.</p>
+<p><strong>Wat je hier moet meenemen:</strong> idempotentie en volgordegarantie zijn orthogonale eigenschappen — de ene lost het probleem van de andere niet op. Een systeem kan volledig idempotent zijn en toch systematisch foutieve eindresultaten opleveren door verkeerde volgorde.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">8.2 Hoe volgorde per object technisch geborgd wordt</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het gangbare mechanisme om volgorde per object te bewaren zonder alle parallellie op te geven, is: berichten die tot hetzelfde object behoren, worden consistent naar dezelfde verwerker geleid — bijvoorbeeld door het deelnemersnummer te gebruiken als partitioneringssleutel. Zo blijft parallellie mogelijk over verschillende deelnemers, terwijl berichten van dezelfde deelnemer altijd door dezelfde verwerker, in de volgorde van binnenkomst, worden afgehandeld.</p>
+<p>Dit deel gaat toolneutraal om met de precieze implementatie (partitionering, sequencing, of andere technologiespecifieke mechanismen komen in de Toolbijlage aan bod), maar het ontwerpprincipe is universeel: <strong>kies een partitioneringssleutel die samenvalt met de grens waarbinnen volgorde ertoe doet.</strong> Bij Meridiaan is dat het deelnemersnummer — niet het mutatietype (dat was juist de routeringssleutel uit deel 4, een andere beslissing met een ander doel) en niet een willekeurige technische sleutel zoals een verzendtijdstip.</p>
+<p>Een tweede, aanvullend mechanisme is expliciete <strong>sequencing</strong>: elk bericht krijgt, naast zijn bericht-ID, een oplopend volgnummer binnen de scope van het object waarop het betrekking heeft. De ontvanger kan dan, zelfs als berichten toch buiten volgorde aankomen, detecteren dat er een gat is en een bericht met een lager volgnummer dan het laatst verwerkte negeren of in een wachtrij zetten totdat het juiste moment komt. Dit is zwaarder om te bouwen dan partitionering alleen, en wordt in de praktijk vooral ingezet als extra vangnet bovenop partitionering, niet als vervanging ervan.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 8.2 — Commutatief of niet</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.2 — Commutatief of niet</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk paar berichten of ze commutatief zijn (volgorde maakt niet uit) of niet (volgorde maakt wel uit).</p>
+<ol>
+<li>Twee adreswijzigingen voor dezelfde deelnemer, kort na elkaar ingediend.</li>
+<li>Een adreswijziging voor deelnemer A en een salariscorrectie voor deelnemer B.</li>
+<li>Een dienstverbandmutatie ("in dienst") en een adreswijziging, allebei voor dezelfde deelnemer, kort na elkaar.</li>
+<li>Twee salariscorrecties voor dezelfde deelnemer: eerst "corrigeer naar €12.340", dan "corrigeer naar €12.500".</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Niet commutatief.</strong> Precies de casus van dit deel — het eindresultaat hangt af van welke wijziging het laatst wordt toegepast.</p>
+<p>b. <strong>Commutatief.</strong> Verschillende deelnemers, geen onderlinge afhankelijkheid — het maakt niet uit welke van de twee eerst wordt verwerkt.</p>
+<p>c. <strong>Waarschijnlijk niet commutatief</strong>, en subtieler dan a: hoewel de twee berichten verschillende velden raken (dienstverbandstatus versus adres), kan er een impliciete afhankelijkheid bestaan als bijvoorbeeld de adreswijziging alleen geldig is voor een deelnemer die al "in dienst" is. Dit is een goed voorbeeld van een grensgeval dat op het eerste gezicht commutatief lijkt (andere velden) maar het bij nader inzien niet is door een bedrijfsregel die de twee velden aan elkaar koppelt.</p>
+<p>d. <strong>Niet commutatief</strong>, ook al zijn beide operaties individueel idempotent (elk "corrigeer naar" is idempotent op zichzelf). Het eindresultaat (€12.340 of €12.500) hangt af van welke van de twee het laatst wordt toegepast — dit is bewust dezelfde valkuil als in 8.1: idempotentie van elke afzonderlijke operatie garandeert niets over de combinatie van twee verschillende operaties op hetzelfde veld.</p>
+<p><strong>Wat je hier moet meenemen:</strong> situatie c laat zien dat "commutatief" niet alleen afhangt van of twee berichten hetzelfde veld raken, maar ook van verborgen bedrijfsregels die velden aan elkaar koppelen — dezelfde soort verborgen aanname als de volgorde-afhankelijkheid tussen abonnees in deel 6.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">8.3 Guaranteed delivery: de andere kant van betrouwbaarheid</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Naast volgorde behandelt dit deel een tweede, verwant vraagstuk: <strong>guaranteed delivery</strong> — de garantie dat een bericht, eenmaal succesvol op een kanaal geplaatst, niet meer verloren kan gaan, ook niet bij een crash van de infrastructuur zelf tussen plaatsing en aflevering.</p>
+<p>Dit klinkt als een herhaling van de leveringsgaranties uit deel 7 (at-least-once versus at-most-once), maar het is een aanvullende, infrastructurele eis: at-least-once zegt iets over wat er gebeurt bij het <em>versturen</em> (blijft de zender proberen totdat er een bevestiging is); guaranteed delivery zegt iets over wat er gebeurt <em>nadat</em> het bericht al is aangenomen door het kanaal — blijft het daar veilig bewaard, ook als de broker zelf herstart of tijdelijk uitvalt, totdat een ontvanger het daadwerkelijk heeft opgehaald en verwerkt?</p>
+<p>Zonder guaranteed delivery kan een bericht dat succesvol is geplaatst (de zender heeft dus al een bevestiging ontvangen en stopt met retryen) alsnog verloren gaan door een storing aan de kant van het kanaal zelf — een situatie die voor de zender onzichtbaar is, want die denkt dat de klus geklaard is. Dit maakt guaranteed delivery een randvoorwaarde die los van, maar aanvullend op, de leveringsgarantie van deel 7 moet worden geregeld — meestal door het kanaal zelf zodanig in te richten dat berichten persistent (op schijf, niet alleen in geheugen) worden opgeslagen totdat ze bevestigd zijn afgeleverd.</p>
+<p>Bij Meridiaan is dit een expliciete infrastructurele eis geworden na een test waarbij, tijdens een geplande herstart van de broker, een klein aantal in-transit berichten bleek te zijn verdwenen — berichten die door de zender al als "verstuurd en bevestigd" werden beschouwd. De oplossing lag niet in het messaging-ontwerp zelf, maar in de configuratie van het kanaal: persistente opslag inschakelen, ten koste van enige doorvoersnelheid.</p>
+<blockquote>
+<p><strong>Vuistregel: leveringsgarantie (deel 7) beschermt de reis van zender naar kanaal; guaranteed delivery beschermt het verblijf ín het kanaal, tot aan de ontvanger.</strong></p>
+</blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 8.3 — Partitioneringssleutel kiezen</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.3 — Partitioneringssleutel kiezen</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan overweegt drie mogelijke partitioneringssleutels voor het mutatiekanaal: deelnemersnummer, werkgevers-ID, en mutatietype. Beoordeel elke optie op basis van kernzin 8 (volgorde doet er alleen toe binnen de grens van hetzelfde object).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p><strong>Deelnemersnummer</strong> — juiste keuze, zoals in de reader. Volgorde doet ertoe binnen de mutatiegeschiedenis van één deelnemer; verschillende deelnemers zijn onderling commutatief.</p>
+<p><strong>Werkgevers-ID</strong> — te grofmazig. Dit zou alle mutaties van alle deelnemers bij één werkgever naar dezelfde verwerker dwingen, ook als die deelnemers onderling volledig commutatief zijn (deelnemer A's adreswijziging heeft geen enkele relatie met deelnemer B's salariscorrectie, ook al werken ze voor dezelfde werkgever). Dit kost onnodig doorvoersnelheid zonder een echt volgordeprobleem op te lossen.</p>
+<p><strong>Mutatietype</strong> — verkeerde sleutel, verwart twee verschillende beslissingen. Dit is de sleutel die in deel 4 voor routering werd gebruikt (welk kanaal), niet voor volgordeborging (welke verwerker binnen een kanaal). Partitioneren op mutatietype zou juist averechts werken: het zou bijvoorbeeld alle salariscorrecties van álle deelnemers door dezelfde verwerker forceren, terwijl salariscorrecties van verschillende deelnemers onderling wél commutatief zijn — en het zou de drie mutaties van 8.0 (die toevallig alle drie adreswijzigingen waren, dus toevallig hetzelfde type) niet noodzakelijk in de juiste onderlinge volgorde houden als er tussendoor een ander type voor dezelfde deelnemer was verzonden.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de juiste partitioneringssleutel valt samen met de grens waarbinnen commutativiteit ophoudt te gelden — niet met een sleutel die toevallig ook bestaat (zoals werkgever of type) maar een andere grens beschrijft.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">8.4 Terug naar het adresincident</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met partitionering op deelnemersnummer als oplossing werd het incident van 8.0 structureel onmogelijk: de drie adreswijzigingen van dezelfde deelnemer worden nu altijd door dezelfde verwerker afgehandeld, in de volgorde van binnenkomst — een piekbelasting kan de verwerking van andere deelnemers versnellen of vertragen, maar raakt de interne volgorde van één deelnemer niet meer.</p>
+<p>Deze oplossing kostte iets: de doorvoersnelheid voor mutaties van een enkele, zeer actieve werkgever (met veel mutaties voor verschillende deelnemers, allemaal via één partitioneringssleutel als het per ongeluk op werkgeverniveau in plaats van deelnemerniveau was gepartitioneerd) zou kunnen dalen als de sleutelkeuze verkeerd was gevallen. Vandaar het belang van de juiste sleutelkeuze in 8.2: partitioneer op de grens waarbinnen volgorde ertoe doet, niet fijnmaziger of grover dan nodig.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 8.4 — Leveringsgarantie versus guaranteed delivery</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.4 — Leveringsgarantie versus guaranteed delivery</p>
+        <div class="card">
+          <div class="prose">
+<p>Een collega zegt: "we hebben at-least-once ingesteld, dus onze berichten zijn gegarandeerd betrouwbaar." Leg uit wat er ontbreekt aan deze bewering, aan de hand van de vuistregel in 8.3.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>At-least-once (deel 7) beschrijft alleen het gedrag van de zender: blijft hij proberen totdat hij een bevestiging krijgt. Het zegt niets over wat er gebeurt nádat het kanaal die bevestiging heeft afgegeven — als de broker zelf berichten alleen in geheugen bewaart en herstart voordat een ontvanger het bericht heeft opgehaald, kan het bericht alsnog verloren gaan, terwijl de zender allang tevreden is gestopt met retryen (hij heeft immers zijn bevestiging al gekregen). Dat is precies wat er bij de geplande broker-herstart bij Meridiaan gebeurde.</p>
+<p>Om werkelijk "gegarandeerd betrouwbaar" te zijn, moet naast de leveringsgarantie (zendergedrag) ook guaranteed delivery (persistente opslag in het kanaal zelf) expliciet zijn geconfigureerd. Dit is typisch een infrastructurele instelling, geen berichtenontwerp-keuze — en dus makkelijk te vergeten, omdat het niet zichtbaar is in de code die berichten verstuurt of ontvangt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "we hebben een leveringsgarantie ingesteld" beantwoordt maar de helft van de vraag "is dit bericht veilig". De andere helft zit in de configuratie van het kanaal zelf.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 8</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Idempotentie (deel 7) beschermt tegen een dubbel bericht met hetzelfde effect; het beschermt niet tegen twee verschillende berichten die in de verkeerde volgorde tot een ander eindresultaat leiden.</li>
+<li>Volgorde doet er alleen toe binnen de grens van hetzelfde object — bewaak volgorde per deelnemer, per polis, per entiteit, niet over het hele kanaal.</li>
+<li>Het gangbare mechanisme: partitioneer berichten naar dezelfde verwerker op basis van een sleutel die samenvalt met die grens; sequencing is een aanvullend vangnet.</li>
+<li>Guaranteed delivery is een aparte, infrastructurele eis: het beschermt het verblijf van een bericht ín het kanaal, na aanname en vóór aflevering — los van de leveringsgarantie die de reis van zender naar kanaal beschrijft.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 8</div>
+        <p class="quiz__src">Uit Werkboek deel 8, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is het verschil tussen het probleem dat idempotentie oplost (deel 7) en het probleem dat volgordeborging oplost (dit deel)?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Idempotentie beschermt tegen een dubbel bericht met hetzelfde effect als één keer; volgordeborging beschermt tegen twee verschillende berichten die, verkeerd geordend, een ander eindresultaat opleveren dan bedoeld.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Volgorde doet er alleen toe binnen de grens van hetzelfde object — bewaak volgorde per deelnemer, per polis, per entiteit, nooit over het hele kanaal in het algemeen.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat betekent "commutatief" in de context van dit deel, en geef een voorbeeld van twee commutatieve en twee niet-commutatieve berichten.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Commutatief betekent dat het eindresultaat hetzelfde is ongeacht de volgorde van toepassing. Voorbeeld commutatief: mutaties van twee verschillende deelnemers. Voorbeeld niet-commutatief: twee opeenvolgende adreswijzigingen van dezelfde deelnemer.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Waarom is "volgorde over het hele kanaal afdwingen" een zware maatregel, en wat is het goedkopere alternatief?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Het dwingt alle berichten door één seriële verwerker, wat de doorvoersnelheid van parallelle verwerking grotendeels tenietdoet. Het goedkopere alternatief: partitioneer op een sleutel die samenvalt met de grens waarbinnen volgorde ertoe doet, zodat parallellie tussen objecten behouden blijft.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Hoe kies je een goede partitioneringssleutel?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Kies een sleutel die samenvalt met de grens waarbinnen commutativiteit ophoudt te gelden — niet fijnmaziger (verliest de volgordegarantie) en niet grover (kost onnodig doorvoersnelheid) dan die grens.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is guaranteed delivery, en hoe verschilt het van de leveringsgaranties uit deel 7?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Guaranteed delivery is de garantie dat een bericht, eenmaal aangenomen door het kanaal, niet meer verloren gaat vóór aflevering, ook niet bij een storing van het kanaal zelf. Leveringsgaranties (deel 7) beschrijven het gedrag van de zender (blijft hij proberen); guaranteed delivery beschrijft wat er ná aanname met het bericht gebeurt.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom bleven de drie adreswijzigingen uit 8.0 elk individueel idempotent, maar leidde hun combinatie toch tot een fout?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat idempotentie alleen garandeert dat herhaling van hetzélfde bericht geen extra effect heeft — het zegt niets over de combinatie van meerdere, verschillende berichten die in de verkeerde volgorde worden toegepast.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 9 sluit niveau 1 inhoudelijk af met foutafhandeling: wat gebeurt er met een bericht dat de ontvanger niet kan verwerken, ook niet na een retry — het dead letter channel en het invalid message channel, en waarom stille verdwijning van een bericht de slechtste van alle uitkomsten is.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 9</h3>
+      <p>Deel 9 — Foutafhandeling basis: dead letter channel en invalid message channel — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-09.html">Deel 9 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 8 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-08/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip8_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

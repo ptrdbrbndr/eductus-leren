@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 11 — Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 11 (Niveau 2 — Het landschap): Niveau 1 loste één probleem grondig op: de mutatieketen tussen Werkgeversportaal, KERN en de externe pensioenadministrateur. Negen delen, negen patronen, één ontwerp dat de capstone van deel 10 overtuigend doorstond.">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-11.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 11</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 11 van 30</p>
+  <h1>Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone</h1>
+  <p class="hero__lead">Niveau 1 loste één probleem grondig op: de mutatieketen tussen Werkgeversportaal, KERN en de externe pensioenadministrateur. Negen delen, negen patronen, één ontwerp dat de capstone van deel 10 overtuigend doorstond.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: <b>① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone (hier)</b> → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → ⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">11.0 Van één keten naar een landschap</a></li>
+      <li><a href="#s2" data-target="s2">11.1 Punt-tot-punt op schaal: waar het breekt</a></li>
+      <li><a href="#s3" data-target="s3">11.2 De broker-architectuur</a></li>
+      <li><a href="#s4" data-target="s4">11.3 De event backbone</a></li>
+      <li><a href="#s5" data-target="s5">11.4 Geen zuivere keuze: een gelaagd landschap</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 11</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">11.0 Van één keten naar een landschap</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niveau 1 loste één probleem grondig op: de mutatieketen tussen Werkgeversportaal, KERN en de externe pensioenadministrateur. Negen delen, negen patronen, één ontwerp dat de capstone van deel 10 overtuigend doorstond.</p>
+<p>Zes weken later kreeg Caspar een heel andere opdracht. Het <strong>Programma Mutatieplatform</strong> ging van start: een programma dat niet één koppeling herbouwt, maar het volledige applicatielandschap van Meridiaan herstructureert rond een gemeenschappelijk mutatiemechanisme. KERN, het Werkgeversportaal, het Nabestaandenloket, de Wegwijzer, twee externe pensioenadministrateurs (de tweede vanwege de eerdere deelfusie) en, naar verwachting, binnen twee jaar nog vier of vijf systemen — allemaal moeten ze mutaties kunnen versturen, ontvangen, of allebei.</p>
+<p>Caspars eerste ontwerp herhaalde, systeem voor systeem, het patroon uit niveau 1: voor elk paar systemen een eigen kanaal, een eigen router waar nodig, een eigen translator waar nodig. Bij acht systemen bleek dit al twintig tot dertig afzonderlijke punt-tot-puntkoppelingen te vergen — en dat aantal groeit kwadratisch met elk nieuw systeem. Het architectuurboard, dat de eerste versie van dit ontwerp zag, stelde een vraag die niveau 1 nooit had hoeven beantwoorden: <strong>is de vorm die op één keten werkte, ook de juiste vorm op landschapsschaal?</strong></p>
+<figure><img alt="Twee diagrammen naast elkaar: acht systemen met dertig losse lijnen ertussen (punt-tot-punt op schaal) versus acht systemen die allemaal met één centrale as verbonden zijn (broker- of backbone-architectuur)." loading="lazy" src="figuren/figuur-11-1-mesh-versus-broker.svg"/><figcaption>Figuur 11-1 — Twee diagrammen naast elkaar: acht systemen met dertig losse lijnen ertussen (punt-tot-punt op schaal) versus acht systemen die allemaal met één centrale as verbonden zijn (broker- of backbone-architectuur).</figcaption></figure>
+<p>Dit deel behandelt drie architectuurstijlen op landschapsniveau, en wanneer welke past — niet als vervanging van de patronen uit niveau 1 (die blijven onverkort gelden binnen elke individuele koppeling), maar als een laag erboven: hoe die koppelingen zich tot elkaar verhouden.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">11.1 Punt-tot-punt op schaal: waar het breekt</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Punt-tot-punt-architectuur</strong> op landschapsniveau betekent: elk paar systemen dat met elkaar moet communiceren, krijgt een eigen, specifiek voor dat paar ontworpen koppeling — precies wat niveau 1 deed voor Werkgeversportaal-KERN en KERN-externe administrateur.</p>
+<p>Dit werkt uitstekend bij een klein aantal systemen, en heeft een reëel voordeel: elke koppeling kan optimaal worden afgestemd op de specifieke behoeften van dat ene paar, zonder concessies aan een gedeelde infrastructuur. Het probleem ontstaat bij groei, en heeft een precieze wiskundige vorm: bij <em>n</em> systemen die allemaal met elkaar kunnen moeten communiceren, groeit het aantal mogelijke koppelingen naar <em>n(n-1)/2</em>. Bij vier systemen zijn dat zes koppelingen — beheersbaar. Bij acht systemen zijn dat achtentwintig. Bij vijftien systemen, waar Meridiaan over twee jaar naar verwacht te groeien, zijn dat honderdvijf.</p>
+<p>Dit is niet alleen een beheerslast. Elke nieuwe koppeling introduceert opnieuw alle ontwerpvragen uit niveau 1 — welke leveringsgarantie, welke idempotentiestrategie, welke foutafhandeling — en zonder een gedeeld kader beantwoordt elk koppelingspaar die vragen mogelijk anders. Bij Meridiaan bleek dit al bij de derde koppeling: de idempotentiestrategie tussen KERN en de eerste externe administrateur verschilde onbedoeld van die tussen KERN en het Nabestaandenloket, simpelweg omdat twee verschillende ontwikkelaars, op verschillende momenten, dezelfde vraag opnieuw en anders hadden beantwoord.</p>
+<blockquote><p><strong>Kernzin 10 van de cursus: punt-tot-punt is geen architectuurfout — het is een architectuurstijl die kwadratisch duur wordt, en de vraag is niet óf dat gebeurt maar bij welk aantal systemen het onhoudbaar wordt voor jouw landschap.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 11.1 — Reken de kwadratische groei door</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.1 — Reken de kwadratische groei door</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan heeft momenteel 8 systemen die onderling moeten kunnen communiceren, en verwacht binnen twee jaar te groeien naar 15.</p>
+<p>a. Hoeveel mogelijke punt-tot-puntkoppelingen zijn er bij 8 systemen, en hoeveel bij 15?</p>
+<p>b. Als het bouwen en onderhouden van elke koppeling gemiddeld twee weken kost, wat is het verschil in doorlooptijd tussen 8 en 15 systemen als alle koppelingen punt-tot-punt zijn?</p>
+<p>c. Wat verandert er aan deze rekensom als een broker wordt ingezet?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Bij 8 systemen: 8×7/2 = 28 koppelingen. Bij 15 systemen: 15×14/2 = 105 koppelingen.</p>
+<p>b. Bij 28 koppelingen: 56 weken (bij serieel bouwen — in de praktijk deels parallel, maar de onderhoudslast blijft evenredig met het aantal). Bij 105 koppelingen: 210 weken. Het verschil is niet evenredig met de toename van 8 naar 15 systemen (bijna verdubbeld), maar bijna verviervoudigd (105/28 ≈ 3,75×) — precies het kwadratische effect.</p>
+<p>c. Met een broker: bij 8 systemen zijn dat 8 koppelingen (naar de broker), bij 15 systemen 15 koppelingen — een lineaire in plaats van kwadratische groei. Het verschil in doorlooptijd tussen 8 en 15 systemen is dan slechts 7 extra koppelingen (14 weken), in plaats van 77 extra koppelingen (154 weken) bij punt-tot-punt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het probleem van punt-tot-punt is niet zichtbaar bij een klein aantal systemen — het wordt disproportioneel duur precies op het moment dat een organisatie groeit, wat het makkelijk maakt om de keuze te lang uit te stellen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">11.2 De broker-architectuur</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>message broker</strong> (of, breder, een integratielaag die als centrale tussenpartij fungeert) vervangt de <em>n(n-1)/2</em> directe koppelingen door <em>n</em> koppelingen: elk systeem praat alleen met de broker, nooit rechtstreeks met een ander systeem. De broker routeert, transformeert waar nodig, en levert af bij de juiste bestemming(en).</p>
+<p>Dit lost het kwadratische probleem rechtstreeks op — bij vijftien systemen zijn dat nog steeds maar vijftien koppelingen, niet honderdvijf. Het brengt echter een eigen afweging met zich mee die vaak wordt onderschat:</p>
+<p><strong>De broker wordt een gedeelde afhankelijkheid voor het hele landschap.</strong> Waar bij punt-tot-punt een storing in één koppeling alleen dat ene paar systemen raakt, raakt een storing in de broker in potentie alles. Dit vraagt een investering in de betrouwbaarheid van de broker zelf die bij punt-tot-punt niet nodig was — precies de guaranteed-delivery-vraag uit deel 8, nu toegepast op infrastructuurniveau in plaats van op een enkel kanaal.</p>
+<p><strong>De broker moet de vertaalkennis van élk aangesloten systeem bevatten, of die kennis moet elders zitten.</strong> Dit is een herhaling van het probleem uit deel 5 (waarom niet in KERN), nu op een hoger niveau: als de broker zelf alle transformaties tussen alle systeemparen kent, groeit de broker met precies dezelfde kwadratische complexiteit die punt-tot-punt had — alleen nu geconcentreerd in één component in plaats van verspreid. De oplossing is hetzelfde principe als in deel 5: elk systeem communiceert met de broker in één, gestandaardiseerd kanoniek formaat (vergelijk de normalizer uit deel 5), en de broker hoeft dan alleen dat ene kanonieke formaat te kennen, niet elk paarsgewijs formaat.</p>
+<figure><img alt="De broker als centrale as: acht systemen, elk met één lijn naar de broker, elk pratend in het kanonieke formaat; de broker routeert en levert af zonder paarsgewijze vertaalkennis te hoeven bevatten." loading="lazy" src="figuren/figuur-11-2-broker-centrale-as.svg"/><figcaption>Figuur 11-2 — De broker als centrale as: acht systemen, elk met één lijn naar de broker, elk pratend in het kanonieke formaat; de broker routeert en levert af zonder paarsgewijze vertaalkennis te hoeven bevatten.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 11.2 — Broker of event backbone?</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.2 — Broker of event backbone?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario of een broker of een event backbone beter past, en motiveer met de vuistregel uit 11.3.</p>
+<p>a. Mutatieopdrachten die KERN moet verwerken, elk met precies één verantwoordelijke uitvoerder.</p>
+<p>b. Een signaal "deelnemer overleden" dat door een groeiend, deels nog onbekend aantal toekomstige systemen relevant zal blijken.</p>
+<p>c. Een statusopvraging tussen het Werkgeversportaal en KERN specifiek.</p>
+<p>d. Een historisch overzicht van alle mutaties van de afgelopen twee jaar, nodig voor een toekomstige data-analysetool die nog niet bestaat.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Broker.</strong> Gerichte, punt-specifieke communicatie met één verantwoordelijke uitvoerder — precies het profiel waarvoor een broker is bedoeld.</p>
+<p>b. <strong>Event backbone.</strong> Feiten die voor een groeiend, deels onbekend aantal partijen relevant zijn — het schoolvoorbeeld van event backbone-gebruik.</p>
+<p>c. <strong>Geen van beide — punt-tot-punt.</strong> Dit is precies het scenario uit 11.4 waar de overhead van een centrale as niet opweegt: een klein, stabiel aantal partijen (twee) met strikt gerichte communicatie.</p>
+<p>d. <strong>Event backbone</strong>, specifiek vanwege de bewaareigenschap. Een gewone broker zou de historie niet per se bewaren; de event backbone is juist ontworpen om nieuwe, nog onbekende abonnees met terugwerkende kracht te kunnen bedienen — exact het probleem dat in deel 6 optrad toen de rapportagetabel een week miste.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de keuze hangt niet af van "hoe belangrijk is dit verkeer" maar van twee concrete vragen: is de communicatie gericht (naar één verantwoordelijke) of verspreidend (naar een groeiend aantal geïnteresseerden), en is historische doorzoekbaarheid nodig?</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">11.3 De event backbone</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>event backbone</strong> (soms event bus, of een event-streaming-platform genoemd — de technologiekeuze hoort in de Toolbijlage) lijkt qua topologie op een broker — ook hier is er één centrale as in plaats van <em>n(n-1)/2</em> directe lijnen — maar verschilt fundamenteel in communicatiestijl: waar een broker doorgaans zowel command- als event-verkeer faciliteert met gerichte routering naar specifieke bestemmingen, is een event backbone primair gebouwd rond publish-subscribe op events (deel 2 en 6), met als extra eigenschap dat gebeurtenissen vaak voor langere tijd, of zelfs onbeperkt, bewaard blijven.</p>
+<p>Deze bewaareigenschap is het belangrijkste verschil met een traditionele broker, en beantwoordt direct een probleem uit deel 6: bij een gewone publish-subscribe-implementatie was een laat aangesloten abonnee (de rapportagetabel die een week miste) een structureel risico, tenzij expliciet een inhaalmechanisme werd gebouwd. Een event backbone bouwt dat inhaalmechanisme in als kernfunctionaliteit: nieuwe abonnees kunnen, binnen de bewaartermijn, de volledige historie van gebeurtenissen "afspelen" alsof ze er van het begin af aan bij waren.</p>
+<p>Dit maakt een event backbone bijzonder geschikt voor landschappen waar, zoals bij Meridiaan te verwachten is, regelmatig nieuwe systemen worden aangesloten die interesse hebben in historische gebeurtenissen — bijvoorbeeld een toekomstige rapportagetool die met terugwerkende kracht trends wil analyseren. De prijs is een zwaardere infrastructuur (bewaring van potentieel miljoenen gebeurtenissen vraagt andere opslag- en doorzoekmechanismen dan een kortstondige wachtrij) en een denkwijze die dichter bij niveau 3 (event sourcing, deel 24) ligt dan bij de eenvoudige messaging van niveau 1.</p>
+<blockquote><p><strong>Vuistregel: kies een broker wanneer het landschap vooral gerichte, punt-specifieke communicatie nodig heeft (commands, gerichte queries); kies een event backbone wanneer het landschap vooral feiten moet verspreiden die voor meerdere, ook toekomstige, partijen relevant zijn en historisch doorzoekbaar moeten blijven.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 11.3 — Waarom een broker niet automatisch eenvoudiger is</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.3 — Waarom een broker niet automatisch eenvoudiger is</p>
+        <div class="card">
+          <div class="prose">
+<p>Een architect stelt voor: "laten we gewoon alle koppelingen via één broker laten lopen, dan zijn we in één keer van het kwadratische probleem af." Leg uit welke twee risico's uit 11.2 hierbij over het hoofd worden gezien.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p><strong>Risico 1: gedeelde afhankelijkheid.</strong> Een storing in de broker raakt in potentie het hele landschap, in plaats van slechts één koppelingspaar zoals bij punt-tot-punt. Dit vraagt een investering in de betrouwbaarheid van de broker (guaranteed delivery op infrastructuurniveau, deel 8) die niet vanzelf meekomt met de architectuurkeuze — het is een aparte kostenpost die vaak wordt vergeten bij het "we lossen het kwadratische probleem op"-argument.</p>
+<p><strong>Risico 2: vertaalkennis die alsnog kwadratisch kan groeien.</strong> Als de broker zelf paarsgewijze vertalingen tussen elk systeempaar moet kennen, verplaatst het kwadratische probleem zich alleen naar binnen de broker, zonder werkelijk opgelost te zijn. De oplossing (een kanoniek formaat, vergelijkbaar met de normalizer uit deel 5) is een aparte ontwerpbeslissing die niet automatisch uit de brokerkeuze zelf volgt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "een broker inzetten" lost het aantal koppelingen op, maar niet automatisch de complexiteit die in die koppelingen zat — die complexiteit moet bewust worden herverdeeld (naar een kanoniek formaat, naar betrouwbaarheidsinvesteringen), niet worden aangenomen als vanzelf opgelost.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">11.4 Geen zuivere keuze: een gelaagd landschap</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Bij Meridiaan is, na overleg met het architectuurboard, niet gekozen voor één zuivere stijl maar voor een gelaagde combinatie — en dat is in de praktijk vaker regel dan uitzondering:</p>
+<p><strong>Point-to-point blijft bestaan</strong> voor koppelingen met een klein, stabiel aantal deelnemers en strikt gerichte communicatie, zoals de statusopvraging uit deel 3 tussen het Werkgeversportaal en KERN specifiek. Hier weegt de overhead van een centrale as niet op tegen het voordeel, omdat er structureel maar twee partijen zijn.</p>
+<p><strong>Een broker verzorgt command-gedreven verkeer</strong> tussen de kernsystemen: mutatieopdrachten die één verantwoordelijke uitvoerder hebben, zoals de mutatiestroom naar KERN.</p>
+<p><strong>Een event backbone verzorgt de verspreiding van feiten</strong> die voor een groeiend aantal, deels nog onbekende partijen relevant zijn — precies het mutatie-gebeurd-kanaal uit deel 2, dat bij nader inzien altijd al de eigenschappen van een event backbone had, alleen zonder de bewaartermijn die deel 6's incident had voorkomen.</p>
+<p>Deze gelaagdheid is geen compromis uit onvermogen om te kiezen — het is een erkenning dat verschillende soorten verkeer verschillende architectuurstijlen verdienen, net zoals binnen één koppeling al verschillende kanalen verschillende typen (command/event/document, deel 3) verdienden.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 11.4 — Het gelaagde landschap van Meridiaan</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.4 — Het gelaagde landschap van Meridiaan</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan koos, zoals in 11.4 beschreven, voor een combinatie van alle drie de stijlen. Beargumenteer voor elk van de volgende drie koppelingen welke stijl het meest waarschijnlijk past, gebruikmakend van de indeling uit 11.4.</p>
+<p>a. De mutatiestroom van de Wegwijzer (een nieuw, nog te bouwen systeem) naar KERN.</p>
+<p>b. Een toekomstig signaal "premiepercentage gewijzigd" dat door zowel bestaande als toekomstige rapportagesystemen moet kunnen worden opgepikt.</p>
+<p>c. Een specifieke, technische heartbeat-koppeling tussen twee monitoring-componenten die nooit door een derde partij zal worden geraadpleegd.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Broker.</strong> Een mutatiestroom naar KERN is command-gedreven, gericht, met KERN als enige verantwoordelijke uitvoerder — vergelijkbaar met het bestaande patroon uit niveau 1, nu via de gedeelde broker in plaats van een aparte punt-tot-puntkoppeling.</p>
+<p>b. <strong>Event backbone.</strong> Een signaal dat voor een groeiend, deels toekomstig aantal partijen relevant is, is het schoolvoorbeeld uit 11.3.</p>
+<p>c. <strong>Point-to-point.</strong> Twee vaste partijen, strikt technisch, geen derde partij ooit betrokken — de overhead van een centrale as (broker of backbone) levert hier geen voordeel op en voegt alleen een onnodige gedeelde afhankelijkheid toe.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de drie stijlen sluiten elkaar niet uit binnen één landschap — de vraag is telkens opnieuw, per soort verkeer, welke stijl past, net zoals in niveau 1 de vraag "welk kanaaltype" per bericht opnieuw werd gesteld.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 11</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Punt-tot-punt-architectuur groeit kwadratisch (<em>n(n-1)/2</em>) met het aantal systemen en wordt bij landschapsschaal onhoudbaar, niet alleen qua beheer maar ook qua consistentie van ontwerpkeuzes.</li>
+<li>Een broker vervangt dat door <em>n</em> koppelingen naar een centrale as, met als eigen afweging: een gedeelde infrastructurele afhankelijkheid, en de noodzaak van een kanoniek formaat om te voorkomen dat de broker zelf kwadratisch complex wordt.</li>
+<li>Een event backbone lijkt topologisch op een broker maar is primair gebouwd rond publish-subscribe met langdurige bewaring, wat het probleem van deel 6 (laat aangesloten abonnees) structureel oplost.</li>
+<li>In de praktijk combineren landschappen doorgaans alle drie de stijlen, gekozen per soort verkeer — niet als compromis, maar als bewuste erkenning dat command-, event- en gerichte communicatie verschillende architectuurvormen verdienen.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 11.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Schat, voor het applicatielandschap van je eigen organisatie (of een deel daarvan), het aantal systemen dat onderling moet kunnen communiceren. Bereken het aantal mogelijke punt-tot-puntkoppelingen, en beoordeel: is punt-tot-punt bij dit aantal nog houdbaar, of zou een broker of event backbone meerwaarde hebben? Onderbouw met minstens één concreet scenario uit je eigen landschap.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers onderschatten vaak het werkelijke aantal systemen totdat ze het expliciet opschrijven, en ontdekken dat hun landschap al ruim voorbij het punt zit waar punt-tot-punt houdbaar is — zonder dat dit ooit als zodanig is benoemd, precies zoals bij Meridiaan pas zichtbaar werd toen het architectuurboord er expliciet naar vroeg.</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 11</div>
+        <p class="quiz__src">Uit Werkboek deel 11, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Punt-tot-punt is geen architectuurfout, maar een stijl die kwadratisch duur wordt — de vraag is niet óf, maar bij welk aantal systemen dat onhoudbaar wordt.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Hoe groeit het aantal mogelijke koppelingen bij punt-tot-punt-architectuur, en wat betekent dat concreet bij een verdubbeling van het aantal systemen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Het groeit volgens <em>n(n-1)/2</em> — bij een verdubbeling van het aantal systemen groeit het aantal koppelingen ruwweg met een factor vier, niet twee.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat lost een broker op, en welke twee risico's brengt het met zich mee?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een broker vervangt <em>n(n-1)/2</em> koppelingen door <em>n</em> koppelingen naar een centrale as. De twee risico's: een gedeelde infrastructurele afhankelijkheid (storing raakt potentieel alles), en het risico dat de broker zelf kwadratisch complex wordt als hij paarsgewijze vertaalkennis moet bevatten in plaats van één kanoniek formaat.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat is het belangrijkste verschil tussen een broker en een event backbone?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een broker faciliteert doorgaans gericht command- en querygedreven verkeer; een event backbone is primair gebouwd rond publish-subscribe met langdurige bewaring van gebeurtenissen.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Welk probleem uit deel 6 lost een event backbone structureel op, en hoe?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Het probleem van laat aangesloten abonnees die historische gebeurtenissen missen (de rapportagetabel-casus). Een event backbone bewaart gebeurtenissen voor langere tijd, waardoor nieuwe abonnees historie kunnen "afspelen".</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wanneer blijft punt-tot-punt, ook op landschapsschaal, de juiste keuze?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij een klein, stabiel aantal partijen met strikt gerichte, punt-specifieke communicatie, waar de overhead van een centrale as niet opweegt tegen het voordeel.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Is de keuze tussen de drie stijlen een eenmalige, landschapsbrede beslissing? Waarom wel/niet?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Nee — in de praktijk combineren landschappen alle drie de stijlen, gekozen per soort verkeer (gericht command-verkeer, verspreidende events, of een klein stabiel paar), net zoals binnen één koppeling al verschillende kanaaltypen naast elkaar bestonden.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 12 verdiept de eerste patroonfamilie van niveau 1 (routing, deel 4) naar landschapsschaal: de dynamic router, de recipient list, en de splitter/aggregator — nodig zodra een bericht niet naar één vaste bestemming maar naar een variabele, soms samengestelde verzameling bestemmingen moet.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 12</h3>
+      <p>Deel 12 — Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-12.html">Deel 12 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 11 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-11/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip11_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

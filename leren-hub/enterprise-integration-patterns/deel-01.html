@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 1 — Van synchroon naar asynchroon: waarom messaging | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 1 (Niveau 1 — Fundament): Op de derde maandag na de stopzetting van WGP 2.0 kreeg Caspar Rijnders zijn eerste incident als integratiearchitect bij Meridiaan Pensioen N.V. De koppeling tussen het Werkgeversportaal en KERN, het kernsysteem, was die ochtend zeven keer blijven ha…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-01.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 1</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 1 (Fundament) · Deel 1 van 30</p>
+  <h1>Van synchroon naar asynchroon: waarom messaging</h1>
+  <p class="hero__lead">Op de derde maandag na de stopzetting van WGP 2.0 kreeg Caspar Rijnders zijn eerste incident als integratiearchitect bij Meridiaan Pensioen N.V. De koppeling tussen het Werkgeversportaal en KERN, het kernsysteem, was die ochtend zeven keer blijven hangen. Niet gecrasht — hangen. Het portaal wachtte op een antwoord van KERN dat niet kwam, de gebruiker zag een draaiend wieltje, en na dertig seconden verscheen een foutmelding die niemand kon plaatsen: &quot;time-out bij mutatieverwerking&quot;.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>11</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 1: <b>① Van synchroon naar asynchroon: waarom messaging (hier)</b> → ② Messagingfundamenten: kanaal, bericht, endpoint → ③ Message Construction: command, event, document en request-reply → ④ Basisrouting: content-based router en message filter → ⑤ Basistransformatie: translator, envelope wrapper, normalizer → ⑥ Point-to-point vs. publish-subscribe kanalen, verdiept → ⑦ Betrouwbaarheid I: garanties en idempotentie → ⑧ Betrouwbaarheid II: volgorde en guaranteed delivery → ⑨ Foutafhandeling basis: dead letter channel en invalid message channel → ⑩ Examentraining en capstone: de verdediging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">1.0 De koppeling die zeven keer per dag vastliep</a></li>
+      <li><a href="#s2" data-target="s2">1.1 Wat request/response veronderstelt</a></li>
+      <li><a href="#s3" data-target="s3">1.2 Drie signalen dat request/response niet meer past</a></li>
+      <li><a href="#s4" data-target="s4">1.3 Wat messaging concreet anders doet</a></li>
+      <li><a href="#s5" data-target="s5">1.4 Wat je ervoor inlevert</a></li>
+      <li><a href="#s6" data-target="s6">1.5 Afbakening ten opzichte van de API-cursus</a></li>
+      <li><a href="#s7" data-target="s7">1.6 Wat er dit deel is gebeurd bij Meridiaan</a></li>
+      <li><a href="#s8" data-target="s8">Samenvatting van deel 1</a></li>
+      <li><a href="#s9" data-target="s9">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">1.0 De koppeling die zeven keer per dag vastliep</h2><span class="chip time">Sectie 1 van 9</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Op de derde maandag na de stopzetting van WGP 2.0 kreeg Caspar Rijnders zijn eerste incident als integratiearchitect bij Meridiaan Pensioen N.V. De koppeling tussen het Werkgeversportaal en KERN, het kernsysteem, was die ochtend zeven keer blijven hangen. Niet gecrasht — hangen. Het portaal wachtte op een antwoord van KERN dat niet kwam, de gebruiker zag een draaiend wieltje, en na dertig seconden verscheen een foutmelding die niemand kon plaatsen: "time-out bij mutatieverwerking".</p>
+<p>De koppeling zelf was, technisch gezien, keurig gebouwd: een REST-aanroep, synchroon, met een duidelijk contract. Het Werkgeversportaal stuurt een mutatie, wacht op het antwoord, en toont dat antwoord aan de gebruiker. Zolang KERN binnen een paar honderd milliseconden reageert, werkt dit onberispelijk.</p>
+<p>Het probleem was niet de koppeling. Het probleem was wat er sinds twee weken ván afhing. KERN was uitgebreid met een asynchrone verwerkingsstap — een validatie tegen de externe pensioenadministrateur, die zelf weer afhankelijk was van een derde partij. Die validatie kon een halve seconde duren, of veertig seconden, afhankelijk van de belasting bij de administrateur. Het Werkgeversportaal wist dat niet. Het deed wat het altijd deed: de aanroep doen en wachten, met een time-out van dertig seconden omdat niemand zich ooit had voorgesteld dat het langer zou kunnen duren.</p>
+<p>Caspar loste het incident die dag op door de time-out naar negentig seconden te verhogen. Dat is geen oplossing, het is uitstel — en dat wist hij, want binnen een kwartaal zou de externe administrateur een nieuwe koppeling opleveren die nóg een stap toevoegde.</p>
+<figure><img alt="De keten Werkgeversportaal → KERN → externe pensioenadministrateur, met bij elke pijl een synchrone request/response-verbinding en een oplopende onzekere wachttijd" loading="lazy" src="figuren/figuur-1-1-synchrone-keten.svg"/><figcaption>Figuur 1-1 — de keten Werkgeversportaal → KERN → externe pensioenadministrateur, met bij elke pijl een synchrone request/response-verbinding en een oplopende onzekere wachttijd</figcaption></figure>
+<p>Dit deel gaat over waarom die oplossing structureel niet houdbaar is, en wat het alternatief is.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">1.1 Wat request/response veronderstelt</h2><span class="chip time">Sectie 2 van 9</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elke synchrone aanroep — of het nu REST, RPC of iets ouders is — rust op drie veronderstellingen die zelden hardop worden uitgesproken:</p>
+<p><strong>De ontvanger is nu beschikbaar.</strong> Niet over vijf minuten, niet zodra de wachtrij leeg is: nu, op het moment van de aanroep.</p>
+<p><strong>De ontvanger antwoordt binnen een voorspelbare tijd.</strong> De aanroeper reserveert een thread, een verbinding, een gebruiker die wacht, voor de duur van dat antwoord. Hoe lang dat duurt, moet ergens binnen een marge liggen die de aanroeper vooraf heeft ingeschat — vandaar de time-out.</p>
+<p><strong>Aanroeper en ontvanger zijn tegelijk operationeel.</strong> Niet alleen nu beschikbaar, maar ook: als de aanroeper herstart, herstelt hij de aanroep opnieuw zelf. Er is geen derde partij die onthoudt dat de aanroep nog moet gebeuren.</p>
+<p>Deze drie veronderstellingen zijn precies wat de API-cursus als vertrekpunt neemt en met gateways, statuscodes en circuit breakers beheersbaar maakt. Ze blijven waar. Wat verandert is de vraag wat je doet zodra één van de drie niet meer standhoudt — niet als uitzondering, maar structureel, omdat een keten schakels bevat die je niet beheerst.</p>
+<blockquote>
+<p><strong>Kernzin 1 van de cursus: elke synchrone aanroep in een keten erft de traagste, minst beschikbare schakel van die keten — of je dat nu wilde of niet.</strong></p>
+</blockquote>
+<p>Dat is precies wat er bij het Werkgeversportaal gebeurde. Niemand had een langzame koppeling gebouwd. Er ontstond er één, door optelling, op een plek waar niemand naar keek.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 1.1 — De drie veronderstellingen testen</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.1 — De drie veronderstellingen testen</p>
+        <div class="card">
+          <div class="prose">
+<p>Voor elk van de vier koppelingen hieronder: welke van de drie veronderstellingen van request/response (beschikbaar nu, voorspelbare antwoordtijd, gelijktijdig operationeel) staat onder druk, en welke niet?</p>
+<ol>
+<li>Werkgeversportaal → KERN, mutatie met validatie bij externe administrateur.</li>
+<li>Gebruiker logt in op het Nabestaandenloket, systeem controleert wachtwoord.</li>
+<li>KERN moet na elke mutatie een audit-regel wegschrijven naar een centraal logsysteem.</li>
+<li>Werkgeversportaal vraagt een actueel premiepercentage op om te tonen tijdens het invullen van een formulier.</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Alle drie onder druk: de externe administrateur is niet altijd snel beschikbaar (veronderstelling 1 en 2), en 's nachts hoeft KERN niet online te zijn om een mutatie alvast te ontvangen (veronderstelling 3). Dit is de casus van 1.0.</p>
+<p>b. Geen van de drie onder druk. Inloggen ís per definitie een moment waarop de gebruiker wacht op een antwoord; er is geen zinnig scenario waarin je "asynchroon inlogt". Dit blijft synchroon, en hoort thuis bij de API-cursus.</p>
+<p>c. Veronderstelling 1 en 3 onder druk: het logsysteem hoeft niet op het moment van de mutatie beschikbaar te zijn, en KERN mag niet vastlopen als het logsysteem tijdelijk onbereikbaar is. Veronderstelling 2 (voorspelbare tijd) is minder relevant — de vraag is vooral of KERN moet wáchten op bevestiging dat het loggen is gelukt. Antwoord: nee. Dit is een schoolvoorbeeld van fire-and-forget messaging.</p>
+<p>d. Geen van de drie werkelijk onder druk, mits het premiepercentage lokaal gecachet kan worden of de aanroep snel genoeg is. Dit is een grensgeval: het lijkt op c (geen kritieke wachttijd) maar de gebruiker wíl wel meteen een antwoord zien. Leerpunt: "de gebruiker wacht" is niet hetzelfde als "het systeem moet synchroon aanroepen" — je kunt ook asynchroon ophalen en tonen zodra het er is, met een skeleton-scherm. Dat is een ontwerpkeuze, geen technische noodzaak.</p>
+<blockquote>
+<p><strong>Wat je hier moet meenemen:</strong> niet elke trage aanroep is een messaging-kandidaat, en niet elke wachtende gebruiker dwingt tot synchroon. De drie veronderstellingen zijn de toetssteen, niet je onderbuikgevoel.</p>
+</blockquote>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">1.2 Drie signalen dat request/response niet meer past</h2><span class="chip time">Sectie 3 van 9</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elke trage koppeling is een reden om over te stappen. Er zijn drie signalen die, los of samen, aangeven dat het probleem niet met een langere time-out is op te lossen.</p>
+<p><strong>Signaal 1: de verwerkingstijd is inherent onvoorspelbaar.</strong> Niet "meestal snel, soms traag" door toevallige belasting, maar structureel variabel omdat er een externe partij, een batchproces of een menselijke handeling in de keten zit. De validatiestap bij de externe administrateur is hiervan een voorbeeld: soms is het antwoord er in milliseconden, soms moet een medewerker daar handmatig ingrijpen.</p>
+<p><strong>Signaal 2: zender en ontvanger hoeven niet gelijktijdig te bestaan.</strong> Als het Werkgeversportaal een mutatie aanlevert om vier uur 's nachts, hoeft KERN niet op dat moment wakker te zijn. Sterker: als KERN op dat moment een onderhoudsvenster heeft, moet de mutatie gewoon blijven staan tot het weer online is — niet foutmelden aan een werkgever die toevallig 's nachts een dienstverband beëindigt.</p>
+<p><strong>Signaal 3: één actie moet meerdere, onafhankelijke ontvangers bereiken.</strong> Een mutatie in KERN moet niet alleen worden verwerkt, maar ook het Nabestaandenloket bijwerken, een audit-trail vullen, en mogelijk een signalering naar de externe administrateur triggeren. Vier synchrone aanroepen achter elkaar bouwen betekent: de totale wachttijd is de som van vier wachttijden, en als één van de vier onbereikbaar is, faalt de hele keten — ook voor de drie andere die het wél hadden gered.</p>
+<figure><img alt="Drie signalen naast elkaar, elk met een minikader: onvoorspelbare verwerkingstijd, ontkoppeling in tijd, één-naar-veel-verspreiding" loading="lazy" src="figuren/figuur-1-2-drie-signalen.svg"/><figcaption>Figuur 1-2 — drie signalen naast elkaar, elk met een minikader: onvoorspelbare verwerkingstijd, ontkoppeling in tijd, één-naar-veel-verspreiding</figcaption></figure>
+<p>Bij het Werkgeversportaal-incident golden signaal 1 en 2 allebei. Dat is waarom het geen incident was dat om een dikkere lijn vroeg, maar om een ander soort verbinding.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 1.2 — De drie signalen herkennen</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.2 — De drie signalen herkennen</p>
+        <div class="card">
+          <div class="prose">
+<p>Herlees paragraaf 1.2. Geef voor elk van de volgende situaties aan welk signaal (of welke signalen) van toepassing zijn, en beargumenteer of dat voldoende reden is om van request/response af te stappen.</p>
+<ol>
+<li>Een nachtelijke batchjob bij de externe pensioenadministrateur verwerkt aangeleverde mutaties tussen 01:00 en 05:00 uur.</li>
+<li>Een mutatie in KERN moet gelijktijdig het Nabestaandenloket, de audit-trail en een rapportagetabel bijwerken.</li>
+<li>Een medewerker keurt eens per dag handmatig een lijst grensgevallen goed voordat verwerking mag doorgaan.</li>
+<li>Twee microservices binnen hetzelfde datacenter communiceren, beide altijd online, antwoordtijd doorgaans onder de 50 ms.</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Signaal 2 (ontkoppeling in tijd) sterk aanwezig. Een synchrone aanroep zou hier letterlijk vier uur moeten wachten — onhoudbaar. Duidelijke messaging-kandidaat.</p>
+<p>b. Signaal 3 (één-naar-veel). Vier aparte synchrone aanroepen na elkaar bouwen betekent een opgetelde wachttijd en een keten die faalt zodra één ontvanger hapert, ook voor de andere drie. Messaging met één publicatie en drie onafhankelijke afnemers is hier de aangewezen vorm — dit is precies het onderwerp van deel 6.</p>
+<p>c. Signaal 1 én 2. De verwerkingstijd is niet "soms traag" maar structureel: minimaal tot de volgende goedkeuringsronde. Hier zou een synchrone aanroep een dag moeten open blijven staan, wat geen enkele infrastructuur normaal ondersteunt.</p>
+<p>d. Geen van de drie signalen. Dit is het schoolvoorbeeld van een situatie waar messaging geen meerwaarde heeft en alleen complexiteit toevoegt. Let op: dit is een veelgemaakte denkfout in de praktijk — "iedereen doet tegenwoordig events" leidt tot messaging op plekken waar request/response prima werkt en eenvoudiger te debuggen is.</p>
+<p><strong>Discussiepunt bij d:</strong> vraag door wat er verandert als deze twee services over verschillende datacenters gaan communiceren, of als er een derde, tragere service bijkomt. Op welk moment kantelt het antwoord?</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">1.3 Wat messaging concreet anders doet</h2><span class="chip time">Sectie 4 van 9</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Messaging vervangt de directe aanroep door een tussenstation: een <strong>bericht</strong> wordt op een <strong>kanaal</strong> gezet, en de zender is klaar zodra het bericht daar veilig staat — niet zodra de ontvanger het heeft verwerkt.</p>
+<p>Dat ene zinnetje bevat het hele verschil. Bij request/response valt "verzonden" en "verwerkt" praktisch samen: de aanroeper weet het antwoord voordat hij verdergaat. Bij messaging vallen ze uit elkaar. De zender weet alleen: het bericht staat op het kanaal. Wat de ontvanger ermee doet, en wanneer, is een aparte vraag.</p>
+<p>Dit lost de drie veronderstellingen van request/response niet stuk voor stuk op — het maakt ze overbodig:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Veronderstelling bij request/response</th><th>Wat messaging daarvoor in de plaats zet</th></tr>
+</thead>
+<tbody>
+<tr><td>Ontvanger is nu beschikbaar</td><td>Het kanaal bewaart het bericht tot de ontvanger er is</td></tr>
+<tr><td>Antwoord binnen voorspelbare tijd</td><td>Zender gaat verder zodra het bericht geplaatst is; verwerkingstijd van de ontvanger raakt de zender niet</td></tr>
+<tr><td>Beide tegelijk operationeel</td><td>Het kanaal overbrugt de tijd ertussen</td></tr>
+</tbody>
+</table></div>
+<p>De prijs die hiervoor wordt betaald, komt in 1.4 en in deel 7 en 8 uitgebreid terug: als je niet meer wacht op een antwoord, moet je expliciet regelen wat je zeker weet en wat niet. Bij request/response krijg je die zekerheid gratis — een uitgebleven antwoord ís een foutmelding. Bij messaging moet je zelf bedenken hoe je weet of een bericht is aangekomen, en wat er gebeurt als het twee keer aankomt.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 1.3 — Het incident herformuleren</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.3 — Het incident herformuleren</p>
+        <div class="card">
+          <div class="prose">
+<p>Caspar loste het incident in 1.0 tijdelijk op door de time-out te verhogen. Leg in twee tot vier zinnen uit waarom dit geen structurele oplossing is, en formuleer wat er in plaats daarvan zou moeten gebeuren — zonder al technische patronen te noemen (die komen pas vanaf deel 2), alleen het principe.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Een verhoogde time-out lost het probleem niet op, het verplaatst het: bij de volgende, nog tragere schakel in de keten loopt de time-out opnieuw vol, en ondertussen zit de gebruiker langer met een draaiend wieltje. Bovendien reserveert elke wachtende aanroep resources (threads, verbindingen) — een langere time-out onder hoge belasting kan het portaal zelf laten vastlopen, ook voor mutaties die niets met de trage validatie te maken hebben.</p>
+<p>Wat er in plaats daarvan zou moeten gebeuren: het Werkgeversportaal moet de mutatie kunnen "afgeven" zonder op de uitkomst van de validatie te wachten, en de gebruiker moet een ander soort bevestiging krijgen dan "gelukt/mislukt" — bijvoorbeeld "ontvangen, wordt verwerkt". Dat is precies het principe van messaging: verzending en verwerking loskoppelen.</p>
+<p><strong>Wat hier nog ontbreekt, bewust:</strong> hoe de gebruiker dan wél weet of de mutatie uiteindelijk is gelukt. Dat is geen omissie maar een vooruitwijzing — dat vraagstuk (statusopvraging, notificatie, correlatie tussen verzoek en antwoord) is de kern van deel 3.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">1.4 Wat je ervoor inlevert</h2><span class="chip time">Sectie 5 van 9</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Messaging is geen upgrade zonder nadeel. Drie dingen worden structureel moeilijker, en het is beroepsoneerlijk om dat pas in deel 7 te vermelden.</p>
+<p><strong>Volgorde is niet meer vanzelfsprekend.</strong> Bij een synchrone keten van aanroepen is de volgorde de volgorde van de code. Bij messaging kunnen twee berichten via verschillende paden, met verschillende snelheid, bij de ontvanger aankomen — en soms is dat prima, en soms is het een dataintegriteitsprobleem. Deel 8 gaat hier volledig over.</p>
+<p><strong>Foutafhandeling verschuift van "meteen zichtbaar" naar "ergens in een wachtrij".</strong> Bij request/response ziet de gebruiker een foutmelding. Bij messaging kan een bericht dat niet te verwerken is, stil in een wachtrij blijven staan — tenzij je expliciet een vangnet bouwt. Deel 9 introduceert dat vangnet.</p>
+<p><strong>Debuggen verandert van aard.</strong> "Waarom werkt dit niet" wordt niet meer beantwoord door één stack trace, maar door de vraag: waar in de keten van kanalen bevindt dit bericht zich, en wat is er sindsdien mee gebeurd. Dat vraagt andere gereedschappen en andere gewoontes, die in niveau 2 (deel 21, observability) aan bod komen.</p>
+<p>Caspar formuleerde het na het derde incident zo tegen zijn architectuurboard: <em>"Ik ruil een probleem dat ik meteen zie, in voor een probleem dat ik moet leren zien."</em> Dat is de kern van de afweging in dit deel — en de reden dat deze cursus niet begint met "messaging is beter", maar met de vraag wanneer het dat is.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 1.4 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Opdracht 1.4 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf een koppeling uit je eigen werk (of een koppeling die je kent) die op request/response draait maar minstens één van de drie signalen uit 1.2 vertoont. Beantwoord:</p>
+<ol>
+<li>Welk signaal (of signalen) precies?</li>
+<li>Wat is op dit moment de "oplossing" waarmee dat signaal wordt opgevangen — een langere time-out, een retry-mechanisme, iets anders?</li>
+<li>Is dat een structurele oplossing of, net als bij Caspar, uitstel?</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Twee observaties uit eerdere groepen, ter kalibratie: bij vraag b noemt een meerderheid een verhoogde time-out of een retry-met-backoff als de huidige "oplossing" — precies het patroon van Caspars incident. Bij vraag c concludeert vrijwel iedereen die eerlijk doorvraagt dat het uitstel is: de onderliggende schakel wordt niet trager, dus het probleem keert terug zodra de belasting toeneemt of er een schakel bijkomt.</p>
+<p>Bewaar dit antwoord: in deel 6 en deel 7 kom je terug op dezelfde koppeling om te ontwerpen hoe hij er ontkoppeld wél uit zou zien.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">1.5 Afbakening ten opzichte van de API-cursus</h2><span class="chip time">Sectie 6 van 9</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deze cursus begint precies waar request/response niet meer past. Dat is geen waardeoordeel over API's: de meeste koppelingen bij Meridiaan zijn en blijven terecht synchroon — een gebruiker die op "opslaan" klikt, wil weten of het gelukt is, niet drie kwartier later een bevestigingsmail.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Onderwerp</th><th>Blijft bij de API-cursus</th><th>Hoort hier</th></tr>
+</thead>
+<tbody>
+<tr><td>Communicatiestijl</td><td>Request/response, blocking</td><td>Fire-and-forget, event-driven, publish/subscribe</td></tr>
+<tr><td>Contractvorm</td><td>OpenAPI/REST-resourcemodellering</td><td>Berichtformaat, kanaalcontract, schema-evolutie</td></tr>
+<tr><td>Ontsluiting</td><td>API-gateway, rate limiting, API-management</td><td>Message broker, event backbone, messaging-endpoints</td></tr>
+<tr><td>Betrouwbaarheid</td><td>HTTP-statuscodes, retries per aanroep</td><td>Idempotentie, leveringsgaranties, volgorde</td></tr>
+</tbody>
+</table></div>
+<figure><img alt="Eén keten, twee kaartlagen: bovenin de synchrone laag (gebruiker → portaal → gateway), onderin de asynchrone laag (KERN → externe administrateur → Nabestaandenloket), met de plek waar Caspars incident ontstond precies op de overgang" loading="lazy" src="figuren/figuur-1-3-twee-kaartlagen.svg"/><figcaption>Figuur 1-3 — één keten, twee kaartlagen: bovenin de synchrone laag (gebruiker → portaal → gateway), onderin de asynchrone laag (KERN → externe administrateur → Nabestaandenloket), met de plek waar Caspars incident ontstond precies op de overgang</figcaption></figure>
+<p>Onthoud dit onderscheid goed: de vraag is nooit "REST of messaging" als architectuurkeuze voor een heel systeem, maar "past dit specifieke contact bij het request/response-patroon, of niet" — telkens opnieuw, per koppeling.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">1.6 Wat er dit deel is gebeurd bij Meridiaan</h2><span class="chip time">Sectie 7 van 9</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Caspar Rijnders is de nieuwe integratiearchitect bij Meridiaan Pensioen, aangesteld nadat WGP 2.0 als watervalproject strandde op onder andere de starre, hard-gecodeerde puntkoppelingen tussen systemen. Zijn eerste weken bestaan uit brandjes blussen op precies zulke koppelingen: synchrone aanroepen die falen zodra een schakel in de keten trager of onbeschikbaar wordt.</p>
+<p>Dit deel introduceert hem niet als expert maar als iemand die het probleem voor het eerst scherp voelt. De rest van niveau 1 bouwt, koppeling voor koppeling, het instrumentarium op waarmee hij het structureel oplost.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 1</h2><span class="chip time">Sectie 8 van 9</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Elke synchrone aanroep in een keten erft de traagste, minst beschikbare schakel van die keten.</li>
+<li>Drie signalen wijzen op een verkeerde pasvorm van request/response: onvoorspelbare verwerkingstijd, ontkoppeling in tijd nodig, of één-naar-veel-verspreiding.</li>
+<li>Messaging vervangt directe aanroepen door een kanaal: de zender is klaar zodra het bericht daar staat, niet zodra het is verwerkt.</li>
+<li>Dit lost niets gratis op: volgorde, foutafhandeling en debuggen worden structureel anders, niet vanzelf makkelijker.</li>
+<li>Deze cursus begint waar request/response niet meer past — de keuze ligt per koppeling, niet per systeem.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 1</div>
+        <p class="quiz__src">Uit Werkboek deel 1, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Noem de drie veronderstellingen die elke synchrone aanroep maakt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">De ontvanger is nu beschikbaar; de ontvanger antwoordt binnen een voorspelbare tijd; zender en ontvanger zijn tegelijk operationeel.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Elke synchrone aanroep in een keten erft de traagste, minst beschikbare schakel van die keten — een koppeling die op zichzelf snel is, kan alsnog traag worden door wat erachter hangt.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Noem de drie signalen die aangeven dat request/response niet meer past.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Onvoorspelbare verwerkingstijd, ontkoppeling in tijd nodig, één-naar-veel-verspreiding.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat is het verschil tussen "verzonden" en "verwerkt" bij messaging, en waarom vallen ze bij request/response praktisch samen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij messaging is "verzonden" het moment dat het bericht op het kanaal staat; "verwerkt" is het moment dat de ontvanger het daadwerkelijk heeft afgehandeld — dat kan later zijn. Bij request/response wacht de aanroeper op het antwoord, dus valt het moment van verzenden praktisch samen met het moment van verwerkt-zijn, vanuit het perspectief van de aanroeper.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Noem twee dingen die je structureel inlevert als je van request/response naar messaging overstapt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Twee van: gegarandeerde volgorde, meteen zichtbare foutafhandeling, eenvoudig debuggen via één stack trace.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Waarom is "twee microservices in hetzelfde datacenter, altijd online, snel" géén messaging-kandidaat?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Geen van de drie signalen is aanwezig: de verwerkingstijd is voorspelbaar, er is geen noodzaak tot ontkoppeling in tijd, en er is geen sprake van één-naar-veel. Messaging zou hier alleen complexiteit toevoegen zonder een probleem op te lossen.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waar ligt de grens tussen de API-cursus en deze cursus?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De API-cursus behandelt communicatie die synchroon hoort te blijven (request/response, API-management, gateways); deze cursus begint zodra een koppeling structureel niet meer aan de drie veronderstellingen van request/response kan voldoen.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 9 van 9</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 2 opent de doos die in dit deel dicht bleef: wat is een kanaal precies, wat is een bericht precies, en wat is een endpoint — de drie bouwstenen waarmee de rest van de cursus werkt.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 2</h3>
+      <p>Deel 2 — Messagingfundamenten: kanaal, bericht, endpoint — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-02.html">Deel 2 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 1 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-01/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];
+  var KEY="eductus_eip1_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

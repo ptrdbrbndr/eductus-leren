@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 24 — Event sourcing als drager | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 24 (Niveau 3 — Event streaming en stelselschaal): Tijdens de bouw van de invaarketen stelde een ontwikkelaar Caspar een vraag die, hoe terecht ook, buiten de scope van deze cursus valt:&quot;Als we toch alle events van een deelnemer permanent bewaren, kunnen we dan niet gewoon de hele huidige toestand va…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-24.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 24</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 3 (Event streaming en stelselschaal) · Deel 24 van 30</p>
+  <h1>Event sourcing als drager</h1>
+  <p class="hero__lead">Tijdens de bouw van de invaarketen stelde een ontwikkelaar Caspar een vraag die, hoe terecht ook, buiten de scope van deze cursus valt:&quot;Als we toch alle events van een deelnemer permanent bewaren, kunnen we dan niet gewoon de hele huidige toestand van die deelnemer berekenen door alle events opnieuw af te spelen, in plaats van een aparte, actuele databasetabel bij te houden?&quot;</p>
+  <div class="hero__stats">
+    <div class="stat"><b>6</b><span>secties</span></div>
+    <div class="stat"><b>1</b><span>figuren</span></div>
+    <div class="stat"><b>8</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 3: ① Event-driven architectuur en event streaming fundamenten → <b>② Event sourcing als drager (hier)</b> → ③ Complexe eventketens: de event backbone voor invaren en datakwaliteit → ④ Poison messages en retry-topologie op schaal → ⑤ Resilience patterns in ketens: circuit breaker, bulkhead, backpressure → ⑥ Governance en lifecycle van een event backbone → ⑦ Auditability en verantwoording richting DNB/AFM vanuit messaging-logs → ⑧ Masterproef: de verdwenen bevestiging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">24.0 Een vraag die niet bij deze cursus hoort</a></li>
+      <li><a href="#s2" data-target="s2">24.1 Waar de transportvraag begint</a></li>
+      <li><a href="#s3" data-target="s3">24.2 De relatie met eerdere patronen uit deze cursus</a></li>
+      <li><a href="#s4" data-target="s4">24.3 Waar deze cursus stopt</a></li>
+      <li><a href="#s5" data-target="s5">Samenvatting van deel 24</a></li>
+      <li><a href="#s6" data-target="s6">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">24.0 Een vraag die niet bij deze cursus hoort</h2><span class="chip time">Sectie 1 van 6</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Tijdens de bouw van de invaarketen stelde een ontwikkelaar Caspar een vraag die, hoe terecht ook, buiten de scope van deze cursus valt: <em>"Als we toch alle events van een deelnemer permanent bewaren, kunnen we dan niet gewoon de hele huidige toestand van die deelnemer berekenen door alle events opnieuw af te spelen, in plaats van een aparte, actuele databasetabel bij te houden?"</em></p>
+<p>Het antwoord is ja — dat is precies <strong>event sourcing</strong> als architectuurpatroon: in plaats van de huidige toestand op te slaan en bij elke wijziging te overschrijven, wordt alleen de reeks events opgeslagen, en wordt de huidige toestand afgeleid door die events opnieuw toe te passen. Dit is een krachtig en veelgebruikt patroon — en het is ook precies het onderwerp van twee andere cursussen in deze familie: de DDD-cursus behandelt hoe event sourcing het domeinmodel vormgeeft (aggregates, domain events, hoe een aggregate zijn eigen geschiedenis reconstrueert), en de databasecursus behandelt het technisch als opslagpatroon (event store-ontwerp, snapshotting voor prestatie, query-modellen).</p>
+<p><strong>Deze cursus behandelt geen van beide.</strong> Wat deze cursus wél behandelt — en wat de andere twee cursussen bewust niet behandelen, om overlap te vermijden — is de vraag die aan beide voorafgaat: <strong>hoe reizen die events, als berichten, betrouwbaar door een keten van systemen, zodat elk systeem dat ze nodig heeft, ze op tijd, in de juiste volgorde en zonder verlies ontvangt?</strong> Dat is de transportvraag, en die valt volledig binnen het domein van Enterprise Integration Patterns.</p>
+<figure><img alt='Drie cirkels die elkaar deels overlappen: "domeinmodel" (DDD-cursus), "opslag" (databasecursus), "transport" (deze cursus) — met event sourcing als het gedeelde onderwerp waar alle drie een ander deel van beschrijven.' loading="lazy" src="figuren/figuur-24-1-drie-cirkels-event-sourcing.svg"/><figcaption>Figuur 24-1 — Drie cirkels die elkaar deels overlappen: "domeinmodel" (DDD-cursus), "opslag" (databasecursus), "transport" (deze cursus) — met event sourcing als het gedeelde onderwerp waar alle drie een ander deel van beschrijven.</figcaption></figure>
+<blockquote><p><strong>Kernzin 24 van de cursus: event sourcing is één architectuurpatroon met drie aspecten — hoe het domein zijn geschiedenis modelleert, hoe die geschiedenis wordt opgeslagen, en hoe die geschiedenis als berichten door een keten reist. Deze cursus behandelt uitsluitend het derde.</strong></p></blockquote>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">24.1 Waar de transportvraag begint</h2><span class="chip time">Sectie 2 van 6</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De transportvraag wordt concreet zodra een event-sourced systeem — zoals de invaaradministratie die op event sourcing wordt gebouwd — zijn events niet alleen intern gebruikt om zijn eigen toestand te reconstrueren, maar ook naar buiten toe publiceert, zodat andere systemen (het Nabestaandenloket, de risicomanagement-rapportage, straks een toekomstig deelnemersportaal) erop kunnen reageren of erop kunnen bouwen.</p>
+<p>Dit introduceert een onderscheid dat, hoewel het buiten deze cursus in de DDD-cursus dieper wordt uitgewerkt, hier relevant is voor het transportontwerp: het verschil tussen een <strong>intern domain event</strong> (gebruikt binnen één aggregate om zijn eigen geschiedenis te reconstrueren, met een structuur die optimaal is voor dat interne doel) en een <strong>extern gepubliceerd integratie-event</strong> (bedoeld voor consumptie door andere systemen, met een structuur die stabiel en begrijpelijk moet zijn voor partijen die het interne domeinmodel niet kennen).</p>
+<p>Deze twee zijn zelden identiek, en het is een veelgemaakte fout — bij Meridiaan aanvankelijk ook gemaakt — om ze te verwarren: het interne domain event van de invaaradministratie bevat velden en structuren die specifiek zijn afgestemd op hoe de aggregate zijn eigen toestand reconstrueert (bijvoorbeeld tussenstappen van een berekening die voor externe partijen betekenisloos zijn), terwijl het externe integratie-event een stabiel, zelfstandig interpreteerbaar contract moet zijn — precies het onderwerp van deel 20 (contractbeheer), nu toegepast op de grens tussen intern domeinmodel en extern transport.</p>
+<blockquote><p><strong>Vuistregel: publiceer nooit het interne domain event rechtstreeks als extern integratie-event — vertaal expliciet, net als bij elke andere translator (deel 5), ook als beide "toevallig" op hetzelfde moment ontstaan.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 24.1 — Intern of extern event?</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 24.1 — Intern of extern event?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk van de volgende events of het een intern domain event of een extern integratie-event betreft, en motiveer.</p>
+<p>a. <code>AggregateVersieOpgehoogdNaar17</code> — gebruikt door de invaaradministratie om optimistic locking binnen zijn eigen opslag te bewaken.</p>
+<p>b. <code>AanspraakIngevaren</code> — met deelnemersnummer, ingevaren bedrag, en toegepaste rekenregelversie.</p>
+<p>c. <code>TussenberekeningStap3Voltooid</code> — een interne tussenstap in een meerstaps berekening.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Intern domain event.</strong> Puur technisch, relevant voor de eigen opslagconsistentie van de aggregate — betekenisloos voor een extern systeem.</p>
+<p>b. <strong>Extern integratie-event.</strong> Precies het soort feit dat andere systemen (Nabestaandenloket, rapportage) nodig hebben en kunnen interpreteren zonder het interne domeinmodel te kennen.</p>
+<p>c. <strong>Intern domain event.</strong> Een tussenstap is relevant voor de eigen reconstructielogica van de aggregate, maar zonder context (wat betekent "stap 3" voor een extern systeem?) niet zinvol te publiceren.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de vuistregel uit 24.1 is niet "publiceer alles" of "publiceer niets", maar een bewuste selectie en vertaling — alleen a en c zouden intern moeten blijven, terwijl b de kandidaat is voor externe publicatie, eventueel na vertaling.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">24.2 De relatie met eerdere patronen uit deze cursus</h2><span class="chip time">Sectie 3 van 6</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Event sourcing als drager is geen nieuw patroon binnen deze cursus — het is een specifieke, strengere toepassing van patronen die al eerder zijn behandeld, nu gecombineerd op een manier die de eisen van deel 23 (onveranderlijkheid, herleidbare volgorde, herspeelbaarheid) technisch waarmaakt.</p>
+<p><strong>De translator (deel 5) en messaging mapper (deel 14)</strong> zijn hier het mechanisme dat interne domain events omzet naar externe integratie-events — precies de vertaalslag uit 24.1.</p>
+<p><strong>Idempotentie (deel 7) wordt hier bijzonder streng</strong>, omdat elk intern domain event, bij het opnieuw afspelen van de geschiedenis (bijvoorbeeld bij het herbouwen van een projectie of het herstellen na een storing), exact hetzelfde effect moet hebben als de eerste keer — niet slechts "geen schadelijk dubbel effect" zoals in niveau 1, maar volledige, herhaalbare determinisme.</p>
+<p><strong>De outbox-pattern (deel 19)</strong> is hier vaak zelfs het native mechanisme in plaats van een aanvullend patroon: bij een goed ontworpen event-sourced systeem ís de opslag van het domain event zelf al de "database transactie", en het publiceren van het corresponderende integratie-event kan direct op die opslag worden gebaseerd — de outbox-tabel en de event store vallen in de praktijk vaak (bijna) samen.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 24.2 — De vertaalslag ontwerpen</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 24.2 — De vertaalslag ontwerpen</p>
+        <div class="card">
+          <div class="prose">
+<p>Ontwerp, met de vuistregel uit 24.1 in de reader, hoe het interne domain event <code>AanspraakBerekend</code> (met velden die specifiek zijn afgestemd op de interne rekenlogica) vertaald wordt naar het externe integratie-event <code>AanspraakIngevaren</code> (stabiel, voor externe consumptie).</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Een expliciete translator (deel 5) of messaging mapper (deel 14) neemt het interne domain event, selecteert daaruit alleen de velden die extern relevant en stabiel genoeg zijn (deelnemersnummer, ingevaren bedrag, rekenregelversie, tijdstip), en verpakt ze in het externe, gedocumenteerde contract van <code>AanspraakIngevaren</code>. Interne, technische velden van het domain event (bijvoorbeeld tussentijdse berekeningsvariabelen of aggregate-versienummers) worden niet meegenomen. Deze vertaling gebeurt op precies dezelfde manier als elke andere translator in deze cursus — er is geen speciaal, event-sourcing-specifiek mechanisme nodig, alleen de discipline om de vertaling expliciet te maken in plaats van het interne event kortsluitend te publiceren.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de techniek is niet nieuw — het is precies deel 5's translator, toegepast op de specifieke grens tussen domeinmodel en extern contract.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">24.3 Waar deze cursus stopt</h2><span class="chip time">Sectie 4 van 6</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Om de afbakening met de DDD- en databasecursus scherp te houden, is het nuttig expliciet te noemen wat <strong>niet</strong> in deze cursus wordt behandeld, ook al raakt het aan hetzelfde onderwerp:</p>
+<ul>
+<li>Hoe een aggregate zijn interne staat reconstrueert uit zijn eigen event-geschiedenis (DDD-cursus).</li>
+<li>Wanneer en hoe een aggregate-grens wordt getrokken, en welke events daarbinnen vallen (DDD-cursus).</li>
+<li>Het technisch ontwerp van een event store: indexering, snapshotting voor prestatie bij lange geschiedenissen, opslagformaat (databasecursus).</li>
+<li>Query-modellen die uit event-geschiedenis worden afgeleid, zoals CQRS-read-models (databasecursus, met raakvlak DDD-cursus).</li>
+</ul>
+<p>Wat deze cursus wél biedt, en de andere twee bewust niet: het antwoord op de vraag die Caspar's ontwikkelaar feitelijk stelde — niet "hoe bouw ik event sourcing", maar <strong>"hoe zorg ik dat de events die uit dat systeem komen, betrouwbaar, in de juiste volgorde, en zonder verlies bij elke partij aankomen die ze nodig heeft"</strong> — precies de kern van deel 7, 8, 16 en 23, nu toegepast op de specifieke situatie van een event-sourced bron.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 24.3 — Afbakening toetsen</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Opdracht 24.3 — Afbakening toetsen</p>
+        <div class="card">
+          <div class="prose">
+<p>Voor elk van de volgende vragen: hoort het bij deze cursus (transport), de DDD-cursus (domeinmodel), of de databasecursus (opslag)?</p>
+<p>a. Hoe lang mag een aggregate's event-geschiedenis worden voordat een snapshot nodig is voor acceptabele leesprestatie?</p>
+<p>b. Hoe garandeer ik dat het externe integratie-event, eenmaal gepubliceerd, betrouwbaar en in de juiste volgorde bij het Nabestaandenloket aankomt?</p>
+<p>c. Welke velden horen thuis in de aggregate "Aanspraak", en welke in een aparte aggregate?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Databasecursus</strong> — een opslag- en prestatievraagstuk.</p>
+<p>b. <strong>Deze cursus</strong> — precies de transportvraag die dit deel afbakent, met antwoorden in deel 7, 8, 16 en 23.</p>
+<p>c. <strong>DDD-cursus</strong> — een domeinmodelleringsvraagstuk (aggregate-grenzen).</p>
+<p><strong>Wat je hier moet meenemen:</strong> de drie vragen lijken op elkaar (ze gaan allemaal "over" event sourcing) maar vereisen elk een andere cursus en een ander soort expertise — het scherp houden van deze afbakening voorkomt dat een team verkeerde verwachtingen heeft van wat deze cursus wel en niet leert.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 24</h2><span class="chip time">Sectie 5 van 6</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Event sourcing heeft drie aspecten: domeinmodellering (DDD-cursus), opslag (databasecursus), en transport (deze cursus) — deze cursus behandelt uitsluitend het laatste.</li>
+<li>Intern domain event en extern integratie-event zijn zelden identiek en moeten expliciet worden vertaald, net als bij elke andere translator.</li>
+<li>Idempotentie wordt hier strenger (volledige determinisme bij herafspelen), en het outbox-pattern valt vaak (bijna) samen met de event store zelf.</li>
+<li>Deze cursus behandelt uitdrukkelijk niet: aggregate-modellering, event store-technisch ontwerp, of query-modellen — dat is het domein van de DDD- en databasecursus.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 24</div>
+        <p class="quiz__src">Uit Werkboek deel 24, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Event sourcing is één architectuurpatroon met drie aspecten — domeinmodellering, opslag, transport. Deze cursus behandelt uitsluitend het transport.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Noem de drie aspecten van event sourcing en welke cursus welk aspect behandelt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Domeinmodellering (DDD-cursus), opslag (databasecursus), transport (deze cursus).</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wat is het verschil tussen een intern domain event en een extern integratie-event?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een intern domain event is afgestemd op de interne reconstructielogica van een aggregate; een extern integratie-event is een stabiel, zelfstandig interpreteerbaar contract voor andere systemen — ze zijn zelden identiek en moeten expliciet vertaald worden.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Waarom wordt idempotentie strenger bij event sourcing dan in niveau 1?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat bij het opnieuw afspelen van de geschiedenis (bijvoorbeeld bij herstel na storing) elk event exact hetzelfde effect moet hebben als de eerste keer — volledige determinisme, niet slechts "geen schadelijk dubbel effect".</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waarom vallen outbox-tabel en event store in de praktijk vaak (bijna) samen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat bij een event-sourced systeem de opslag van het domain event zelf al de transactie is die het outbox-pattern normaliter apart zou moeten regelen — de twee mechanismen vallen in de praktijk vaak (bijna) samen.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 6 van 6</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 25 bouwt hierop voort met complexe eventketens: het ontwerp van de event backbone specifiek voor invaren en datakwaliteit, waar meerdere event-sourced en niet-event-sourced systemen samen één auditeerbare keten moeten vormen.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 25</h3>
+      <p>Deel 25 — Complexe eventketens: de event backbone voor invaren en datakwaliteit — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-25.html">Deel 25 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 24 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-3/deel-24/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6"];
+  var KEY="eductus_eip24_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

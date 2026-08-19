@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Build leren-hub/enterprise-integration-patterns/index.html.
+SECTIONS is derived PROGRAMMATICALLY from the already-built deel-NN.html files
+(counting real <article class="section"> blocks) -- never estimated/guessed.
+Run after build.py.
+"""
+import re
+import glob
+import json
+from pathlib import Path
+from build import TITLES, NIVEAUS, pad, OUT
+
+DEEL_GLOB = str(OUT / "deel-*.html")
+
+
+def derive_sections():
+    sections = {}
+    for f in sorted(glob.glob(DEEL_GLOB)):
+        n = int(re.search(r"deel-(\d+)\.html", f).group(1))
+        txt = Path(f).read_text(encoding="utf-8")
+        sections[n] = len(re.findall(r'<article class="section"', txt))
+    return sections
+
+
+CSS = """
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.07),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.07),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;position:relative;z-index:2}
+.top{padding:26px 0 0}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;font-size:22px;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px}
+.sitenav{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.sitenav a{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);padding:6px 13px;border-radius:999px;border:1px solid var(--line);background:var(--paper-2);transition:.2s}
+.sitenav a:hover{color:var(--teal-deep);border-color:var(--teal)}
+.hero{padding:56px 0 30px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(34px,5.8vw,64px);line-height:1.05;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:64ch;margin:26px 0 0;font-size:21px;color:var(--ink-soft)}
+.note{margin:38px 0 10px;border-left:4px solid var(--ochre);background:var(--ochre-tint);padding:18px 22px;border-radius:0 14px 14px 0;color:var(--ink-soft);font-size:16px}
+.note b{color:#9a6418}
+.note.teal{border-left-color:var(--teal);background:var(--teal-tint)}
+.note.teal b{color:var(--teal-deep)}
+.rowhead{display:flex;align-items:baseline;gap:14px;margin:52px 0 20px}
+.rowhead h3{font-family:"Fraunces",serif;font-weight:600;font-size:26px;margin:0}
+.rowhead span{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.rowhead .line{flex:1;height:1px;background:var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;padding-bottom:20px}
+.card{position:relative;display:flex;flex-direction:column;background:var(--paper-2);border:1px solid var(--line);border-radius:18px;padding:22px 22px 20px;box-shadow:var(--shadow);transition:.22s;overflow:hidden;cursor:pointer}
+.card::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line);transition:.22s}
+.card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:#c6b699}
+.card:hover::after{background:var(--teal)}
+.card.showcase{background:linear-gradient(160deg,var(--teal-tint),var(--paper-2))}
+.card.showcase::after{background:var(--teal)}
+.card__top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.card__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none}
+.card__ring{--v:0;width:42px;height:42px;border-radius:50%;margin-left:auto;flex:none;display:grid;place-items:center;background:conic-gradient(var(--teal) calc(var(--v)*1%),var(--line) 0);position:relative}
+.card__ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--paper-2)}
+.card__ring b{position:relative;font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;color:var(--teal-deep)}
+.card h4{font-family:"Fraunces",serif;font-weight:600;font-size:21px;margin:0 0 6px;line-height:1.14;letter-spacing:-.3px}
+.card p{margin:0;color:var(--ink-soft);font-size:15.5px;flex:1}
+.card__meta{display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;background:var(--paper);border:1px solid var(--line);color:var(--ink-soft);padding:4px 9px;border-radius:999px}
+.tag.new{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:600}
+.card__go{margin-top:14px;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--teal);font-weight:600;display:flex;align-items:center;gap:6px}
+.card:hover .card__go{gap:11px}
+footer{padding:40px 0 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;border-top:1px solid var(--line);margin-top:40px}
+"""
+
+
+def esc(s):
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def main():
+    sections = derive_sections()
+    assert set(sections) == set(range(1, 31)), f"missing delen: {set(range(1,31)) - set(sections)}"
+
+    titles_js = json.dumps({str(n): TITLES[n] for n in range(1, 31)}, ensure_ascii=False)
+    sections_js = json.dumps({str(n): sections[n] for n in range(1, 31)}, ensure_ascii=False)
+
+    note = ('<div class="note teal"><b>Alle 30 delen zijn omgezet.</b> Elk deel heeft een sticky '
+            'inhoudsopgave, per-sectie leesvoortgang (lokaal in uw browser bewaard) en controlevragen '
+            'letterlijk uit het werkboek, met bronvermelding. De docentenhandleiding en de slidedeck '
+            'per deel blijven bereikbaar via de oude vormgeving op cursus.eductus.nl.</div>')
+
+    intro = ('<p>Deze Ductus-opleiding behandelt asynchrone, event-driven integratie langs de 65 patronen '
+              'van Hohpe &amp; Woolf, in drie niveaus: het fundament (messaging, routing, transformatie, '
+              'betrouwbaarheid), de patroonfamilies op landschapschaal (integratiearchitectuur, sagas, '
+              'outbox, observability) en event streaming als drager op stelselschaal (event sourcing, '
+              'resilience, governance, auditability). De cursus is toolneutraal; de Toolbijlage werkt de '
+              'patronen uit met Apache Camel als open-source referentie-implementatie. Eén doorlopende '
+              'casus bij pensioenuitvoerder Meridiaan Pensioen, met integratiearchitect Caspar Rijnders '
+              'als hoofdpersoon, loopt door alle drie niveaus.</p>')
+
+    rows = []
+    for lv in NIVEAUS:
+        rows.append(
+            f'<div class="rowhead"><h3>Niveau {lv["n"]} — {esc(lv["label"])}</h3>'
+            f'<span>deel {lv["lo"]}–{lv["hi"]}</span><div class="line"></div></div>\n'
+            f'  <div class="grid" id="gridN{lv["n"]}"></div>'
+        )
+    rows_html = "\n\n  ".join(rows)
+
+    html = f"""<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enterprise Integration Patterns | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns in de warme, redactionele vormgeving van de SAP-leerreeks — 30 delen, asynchrone en event-driven integratie langs de 65 patronen van Hohpe &amp; Woolf, van messaging-fundament tot event streaming op stelselschaal.">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/index.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>{CSS}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="topbar">
+      <div class="brand">Eductus<span class="dot">.</span><small>Leerplatform</small></div>
+      <nav class="sitenav" aria-label="Eductus-onderdelen">
+        <a href="https://cursus.eductus.nl/enterprise-integration-patterns/index.html">↔ Oude vormgeving (cursus.eductus.nl)</a>
+        <a href="https://leren.eductus.nl">Alle cursussen</a>
+      </nav>
+    </div>
+  </div>
+
+  <section class="hero">
+    <p class="eyebrow">Enterprise Integration Patterns</p>
+    <h1>30 delen,<br><em>nieuwe vormgeving</em>.</h1>
+    <p class="hero__lead">Asynchrone en event-driven integratie langs de 65 patronen van Hohpe &amp; Woolf, nu in de warme, redactionele opmaak van de SAP-leerreeks: secties met leesvoortgang en controlevragen letterlijk uit het werkboek. Doorlopende casus bij pensioenuitvoerder Meridiaan Pensioen, met integratiearchitect Caspar Rijnders. Dit is nu de vaste vorm op leren.eductus.nl; de oude documentstijl blijft bereikbaar op cursus.eductus.nl.</p>
+  </section>
+
+  {note}
+
+  {intro}
+
+  {rows_html}
+
+  <footer>Eductus · Enterprise Integration Patterns · 3 niveaus · 30 delen</footer>
+</div>
+
+<script>
+(function(){{
+  var TITLES={titles_js};
+  var SECTIONS={sections_js};
+  function pad(n){{return String(n).padStart(2,"0")}}
+  function escapeHtml(s){{return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}}
+
+  function deelCard(n){{
+    var total=SECTIONS[n],pct=0;
+    try{{
+      var state=JSON.parse(localStorage.getItem("eductus_eip"+n+"_progress_v1")||"{{}}");
+      var done=Object.keys(state).filter(function(k){{return state[k]}}).length;
+      pct=total?Math.round(done/total*100):0;
+    }}catch(e){{}}
+    var a=document.createElement("a");
+    a.href="deel-"+pad(n)+".html";
+    a.className="card"+(pct>0?" showcase":"");
+    a.innerHTML=
+      '<div class="card__top"><div class="card__num">'+n+'</div>'+
+      '<div class="card__ring" style="--v:'+pct+'"><b>'+pct+'%</b></div></div>'+
+      '<h4>'+escapeHtml(TITLES[n])+'</h4>'+
+      '<p>'+total+' secties, leesvoortgang, en de controlevragen van dit deel.</p>'+
+      '<div class="card__meta"><span class="tag new">Nieuwe vormgeving</span><span class="tag">'+total+' secties</span></div>'+
+      '<div class="card__go">Bekijken →</div>';
+    return a;
+  }}
+
+  var gridN1=document.getElementById("gridN1");
+  for(var i=1;i<=10;i++) gridN1.appendChild(deelCard(i));
+  var gridN2=document.getElementById("gridN2");
+  for(i=11;i<=22;i++) gridN2.appendChild(deelCard(i));
+  var gridN3=document.getElementById("gridN3");
+  for(i=23;i<=30;i++) gridN3.appendChild(deelCard(i));
+}})();
+</script>
+</body>
+</html>"""
+    (OUT / "index.html").write_text(html, encoding="utf-8")
+    print("index.html written. SECTIONS map:", sections)
+
+
+if __name__ == "__main__":
+    main()

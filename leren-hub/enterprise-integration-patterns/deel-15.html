@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 15 — Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 15 (Niveau 2 — Het landschap): Acht systemen, een broker, een event backbone, drie soorten endpoints — het landschap uit deel 11 tot en met 14 stond, en werkte. Tot een salariscorrectie van een grote werkgever spoorloos leek: de werkgever had een bevestiging gekregen (deel 3), de …">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-15.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 15</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 2 (Het landschap) · Deel 15 van 30</p>
+  <h1>Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy</h1>
+  <p class="hero__lead">Acht systemen, een broker, een event backbone, drie soorten endpoints — het landschap uit deel 11 tot en met 14 stond, en werkte. Tot een salariscorrectie van een grote werkgever spoorloos leek: de werkgever had een bevestiging gekregen (deel 3), de deelnemer had na drie weken nog niets op zijn rekening gezien, en niemand bij Meridiaan kon vertellen wáár in de keten — KERN, de recipient list, de content enricher naar het personeelssysteem, of ergens anders — het bericht was blijven steken.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>15</b><span>controlevragen</span></div>
+    <div class="stat"><b>2</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 2: ① Integratiearchitectuurstijlen: punt-tot-punt vs. broker vs. event backbone → ② Routing-patroonfamilie diepgaand: dynamic router, recipient list, splitter/aggregator → ③ Transformatie diepgaand: content enricher, content filter, claim check → ④ Endpoint-patronen: messaging gateway, messaging mapper, service activator → <b>⑤ Systeembeheerpatronen: control bus, wire tap, detour, message history, smart proxy (hier)</b> → ⑥ Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen → ⑦ Orkestratie versus choreografie → ⑧ Distributed transactions in async context: saga&#39;s en compenserende transacties → ⑨ Outbox-pattern en transactional messaging → ⑩ Contractbeheer voor asynchrone koppelingen → ⑪ Observability in ketens: distributed tracing, correlation, message history in productie → ⑫ Capstone: verdediging vanuit rollen — integratieontwerp voor het Mutatieplatform</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">15.0 Het incident dat drie dagen kostte om te lokaliseren</a></li>
+      <li><a href="#s2" data-target="s2">15.1 De control bus</a></li>
+      <li><a href="#s3" data-target="s3">15.2 De wire tap</a></li>
+      <li><a href="#s4" data-target="s4">15.3 De detour</a></li>
+      <li><a href="#s5" data-target="s5">15.4 De message history</a></li>
+      <li><a href="#s6" data-target="s6">15.5 De smart proxy</a></li>
+      <li><a href="#s7" data-target="s7">15.6 Vijf patronen, één samenhangend antwoord op het incident van 15.0</a></li>
+      <li><a href="#s8" data-target="s8">Samenvatting van deel 15</a></li>
+      <li><a href="#s9" data-target="s9">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">15.0 Het incident dat drie dagen kostte om te lokaliseren</h2><span class="chip time">Sectie 1 van 9</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Acht systemen, een broker, een event backbone, drie soorten endpoints — het landschap uit deel 11 tot en met 14 stond, en werkte. Tot een salariscorrectie van een grote werkgever spoorloos leek: de werkgever had een bevestiging gekregen (deel 3), de deelnemer had na drie weken nog niets op zijn rekening gezien, en niemand bij Meridiaan kon vertellen wáár in de keten — KERN, de recipient list, de content enricher naar het personeelssysteem, of ergens anders — het bericht was blijven steken.</p>
+<p>Het kostte Caspars team <strong>drie dagen</strong> om het antwoord te vinden: het bericht had de content enricher (deel 13) bereikt, was daar door een tijdelijke fout in de fallback-logica in een lus terechtgekomen die het steeds opnieuw probeerde zonder ooit het dead letter channel te bereiken, en had zo, onzichtbaar, drie weken lang "gewerkt" zonder ooit te voltooien. Elke individuele component werkte naar behoren volgens zijn eigen logica. Niemand had een overzicht dat over de hele keten heen liep.</p>
+<p>Dit is een ander probleem dan niveau 1 behandelde. Deel 9 loste op wat er gebeurt als een bericht <em>definitief</em> mislukt. Dit incident liet zien dat er ook een categorie tussenin bestaat: berichten die niet mislukken, niet slagen, en gewoon <strong>onzichtbaar</strong> ergens ronddraaien — en dat drie dagen zoeken door acht systemen, zonder gecentraliseerd overzicht, geen houdbare manier is om dat te vinden.</p>
+<figure><img alt='Een keten van acht systemen met een bericht dat ergens tussen twee stappen "verdwaald" is, en drie dagen aan losse logbestanden, terminals en telefoontjes tussen teams die nodig waren om het te vinden.' loading="lazy" src="figuren/figuur-15-1-verdwaald-bericht.svg"/><figcaption>Figuur 15-1 — Een keten van acht systemen met een bericht dat ergens tussen twee stappen "verdwaald" is, en drie dagen aan losse logbestanden, terminals en telefoontjes tussen teams die nodig waren om het te vinden.</figcaption></figure>
+<p>Dit deel — het eerste tweedagdelen-deel van de cursus, zoals de familieopzet voorschrijft voor onderwerpen die dat zwaartepunt vragen — behandelt vijf patronen die samen dit soort situaties voorkomen: de <strong>control bus</strong>, de <strong>wire tap</strong>, de <strong>detour</strong>, de <strong>message history</strong>, en de <strong>smart proxy</strong>.</p>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">15.1 De control bus</h2><span class="chip time">Sectie 2 van 9</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>control bus</strong> is een apart, van het reguliere berichtenverkeer gescheiden kanaal dat uitsluitend bestuurlijke en operationele signalen draagt: statusopvragingen aan componenten, commando's om een component tijdelijk te pauzeren, configuratiewijzigingen, en gezondheidscontroles. Het onderscheidende principe is dat dit verkeer <em>nooit</em> over dezelfde kanalen loopt als de mutatieberichten zelf.</p>
+<p>Waarom dit ertoe doet, wordt duidelijk bij het incident van 15.0: als Caspars team op het moment van het incident een manier had gehad om aan elke component in de keten te vragen "wat verwerk je op dit moment, en hoe lang al", zonder daarvoor het reguliere mutatieverkeer te moeten doorzoeken, was het incident in uren gevonden in plaats van dagen. Een control bus maakt dat mogelijk door bestuurlijke vragen als eersteklas berichten te behandelen, met hun eigen kanaal, los van de operationele last van het productieverkeer.</p>
+<p>Een tweede reden voor scheiding is betrouwbaarheid onder druk: als het reguliere mutatiekanaal overbelast is (precies het scenario waarin je het meest behoefte hebt aan bestuurlijk overzicht), zou een controlesignaal dat over hetzelfde kanaal moet, evenzeer vertraagd worden — op het moment dat je het hardst nodig hebt, is het dan het minst beschikbaar. Door de control bus fysiek of logisch te scheiden, blijft bestuurlijke communicatie ook werkzaam wanneer het reguliere verkeer vastloopt.</p>
+<blockquote><p><strong>Kernzin 15 van de cursus: bestuurlijk verkeer over hetzelfde kanaal als operationeel verkeer laten lopen, betekent dat je stuurinstrument precies dan uitvalt wanneer je het het hardst nodig hebt.</strong></p></blockquote>
+<p>Bij Meridiaan is, ná het incident, een control bus ingericht waarmee elk endpoint (deel 14) periodiek een minimale statusmelding aflevert ("laatst actief bericht-ID, tijdstip, aantal in verwerking"), en waarmee het integratieteam op aanvraag een directe statusopvraging aan elk component kan sturen — zonder ooit het reguliere mutatiekanaal te hoeven raadplegen.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.1 — Waarom drie dagen</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.1 — Waarom drie dagen</p>
+        <div class="card">
+          <div class="prose">
+<p>Herlees 15.0. Leg uit waarom geen van de negen niveau 1-patronen (idempotentie, volgordeborging, dead letter channel, etc.) dit specifieke incident had voorkomen of snel had blootgelegd.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Elk van de negen niveau 1-patronen lost een probleem op ván een individueel bericht of een individuele koppeling — idempotentie voorkomt dubbele verwerking, volgordeborging voorkomt verkeerde volgorde, het dead letter channel vangt berichten op die <em>definitief</em> mislukken. Het incident van 15.0 was echter geen van deze categorieën: het bericht mislukte niet definitief (het bleef eindeloos retryen zonder ooit de dead-letter-drempel te bereiken door een fout in de fallback-logica zelf), en het was, op elk individueel moment bekeken, precies één bericht dat door precies één component werd verwerkt — geen duplicatie, geen volgordeprobleem.</p>
+<p>Het probleem zat op een ander niveau: er was geen enkel mechanisme dat over de <em>hele keten heen</em> kon laten zien waar een specifiek bericht zich bevond op een gegeven moment. Elk individueel patroon werkte naar behoren volgens zijn eigen logica; het ontbrekende stuk was landschapsbreed overzicht, niet een verbetering van een individueel patroon.</p>
+<p><strong>Wat je hier moet meenemen:</strong> niveau 1 lost problemen op binnen een koppeling; dit deel lost een probleem op dat alleen zichtbaar wordt op landschapsniveau — een ander soort probleem, geen "vervolg" op wat niveau 1 miste.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">15.2 De wire tap</h2><span class="chip time">Sectie 3 van 9</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>wire tap</strong> is een niet-invasief afluisterpunt op een bestaand kanaal: een kopie van elk bericht dat langskomt, wordt afgetakt naar een apart observatiekanaal, zonder de oorspronkelijke berichtstroom op enige manier te beïnvloeden — geen vertraging, geen wijziging, geen risico dat de tap zelf een storing in de hoofdstroom veroorzaakt.</p>
+<p>Het onderscheid met een gewone publish-subscribe-abonnee (deel 6) is er een van bedoeling en garantie: een reguliere abonnee is een functionele deelnemer aan de keten (het Nabestaandenloket doet iets met een mutatie-event), terwijl een wire tap uitdrukkelijk <strong>geen</strong> functionele rol heeft — hij observeert alleen, en zijn eventuele falen (de observatiekant is overbelast, of tijdelijk onbereikbaar) mag onder geen beding de hoofdstroom raken. Dit vraagt een expliciete ontwerpeis: de tap-mechaniek moet "fire and forget" zijn richting het observatiekanaal, zonder enige vorm van bevestiging die de hoofdverwerking zou kunnen blokkeren.</p>
+<p>Bij Meridiaan is, na het incident, een wire tap geplaatst op elk kanaal in de mutatieketen, die elk doorgaand bericht (met alleen de header-velden, niet de volledige payload — een bewuste toepassing van de content filter uit deel 13, om gevoelige gegevens niet onnodig te dupliceren naar een observatiekanaal) naar een centraal traceersysteem stuurt. Dit is precies het instrument dat het incident van drie dagen tot een kwestie van minuten had kunnen maken: één bericht-ID opzoeken, en zien op welk kanaal het voor het laatst is gezien, en wanneer.</p>
+<figure><img alt='Een kanaal met een wire tap: de hoofdstroom loopt ongestoord door, een dunne aftakking stuurt een kopie (alleen headers) naar een centraal traceersysteem, expliciet gemarkeerd als "geen bevestiging vereist, geen invloed op hoofdstroom".' loading="lazy" src="figuren/figuur-15-2-wire-tap.svg"/><figcaption>Figuur 15-2 — Een kanaal met een wire tap: de hoofdstroom loopt ongestoord door, een dunne aftakking stuurt een kopie (alleen headers) naar een centraal traceersysteem, expliciet gemarkeerd als "geen bevestiging vereist, geen invloed op hoofdstroom".</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.2 — Control bus of gewoon een extra kanaal?</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.2 — Control bus of gewoon een extra kanaal?</p>
+        <div class="card">
+          <div class="prose">
+<p>Een ontwikkelaar stelt voor om statusopvragingen gewoon over het bestaande mutatiekanaal te sturen, met een speciaal <code>berichttype: statusvraag</code>-veld dat de router (deel 4) naar een aparte verwerkingslogica leidt.</p>
+<p>a. Wat gaat hiermee mis, gegeven kernzin 15?</p>
+<p>b. Wanneer zou dit voorstel wél acceptabel zijn?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Op het moment dat het reguliere mutatiekanaal overbelast of vertraagd is — precies het scenario waarin bestuurlijk overzicht het hardst nodig is — zou de statusvraag zelf in dezelfde wachtrij vastzitten als het operationele verkeer waarover hij informatie moet geven. Dit ondermijnt het hele doel van een control bus: sturing die werkzaam blijft wanneer het reguliere verkeer faalt.</p>
+<p>b. Als de statusvraag zelf geen tijdkritische, storing-gerelateerde functie heeft — bijvoorbeeld een periodiek, niet-urgent rapportageverzoek dat prima een paar minuten vertraging kan hebben. Het principe geldt het scherpst voor bestuurlijk verkeer dat juist tijdens storingen relevant is (zoals "wat verwerk je op dit moment" tijdens een incident); voor niet-urgente bestuurlijke rapportage is de striktheid minder doorslaggevend, al blijft een aparte control bus ook daar de eenvoudigere, meer voorspelbare keuze.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het criterium voor een control bus is niet "is dit bestuurlijk verkeer" op zichzelf, maar specifiek "moet dit verkeer werkzaam blijven wanneer het reguliere verkeer faalt of overbelast is".</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">15.3 De detour</h2><span class="chip time">Sectie 4 van 9</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>detour</strong> stuurt een bericht, onder een specifieke, tijdelijke voorwaarde, via een omweg langs een extra verwerkingsstap, voordat het zijn normale pad vervolgt — bijvoorbeeld voor extra validatie, tijdelijke monitoring van een verdachte berichtsoort, of een geplande interventie tijdens een storing.</p>
+<p>Het verschil met een content-based router (deel 4) is dat een detour <strong>tijdelijk en uitzonderlijk</strong> is, terwijl een router een <strong>permanent onderdeel</strong> van het normale ontwerp is. Bij Meridiaan is een detour ingezet direct na het incident van 15.0: gedurende de onderzoeksperiode werden alle berichten die de content enricher naar het personeelssysteem passeerden, via een detour omgeleid langs een extra logcomponent die elke retry-poging expliciet vastlegde — een tijdelijke maatregel, uitdrukkelijk niet bedoeld om permanent te blijven bestaan, om de oorzaak van de eindeloze retry-lus te kunnen reconstrueren.</p>
+<p>Een detour die vergeten wordt af te breken, wordt in de praktijk zelf een bron van complexiteit — een permanente omweg die niemand meer als tijdelijk herkent, en die op den duur net zo goed als een vergeten, ongedocumenteerde router functioneert. De discipline hier is expliciet: elke detour krijgt bij Meridiaan een vervaldatum in de configuratie, en een verantwoordelijke die actief moet beslissen: verwijderen, of formaliseren tot een permanent onderdeel van de keten (in welk geval het feitelijk een nieuwe, bewust ontworpen router of filter wordt, niet langer een detour).</p>
+<blockquote><p><strong>Vuistregel: een detour die langer dan een vooraf afgesproken termijn blijft bestaan, is geen detour meer — het is een niet-erkende, permanente wijziging van de keten, en verdient dezelfde zorgvuldigheid als elk ander permanent ontwerp.</strong></p></blockquote>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.3 — Wire tap of publish-subscribe-abonnee?</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.3 — Wire tap of publish-subscribe-abonnee?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elk scenario of het een wire tap of een reguliere publish-subscribe-abonnee (deel 6) betreft.</p>
+<p>a. Een centraal traceersysteem dat een kopie van elke header ontvangt, puur voor diagnostische doeleinden, zonder ooit zelf iets te "doen" met het bericht.</p>
+<p>b. Het Nabestaandenloket, dat op basis van een mutatie-event zijn eigen administratie bijwerkt.</p>
+<p>c. Een nieuw dashboard dat "alleen even wil meekijken" met het mutatieverkeer, maar waarvan het team toegeeft dat het "misschien later ook iets actiefs" gaat doen met de data.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Wire tap.</strong> Geen functionele rol, puur observatie, expliciet "fire and forget" — precies de definitie uit 15.2.</p>
+<p>b. <strong>Reguliere publish-subscribe-abonnee.</strong> Het Nabestaandenloket heeft een functionele rol; zijn falen heeft functionele consequenties (deel 6's drie vragen zijn hier relevant: wat als hij offline is, etc.).</p>
+<p>c. <strong>Grensgeval — begin als wire tap, maar wees alert.</strong> Zolang het dashboard puur observeert, is een wire tap-mechaniek (fire and forget, geen invloed op hoofdstroom) passend en de eenvoudigste, veiligste keuze. Zodra het team daadwerkelijk actieve, functionele logica toevoegt ("misschien later"), moet de koppeling worden heroverwogen als reguliere publish-subscribe-abonnee, met de bijbehorende garantie-eisen uit deel 6 (wat gebeurt er als dit dashboard offline is, is dataverlies dan acceptabel). Het risico van dit scenario is dat de wire tap-mechaniek (bewust geen garanties) blijft bestaan terwijl de functie van de abonnee stilletjes verandert naar iets dat wél garanties nodig heeft.</p>
+<p><strong>Wat je hier moet meenemen:</strong> situatie c is een waarschuwing die in de praktijk vaak voorkomt — een wire tap die organisch "functioneel" wordt zonder dat de onderliggende garanties worden heroverwogen, is een sluipend risico.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">15.4 De message history</h2><span class="chip time">Sectie 5 van 9</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>message history</strong> is een header-veld dat, terwijl een bericht door de keten reist, een cumulatief spoor bijhoudt van elke component die het heeft aangeraakt — niet de volledige inhoud van elke stap, maar een compacte lijst van "wie, wanneer" die groeit naarmate het bericht verder door de keten beweegt.</p>
+<p>Het onderscheid met een wire tap is er een van perspectief: een wire tap observeert van buitenaf, op een specifiek kanaal, en vergt een centraal systeem om de losse waarnemingen samen te voegen tot een verhaal. Een message history reist <em>mee met het bericht zelf</em> en vertelt zijn eigen verhaal, zonder dat een apart traceersysteem de puzzelstukken hoeft samen te voegen — op elk moment dat je het bericht in handen hebt (bijvoorbeeld in het dead letter channel, deel 9), kun je direct zien welke weg het al heeft afgelegd, zonder een aparte raadpleging.</p>
+<p>Bij Meridiaan zijn beide patronen complementair ingezet: de wire tap geeft het centrale team een landschapsbreed overzicht (waar zijn berichten in het algemeen, welke kanalen zijn druk), terwijl de message history elk individueel bericht zelfvoorzienend maakt in het beantwoorden van de vraag "wat is er met mij gebeurd" — cruciaal juist in het dead letter channel, waar een mens het bericht handmatig gaat onderzoeken en niet wil moeten wachten op een aparte raadpleging van een extern traceersysteem om te weten waar te beginnen.</p>
+<p>Een praktische grens: een message history mag niet onbeperkt groeien. Bij een lange keten met veel stops (zoals bij een detour die extra stappen toevoegt, 15.3) kan het header-veld zelf een aanzienlijke omvang bereiken. Bij Meridiaan is een maximum van twintig vermelde stops afgesproken, met een expliciete markering ("geschiedenis afgekapt") zodra die grens wordt bereikt — een bewuste keuze om de bruikbaarheid van de laatste, meest recente stappen te bewaren boven volledigheid van de vroegste stappen, die doorgaans minder relevant zijn voor het diagnosticeren van een actueel probleem.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.4 — Detour met of zonder vervaldatum</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.4 — Detour met of zonder vervaldatum</p>
+        <div class="card">
+          <div class="prose">
+<p>Twee detours worden bij Meridiaan ingezet: (1) een tijdelijke extra logstap tijdens het onderzoek naar het incident van 15.0, en (2) een "tijdelijke" omweg die drie jaar geleden is ingesteld tijdens een andere storing en sindsdien nooit is verwijderd omdat "hij toch geen kwaad doet".</p>
+<p>a. Wat is het verschil tussen deze twee, gebruikmakend van de vuistregel in 15.3?</p>
+<p>b. Wat zou je concreet doen met detour (2)?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Detour (1) is een correct toegepast patroon: tijdelijk, met een expliciet doel (diagnose van een specifieke fout), en — naar mag worden aangenomen — een vervaldatum of in ieder geval een duidelijk eindpunt (zodra het onderzoek is afgerond). Detour (2) is, volgens de vuistregel, geen detour meer — drie jaar zonder afbreking is een niet-erkende, permanente wijziging van de keten die nooit als zodanig is beoordeeld, gedocumenteerd of getest zoals een bewust ontworpen permanent onderdeel dat zou zijn.</p>
+<p>b. Beoordeel expliciet: dient deze omweg nog een functioneel doel? Zo ja: formaliseer hem tot een bewust ontworpen, gedocumenteerd onderdeel van de keten (een router, filter, of ander permanent patroon, met de bijbehorende zorgvuldigheid uit de relevante delen). Zo nee: verwijder hem, na te hebben vastgesteld dat niets er meer van afhangt — wat zelf weer onderzoek vergt, precies de kostenpost die het niet tijdig afbreken van een detour veroorzaakt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "hij doet toch geen kwaad" is precies het soort redenering dat een tijdelijke maatregel permanent en onzichtbaar maakt — de vraag is niet of hij kwaad doet, maar of hij ooit bewust is beoordeeld als permanent onderdeel.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">15.5 De smart proxy</h2><span class="chip time">Sectie 6 van 9</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>smart proxy</strong> combineert kenmerken van de wire tap en de service activator (deel 14): hij plaatst zich tussen zender en ontvanger, registreert het bericht (zoals een wire tap) maar houdt daarnaast, in tegenstelling tot een pure wire tap, actief de relatie bij tussen het oorspronkelijke bericht en het uiteindelijke antwoord — waardoor hij, anders dan een wire tap, wél in de hoofdstroom zit en dus zorgvuldiger moet worden ontworpen om geen vertraging of storing te introduceren.</p>
+<p>Het motiverende scenario bij Meridiaan is de externe pensioenadministrateur-koppeling: berichten die naar de administrateur gaan, passeren een smart proxy die (a) een kopie van het uitgaande bericht registreert met tijdstempel, (b) wanneer het antwoord terugkomt, dat antwoord aan de oorspronkelijke aanvraag koppelt via de correlatie-ID (deel 2-3), en (c) automatisch signaleert wanneer een uitgaand bericht na een ingestelde termijn nog geen antwoord heeft gekregen — zonder dat de aanvrager zelf hoeft te pollen of te wachten (in lijn met het non-blocking-principe uit deel 3).</p>
+<p>Het verschil met een gewone request-reply-implementatie (deel 3) is dat de smart proxy dit <strong>generiek, voor elke koppeling met de externe administrateur</strong>, op één centrale plek doet, in plaats van dat elke individuele aanvrager zijn eigen tijdslimiet- en signaleringslogica moet bouwen — een herbruikbare, gedeelde voorziening die het "is dit onderweg blijven hangen?"-vraagstuk (precies het incident van 15.0) generiek oplost voor alle koppelingen met die specifieke, historisch onbetrouwbare externe partij, zonder elke aanvrager afzonderlijk te belasten met die verantwoordelijkheid.</p>
+<blockquote><p><strong>Kernzin 16 van de cursus: een smart proxy is waardevol precies daar waar meerdere aanvragers hetzelfde bewakings- en koppelingsprobleem zouden moeten oplossen — centraliseer het probleem op de plek waar het structureel voorkomt, niet bij elke individuele aanvrager apart.</strong></p></blockquote>
+<figure><img alt="De smart proxy tussen Meridiaan en de externe administrateur: uitgaand bericht geregistreerd met tijdstempel, inkomend antwoord gekoppeld via correlatie-ID, en een automatische signalering naar de control bus (15.1) als de termijn wordt overschreden." loading="lazy" src="figuren/figuur-15-3-smart-proxy.svg"/><figcaption>Figuur 15-3 — De smart proxy tussen Meridiaan en de externe administrateur: uitgaand bericht geregistreerd met tijdstempel, inkomend antwoord gekoppeld via correlatie-ID, en een automatische signalering naar de control bus (15.1) als de termijn wordt overschreden.</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.5 — Message history versus wire tap</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.5 — Message history versus wire tap</p>
+        <div class="card">
+          <div class="prose">
+<p>Een architect vraagt: "als we toch al een wire tap hebben die alles naar een centraal traceersysteem stuurt, waarom zouden we dan ook nog een message history in de berichten zelf bijhouden — is dat niet dubbel werk?"</p>
+<p>Beantwoord deze vraag met het onderscheid uit 15.4.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Het is geen dubbel werk, maar twee complementaire perspectieven die verschillende situaties bedienen. De wire tap vergt een apart, centraal systeem dat geraadpleegd moet worden — nuttig voor landschapsbreed overzicht, maar afhankelijk van de beschikbaarheid en juiste werking van dat centrale systeem zelf. De message history reist mee met het bericht en is direct beschikbaar op het moment dat iemand het bericht fysiek in handen heeft — bijvoorbeeld een medewerker die een bericht in het dead letter channel (deel 9) onderzoekt, kan onmiddellijk de geschiedenis zien zonder eerst het centrale traceersysteem te hoeven raadplegen (dat op dat moment zelf ook een storing kan hebben, of simpelweg een extra stap vergt).</p>
+<p>Het meest robuuste ontwerp gebruikt beide: de wire tap voor landschapsbreed, proactief overzicht (waar zijn berichten in het algemeen), en de message history voor het geval een specifiek bericht al gevonden is en direct, zelfvoorzienend, zijn eigen verhaal moet kunnen vertellen.</p>
+<p><strong>Wat je hier moet meenemen:</strong> "hebben we dit al ergens anders" is een terechte vraag bij elk nieuw patroon, maar het antwoord is niet altijd "dus is het overbodig" — soms dienen twee vergelijkbaar ogende mechanismen bewust verschillende, complementaire doelen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">15.6 Vijf patronen, één samenhangend antwoord op het incident van 15.0</h2><span class="chip time">Sectie 7 van 9</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Terug naar het incident waarmee dit deel opende. Met alle vijf patronen op hun plaats, zou hetzelfde incident zich anders hebben ontvouwen:</p>
+<p>De <strong>wire tap</strong> op elk kanaal had onmiddellijk getoond op welk kanaal het bericht voor het laatst was gezien. De <strong>message history</strong> op het bericht zelf had, zodra het gevonden was, in één oogopslag getoond welke stappen het al had doorlopen. De <strong>control bus</strong> had het mogelijk gemaakt direct aan de content enricher te vragen "wat verwerk je op dit moment", zonder de logs van acht systemen te moeten doorzoeken. De <strong>smart proxy</strong>, was deze specifieke koppeling er een naar een externe partij geweest, had automatisch gesignaleerd dat er geen tijdig antwoord was gekomen. En de <strong>detour</strong>, ingezet tijdens het onderzoek, had de precieze oorzaak van de retry-lus vastgelegd voor toekomstige diagnose, zonder de permanente keten te hoeven aanpassen.</p>
+<p>Geen van deze vijf patronen lost het incident zelf op — dat bleef een bug in de fallback-logica van deel 13, die alsnog gecorrigeerd moest worden. Wat ze wel oplossen, is de tijd tussen "er is iets mis" en "we weten precies wat en waar" — van drie dagen naar, naar schatting bij Meridiaan achteraf berekend, minder dan een uur.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.6 — De grens aan message history</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.6 — De grens aan message history</p>
+        <div class="card">
+          <div class="prose">
+<p>Bij Meridiaan is een maximum van twintig vermelde stops afgesproken voor de message history.</p>
+<p>a. Waarom is een onbeperkte message history problematisch?</p>
+<p>b. Waarom is de keuze om de vroegste stops af te kappen (in plaats van de meest recente) verdedigbaar?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Een onbeperkt groeiend header-veld vergroot de omvang van elk bericht naarmate het langer door de keten (of via detours, retries, of complexe splitser/aggregator-ketens) reist — dit kan de doorvoersnelheid raken en, in extremere gevallen, tegen praktische berichtgroottelimieten van de onderliggende infrastructuur aanlopen.</p>
+<p>b. Bij het diagnosticeren van een actueel probleem (waarom loopt dit bericht nu vast) zijn de meest recente stappen doorgaans het meest relevant — waar is het bericht de afgelopen uren of minuten geweest, niet noodzakelijk waar het drie weken geleden ooit begon. Het afkappen van de vroegste geschiedenis behoudt de bruikbaarheid voor de meest voorkomende diagnostische vraag, ten koste van volledige historische reconstructie, wat een bewuste, redelijke afweging is.</p>
+<p><strong>Wat je hier moet meenemen:</strong> een praktische grens instellen is geen falen van het patroon maar een bewuste ontwerpkeuze — net als bij de bewaartermijn van de claim check in deel 13, moet elke "hoeveel bewaren we" vraag expliciet en beargumenteerd beantwoord worden, niet impliciet op "zoveel als mogelijk" blijven staan.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 15</h2><span class="chip time">Sectie 8 van 9</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Een control bus scheidt bestuurlijk verkeer strikt van operationeel verkeer, zodat sturing werkzaam blijft ook wanneer het reguliere verkeer overbelast is.</li>
+<li>Een wire tap tapt niet-invasief een kopie van elk bericht af naar een centraal observatiekanaal, zonder de hoofdstroom te beïnvloeden — anders dan een reguliere publish-subscribe-abonnee, die wél een functionele rol heeft.</li>
+<li>Een detour is een tijdelijke, uitzonderlijke omweg met een expliciete vervaldatum — een detour die vergeten wordt af te breken, wordt een niet-erkende permanente wijziging.</li>
+<li>Een message history reist mee met het bericht en maakt het zelfvoorzienend in het vertellen van zijn eigen verwerkingsgeschiedenis, met een praktische grens aan hoeveel stops worden bewaard.</li>
+<li>Een smart proxy centraliseert bewaking en correlatie voor koppelingen waar meerdere aanvragers hetzelfde probleem zouden moeten oplossen, met name bij historisch onbetrouwbare externe partijen.</li>
+<li>Samen verkorten deze vijf patronen niet het onderliggende probleem, maar wel de tijd tussen signaal en diagnose — precies de zichtbaarheidsles die deel 9 al op berichtniveau introduceerde, nu toegepast op landschapsniveau.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.7 — Smart proxy ontwerpen</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.7 — Smart proxy ontwerpen</p>
+        <div class="card">
+          <div class="prose">
+<p>Ontwerp een smart proxy voor de koppeling met de tweede externe pensioenadministrateur (uit de deelfusie, deel 5), die net als de eerste historisch onbetrouwbaar is gebleken.</p>
+<p>a. Welke drie taken moet de smart proxy op zich nemen, volgens 15.5?</p>
+<p>b. Waarom is dit beter dan elke individuele aanvrager zijn eigen bewakingslogica te laten bouwen?</p>
+<p>c. Naar welk patroon uit dit deel zou de smart proxy een signalering moeten sturen als de termijn wordt overschreden, en waarom naar dát patroon?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Registratie van het uitgaande bericht met tijdstempel; koppeling van het inkomende antwoord aan de oorspronkelijke aanvraag via de correlatie-ID; automatische signalering bij het overschrijden van een ingestelde termijn zonder antwoord.</p>
+<p>b. Zonder een centrale smart proxy zou elke individuele aanvrager (elk systeem of elke component die met deze specifieke externe administrateur communiceert) zijn eigen tijdslimiet- en signaleringslogica moeten bouwen — met het risico dat, net als bij het idempotentie-incident uit deel 11, verschillende aanvragers dit onbedoeld verschillend implementeren. Eén centrale voorziening, gebouwd op de plek waar het probleem structureel voorkomt (de koppeling met deze specifieke, onbetrouwbare partij), lost het voor alle aanvragers tegelijk en consistent op.</p>
+<p>c. Naar de <strong>control bus</strong> (15.1) — een signalering dat een uitgaand bericht te lang op antwoord wacht, is precies het soort bestuurlijk/operationeel signaal dat niet via het (mogelijk zelf overbelaste of vertraagde) reguliere kanaal moet lopen, maar via het aparte, altijd beschikbare bestuurlijke kanaal.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de vijf patronen van dit deel zijn niet geïsoleerd — een smart proxy die geen signaleringspad naar de control bus heeft, mist zijn belangrijkste praktische waarde: het moment dat iemand daadwerkelijk wordt gewaarschuwd.</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 15.8 — Terug naar het incident van 15.0</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.8 — Terug naar het incident van 15.0</p>
+        <div class="card">
+          <div class="prose">
+<p>Beschrijf, in eigen woorden en zonder terug te bladeren naar 15.6 in de reader, hoe elk van de vijf patronen het incident van drie dagen tot minuten had kunnen verkorten. Wees specifiek: welk patroon toont wélke informatie op wélk moment in het onderzoek?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen uniek modelantwoord, maar een sterk antwoord noemt minimaal:</p>
+<ul>
+<li><strong>Wire tap:</strong> direct te zien op welk kanaal het bericht-ID voor het laatst is waargenomen, zonder acht systemen los te hoeven doorzoeken.</li>
+<li><strong>Message history:</strong> zodra het bericht gevonden is (bijvoorbeeld vastgelopen bij de content enricher), direct zichtbaar welke stappen het al had doorlopen, zonder aparte raadpleging.</li>
+<li><strong>Control bus:</strong> een directe statusvraag aan de content enricher specifiek ("wat verwerk je nu, hoe lang al") zonder logbestanden te moeten doorspitten.</li>
+<li><strong>Smart proxy</strong> (indien van toepassing op deze specifieke koppeling): automatische signalering zodra de verwachte antwoordtermijn werd overschreden, mogelijk al na enkele uren in plaats van pas na drie weken toen de deelnemer zelf klaagde.</li>
+<li><strong>Detour:</strong> niet primair voor het vínden van het incident, maar voor het diagnosticeren van de precieze oorzaak (de fout in de fallback-logica) zodra het probleemgebied bekend is.</li>
+</ul>
+<p><strong>Wat je hier moet meenemen:</strong> de vijf patronen werken op verschillende momenten in een incidentonderzoek (lokaliseren, diagnosticeren, signaleren) — geen enkel patroon doet alles, en het is de combinatie die het verschil maakt tussen dagen en minuten.</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 15</div>
+        <p class="quiz__src">Uit Werkboek deel 15, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin over de control bus, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bestuurlijk verkeer over hetzelfde kanaal als operationeel verkeer laten lopen, betekent dat je stuurinstrument precies dan uitvalt wanneer je het het hardst nodig hebt.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het verschil tussen een wire tap en een reguliere publish-subscribe-abonnee?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een wire tap heeft geen functionele rol en observeert alleen, fire-and-forget, zonder invloed op de hoofdstroom; een reguliere abonnee heeft een functionele rol met bijbehorende garantie-eisen (deel 6).</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Wanneer is een detour geen detour meer, en wat moet er dan mee gebeuren?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Wanneer hij langer blijft bestaan dan een vooraf afgesproken termijn zonder expliciete beoordeling — dan moet hij ofwel verwijderd worden, ofwel geformaliseerd tot een bewust ontworpen, permanent onderdeel van de keten.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat is het verschil tussen een message history en een wire tap, qua perspectief?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een wire tap observeert van buitenaf via een centraal systeem dat losse waarnemingen moet samenvoegen; een message history reist mee met het bericht zelf en is direct, zelfvoorzienend beschikbaar zonder aparte raadpleging.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Waarom heeft een message history een praktische grens nodig, en welke keuze maakte Meridiaan daarover?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een onbeperkt groeiend header-veld vergroot de berichtomvang naarmate het bericht langer door de keten reist. Meridiaan koos voor een maximum van twintig stops, met afkapping van de vroegste (minst relevante voor actuele diagnose) in plaats van de meest recente stappen.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Wat is de kernzin over de smart proxy, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een smart proxy is waardevol precies daar waar meerdere aanvragers hetzelfde bewakings- en koppelingsprobleem zouden moeten oplossen — centraliseer het probleem op de plek waar het structureel voorkomt, niet bij elke individuele aanvrager apart.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Welk probleem lossen deze vijf patronen samen op, en welk probleem lossen ze uitdrukkelijk niet op?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Samen verkorten ze de tijd tussen "er is iets mis" en "we weten precies wat en waar" — landschapsbreed zichtbaarheid en snelle diagnose. Ze lossen uitdrukkelijk niet de onderliggende oorzaak van een incident op (in de casus: de bug in de fallback-logica van deel 13) — dat blijft een aparte correctie.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 9 van 9</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 16 verlaat de systeembeheerpatronen en behandelt de messaging-infrastructuur zelf: broker-architecturen en exchange/queue-modellen, toolneutraal beschreven — de technische onderbouw waarop alle voorgaande patronen, van kanaal tot smart proxy, uiteindelijk draaien.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 16</h3>
+      <p>Deel 16 — Messaging-infrastructuur: broker-architecturen en exchange/queue-modellen — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-16.html">Deel 16 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 15 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-2/deel-15/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];
+  var KEY="eductus_eip15_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

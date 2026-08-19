@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 5 — Basistransformatie: translator, envelope wrapper, normalizer | Eductus</title>
+<meta name="description" content="Cursus Enterprise Integration Patterns, Deel 5 (Niveau 1 — Fundament): Met router en filter op hun plaats leek het mutatielandschap bij Meridiaan eindelijk stabiel. Tot de externe pensioenadministrateur — de partij die de validatie van salariscorrecties uitvoert — een eigen koppelvlak bleek te hanteren dat niets leek op…">
+<link rel="canonical" href="https://leren.eductus.nl/enterprise-integration-patterns/deel-05.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,64px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.oldlinks{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.oldlinks a{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);background:var(--paper-2);padding:6px 12px;border-radius:999px;transition:.2s}
+.oldlinks a:hover{border-color:var(--teal);color:var(--teal);text-decoration:none}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.2vw,34px);margin:0;line-height:1.1;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"IBM Plex Mono",monospace;font-size:.86em}
+.prose pre{background:var(--teal-deep);color:#eaf2ef;border-radius:14px;padding:16px 18px;overflow-x:auto;box-shadow:var(--shadow);margin:16px 0}
+.prose pre code{background:none;border:none;padding:0;color:inherit;font-size:14.5px;line-height:1.6}
+.prose blockquote{margin:18px 0;padding:14px 20px;border-left:3px solid var(--ochre);background:var(--ochre-tint);border-radius:0 12px 12px 0;color:var(--ink-soft)}
+.prose blockquote p{margin:6px 0}
+.prose blockquote strong{color:#9a6418}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+.quiz .card{border-bottom:1px solid var(--line);padding:14px 0}
+.quiz .card:last-child{border-bottom:none}
+.quiz .card h4{font-family:"Fraunces",serif;font-weight:600;font-size:18px;margin:0 0 8px;color:var(--teal-deep)}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer a{margin:0 2px}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Enterprise Integration Patterns · Deel 5</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Enterprise Integration Patterns · Niveau 1 (Fundament) · Deel 5 van 30</p>
+  <h1>Basistransformatie: translator, envelope wrapper, normalizer</h1>
+  <p class="hero__lead">Met router en filter op hun plaats leek het mutatielandschap bij Meridiaan eindelijk stabiel. Tot de externe pensioenadministrateur — de partij die de validatie van salariscorrecties uitvoert — een eigen koppelvlak bleek te hanteren dat niets leek op het interne formaat van KERN. Waar KERN een deelnemer aanduidt met een intern deelnemersnummer (&quot;deelnemerId&quot;: &quot;00482&quot;), verwacht de administrateur een samengesteld sleutelveld van polisnummer plus geboortedatum (&quot;polis&quot;: &quot;NL-88213&quot;, &quot;geboortedatum&quot;: &quot;1978-04-12&quot;). Waar KERN bedragen als geheel getal in centen doorgeeft, verwacht de administrateur een decimaal bedrag met twee cijfers achter de komma.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>3</b><span>figuren</span></div>
+    <div class="stat"><b>12</b><span>controlevragen</span></div>
+    <div class="stat"><b>1</b><span>kernzinnen</span></div>
+  </div>
+  <div class="trail">Niveau 1: ① Van synchroon naar asynchroon: waarom messaging → ② Messagingfundamenten: kanaal, bericht, endpoint → ③ Message Construction: command, event, document en request-reply → ④ Basisrouting: content-based router en message filter → <b>⑤ Basistransformatie: translator, envelope wrapper, normalizer (hier)</b> → ⑥ Point-to-point vs. publish-subscribe kanalen, verdiept → ⑦ Betrouwbaarheid I: garanties en idempotentie → ⑧ Betrouwbaarheid II: volgorde en guaranteed delivery → ⑨ Foutafhandeling basis: dead letter channel en invalid message channel → ⑩ Examentraining en capstone: de verdediging</div>
+  <div class="oldlinks"><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/slidedeck.html">Slidedeck</a></div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">5.0 Twee systemen, twee talen, één deelnemersnummer</a></li>
+      <li><a href="#s2" data-target="s2">5.1 De translator</a></li>
+      <li><a href="#s3" data-target="s3">5.2 De envelope wrapper</a></li>
+      <li><a href="#s4" data-target="s4">5.3 De normalizer</a></li>
+      <li><a href="#s5" data-target="s5">5.4 Drie patronen, drie verantwoordelijkheden</a></li>
+      <li><a href="#s6" data-target="s6">Samenvatting van deel 5</a></li>
+      <li><a href="#s7" data-target="s7">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">5.0 Twee systemen, twee talen, één deelnemersnummer</h2><span class="chip time">Sectie 1 van 7</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met router en filter op hun plaats leek het mutatielandschap bij Meridiaan eindelijk stabiel. Tot de externe pensioenadministrateur — de partij die de validatie van salariscorrecties uitvoert — een eigen koppelvlak bleek te hanteren dat niets leek op het interne formaat van KERN. Waar KERN een deelnemer aanduidt met een intern deelnemersnummer (<code>"deelnemerId": "00482"</code>), verwacht de administrateur een samengesteld sleutelveld van polisnummer plus geboortedatum (<code>"polis": "NL-88213", "geboortedatum": "1978-04-12"</code>). Waar KERN bedragen als geheel getal in centen doorgeeft, verwacht de administrateur een decimaal bedrag met twee cijfers achter de komma.</p>
+<p>Caspars eerste reflex was voorstelbaar: pas de code in KERN aan zodat die berichten in het formaat van de administrateur aanmaakt. Het probleem daarmee werd zichtbaar zodra een tweede externe partij, de toekomstige koppeling met een tweede pensioenadministrateur voor een deelfusie, hetzelfde traject moest doorlopen — met wéér een ander formaat. KERN zou dan voor elke externe partij zijn eigen uitvoerformaat moeten kennen, wat de kernapplicatie onnodig laat groeien met kennis die niets met pensioenverwerking te maken heeft, alleen met de eigenaardigheden van externe koppelvlakken.</p>
+<p>Dit deel behandelt drie patronen die dit voorkomen: de <strong>translator</strong>, die een bericht van het ene formaat naar het andere omzet; de <strong>envelope wrapper</strong>, die metadata rond een bericht toevoegt of verwijdert zonder de inhoud te raken; en de <strong>normalizer</strong>, die meerdere binnenkomende varianten samenbrengt tot één interne kanonieke vorm.</p>
+<figure><img alt="Twee koppelvlakspecificaties naast elkaar: het interne KERN-formaat en het externe administrateur-formaat, met gemarkeerde verschillen in sleutelveld, bedragrepresentatie en datumnotatie" loading="lazy" src="figuren/figuur-5-1-twee-koppelvlakspecificaties.svg"/><figcaption>Figuur 5-1 — twee koppelvlakspecificaties naast elkaar: het interne KERN-formaat en het externe administrateur-formaat, met gemarkeerde verschillen in sleutelveld, bedragrepresentatie en datumnotatie</figcaption></figure>
+      </div>
+
+
+    </article>
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">5.1 De translator</h2><span class="chip time">Sectie 2 van 7</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een <strong>translator</strong> (ook wel message translator) zet een bericht van het ene formaat om naar het andere, zonder de betekenis te veranderen. Het cruciale ontwerpprincipe is waar deze vertaling wordt geplaatst: niet in KERN, en niet bij de externe administrateur, maar in een aparte, tussenliggende component die aan beide kanten van het kanaal precies één formaat kent.</p>
+<p>Dit lijkt een subtiel verschil met "KERN past zijn uitvoer aan", maar het gevolg is groot. Met een aparte translator blijft KERN uitsluitend het interne formaat spreken — naar elk kanaal, altijd. De translator, en niet KERN, draagt de kennis over wat de externe administrateur specifiek verwacht. Komt er een derde externe partij bij met een derde formaat? Dan komt er een derde translator, en KERN verandert niet.</p>
+<blockquote>
+<p><strong>Kernzin 5 van de cursus: elk systeem hoort precies één taal te spreken — de zijne. Vertalen is het werk van de grens, niet van het systeem zelf.</strong></p>
+</blockquote>
+<p>Een translator moet, om houdbaar te blijven, aan twee eisen voldoen:</p>
+<p><strong>Hij vertaalt structuur en representatie, niet betekenis.</strong> Een deelnemersnummer omzetten naar een polisnummer-plus-geboortedatum-sleutel is vertalen, mits de onderliggende identiteit van de deelnemer hetzelfde blijft. Zodra een translator inhoudelijke beslissingen begint te nemen — bijvoorbeeld: "als het bedrag boven €5.000 is, stuur een ander veld mee" — is hij niet langer een translator maar een stuk verborgen bedrijfslogica die eigenlijk in de applicatie thuishoort, of een filter (deel 4).</p>
+<p><strong>Hij is in twee richtingen consistent, ook als hij maar in één richting wordt gebruikt.</strong> Ook wanneer alleen berichten van KERN náár de administrateur worden vertaald, is het waardevol om vast te leggen hoe de vertaling in omgekeerde richting zou lopen — dat dwingt af dat de vertaling geen informatie stilzwijgend laat vallen. Bij Meridiaan bleek deze discipline waardevol toen de administrateur van foutmeldingen een antwoordbericht terugstuurde: omdat de vertaalregels al in kaart waren gebracht, kon de terugvertaling zonder gissen worden gebouwd.</p>
+<figure><img alt="De translator als tussenkomponent tussen KERN (intern formaat) en de externe administrateur (extern formaat), met een expliciete vertaaltabel: deelnemerId ↔ polis+geboortedatum, centen ↔ decimaal bedrag" loading="lazy" src="figuren/figuur-5-2-translator-vertaaltabel.svg"/><figcaption>Figuur 5-2 — de translator als tussenkomponent tussen KERN (intern formaat) en de externe administrateur (extern formaat), met een expliciete vertaaltabel: deelnemerId ↔ polis+geboortedatum, centen ↔ decimaal bedrag</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 5.1 — Waarom niet in KERN?</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5.1 — Waarom niet in KERN?</p>
+        <div class="card">
+          <div class="prose">
+<p>Caspars eerste reflex was: pas KERN aan zodat het rechtstreeks het externe administrateurformaat aanmaakt. Leg uit, met een concreet toekomstscenario, waarom dit binnen een jaar een probleem wordt.</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Zodra een tweede externe partij met een ander formaat wordt aangesloten (zoals in 5.0 de tweede pensioenadministrateur bij de deelfusie), zou KERN twee verschillende uitvoerformaten moeten kennen — en bij een derde partij drie, enzovoort. KERN groeit dan met kennis die niets met pensioenverwerking te maken heeft, alleen met de eigenaardigheden van externe koppelvlakken. Bovendien: wijzigt één externe partij zijn formaat (zoals de administrateur later met het versienummer deed, zie 5.2), dan moet KERN zelf worden aangepast en opnieuw getest — met risico op regressie in de kernverwerking, voor een wijziging die inhoudelijk niets met die verwerking te maken had.</p>
+<p><strong>Wat je hier moet meenemen:</strong> het probleem is niet zichtbaar bij de eerste externe koppeling. Het wordt pas zichtbaar — en dan meteen duur — bij de tweede.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">5.2 De envelope wrapper</h2><span class="chip time">Sectie 3 van 7</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niet elk verschil tussen formaten zit in de inhoud. Soms verschilt alleen wat er <em>omheen</em> staat: headers, ondertekening, versie-informatie, transportmetadata die een extern koppelvlak vereist maar die voor de eigenlijke boodschap niet relevant is.</p>
+<p>Een <strong>envelope wrapper</strong> voegt zo'n omhulsel toe (of verwijdert het) zonder de kerninhoud aan te raken. Het verschil met een translator is precies dit: een translator verandert de inhoud zelf, een envelope wrapper verandert alleen wat eromheen zit.</p>
+<p>Bij de koppeling met de externe administrateur bleek dit onderscheid praktisch waardevol. De administrateur vereiste dat elk bericht werd verpakt in een SOAP-envelope met een digitale ondertekening en een verplicht versienummer van het koppelvlak — niets daarvan raakte de inhoud van de mutatie zelf. Door dit als aparte envelope wrapper te bouwen, ná de translator, kon de vertaling van de inhoud (5.1) onveranderd blijven werken, zelfs toen de administrateur een half jaar later het versienummer van de envelope wijzigde zonder de inhoudelijke specificatie aan te passen. Was de envelogica vermengd met de vertaallogica geweest, dan had die wijziging een onnodig risico op regressie in de inhoudsvertaling met zich meegebracht.</p>
+<p><strong>Vuistregel: als een wijziging alleen "de buitenkant" raakt, hoort hij in de envelope wrapper; raakt hij de betekenis van een veld, dan hoort hij in de translator.</strong></p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 5.2 — Translator of envelope wrapper?</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5.2 — Translator of envelope wrapper?</p>
+        <div class="card">
+          <div class="prose">
+<p>Bepaal voor elke wijziging of hij in de translator of in de envelope wrapper hoort.</p>
+<ol>
+<li>De administrateur wijzigt het versienummer van het koppelvlak in de SOAP-header.</li>
+<li>De administrateur besluit bedragen voortaan in hele centen te ontvangen in plaats van decimale euro's.</li>
+<li>De administrateur voegt een verplicht digitaal ondertekeningsveld toe aan elk bericht.</li>
+<li>De administrateur hernoemt het veld <code>polis</code> naar <code>polisnummer</code>.</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. <strong>Envelope wrapper.</strong> Raakt alleen metadata rond het bericht, niet de inhoud.</p>
+<p>b. <strong>Translator.</strong> Raakt de representatie van een inhoudelijk veld (bedrag).</p>
+<p>c. <strong>Envelope wrapper.</strong> Een ondertekening zegt iets over het bericht als geheel (transportintegriteit), niet over de betekenis van een specifiek inhoudsveld.</p>
+<p>d. <strong>Translator.</strong> Een veldnaam is onderdeel van de inhoudelijke structuur die vertaald wordt.</p>
+<p><strong>Wat je hier moet meenemen:</strong> de vuistregel uit 5.2 in de reader — raakt het de buitenkant, envelope wrapper; raakt het de betekenis van een veld, translator — is bij a en c eenduidig, maar bij b en d vereist het even nadenken omdat het "maar een klein wijzigingetje" lijkt. De omvang van een wijziging zegt niets over welk patroon hem hoort op te vangen.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">5.3 De normalizer</h2><span class="chip time">Sectie 4 van 7</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Waar translator en envelope wrapper werken met precies twee formaten (intern en één extern), lost een <strong>normalizer</strong> een ander probleem op: meerdere, verschillende binnenkomende varianten samenbrengen tot één interne, kanonieke vorm.</p>
+<p>Dit patroon werd relevant toen bleek dat het Werkgeversportaal niet de enige bron van mutaties was. Een aantal grote werkgevers levert mutaties nog altijd aan via een oudere batchupload in csv-formaat, en een derde bron — een zelfbedieningsportaal voor kleinere werkgevers dat later dat jaar werd gelanceerd — leverde weer een eigen JSON-variant. Drie invoervormen, één interne verwerking in KERN.</p>
+<p>Een normalizer lost dit op door vóór elke bron een eigen, bronspecifieke translator te plaatsen (csv → intern formaat, portaal-JSON → intern formaat, Werkgeversportaal-formaat → intern formaat, wat hier toevallig al gelijk was), die allemaal uitmonden op hetzelfde interne mutatiekanaal. Vanaf dat kanaal ziet KERN nooit meer dan één formaat, ongeacht welke van de drie bronnen het bericht oorspronkelijk aanleverde.</p>
+<p>Het onderscheid met "gewoon drie keer een translator bouwen" is conceptueel: een normalizer is het patroon dat expliciet maakt dat er <em>meerdere bronnen naar één kanonieke vorm</em> convergeren, terwijl een translator (5.1) doorgaans één bron en één bestemming veronderstelt. In de praktijk is een normalizer dan ook vaak letterlijk een verzameling translators die op hetzelfde uitgaande kanaal uitkomen — het is geen ander bouwwerk, maar wel een andere manier om ernaar te kijken, met een eigen implicatie: <strong>bij een normalizer moet je expliciet vastleggen wat de kanonieke vorm ís</strong>, onafhankelijk van welke bron toevallig het eerst werd aangesloten. Doe je dat niet, dan wordt de kanonieke vorm stilzwijgend "wat de eerste bron toevallig aanlevert" — met alle problemen van dien zodra die eerste bron zelf verandert.</p>
+<figure><img alt="Drie invoerbronnen (Werkgeversportaal, csv-batchupload, zelfbedieningsportaal) elk met een eigen translator, uitmondend op één gedeeld, kanoniek mutatiekanaal richting KERN" loading="lazy" src="figuren/figuur-5-3-drie-bronnen-kanoniek-kanaal.svg"/><figcaption>Figuur 5-3 — drie invoerbronnen (Werkgeversportaal, csv-batchupload, zelfbedieningsportaal) elk met een eigen translator, uitmondend op één gedeeld, kanoniek mutatiekanaal richting KERN</figcaption></figure>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 5.3 — Normalizer ontwerpen</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5.3 — Normalizer ontwerpen</p>
+        <div class="card">
+          <div class="prose">
+<p>Meridiaan krijgt mutaties binnen via drie bronnen: het Werkgeversportaal (JSON, intern formaat), een csv-batchupload van grote werkgevers, en een nieuw zelfbedieningsportaal (eigen JSON-variant).</p>
+<ol>
+<li>Waarom is dit een normalizer-vraagstuk en niet slechts drie keer hetzelfde translator-patroon toepassen?</li>
+<li>Wat moet je expliciet vastleggen voordat je de drie bronspecifieke translators bouwt?</li>
+<li>Wat gaat er mis als je dat niet vastlegt en gewoon begint met de translator voor het Werkgeversportaal?</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Het is in essentie wél drie keer een translator (zie 5.3 in de reader: "vaak letterlijk een verzameling translators die op hetzelfde uitgaande kanaal uitkomen"), maar het normalizer-perspectief voegt iets toe: het maakt expliciet dat er een gedeelde, kanonieke bestemmingsvorm bestaat waar alle drie de bronnen naartoe moeten convergeren — dat is iets anders dan drie onafhankelijke, los van elkaar ontworpen vertalingen.</p>
+<p>b. De kanonieke interne vorm zelf: de definitieve structuur, veldnamen en representaties die KERN intern verwacht, onafhankelijk van welke bron toevallig het eerst is aangesloten.</p>
+<p>c. Als je zonder die vastlegging begint met de Werkgeversportaal-translator, wordt "wat het Werkgeversportaal toevallig aanlevert" stilzwijgend de kanonieke vorm. Zodra de tweede bron (csv) wordt aangesloten, blijkt die kanonieke vorm dan bijvoorbeeld toevallig JSON-specifieke aannames te bevatten die niet bij csv passen, en moet de eerste translator alsnog worden herzien — precies het probleem dat expliciete vastlegging vooraf had voorkomen.</p>
+<p><strong>Discussiepunt:</strong> is "wat de eerste bron toevallig aanlevert" ooit een verdedigbare kanonieke vorm? Soms wel — als die eerste bron toevallig al goed doordacht is. Het probleem is niet dat de vorm daaruit voortkomt, maar dat de keuze niet bewust en expliciet is.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">5.4 Drie patronen, drie verantwoordelijkheden</h2><span class="chip time">Sectie 5 van 7</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De drie patronen van dit deel lossen aantoonbaar verschillende problemen op, en het is de moeite waard ze scherp naast elkaar te zetten:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>Patroon</th><th>Probleem</th><th>Verandert de inhoud?</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Translator</strong></td><td>Eén bron, één bestemming, verschillend formaat</td><td>Ja</td></tr>
+<tr><td><strong>Envelope wrapper</strong></td><td>Metadata rond het bericht wijkt af van de inhoud</td><td>Nee</td></tr>
+<tr><td><strong>Normalizer</strong></td><td>Meerdere bronnen, één kanonieke bestemmingsvorm</td><td>Ja (per bron)</td></tr>
+</tbody>
+</table></div>
+<p>Alle drie delen hetzelfde onderliggende principe uit kernzin 5: elk systeem spreekt zijn eigen taal, en het transformeren daartussen is expliciet, herkenbaar werk — niet iets dat verstopt zit in de kernlogica van een applicatie die eigenlijk alleen over pensioenverwerking zou moeten gaan.</p>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 5.4 — Betekenis versus representatie</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5.4 — Betekenis versus representatie</p>
+        <div class="card">
+          <div class="prose">
+<p>Een ontwikkelaar stelt voor om in de translator naar de externe administrateur ook meteen te controleren of het bedrag boven €5.000 is, en zo ja, een extra veld <code>vereistGoedkeuring: true</code> toe te voegen.</p>
+<ol>
+<li>Is dit correct translator-werk volgens de eis uit 5.1 ("vertaalt structuur en representatie, niet betekenis")?</li>
+<li>Waar hoort deze logica dan wel thuis?</li>
+</ol>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>a. Nee. Dit is een inhoudelijke beslissing (is goedkeuring vereist), geen representatieverandering. De translator zou hiermee verborgen bedrijfslogica bevatten die niets met vertalen te maken heeft.</p>
+<p>b. Dit is precies het werk van de message filter uit deel 4 (het €5.000-scenario) — de beslissing "vereist dit bericht goedkeuring" hoort vóór of los van de translator te worden genomen, niet erin verstopt. Als het externe koppelvlak het veld <code>vereistGoedkeuring</code> daadwerkelijk nodig heeft, kan de translator dat veld overnemen zodra het al eerder in de keten (bijvoorbeeld als header-veld) is vastgesteld — maar de translator berekent het niet zelf.</p>
+<p><strong>Wat je hier moet meenemen:</strong> dit is dezelfde valkuil als in deel 4 (vermenging van verantwoordelijkheden), nu in een ander patroon. Herken het patroon van de fout, niet alleen de fout zelf.</p>
+          </div></details>
+        </div>
+      </div>
+
+    </article>
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Samenvatting van deel 5</h2><span class="chip time">Sectie 6 van 7</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<ul>
+<li>Vertaalwerk hoort aan de grens tussen systemen, niet in de applicatie zelf — elk systeem spreekt precies één taal, de zijne.</li>
+<li>Een translator zet inhoud om tussen twee formaten; hij vertaalt structuur en representatie, nooit betekenis, en blijft in twee richtingen consistent.</li>
+<li>Een envelope wrapper voegt metadata toe of verwijdert die, zonder de kerninhoud te raken — gescheiden houden van de translator voorkomt onnodig regressierisico bij wijzigingen die alleen de buitenkant raken.</li>
+<li>Een normalizer brengt meerdere binnenkomende varianten samen tot één interne, kanonieke vorm — vaak een verzameling translators die op één kanaal uitkomen, met als aparte eis dat de kanonieke vorm expliciet is vastgelegd.</li>
+</ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz__h">Controlevraag — Opdracht 5.5 — Uit je eigen praktijk</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Opdracht 5.5 — Uit je eigen praktijk</p>
+        <div class="card">
+          <div class="prose">
+<p>Neem een koppeling uit je eigen werk waarbij twee systemen een verschillend formaat voor "hetzelfde" gegeven hanteren (bijvoorbeeld een andere sleutel, andere eenheden, andere datumnotatie). Ontwerp een translator, en beoordeel: is er ook een envelope-verschil, en zo ja, houd je dat gescheiden van de inhoudelijke vertaling?</p>
+          </div>
+          <details class="q"><summary><span class="qn">&rarr;</span><span>Uitwerking tonen</span><span class="qx">Toon</span></summary><div class="ans">
+<p>Er is geen modelantwoord; dit is een spiegelopdracht.</p>
+<p>Veelvoorkomende observatie uit eerdere groepen: deelnemers ontdekken vaak dat hun bestaande vertaalcode envelope- en inhoudslogica door elkaar heeft lopen — bijvoorbeeld authenticatieheaders die in dezelfde functie worden gezet als veldvertalingen — precies de vermenging die paragraaf 5.2 wil voorkomen.</p>
+          </div></details>
+        </div>
+      </div>
+      <div class="quiz">
+        <div class="quiz__h">Zelftoets deel 5</div>
+        <p class="quiz__src">Uit Werkboek deel 5, Zelftoets (letterlijk overgenomen)</p>
+        <details class="q"><summary><span class="qn">1</span><span>Wat is de kernzin van dit deel, in eigen woorden?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Elk systeem hoort precies één taal te spreken — de zijne. Vertalen is het werk van de grens, niet van het systeem zelf.</div></details>
+        <details class="q"><summary><span class="qn">2</span><span>Wat is het verschil tussen een translator en een envelope wrapper?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een translator verandert de inhoud van het bericht (structuur, representatie); een envelope wrapper voegt metadata rond het bericht toe of verwijdert die, zonder de inhoud te raken.</div></details>
+        <details class="q"><summary><span class="qn">3</span><span>Noem de twee eisen waaraan een houdbare translator moet voldoen.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Hij vertaalt structuur en representatie, nooit betekenis; hij is in twee richtingen consistent, ook als hij maar in één richting wordt gebruikt.</div></details>
+        <details class="q"><summary><span class="qn">4</span><span>Wat lost een normalizer op dat een enkele translator niet oplost?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een normalizer maakt expliciet dat meerdere, verschillende bronnen moeten convergeren naar één gedeelde kanonieke vorm — een los toegepaste translator veronderstelt doorgaans één bron en één bestemming.</div></details>
+        <details class="q"><summary><span class="qn">5</span><span>Wat moet je expliciet vastleggen voordat je een normalizer bouwt, en wat gaat er mis als je dat niet doet?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De kanonieke interne vorm zelf, onafhankelijk van welke bron toevallig het eerst is aangesloten. Zonder die vastlegging wordt de kanonieke vorm stilzwijgend "wat de eerste bron toevallig aanlevert", met herzieningen tot gevolg zodra een volgende bron wordt aangesloten.</div></details>
+        <details class="q"><summary><span class="qn">6</span><span>Waarom is "bedrag boven €5.000 → extra veld toevoegen" geen translator-werk?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat het een inhoudelijke beslissing is (of goedkeuring vereist is), geen representatieverandering — dat hoort bij een filter of eerder in de keten, niet verstopt in de translator.</div></details>
+        <details class="q"><summary><span class="qn">7</span><span>Waarom werd het probleem van 5.0 pas zichtbaar bij de tweede externe partij, niet bij de eerste?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij één externe partij was er nog geen sprake van hergebruik of van conflicterende eisen — het probleem (KERN groeit met externe-koppelvlakkennis) wordt pas zichtbaar zodra een tweede partij met een ander formaat wordt aangesloten en dezelfde aanpak zou moeten worden herhaald.</div></details>
+      </div>
+    </article>
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">Sectie 7 van 7</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 6 verdiept het onderscheid tussen point-to-point en publish-subscribe kanalen dat in deel 2 is geïntroduceerd — met de vraag wat er verandert zodra niet één, maar meerdere onafhankelijke systemen op hetzelfde event moeten reageren, zoals bij de eerdere uitbreiding met het Nabestaandenloket.</p>
+      </div>
+
+
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 6</h3>
+      <p>Deel 6 — Point-to-point vs. publish-subscribe kanalen, verdiept — bouwt voort op wat hier is behandeld.</p>
+      <a class="btn" href="deel-06.html">Deel 6 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Enterprise Integration Patterns · Deel 5 · <a href="index.html">terug naar cursusoverzicht</a> · oude vormgeving (incl. docentenhandleiding en slidedeck): <a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/reader.html">Reader</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/werkboek.html">Werkboek</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/docentenhandleiding.html">Docentenhandleiding</a><a href="https://cursus.eductus.nl/enterprise-integration-patterns/niveau-1/deel-05/slidedeck.html">Slidedeck</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
+  var KEY="eductus_eip5_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
