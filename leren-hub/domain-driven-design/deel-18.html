@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 18 — Aggregates herzien: consistentiegrenzen bij meerdere teams | Eductus</title>
+<meta name="description" content="Cursus Domain-Driven Design, Deel 18: waarom een aggregate die door twee teams tegelijk wordt gewijzigd een ontwerpfout is, twee herzieningsrichtingen, en de grenzentoets om bestaande grenzen op landschapsschaal te toetsen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quote{margin:20px 0;padding:6px 0 6px 22px;border-left:3px solid var(--line);color:var(--ink-soft);font-style:italic}
+.quote p{margin:8px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Domain-Driven Design · Deel 18</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Domain-Driven Design · Niveau 2 (het landschap) · Deel 18 van 30</p>
+  <h1>Eén aggregate,<br><em>één bewaker</em></h1>
+  <p class="hero__lead">In niveau 1 was het vanzelfsprekend: één team bewaakte het dossier. Op landschapsschaal blijkt de botsing waarmee niveau 2 opende geen coördinatieprobleem, maar een symptoom: een aggregaatgrens die, zonder dat iemand het besloot, door twee teams tegelijk wordt aangeraakt. Dit deel herziet die grenzen.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>7</b><span>secties</span></div>
+    <div class="stat"><b>±1u</b><span>leestijd + opdrachten</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>2</b><span>herzieningsrichtingen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de iSAQB® Advanced Level-module <em>Domain-Driven Design</em> en is uitdrukkelijk geen vervanging van een erkende iSAQB-training — zij levert op zichzelf geen certificaat op. Alle formuleringen, figuren en werkvormen zijn van Ductus; waar wij naar begrippen van Eric Evans en Vaughn Vernon verwijzen, doen wij dat in eigen woorden en eigen voorbeelden. Studeer voor de module altijd óók bij een erkende provider.</div>
+  <div class="trail">Niveau 2: ➊ Landschap in kaart → ➋ Core/supporting/generic → ➌ Context mapping I → ➍ Context mapping II → ➎ EventStorming I → ➏ EventStorming II → ➐ Example mapping → <b>➑ Aggregates herzien (hier)</b> → ➒ Architectuurpatronen → ➓ Teams/Conway → ⓫ Events als integratie → ⓬ Examentraining + portfolio</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: één begrip, twee eigenaren</a></li>
+      <li><a href="#s3" data-target="s3">Waarom dit een ontwerpfout is</a></li>
+      <li><a href="#s4" data-target="s4">Twee herzieningsrichtingen</a></li>
+      <li><a href="#s5" data-target="s5">De termijnbewaking opgelost</a></li>
+      <li><a href="#s6" data-target="s6">De werkvorm: de grenzentoets</a></li>
+      <li><a href="#s7" data-target="s7">Terug naar de casus, en vooruit</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>In niveau 1 trok het Nabestaandenloket-team één aggregaatgrens: het dossier, als enige toegangspoort tot alles wat gegarandeerd samen moest kloppen. Dat werkte omdat er precies één team was dat aan die grens bouwde. Op landschapsschaal gaat die vanzelfsprekendheid niet meer op.</p>
+<p>Dit deel herziet de aggregaatgrenzen van het Mutatieplatform-landschap met een nieuwe vraag: niet "wat hoort bij elkaar", zoals in deel 6, maar "wie is eigenaar van deze grens, en houdt die eigendom stand als er een tweede team meebouwt". De kernstelling: een aggregate die structureel door twee teams tegelijk wordt gewijzigd, is geen toevalstreffer — het is een ontwerpfout.</p>
+<p>Aan het eind van dit deel kun je:</p>
+<ul>
+<li>uitleggen waarom een aggregaatgrens die op één-team-schaal goed werkt, op landschapsschaal moet worden herzien;</li>
+<li>herkennen wanneer een cross-team-conflict wijst op een modelleerfout in plaats van een coördinatieprobleem;</li>
+<li>twee herzieningsrichtingen toepassen — splitsen langs teamgrenzen, of de contextgrens zelf heroverwegen;</li>
+<li>met de <strong>grenzentoets</strong> een bestaande aggregaatgrens op landschapsschaal toetsen.</li>
+</ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: één begrip, twee eigenaren</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Vera opent bij de relatie die in deel 13 als shared kernel werd benoemd: "Ik heb toen gezegd dat een shared kernel geen technische koppeling is, maar een doorlopende, kostbare afspraak. Wat ik er niet bij zei: op dit moment is het geen afspraak. Het is één aggregate — het dienstverband — waar mijn team én het Mutatieplatform-team allebei rechtstreeks in schrijven. Niet via elkaar. Gewoon allebei."</p>
+<p>Karsten: "Dat is precies de botsing van twee maanden geleden. Wij namen aan dat een deeltijdwijziging een nieuw dienstverband is. KERN beschouwt hetzelfde dienstverband als ononderbroken doorlopend. Dat zijn geen twee meningen — het zijn twee teams die allebei, onafhankelijk, de invariant van hetzelfde aggregate bepalen. En een aggregate kan er maar één hebben."</p>
+<p>Otto: "Dus we spreken af wie voortaan als eerste schrijft?" Foppe: "Dat lost de botsing misschien voor deze ene keer op. Maar het antwoord is een procesafspraak bovenop een grens die zelf het probleem is. Stel dat we een derde team krijgen — moet dat team dan ook in de rij aansluiten?"</p>
+<p>Priya brengt de vraag terug naar deel 6: "Bij het Nabestaandenloket was het antwoord vanzelfsprekend — het ene team. Hier is het antwoord niet vanzelfsprekend, en dat is precies wat er misging." Daan vat samen: "Een aggregate is een consistentiegrens die garandeert dat wat erbinnen zit altijd samen klopt. Wat we vandaag ontdekken, is dat die garantie een eigenaar nodig heeft die haar kan waarmaken."</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Waarom dit een ontwerpfout is</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het is verleidelijk de botsing te lezen als pech. Dat mist waar het probleem zit. Een aggregate bewaakt een invariant — een regel die altijd moet kloppen. Die garantie werkt alleen als er precies één plek is die alle wijzigingen ziet vóórdat ze worden doorgevoerd. Zodra twee teams onafhankelijk in dezelfde aggregate schrijven, bestaat die plek niet meer — niet omdat de code het niet aankan, maar omdat er twee onafhankelijke besluitvormers zijn die allebei denken dat zíj de invariant bewaken.</p>
+<p>Dat is anders dan de twee denkfouten uit deel 6 (te groot of te klein binnen één team). Daar is er nog altijd één partij die de grens kan bewaken. Bij een aggregate die door twee teams wordt aangeraakt, is de bewaking zelf onmogelijk geworden, ongeacht waar de grens ligt. Vandaar de vuistregel: <strong>een aggregate hoort bij precies één team.</strong> Niet uit wantrouwen, maar omdat een consistentiegarantie een enkele, ondubbelzinnige bewaker vereist.</p>
+<figure><img src="figuren/figuur-18-2-bewakingspoort.svg" alt="Een aggregate als bewakingspoort met één sleutel — tegenover dezelfde aggregate met twee sleutels die allebei onafhankelijk de poort kunnen openen, zonder dat een van beide weet wat de ander net heeft gedaan"><figcaption>Figuur 18-2 — één sleutel, of twee sleutels die elkaar niet zien</figcaption></figure>
+<p>Karsten formuleert het scherpst: "Als twee teams allebei aan dezelfde aggregate moeten kunnen schrijven, is dat een teken dat we, ergens eerder, een grens hadden moeten trekken die we niet trokken."</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 1 — het verschil met deel 6</p><details class="q"><summary><span class="qn">1</span><span>Welke vraag voegt dit deel toe aan de vraag uit deel 6 ("welke wijzigingen moeten gegarandeerd samen kloppen?"), en waarom had deel 6 die vraag niet nodig?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De toegevoegde vraag: "wie kan deze consistentiegarantie in de praktijk waarmaken — is er precies één bewaker?" Deel 6 had die vraag niet nodig omdat er bij het Nabestaandenloket vanzelfsprekend precies één team was; de vraag "wat moet samen kloppen" veronderstelde stilzwijgend al dat er één partij was die dat kon bewaken. Op landschapsschaal, met meerdere onafhankelijk werkende teams, is die vooronderstelling niet langer geldig.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Twee herzieningsrichtingen</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Zodra het team een cross-team-aggregate herkent, is de keuze: horen de twee teams eigenlijk hetzelfde ding te bewaken, of bewaken ze twee verschillende dingen die toevallig dezelfde naam dragen?</p>
+<p><strong>Richting 1 — splitsen langs teamgrenzen.</strong> Vaak blijkt wat één aggregate leek, twee afzonderlijke invarianten te bewaken. KERN moet garanderen dat een dienstverband een geldige ingangsdatum en percentage heeft. Het Mutatieplatform moet garanderen dat een binnenkomende mutatie aan de eigen validatieregels voldoet — een andere invariant, die verliesloos kan werken op een momentopname. Het dienstverband wordt bij KERN de ene, complete aggregate; het Mutatieplatform krijgt een eigen, kleinere aggregate die verwijst via identiteit en versie, zonder ooit rechtstreeks in de aggregate van KERN te schrijven.</p>
+<p><strong>Richting 2 — de contextgrens zelf heroverwegen.</strong> Soms wijst het conflict niet op een ten onrechte gedeelde aggregate, maar op een bounded-contextgrens die de verkeerde relatie draagt. Als KERN en het Mutatieplatform structureel op elk detail moeten overeenstemmen, is een bewust gekozen, zwaar bewaakte shared kernel misschien wél juist — mits bestuurd: één gezamenlijk team, of een vaste afstemmingsroute. Vera: "Een shared kernel is geen verbod op delen. Het is een verbod op ongeorganiseerd delen."</p>
+<figure><img src="figuren/figuur-18-3-twee-herzieningsrichtingen.svg" alt="Twee schema's naast elkaar — links één gedeelde aggregate gesplitst in twee, met een verwijzing ertussen; rechts dezelfde aggregate behouden als bewust bestuurde shared kernel met één team"><figcaption>Figuur 18-3 — splitsen, of bewust bestuurd delen</figcaption></figure>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 3 — richting 1 of richting 2?</p><details class="q"><summary><span class="qn">1</span><span>Waarom kiest het team voor de dienstverband-aggregate richting 1 (splitsen) en niet richting 2 (bestuurde shared kernel)?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De twee teams bewaken bij nadere inspectie niet werkelijk dezelfde invariant: KERN bewaakt de authentieke registratie, het Mutatieplatform bewaakt de validiteit van een binnenkomende mutatie op basis van een momentopname — twee verschillende zorgen die toevallig over hetzelfde begrip gaan. Richting 2 zou passend zijn als beide teams structureel, op elk detail, exact dezelfde regels moeten blijven volgen zonder zelfstandig te kunnen werken op een eigen, afgeleide versie.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De termijnbewaking opgelost</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Foppe brengt het team terug bij Vera's observatie uit deel 17: om de terugkeer naar het oorspronkelijke percentage te controleren, moet het systeem weten wat dat percentage was — een gegeven binnen dezelfde aggregaatgrens als het huidige percentage. Maar de controle zelf leek Vera ergens anders te horen.</p>
+<p>Toegepast op §s4: geen conflict tussen teams, maar dezelfde onderliggende vraag. Het percentage en de vraag of het geldig is, horen bij de dienstverband-aggregate zelf. Maar "is deze tijdelijke wijziging op de afgesproken datum teruggedraaid" is geen invariant van het dienstverband op een willekeurig moment — het is een invariant over tijd. Dat maakt de termijnbewaking een eigen, kleine aggregate: houdt een deadline en een verwachte terugkeerwaarde vast, herschrijft het dienstverband niet, en geeft op het juiste moment een signaal af.</p>
+<figure><img src="figuren/figuur-18-4-dienstverband-termijnbewaking.svg" alt="De dienstverband-aggregate en een aparte termijnbewaking-aggregate, met een stippellijn ertussen gelabeld signaal op de afgesproken datum"><figcaption>Figuur 18-4 — twee eigen kleine baasjes, verbonden via een signaal</figcaption></figure>
+<p>Otto, voor het eerst instemmend met een uitkomst die niet het snelste antwoord was: "Dat is dan geen coördinatieprobleem meer. Dat is gewoon: twee dingen die allebei hun eigen klein baasje hebben, en die elkaar op het juiste moment een seintje geven." Foppe: "Precies dat seintje is het onderwerp van deel 21."</p>
+<div class="callout note"><span class="lbl">Uitvoering: het Locked Platform</span><p>Dit invariant-denken — één aggregate, één bewaker, wijzigingen die elkaar via een signaal bereiken in plaats van gedeelde schrijftoegang — is een modelleerkeuze, geen technologiekeuze; ze laat zich op meer dan één manier bouwen (klassiek met een ORM en één transactie, of event-sourced met een eigen event-reeks per aggregate-instantie). Pieters eigen Locked Platform is één uitvoering van die tweede route: een data-centrisch, event-driven platform met aggregates als toestandsmachines en CQRS dat lezen en schrijven uit elkaar trekt. Dit deel gaat niet dieper op de techniek in — zie de Toolbijlage.</p></div>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">De werkvorm: de grenzentoets</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het instrument van dit deel is de <strong>grenzentoets</strong>: een sjabloon om een aggregaatgrens te toetsen op landschapsschaal — niet "wat moet samen kloppen" (deel 6), maar wie die garantie in de praktijk kan waarmaken.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Stap</th><th>Wat je doet</th></tr></thead>
+<tbody>
+<tr><td><strong>1 — Benoem de aggregate en de invariant</strong></td><td>Eén zin: wat moet binnen deze grens altijd samen kloppen?</td></tr>
+<tr><td><strong>2 — Inventariseer wie er daadwerkelijk in schrijft</strong></td><td>Eén team: door naar stap 4. Twee of meer: naar stap 3.</td></tr>
+<tr><td><strong>3 — Kies een richting en beargumenteer</strong></td><td>Eén invariant die twee teams toevallig delen (richting 1), of werkelijk gedeeld en dus een bestuurde shared kernel (richting 2)?</td></tr>
+<tr><td><strong>4 — Beschrijf hoe gescheiden aggregates elkaar bereiken</strong></td><td>Via een verwijzing naar identiteit en versie, of via een signaal — de precieze vorm hoort bij deel 19/21.</td></tr>
+</tbody>
+</table></div>
+<div class="callout note"><span class="lbl">Het vijfde veld</span><p><strong>Dat het verschil maakt: als we deze grens laten zoals hij nu is, welk incident gaat er dan opnieuw gebeuren, en hoe lang duurt het voordat iemand het merkt?</strong> Karsten: "Als we deze grens laten zoals hij is, gebeurt de botsing van twee maanden geleden opnieuw, zodra een derde deelproject met dezelfde aanname aan de slag gaat." Vera, over de termijnbewaking: "Niemand merkt het totdat een deelnemer een brief krijgt met een percentage dat al maanden niet meer klopt."</p></div>
+<figure><img src="figuren/figuur-18-5-grenzentoets.svg" alt="Het invulblad van de grenzentoets, ingevuld voor de dienstverband-aggregate — vier stappen plus het afsluitende veld"><figcaption>Figuur 18-5 — de grenzentoets, ingevuld voor de dienstverband-aggregate</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Terug naar de casus, en vooruit</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De dienstverband-aggregate wordt gesplitst: KERN behoudt de volledige, authentieke aggregate; het Mutatieplatform krijgt een eigen, kleinere aggregate die verwijst naar identiteit en versie. De termijnbewaking wordt een eigen, kleine aggregate, verbonden via een signaal op de afgesproken datum.</p>
+<p>Daan vat samen in het verslag aan Iris: "We hebben de botsing niet opgelost door beter af te spreken wie eerst mag schrijven. We hebben ontdekt dat er nooit één grens had mogen bestaan die twee teams tegelijk bewaakten — en nu is er geen afspraak meer nodig, omdat er geen conflict meer kán ontstaan." Iris vraagt terug: "En hoe voorkomen we dat dit over een half jaar, met een ander begrip, gewoon weer gebeurt?" Daan heeft daar nog geen volledig antwoord op.</p>
+<h4>Samenvatting</h4>
+<ul>
+<li>Een aggregate die door twee teams wordt aangeraakt is een ontwerpfout, geen coördinatieprobleem.</li>
+<li>Een aggregate hoort bij precies één team — een consistentiegarantie vereist één ondubbelzinnige bewaker.</li>
+<li>Twee herzieningsrichtingen: splitsen langs teamgrenzen (twee verschillende dingen, toevallig dezelfde naam), of een bewust bestuurde shared kernel (werkelijk één gedeeld ding).</li>
+<li>Gescheiden aggregates communiceren via een verwijzing of een signaal, nooit via gedeelde schrijftoegang.</li>
+</ul>
+<div class="callout tip"><span class="lbl">Vooruit naar deel 19</span><p>De dienstverband-aggregate en de mutatieverwerking-aggregate zijn nu gescheiden, maar moeten nog altijd met elkaar samenwerken binnen één systeem. Deel 19, een sessie van twee dagdelen, behandelt de applicatie-architectuurpatronen — hexagonaal, gelaagd, CQRS — die bepalen hoe gescheiden aggregates, gescheiden lezen/schrijven en gescheiden teams zich tot elkaar verhouden.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 18, Opdracht 9 — wanneer een shared kernel wél de juiste keuze is</p><details class="q"><summary><span class="qn">1</span><span>Welke twee concrete bestuursmaatregelen zouden een shared kernel tussen KERN en het Mutatieplatform draaglijk maken, mocht het team ooit voor richting 2 kiezen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">(1) Eén gezamenlijk, uit beide teams samengesteld team dat de gedeelde kernel onderhoudt, met een gezamenlijke planning in plaats van twee losse releaseritmes. (2) Een vaste afstemmingsroute — bijvoorbeeld een verplichte gezamenlijke review vóór elke wijziging aan het gedeelde stuk, met een vetorecht voor beide kanten — zodat een wijziging nooit eenzijdig wordt doorgevoerd.</div></details>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 19</h3>
+      <p>De dienstverband-aggregate en de mutatieverwerking-aggregate zijn nu gescheiden, maar moeten nog altijd met elkaar samenwerken binnen één systeem. Deel 19 behandelt de applicatie-architectuurpatronen — hexagonaal, gelaagd, CQRS — die bepalen hoe gescheiden aggregates, gescheiden lezen en schrijven, en gescheiden teams zich tot elkaar verhouden.</p>
+      <a class="btn" href="https://cursus.eductus.nl/domain-driven-design/niveau-2/deel-19/reader.html">Deel 19 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Domain-Driven Design · Deel 18 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/domain-driven-design/niveau-2/deel-18/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_ddd18_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
