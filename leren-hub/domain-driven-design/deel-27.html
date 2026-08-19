@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 27 — DDD in fusie en organisatieverandering: twee modellen, één landschap | Eductus</title>
+<meta name="description" content="Cursus Domain-Driven Design, Deel 27: drie botsingspunten tussen twee deelnemersmodellen na een fusie, drie generieke oplossingsrichtingen (shared kernel, anti-corruption layer, tijdelijk conformist), en de richtingenkaart.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quote{margin:20px 0;padding:6px 0 6px 22px;border-left:3px solid var(--line);color:var(--ink-soft);font-style:italic}
+.quote p{margin:8px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Domain-Driven Design · Deel 27</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Domain-Driven Design · Niveau 3 (masterproef) · Deel 27 van 30</p>
+  <h1>Twee modellen,<br><em>één landschap</em></h1>
+  <p class="hero__lead">Deel 26 eindigde met één begrip op tafel. Dit deel legt de rest van het dossier open: drie botsingspunten tussen twee deelnemersmodellen die elk, op zichzelf, consistent en verdedigbaar zijn — en drie richtingen om ermee om te gaan, zonder dat dit deel al kiest.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>8</b><span>secties</span></div>
+    <div class="stat"><b>±1u15</b><span>leestijd + opdrachten</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>3</b><span>oplossingsrichtingen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de iSAQB® Advanced Level-module <em>Domain-Driven Design</em> en is uitdrukkelijk geen vervanging van een erkende iSAQB-training — zij levert op zichzelf geen certificaat op. Alle formuleringen, figuren en werkvormen zijn van Ductus; waar wij naar begrippen van Eric Evans en Vaughn Vernon verwijzen, doen wij dat in eigen woorden en eigen voorbeelden. Studeer voor de module altijd óók bij een erkende provider.</div>
+  <div class="trail">Niveau 3: ➊ Kerndomein heroverwogen → ➋ Grote ballen modder saneren → ➌ Consistentie bij bounded contexts → ➍ Governance en taal-drift → <b>➎ Fusie en organisatieverandering (hier)</b> → ➏ Oordeel: géén DDD → ➐ CPSA-A-examentraining → ➑ Masterproef</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: de kamer waarin het dossier compleet wordt</a></li>
+      <li><a href="#s3" data-target="s3">Waarom geen van beide modellen "gewoon fout" is</a></li>
+      <li><a href="#s4" data-target="s4">Drie oplossingsrichtingen — en wat elke richting werkelijk vraagt</a></li>
+      <li><a href="#s5" data-target="s5">Waarom dit geen zuiver architecturale keuze is</a></li>
+      <li><a href="#s6" data-target="s6">De richtingenkaart</a></li>
+      <li><a href="#s7" data-target="s7">Terug naar de casus: drie kaarten, nog geen besluit</a></li>
+      <li><a href="#s8" data-target="s8">Vooruitblik</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 7 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 26 eindigde met één begrip op tafel — "deelnemer in opbouw" — en een architect, Youssef Aït Idar, die vroeg om eerst te begrijpen vóór er geoordeeld wordt. Dit deel legt de rest van het dossier open. Niet één botsingspunt, maar drie: waardeoverdracht, de definitie van "partner", en "deelnemer in opbouw" in volle omvang.</p>
+<p>Dit deel legt drie mogelijke oplossingsrichtingen op tafel — samenvoegen tot één model, aansluiten via een anti-corruption layer, of tijdelijk als conformist meelopen — en onderzoekt wat elke richting kost en oplevert. Dit deel <strong>kiest niet</strong>. De knoop doorhakken is het werk van deel 28 en, definitief, van de masterproef in deel 30.</p>
+<p>Aan het eind van dit deel kun je:</p>
+<ul>
+<li>de drie botsingspunten tussen twee deelnemersmodellen op waarde schatten: waar zit het verschil, en waarom is geen van beide kanten "gewoon fout";</li>
+<li>drie generieke oplossingsrichtingen voor een modelbotsing tussen twee organisaties beschrijven, inclusief wat elke richting van een organisatie vraagt;</li>
+<li>voor een botsingspunt onderbouwen wat elke richting kost, voor wie, en wat ze oplevert, zonder al een keuze te maken;</li>
+<li>met de <strong>richtingenkaart</strong> een modelbotsing systematisch openleggen op een manier die een verdedigbaar besluit voorbereidt.</li>
+</ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: de kamer waarin het dossier compleet wordt</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Iris heeft de sessie zelf belegd, met een bewust samengestelde deelnemerslijst: Daan en Vera namens de architectuur, Youssef namens Kustveer, Loes Verstappen namens het gecombineerde bestuur, en actuaris Thijs Okkerse om, zoals ze het aankondigt, "elke keuze die vandaag op tafel komt, meteen van een prijskaartje te voorzien."</p>
+<p>Daan legt het overzicht neer dat het team sinds deel 26 heeft opgebouwd: drie plekken waar de modellen van Meridiaan en Kustveer verschillende regels dragen onder hetzelfde of gelijkende woord.</p>
+<p><strong>Waardeoverdracht.</strong> Kustveers coulanceregeling — een erfenis van de cao Kustvaart en Veerdiensten uit 1994 — berekent bij baanwisseling binnen de sector een gunstiger overdrachtswaarde dan Meridiaans standaardmethode. Thijs' eerste doorrekening: bij volledige overgang op Meridiaans standaardmethode verliest een deel van de voormalige Kustveer-deelnemers een niet-triviaal bedrag; het omgekeerde is "actuarieel niet te verantwoorden op deze schaal."</p>
+<p><strong>"Partner."</strong> Meridiaans sluitende, contractgebonden definitie tegenover Kustveers eigen toetsingsproces voor gezamenlijke huishoudens zonder contract. Loes: "Ik ken mensen in onze achterban voor wie dit letterlijk bepaalt of hun partner iets krijgt als zij overlijden."</p>
+<p><strong>"Deelnemer in opbouw."</strong> Het verschil uit deel 26, nu naast de andere twee gelegd — volgens Youssef het punt waarop "het duidelijkst zichtbaar wordt dat twee fondsen niet zomaar twee dialecten van dezelfde taal spreken."</p>
+<figure><img src="figuren/figuur-27-1-drie-botsingspunten.svg" alt="de drie botsingspunten naast elkaar — waardeoverdracht, partner, deelnemer in opbouw — met bij elk punt de Meridiaan-regel en de Kustveer-regel, en wie er in elk geval wint of verliest"><figcaption>Figuur 27-1 — drie botsingspunten, elk met een Meridiaan-regel en een Kustveer-regel</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Waarom geen van beide modellen "gewoon fout" is</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De reflex die Youssef al voorvoelde — "de meeste mensen die naar ons systeem keken, begonnen met 'dit moet anders'" — ligt voortdurend op de loer. Meridiaans model is niet "het standaardmodel" omdat Meridiaan de grotere organisatie is. Kustveers model is niet "de uitzondering" omdat het kleiner is. Beide modellen zijn, elk in hun eigen context, intern consistent, met regels die een aanwijsbare, verdedigbare reden hebben.</p>
+<p>Dit is precies waarom context mapping, zoals niveau 2 het introduceerde, nooit een technische exercitie is geweest. De vraag "welk model wint" is, onder de motorkap, altijd de vraag "wiens realiteit telt hier het zwaarst mee" — en die vraag heeft geen neutraal, technisch antwoord. Elke koppeling belichaamt een impliciete keuze over wiens model waar geldt; de vraag is of die keuze bewust wordt gemaakt, of stilzwijgend wordt ingebakken in de eerste de beste technische oplossing.</p>
+<figure><img src="figuren/figuur-27-2-twee-consistente-modellen.svg" alt="twee interne, elk consistente modellen naast elkaar, met de vraag welk model wint ontleed in de onderliggende vraag wiens realiteit telt hier het zwaarst"><figcaption>Figuur 27-2 — "welk model wint" is eigenlijk "wiens realiteit telt hier het zwaarst"</figcaption></figure>
+<p>Karsten, later door Daan bijgepraat, formuleert het scherp: "Dat is precies de vraag die we bij WGP 2.0 nooit stelden — wiens model gold eigenlijk, en wie droeg de rekening toen dat nooit was afgesproken?"</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 27, Opdracht 1 — de drie botsingspunten wegen</p><details class="q"><summary><span class="qn">1</span><span>Waarom weegt "partner" in de rangschikking vaak het zwaarst, ondanks dat het niet het grootste financiële bedrag van de drie botsingspunten betreft?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat het gevolg — geen erkenning bij overlijden — het meest onomkeerbare van de drie is als het misgaat: een overleden deelnemer kan niet met terugwerkende kracht alsnog een erkende partner krijgen, terwijl een gemist bedrag bij waardeoverdracht later nog kan worden bijbetaald.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Drie oplossingsrichtingen — en wat elke richting werkelijk vraagt</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Voor een botsing tussen twee modellen die één landschap moeten delen, zijn er drie generieke richtingen. Geen van de drie is een technische keuze alleen.</p>
+<h3>Richting A — Samenvoegen tot één gedeeld model (shared kernel)</h3>
+<p>De twee modellen worden, voor de botsende begrippen, één model: één definitie van "partner", één rekenmethode voor waardeoverdracht, gedragen door beide kanten samen. Dit maakt het landschap op termijn het eenvoudigst — één waarheid, geen vertaling nodig. De prijs zit in het proces: een shared kernel vraagt voortdurende afstemming en een daadwerkelijk besluit over wiens regel het wordt, of een nieuwe regel die niemand eerder had. Bij drie botsingspunten met elk een reële winnaar en verliezer is dat een bestuurlijk en actuarieel onderhandelingstraject, met een uitkomst die zich niet binnen negen maanden laat forceren zonder iemand tekort te doen.</p>
+<h3>Richting B — Aansluiten via een anti-corruption layer</h3>
+<p>Kustveers model blijft, aan de eigen kant, intact — en een expliciete vertaallaag zet Kustveer-begrippen om naar Meridiaan-begrippen (en omgekeerd) op de plekken waar de landschappen elkaar raken. Dit beschermt Meridiaans kernmodel het zuiverst — geen Kustveer-uitzondering lekt door, precies de bescherming die Vera in deel 24 voor KERN bepleitte, nu op een externe in plaats van interne grens. De prijs zit in de vertaling zelf: een laag die twee fundamenteel verschillende partnerdefinities vertaalt, moet een besluit incorporeren over wat er gebeurt met een Kustveer-partner zonder contract. De laag verbergt de botsing niet; hij legt haar vast, op één plek.</p>
+<h3>Richting C — Tijdelijk conformist, tot na de deadline</h3>
+<p>Kustveer sluit, voorlopig, aan op Meridiaans model zoals het is — een bewuste, tijdelijke keuze om de eigen regels opzij te zetten totdat er, ná 1 januari 2028, ruimte is om zorgvuldiger te kiezen. Dit leidt het snelst tot een werkend landschap vóór de deadline. De prijs is het scherpst: voor de duur van het conformist-zijn verliezen sommige voormalige Kustveer-deelnemers een recht of bedrag tijdelijk — of, als "tijdelijk" nooit wordt afgerond, feitelijk blijvend. Deze richting is alleen verdedigbaar als de tijdelijkheid geen loze belofte is: een concreet vervolgmoment, een aanwijsbare eigenaar, en eerlijke erkenning naar de getroffen deelnemers van wat er in de tussentijd wordt opgegeven.</p>
+<figure><img src="figuren/figuur-27-3-drie-richtingen.svg" alt="de drie richtingen naast elkaar — shared kernel, anti-corruption layer, tijdelijk conformist — elk met wat ze beschermen, wat ze kosten, en wat ze van de organisatie vragen"><figcaption>Figuur 27-3 — drie richtingen, elk met een eigen bescherming, prijs en vereiste discipline</figcaption></figure>
+<p>Geen van de drie richtingen is "de DDD-manier" — DDD levert het instrumentarium om elke richting eerlijk te doordenken, niet een voorkeur voor een van de drie.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 27, Opdracht 3 — de drie richtingen op een nieuw botsingspunt</p><details class="q"><summary><span class="qn">1</span><span>Kustveer kent een aanvullende overlijdensuitkering die Meridiaan niet kent en waarvoor geen equivalent bestaat. Wat betekent "tijdelijk conformist" hier concreet, en waarom is dat een fundamenteel andere ingreep dan bij een verschil in rekenmethode?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">De uitkering vervalt voor nieuwe situaties na de overname, met de knoop "voor altijd of definitief vervallen" doorgeschoven naar na de deadline. Dit is zwaarder dan bij waardeoverdracht, omdat het hier niet gaat om tijdelijk een andere regel volgen, maar om een recht tijdelijk niet uitkeren — met het risico dat "tijdelijk vervallen" in de praktijk "definitief vervallen" wordt als niemand het later agendeert.</div></details>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Waarom dit geen zuiver architecturale keuze is</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Wat deze sessie onderscheidt van een context-mappingoefening binnen één organisatie, is dat elke richting hier een reëel, individueel herkenbaar gevolg heeft voor mensen die niet aan tafel zitten. Thijs, na Daans overzicht: "Ik kan voor elke richting een venster laten zien van wie wint en wie verliest, in euro's en in maanden vertraging. Wat ik niet voor jullie kan doen, is zeggen welke verliezer aanvaardbaar is. Dat is geen actuariële vraag."</p>
+<p>Dat is precies waarom de rolverdeling in deze kamer — architect, bestuurslid, actuaris — geen toeval is, en waarom de masterproef in deel 30 vier rollen kent in plaats van één architect die in isolatie beslist. Een context-mappingbesluit tussen twee organisaties is onderbouwd door een expliciete erkenning van wie de rekening betaalt voor elke richting, en of die verdeling te verdedigen is.</p>
+<figure><img src="figuren/figuur-27-4-drie-rollen.svg" alt="drie rollen rond de tafel — architect, bestuurslid, actuaris — elk met een eigen vraag die een volledig context-mappingbesluit moet beantwoorden"><figcaption>Figuur 27-4 — architect, bestuurslid, actuaris: drie vragen die samen een besluit onderbouwen</figcaption></figure>
+<p>Loes, aan het eind van de sessie: "Ik hoor drie richtingen, en ik hoor voor elk een prijs. Wat ik nog niet hoor, is wie in deze kamer straks zegt: dit is de prijs die we kiezen, en dit is waarom die eerlijk is." Foppe, later tegen Daan: "Vandaag was niet de dag om te kiezen. Vandaag was de dag om te zorgen dat de keuze, wanneer hij komt, geen van de drie prijzen verrast."</p>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">De richtingenkaart</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>De richtingenkaart is het instrument van dit deel: voor een gegeven botsingspunt leg je de drie oplossingsrichtingen systematisch naast elkaar, zonder al te kiezen — een voorbereiding op een besluit, geen vervanging ervan.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Kolom</th><th>Vraag</th></tr></thead>
+<tbody>
+<tr><td><strong>1 — Wat lost deze richting werkelijk op?</strong></td><td>Welk deel van de botsing is hierna verholpen, en welk deel blijft onopgelost of latent?</td></tr>
+<tr><td><strong>2 — Wat kost deze richting, en aan wie?</strong></td><td>Welke groep wint, welke groep verliest, en is dat verlies tijdelijk of structureel?</td></tr>
+<tr><td><strong>3 — Wat vraagt deze richting van de organisatie om vol te houden?</strong></td><td>Governance (shared kernel), een onderhoudende eigenaar (ACL), of discipline om "tijdelijk" waar te maken (conformist).</td></tr>
+<tr><td><strong>Laatste veld — Is dit verlies omkeerbaar, en door wie gedragen?</strong></td><td>Kan het besluit worden teruggedraaid zonder onherstelbare schade, en heeft de beslisser het mandaat om dat verlies namens de geraakten te dragen?</td></tr>
+</tbody>
+</table></div>
+<figure><img src="figuren/figuur-27-5-richtingenkaart.svg" alt="de richtingenkaart als tabel — drie richtingen als rijen, drie kolommen plus het laatste veld, met bij elk botsingspunt een eigen kaart"><figcaption>Figuur 27-5 — de richtingenkaart: drie richtingen, drie kolommen, en één afsluitend veld</figcaption></figure>
+<p>Elke richting faalt niet primair op de dag dat hij wordt gekozen, maar op de dag dat de organisatie de discipline mist om hem vol te houden. Dit veld is waarom de richtingenkaart nooit door een architect alleen wordt ingevuld: kolom 1 en 3 zijn architecturale vragen, kolom 2 en het laatste veld zijn dat niet, of niet alleen.</p>
+<p>De kaart wordt in dit deel voor alle drie de botsingspunten geopend, maar bewust niet afgesloten — kolom 1 en 3 worden grotendeels in de sessie ingevuld; kolom 2 en het laatste veld, waar Thijs en Loes verdere doorrekening en achterbanraadpleging nodig hebben, blijven open voor deel 28.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 27, Opdracht 6 — de richtingenkaart op "partner"</p><details class="q"><summary><span class="qn">1</span><span>Waarom is richting C (tijdelijk conformist) voor het botsingspunt "partner" volgens het laatste veld van de richtingenkaart bijzonder risicovol vergeleken met waardeoverdracht?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Omdat het verlies bij "partner" niet omkeerbaar is zodra het zich voordoet: een overleden deelnemer kan niet met terugwerkende kracht alsnog een erkende partner krijgen. Bij waardeoverdracht kan een gemist bedrag later nog worden bijbetaald — bij "partner" bestaat die herstelmogelijkheid niet, wat betekent dat het besluit niet bij de architect alleen hoort te liggen, maar bij het bestuur met een stem namens de geraakte groep.</div></details>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Terug naar de casus: drie kaarten, nog geen besluit</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Aan het eind van de sessie liggen er drie, deels ingevulde richtingenkaarten op tafel. Voor waardeoverdracht tekent zich af dat noch volledige samenvoeging naar Meridiaans standaardmethode, noch landschapsbrede toepassing van Kustveers coulanceregeling, actuarieel of bestuurlijk op korte termijn haalbaar is — wat richting B en C allebei serieuzer maakt dan Daan bij binnenkomst had verwacht. Voor "partner" ligt het gevoeliger: Loes maakt duidelijk dat een tijdelijk-conformist-keuze hier een risico draagt dat zich niet laat compenseren als het misgaat.</p>
+<p>Youssef sluit af: "Ik hoorde vandaag voor het eerst een gesprek dat niet begon met 'dit moet passen in jullie systeem.' Dat betekent nog niet dat ik het eens ben met waar dit naartoe gaat. Maar het betekent dat ik bereid ben om mee te blijven praten." Willemijn, aangeschoven vanwege haar ervaring met het Nabestaandenloket-model uit niveau 1: "Ons model had toen nog geen ruimte voor een partnerschap zonder contract. Dat was toen geen oversight — dat was omdat we het probleem nog niet kenden. Nu kennen we het wel, en dat verandert wat 'geen ruimte hebben' betekent."</p>
+<p>Iris sluit af zonder een besluit te forceren: "We gaan hier niet vandaag uitkomen, en dat is precies goed. Wat ik wél wil, is dat niemand deze kamer verlaat met het idee dat er een makkelijke uitkomst is die we nog niet hebben gezien. Die is er niet. Er zijn drie richtingen, en elke richting heeft een prijs die iemand in deze organisatie, of in Kustveer, gaat dragen."</p>
+<h4>Samenvatting</h4>
+<ul>
+<li>Drie botsingspunten — waardeoverdracht, "partner", "deelnemer in opbouw" — elk met een Meridiaan-regel en een Kustveer-regel die op zichzelf beide verdedigbaar zijn.</li>
+<li>Drie generieke richtingen: shared kernel, anti-corruption layer, tijdelijk conformist — elk met een eigen prijs en een eigen eis aan organisatiediscipline.</li>
+<li>De richtingenkaart legt kolom 1 (wat lost het op) en 3 (wat vraagt het) architecturaal vast; kolom 2 (wie betaalt) en het laatste veld (omkeerbaarheid) vragen bestuurlijke en actuariële inbreng.</li>
+<li>Dit deel kiest bewust niet — dat gebeurt in deel 28 en definitief in de masterproef van deel 30.</li>
+</ul>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Vooruitblik</h2><span class="chip time">⏱ 7 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Dit deel heeft de volle botsing tussen twee deelnemersmodellen op tafel gelegd — drie botsingspunten, geen van beide kanten "gewoon fout" — en drie generieke oplossingsrichtingen geïntroduceerd. De richtingenkaart heeft laten zien wat elke richting oplost, kost, en van de organisatie vraagt om vol te houden — zonder de knoop door te hakken.</p>
+<div class="callout tip"><span class="lbl">Vooruit naar deel 28</span><p>Dat blijft bewust onbeslist: deel 28 behandelt wanneer een team zichzelf voor de gek houdt door een DDD-oplossing te forceren die de tijdsdruk niet eerlijk verdraagt, en wat het betekent om, onder het toeziend oog van DNB, een onderbouwd "nog niet" te verdedigen. Pas in de masterproef van deel 30, met alle drie de richtingen, alle drie de botsingspunten en alle vier de rollen uit deze kamer aan tafel, valt het echte besluit — en verdedigt Daan het.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 28</h3>
+      <p>Drie richtingen, elk met een prijs, en nog geen besluit. Deel 28 behandelt wanneer een team zichzelf voor de gek houdt door een DDD-oplossing te forceren, en hoe je — ook tegenover een toezichthouder — een onderbouwd "nog niet" verdedigt.</p>
+      <a class="btn" href="https://cursus.eductus.nl/domain-driven-design/niveau-3/deel-28/reader.html">Deel 28 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Domain-Driven Design · Deel 27 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/domain-driven-design/niveau-3/deel-27/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_ddd27_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
