@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 19 — Applicatie-architectuurpatronen: hexagonaal, gelaagd, CQRS als patroon | Eductus</title>
+<meta name="description" content="Cursus Domain-Driven Design, Deel 19: gelaagde en hexagonale architectuur om aggregaatgrenzen technisch te beschermen, CQRS voor de asymmetrie tussen lezen en schrijven, en het architectuurkeuzeblad.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.quote{margin:20px 0;padding:6px 0 6px 22px;border-left:3px solid var(--line);color:var(--ink-soft);font-style:italic}
+.quote p{margin:8px 0}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Domain-Driven Design · Deel 19</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Domain-Driven Design · Niveau 2 (het landschap) · twee dagdelen · Deel 19 van 30</p>
+  <h1>Een grens die<br><em>ook standhoudt</em></h1>
+  <p class="hero__lead">"Niks in mijn codebase houdt tegen dat iemand rechtstreeks een query naar de KERN-database schrijft." De aggregaatgrenzen van deel 18 bestaan op papier — dit deel bouwt de muur die ze ook in code beschermt: gelaagde en hexagonale architectuur, en CQRS voor wanneer lezen en schrijven twee heel verschillende opgaven zijn.</p>
+  <div class="hero__stats">
+    <div class="stat"><b>9</b><span>secties</span></div>
+    <div class="stat"><b>2</b><span>dagdelen</span></div>
+    <div class="stat"><b>4</b><span>controlevragen</span></div>
+    <div class="stat"><b>3</b><span>architectuurpatronen</span></div>
+  </div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus bereidt voor op de iSAQB® Advanced Level-module <em>Domain-Driven Design</em> en is uitdrukkelijk geen vervanging van een erkende iSAQB-training — zij levert op zichzelf geen certificaat op. Alle formuleringen, figuren en werkvormen zijn van Ductus; waar wij naar begrippen van Eric Evans en Vaughn Vernon verwijzen, doen wij dat in eigen woorden en eigen voorbeelden. Studeer voor de module altijd óók bij een erkende provider.</div>
+  <div class="trail">Niveau 2: ➊ Landschap in kaart → ➋ Core/supporting/generic → ➌ Context mapping I → ➍ Context mapping II → ➎ EventStorming I → ➏ EventStorming II → ➐ Example mapping → ➑ Aggregates herzien → <b>➒ Architectuurpatronen (hier)</b> → ➓ Teams/Conway → ⓫ Events als integratie → ⓬ Examentraining + portfolio</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Waar dit deel over gaat</a></li>
+      <li><a href="#s2" data-target="s2">De casus: een grens op papier is geen grens in code</a></li>
+      <li><a href="#s3" data-target="s3">Gelaagde architectuur</a></li>
+      <li><a href="#s4" data-target="s4">Hexagonale architectuur</a></li>
+      <li><a href="#s5" data-target="s5">Wanneer het ene het andere overbodig maakt</a></li>
+      <li><a href="#s6" data-target="s6">Dagdeel B: lezen en schrijven zijn niet hetzelfde probleem</a></li>
+      <li><a href="#s7" data-target="s7">CQRS: wat het oplost, wanneer het overkill is</a></li>
+      <li><a href="#s8" data-target="s8">De werkvorm: het architectuurkeuzeblad</a></li>
+      <li><a href="#s9" data-target="s9">Terug naar de casus, en vooruit</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- S1 -->
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waar dit deel over gaat</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Deel 18 eindigde met een splitsing, niet met een oplossing. De dienstverband-aggregate en de mutatieverwerking-aggregate zijn modelleerbeslissingen — uitspraken over welke invariant waar hoort. Geen van beide zegt iets over hoe een systeem die grens ook daadwerkelijk beschermt tegen dagelijkse druk: een deadline, "het is maar één regel", een collega-team dat "er even snel bij" wil.</p>
+<p>Dit deel behandelt de applicatie-architectuurpatronen die dat wél doen: hexagonale architectuur, gelaagde architectuur, en CQRS — platformonafhankelijke ontwerpkeuzes, geen technologieën. Dit deel beslaat <strong>twee dagdelen</strong>. Dagdeel A behandelt hexagonaal en gelaagd als bescherming van de grenzen uit deel 18. Dagdeel B behandelt CQRS, met de asymmetrie tussen Wegwijzer (leest) en KERN/Mutatieplatform (schrijft) als scherpste voorbeeld.</p>
+<p>Aan het eind van dit deel kun je:</p>
+<ul>
+<li>het verschil tussen gelaagde en hexagonale architectuur uitleggen in termen van afhankelijkheidsrichting;</li>
+<li>een bounded context herkennen waarin de aggregaatgrens technisch onvoldoende beschermd is;</li>
+<li>CQRS toepassen: wat het oplost, wanneer het overkill is, en waarom het geen synoniem is voor "twee databases";</li>
+<li>met het <strong>architectuurkeuzeblad</strong> een architectuurbeslissing voor een bounded context onderbouwen en verdedigen.</li>
+</ul>
+      </div>
+    </article>
+
+    <!-- S2 -->
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De casus: een grens op papier is geen grens in code</h2><span class="chip time">⏱ 11 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Otto, twee weken na deel 18, met de eerste code voor de mutatieverwerking-aggregate: "Niks in mijn codebase houdt tegen dat iemand — ikzelf over drie maanden, of een nieuwe developer die de context map nooit heeft gezien — gewoon rechtstreeks een query naar de KERN-database schrijft omdat dat sneller is. De grens die we op papier hebben getekend, bestaat in de database niet."</p>
+<p>Foppe: "Tot en met deel 18 hebben jullie besloten wát bij elkaar hoort en wie het bewaakt. Otto's vraag is een vraag over hóe."</p>
+<p>Vera herkent de parallel: "Bij KERN hebben we dat probleem al veertien jaar. Een query kan overal vandaan komen. Een validatieregel staat op drie plekken, licht verschillend." Karsten: "WGP 2.0 mislukte deels omdat de architectuur het onmogelijk maakte om één stuk aan te passen zonder drie andere stukken kapot te maken." Daan: "We hebben geleerd dat een grens een eigenaar nodig heeft. Wat we nu leren, is dat die eigenaar een muur nodig heeft die hem ook daadwerkelijk beschermt."</p>
+      </div>
+    </article>
+
+    <!-- S3 -->
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Gelaagde architectuur</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Gelaagde architectuur</strong> verdeelt een systeem in lagen met een vaste regel: welke laag mag van welke andere weten. De gangbare indeling: <strong>presentatielaag</strong>, <strong>applicatielaag</strong>, <strong>domeinlaag</strong> (aggregates, entities, domeinregels), <strong>infrastructuurlaag</strong>. Elke laag mag alleen weten van de laag direct eronder, nooit andersom, en de domeinlaag weet idealiter van geen enkele andere laag.</p>
+<p>Die regel lost precies Vera's probleem op: als de domeinlaag niet weet hoe de database eruitziet, kan een query nooit rechtstreeks om de domeinregels heen. Dat is geen conventie die iedereen zich moet herinneren; het is een structurele eigenschap van de code. Een developer die "snel even" een rechtstreekse query wil schrijven, moet de laagstructuur letterlijk doorbreken — een handeling die opvalt bij een code review.</p>
+<figure><img src="figuren/figuur-19-2-gelaagde-architectuur.svg" alt="Vier lagen gestapeld — presentatie, applicatie, domein, infrastructuur — met pijlen die alleen naar beneden wijzen, en één rode, doorbroken pijl die rechtstreeks van presentatie naar infrastructuur loopt"><figcaption>Figuur 19-2 — vier lagen, met de erosie zichtbaar als een doorbroken pijl</figcaption></figure>
+<p>Vrijwel elk systeem in het landschap heeft een vorm van lagen — en toch is KERN's grens uitgehold. Een laagstructuur beschermt alleen wat de regel ook daadwerkelijk afdwingt: zodra ergens één uitzondering wordt toegestaan, begint erosie die jaren later niet meer terug te draaien is zonder het systeem opnieuw te bouwen.</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 3 — Vera's erosie bij KERN diagnosticeren</p><details class="q"><summary><span class="qn">1</span><span>KERN heeft een laagstructuur, en toch is de grens uitgehold. Hoe kan dat, en welke maatregel had het kunnen voorkomen?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Een laagstructuur die op papier bestaat maar niet gehandhaafd wordt, mist een mechanisme dat een uitzondering zichtbaar en bespreekbaar maakt vóórdat ze wordt toegestaan — als "voor deze ene rapportage mag het rechtstreeks" één keer wordt goedgekeurd, ontstaat geen structurele belemmering om het een tweede en derde keer ook te doen. Een concrete maatregel: een verplichte, geautomatiseerde controle (in de build of code review) die een rechtstreekse afhankelijkheid van presentatie naar infrastructuur laat falen.</div></details>
+      </div>
+    </article>
+
+    <!-- S4 -->
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Hexagonale architectuur</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>Hexagonale architectuur</strong> (ports-and-adapters) plaatst het domein letterlijk in het midden, zonder kennis van wat er "buiten" gebeurt. Alles wat het domein van de buitenwereld nodig heeft, wordt beschreven als een <strong>poort</strong>: een interface die zegt wát nodig is, niet hóe dat geleverd wordt. Buiten die poort zit een <strong>adapter</strong>: de concrete, technische implementatie.</p>
+<p>Het verschil met gelaagd zit niet in "hoeveel onderdelen" maar in "wie is van wie afhankelijk". Bij gelaagd hangt applicatie af van domein, domein van niets — maar de richting blijft impliciet. Bij hexagonaal wordt de richting voor alles "naar buiten" expliciet omgedraaid: een database-adapter implementeert een interface die het domein heeft gedefinieerd; het domein importeert nooit een databasebibliotheek. Het domein kan letterlijk niet compileren met een verwijzing naar de database.</p>
+<figure><img src="figuren/figuur-19-3-hexagonale-architectuur.svg" alt="Het domein als kern, omringd door poorten, met adapters die van buitenaf op de poorten aansluiten — pijlen die van de adapters naar de poorten wijzen, nooit andersom"><figcaption>Figuur 19-3 — het domein als kern; adapters hangen af van poorten, nooit andersom</figcaption></figure>
+<p>Die extra garantie heeft een prijs: meer indirectie, die alleen loont wanneer ze iets beschermt dat het waard is — een invariant die niet omzeild mag worden, of een systeem met waarschijnlijk wisselende adapters. Voor een klein systeem met één stabiele database is de indirectie kosten zonder aantoonbare baat.</p>
+      </div>
+    </article>
+
+    <!-- S5 -->
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Wanneer het ene het andere overbodig maakt</h2><span class="chip time">⏱ 14 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>De vraag is niet "welk patroon is beter" maar "wat moet deze context beschermen, en tegen wat".</strong> Gelaagd beschermt tegen het meest voorkomende risico: presentatie- en domeinlogica die door elkaar lopen. Hexagonaal beschermt tegen een specifieker risico: het domein afhankelijk worden van een concrete technische keuze die lastig te veranderen is.</p>
+<p>Otto: "Voor het Mutatieplatform, dat straks met meerdere bronnen en afnemers moet praten, is de kans groot dat we adapters gaan wisselen. Dat is precies het scenario waar hexagonaal voor bedoeld is." Vera: "Wij hebben één database, al veertien jaar dezelfde. Wat wij nodig hebben is niet bescherming tegen wisselende adapters — dat risico bestaat bij ons niet — maar bescherming tegen erosie. Voor ons is een strak gehandhaafde gelaagde architectuur waarschijnlijk genoeg."</p>
+<p>Priya brengt een derde smaak in: "Wij lezen alleen. We bewaken geen invariant van onszelf. Past hexagonaal daar überhaupt op?" Foppe: "Precies daar zit het onderscheid dat we vanmiddag nog niet hebben gemaakt — tussen een context die schrijft en een die alleen leest."</p>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 4 — risico, niet mode</p><details class="q"><summary><span class="qn">1</span><span>Welk risico loopt het Nabestaandenloket, en welk patroon — gelaagd of hexagonaal — past daarbij?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">Het Nabestaandenloket is klein, heeft één team en één overzichtelijke aggregate — het risico van wisselende of meerdere technische aansluitingen, waar hexagonaal voor bedoeld is, speelt daar niet. Het risico dat wel bestaat (erosie van de laagstructuur door gebrek aan discipline) is met een strak gehandhaafde <strong>gelaagde architectuur</strong> voldoende af te dekken, zonder de extra indirectie van hexagonaal die geen aantoonbaar risico afdekt bij dit systeem.</div></details>
+      </div>
+    </article>
+
+    <!-- S6 -->
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Dagdeel B: lezen en schrijven zijn niet hetzelfde probleem</h2><span class="chip time">⏱ 11 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Priya opent dagdeel B: "Wegwijzer toont een deelnemer zijn opgebouwde aanspraken. Dat overzicht moet snel zijn en begrijpelijk — niet in de vorm waarin KERN het intern vasthoudt. Maar Wegwijzer beslist nooit iets. Het heeft geen enkele aggregate van zichzelf."</p>
+<p>Karsten herkent het spiegelbeeld: "Bij ons is het precies andersom. Elke mutatie moet strikt gevalideerd worden. Snelheid van lezen is daar niet het probleem. Het probleem is: hoe zorgen we dat elke schrijfactie de invarianten waarborgt, ook als er twee mutaties bijna gelijktijdig binnenkomen."</p>
+<p>Foppe: "Jullie beschrijven twee heel verschillende soorten werk die toevallen aan hetzelfde begrip 'dienstverband': lezen — snel, leesbaar, zonder beslissingen — en schrijven — strikt, met bewaakte invarianten. Moet je die twee soorten werk door dezelfde technische weg laten lopen, alleen omdat ze over hetzelfde gegeven gaan?"</p>
+      </div>
+    </article>
+
+    <!-- S7 -->
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">CQRS: wat het oplost, wanneer het overkill is</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p><strong>CQRS</strong> — command query responsibility segregation — scheidt het pad waarlangs een systeem gegevens <strong>wijzigt</strong> (een <strong>command</strong>, dat een aggregate's invariant moet respecteren) van het pad waarlangs het gegevens <strong>toont</strong> (een <strong>query</strong>, die alleen leest). De twee paden hoeven niet dezelfde structuur te delen.</p>
+<p>Vera herkent het probleem van één gedeeld model: "Wij hebben velden in onze kernstructuur die uitsluitend bestaan omdat een rapportage ze ooit nodig had, en velden die uitsluitend bestaan voor validatie. Het is één tabel geworden die twee meesters dient, en geen van beide goed."</p>
+<figure><img src="figuren/figuur-19-6-cqrs.svg" alt="Eén gedeeld model dat zowel schrijft als toont, met velden gemarkeerd die alleen voor de ene of de andere kant bestaan — tegenover een gescheiden command- en querypad, elk met zijn eigen, toegesneden model"><figcaption>Figuur 19-6 — één model dat twee meesters dient, tegenover gescheiden paden</figcaption></figure>
+<p><strong>Wanneer CQRS overkill is.</strong> Foppe: "CQRS is geen upgrade die elk systeem beter maakt. Het is een antwoord op een asymmetrie die je eerst moet aantonen, niet aannemen." Drie signalen wijzen op overkill: lezen en schrijven komen ongeveer even vaak voor met dezelfde structuur; het gedeelde model levert geen merkbaar compromis op; of een klein team kan de extra onderdelen niet onderhouden zonder vertraging.</p>
+<p><strong>CQRS is geen synoniem voor "twee databases".</strong> Het patroon gaat over scheiding van verantwoordelijkheid, niet over infrastructuur — een systeem kan CQRS toepassen met één database, zolang schrijfoperaties door de aggregate lopen en leesoperaties via een aparte, voor lezen geoptimaliseerde weg. Pas bij een grote asymmetrie wordt een fysiek gescheiden leesmodel de logische volgende stap.</p>
+<div class="callout note"><span class="lbl">Uitvoering: het Locked Platform</span><p>De scheiding tussen command en query is een modelleerkeuze, geen databasekeuze. Pieters eigen Locked Platform heeft CQRS en <strong>event sourcing</strong> als architecturale grondslag: het schrijfpad legt niet de actuele staat vast, maar de reeks gebeurtenissen die ertoe leidden, en het leespad bouwt daar apart, asynchroon, toegesneden leesmodellen op. Eén mogelijke, consequent doorgevoerde uitvoering naast andere — zie de Toolbijlage voor de techniek.</p></div>
+      </div>
+      <div class="quiz"><div class="quiz__h">Controlevraag</div>
+        <p class="quiz__src">Uit Werkboek deel 19, Opdracht 10 — CQRS is geen "twee databases"</p><details class="q"><summary><span class="qn">1</span><span>Wat vereist CQRS wél, ook zonder gescheiden opslag, en wanneer wordt gescheiden opslag de logische volgende stap?</span><span class="qx">Toon antwoord</span></summary>
+          <div class="ans">CQRS vereist dat de code zelf het onderscheid bewaart: schrijfoperaties lopen door de aggregate die de invariant bewaakt, leesoperaties via een aparte, voor lezen geoptimaliseerde weg die de aggregate niet belast — dat kan binnen één database. Een fysiek gescheiden leesmodel wordt de logische volgende stap zodra de asymmetrie tussen lezen en schrijven groot genoeg wordt, zoals bij Wegwijzer met veel meer leesverkeer dan schrijfverkeer.</div></details>
+      </div>
+    </article>
+
+    <!-- S8 -->
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">De werkvorm: het architectuurkeuzeblad</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Het instrument van dit deel is het <strong>architectuurkeuzeblad</strong>: gelaagd/hexagonaal en CQRS als vragen die elkaar aanvullen, niet als concurrerende opties.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Stap</th><th>Wat je doet</th></tr></thead>
+<tbody>
+<tr><td><strong>1 — Context en aggregaatgrens</strong></td><td>Welke aggregate(s), welke invariant, uit deel 18.</td></tr>
+<tr><td><strong>2 — Gelaagd of hexagonaal, met risico als argument</strong></td><td>Erosie door gebrek aan discipline, of afhankelijkheid van wisselende technische aansluitingen?</td></tr>
+<tr><td><strong>3 — Toets op lees/schrijf-asymmetrie</strong></td><td>Aantoonbaar verschil? CQRS overwegen. Geen asymmetrie of te klein team: expliciet benoemen waarom (nog) niet.</td></tr>
+<tr><td><strong>4 — De architectuur in één alinea</strong></td><td>Gericht op wie haar bouwt: basispatroon, wel/geen CQRS, de ene regel die niet doorbroken mag worden.</td></tr>
+</tbody>
+</table></div>
+<div class="callout note"><span class="lbl">Het vijfde veld</span><p><strong>Dat het verschil maakt: als een developer die deze keuze niet kent, over een jaar de snelste weg neemt in plaats van de architectonisch juiste — wat gaat er dan mis, en hoe snel wordt dat zichtbaar?</strong> Een keuze die dit veld niet overtuigend invult, is vermoedelijk gekozen omdat ze bekend is, niet omdat ze een reëel risico afdekt.</p></div>
+<h3>Toepassing: vijf systemen, vijf verschillende keuzes</h3>
+<p>Otto en Karsten kiezen hexagonaal voor het Mutatieplatform (wisselende adapters), zonder CQRS in eerste instantie. Voor het Werkgeversportaal kiezen ze gelaagd — eenvoud tegen het litteken van WGP 2.0. Priya en Vera kiezen CQRS voor Wegwijzer zonder discussie. Voor KERN wordt het feller: Vera bepleit gelaagd mét CQRS om de erosie tegen te gaan. Karsten vraagt door: "Is dat een architectuurkeuze, of een saneringsproject met een architectuurpatroon als excuus?" Vera: "Allebei. Het patroon lost het structurele probleem op. Maar het saneringswerk zelf is gewoon werk dat ooit gedaan moet worden, met of zonder CQRS."</p>
+<figure><img src="figuren/figuur-19-8-vijf-architectuurkeuzes.svg" alt="Vijf systemen met, per systeem, het toegekende architectuurpatroon en één zin over het risico dat het afdekt"><figcaption>Figuur 19-8 — vijf systemen, vijf architectuurkeuzes, elk met een eigen risico-argument</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- S9 -->
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Terug naar de casus, en vooruit</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+        <p>Daan brengt het resultaat samen: geen enkel systeem krijgt hetzelfde patroon om dezelfde reden. Foppe: "Jullie hebben geen architectuurstandaard voor het hele landschap gekozen. Jullie hebben, per context, uitgezocht welk risico daar werkelijk speelt — dat is wat architectuur op landschapsschaal betekent."</p>
+<p>Otto: "We weten nu welke architectuur elk systeem beschermt. We weten nog niet hoe die systemen elkaar ook daadwerkelijk bereiken zonder dat een van beide de ander weer binnendringt." Dat is deel 21.</p>
+<h4>Samenvatting</h4>
+<ul>
+<li>Gelaagde architectuur beschermt tegen vermenging van presentatie- en domeinlogica; hexagonaal beschermt het domein tegen afhankelijkheid van een concrete technische keuze.</li>
+<li>De keuze volgt uit het risico dat een context daadwerkelijk loopt, niet uit welk patroon moderner is.</li>
+<li>CQRS scheidt command van query — een antwoord op een aangetoonde asymmetrie, geen upgrade voor elk systeem.</li>
+<li>Het architectuurkeuzeblad verdedigt een keuze met een concreet incident dat ze voorkomt.</li>
+</ul>
+<div class="callout tip"><span class="lbl">Vooruit naar deel 20</span><p>Karsten kiest bewust voor eenvoud bij het Werkgeversportaal, omdat zijn team klein is. Iris vraagt: "Kiezen jullie deze architecturen om het domein, of om hoe mijn teams nu toevallig zijn ingericht?" Dat gebrek aan antwoord is waar deel 20, over Conway's Law en teamtopologieën, mee begint: bounded contexts en de architectuur die ze beschermt zijn niet alleen een technisch vraagstuk, maar ook een organisatievraagstuk.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 20</h3>
+      <p>Karsten kiest bewust voor eenvoud bij het Werkgeversportaal, omdat zijn team klein is. Iris vraagt: "Kiezen jullie deze architecturen om het domein, of om hoe mijn teams nu toevallig zijn ingericht?" Dat gebrek aan antwoord is waar deel 20, over Conway's Law en teamtopologieën, mee begint.</p>
+      <a class="btn" href="https://cursus.eductus.nl/domain-driven-design/niveau-2/deel-20/reader.html">Deel 20 openen (oude vormgeving) →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Domain-Driven Design · Deel 19 · <a href="index.html">terug naar cursusoverzicht</a> · <a href="https://cursus.eductus.nl/domain-driven-design/niveau-2/deel-19/reader.html">bekijk de oude vormgeving van dit deel</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_ddd19_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
