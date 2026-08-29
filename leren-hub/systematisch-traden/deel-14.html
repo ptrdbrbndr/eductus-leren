@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 14 — Risk management verdieping | Eductus</title>
+<meta name="description" content="Drie sizing-methodes exact uitgerekend: fixed fractional, Kelly-criterium en half-Kelly, en ATR-based sizing — op dezelfde voorbeeldtrade naast elkaar, met de waarschuwingssignalen die op een te grote positie wijzen.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-14.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+details.q .ans pre{background:var(--ink);color:#e9e2d3;padding:12px 16px;border-radius:10px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:13.5px;line-height:1.5;margin:8px 0}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 14 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 2 (Systematisch) · Deel 14 van 30</p>
+  <h1>Risk management verdieping<br><em>Drie sizing-methodes, exact uitgerekend.</em></h1>
+  <p class="hero__lead">Van alle onderdelen van een blueprint is risk management het minst vergeeflijke. Dit deel rekent drie sizing-methodes — fixed fractional, Kelly-criterium/half-Kelly en ATR-based sizing — stap voor stap uit op dezelfde voorbeeldtrade, en legt de waarschuwingssignalen vast die op een te grote of onverantwoorde positie wijzen. Fenna de Wit's grootste misser uit niveau 1 was een trade zonder vooraf vastgelegde stop; dit deel geeft daar een expliciet antwoord op.</p>
+  <div class="hero__stats"><div class="stat"><b>7</b><span>secties</span></div><div class="stat"><b>±50 min</b><span>leestijd + werkboek</span></div><div class="stat"><b>11</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>Systematisch</span></div></div>
+  <div class="disclaimer"><strong>Disclaimer.</strong> Deze cursus is educatieve content, geen financieel advies. De rekenvoorbeelden in dit deel gebruiken een fictief, generiek "aandeel X" en zijn uitsluitend bedoeld om de formules te illustreren — geen aanbeveling voor een concreet instrument of een concrete positiegrootte. Trading kent verliesrisico, inclusief het volledige verlies van de inzet; bij hefboomproducten kan het verlies groter zijn dan de inzet. Er wordt geen rendement of resultaat gegarandeerd; de genoemde win rate en win/loss-ratio zijn illustratieve aannames, geen prognose.</div>
+  <div class="trail">Niveau 2 · Systematisch: ① Van losse trades naar strategie &rarr; ② Strategy blueprint &rarr; ③ Indicatoren verdieping &rarr; <b>④ Risk management verdieping (hier)</b> &rarr; ⑤ Kill switch en drawdown-bewaking &rarr; ⑥ Backtesting-methodologie &rarr; ⑦ Tradingplan schrijven &rarr; ⑧ Journaling en reviewdiscipline &rarr; ⑨ Marktregimes en volatiliteit &rarr; ⑩ Portfolio-basis en diversificatie &rarr; ⑪ Strategieën vergelijken en kiezen &rarr; ⑫ Terugblik niveau 2</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom dit het belangrijkste deel van niveau 2 is</a></li>
+<li><a href="#s2" data-target="s2">Fixed fractional — de standaardmethode</a></li>
+<li><a href="#s3" data-target="s3">Kelly-criterium en half-Kelly</a></li>
+<li><a href="#s4" data-target="s4">Volatility/ATR-based sizing</a></li>
+<li><a href="#s5" data-target="s5">De drie methodes naast elkaar</a></li>
+<li><a href="#s6" data-target="s6">Waarom de meeste traders te groot inzetten</a></li>
+<li><a href="#s7" data-target="s7">Disclaimer</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom dit het belangrijkste deel van niveau 2 is</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Van alle onderdelen van een blueprint is risk management het onderdeel dat het minst vergeeflijk is. Een zwakke entry-regel kost u op termijn wat rendement. Een te grote positiegrootte kan, bij een ongelukkige reeks verliezen, een account in een paar weken onherstelbaar beschadigen — ongeacht hoe goed de onderliggende edge-hypothese is. Dit deel gaat daarom niet over "een beetje voorzichtiger zijn", maar over drie concrete, exact uit te rekenen methodes om te bepalen hoeveel u bij een trade inzet.</p>
+<p>Fenna's grootste misser uit niveau 1 was een trade zonder stop-loss die veel groter uitpakte dan gepland — niet omdat haar analyse fout was, maar omdat ze nooit vooraf had vastgelegd hóeveel ze bereid was te verliezen. Dit deel geeft haar (en u) daar een expliciet antwoord op.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Fixed fractional — de standaardmethode</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fixed fractional is de meest gebruikte en meest robuuste sizing-methode, en de default in deze cursus. Het idee: u riskeert bij elke trade een vast percentage van uw accountgrootte, ongeacht hoe overtuigd u bent van die specifieke trade.</p>
+<pre>risico_bedrag   = account_grootte × (risico_pct / 100)
+stop_afstand    = |entry_prijs - stop_prijs|
+positiegrootte  = floor(risico_bedrag / stop_afstand)
+notional        = positiegrootte × entry_prijs</pre>
+<p><strong>Rekenvoorbeeld.</strong> Fenna's account staat op €20.000. Ze hanteert een vast risico van 1% per trade. Aandeel X noteert €50; op basis van haar entry-regel (herovering van het 50-daags gemiddelde) plaatst ze haar technische stop op €47, net onder de recente steunzone.</p>
+<pre>risico_bedrag   = 20.000 × (1 / 100)        = €200
+stop_afstand    = |50 - 47|                 = €3
+positiegrootte  = floor(200 / 3)            = 66 aandelen
+notional        = 66 × 50                   = €3.300</pre>
+<p>Fenna koopt dus 66 aandelen X. Als de stop wordt geraakt, verliest ze 66 × €3 = €198 — vrijwel exact haar beoogde 1% (het kleine verschil ontstaat doordat <code>floor</code> naar beneden afrondt).</p>
+<div class="callout warn"><span class="lbl">Waarschuwingen om te bewaken</span><p>Een <code>stop_afstand</code> van €0 is geen fout in de rekensom maar een fout in de trade-opzet: er is dan geen zinvolle berekening mogelijk, en een trade zonder een van tevoren bepaalde stop hoort niet geopend te worden. Een <code>stop_afstand</code> kleiner dan 0,5% van de entryprijs is verdacht klein en wijst vaak op een stop die te dicht op de koers is gezet om realistisch te zijn (ruis raakt hem dan bijna zeker). Een <code>notional</code> groter dan vijf keer de accountgrootte wijst op extreme hefboom — bij een fixed-fractional-berekening met een normaal risicopercentage zou dit alleen kunnen ontstaan bij een absurd kleine <code>stop_afstand</code>, en is dan zelf al een teken dat er iets niet klopt in de trade-opzet.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 14, Opdracht 1</p>
+<details class="q"><summary><span class="qn">1</span><span>Aandeel Y noteert €80. Fenna's account staat op €15.000, ze hanteert 1,5% risico per trade. Haar technische stop staat op €76. Bereken het risicobedrag, de stop-afstand, de positiegrootte en de notional.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre>risico_bedrag   = 15.000 × (1,5 / 100)  = €225
+stop_afstand    = |80 - 76|             = €4
+positiegrootte  = floor(225 / 4)        = 56 aandelen
+notional        = 56 × 80               = €4.480</pre></div></details>
+<details class="q"><summary><span class="qn">2</span><span>Wat verliest Fenna maximaal (in euro's) als de stop wordt geraakt, en hoe verhoudt zich dat tot haar beoogde 1,5%?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij een geraakte stop verliest Fenna 56 × €4 = <strong>€224</strong> — nagenoeg exact haar beoogde 1,5% (€225), met een klein verschil door de afronding naar beneden (<code>floor</code>).</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Kelly-criterium en half-Kelly</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het Kelly-criterium berekent, op basis van de win rate en de gemiddelde winst/verlies-verhouding van een strategie, welke fractie van het kapitaal wiskundig optimaal is om op lange termijn de groei te maximaliseren.</p>
+<pre>kelly_fractie  = win_rate - ((1 - win_rate) / avg_win_loss_ratio)
+half_kelly     = kelly_fractie / 2
+risico_bedrag  = account_grootte × half_kelly
+positiegrootte = floor(risico_bedrag / stop_afstand)</pre>
+<p>Hierbij is <code>win_rate</code> een fractie tussen 0 en 1, en <code>avg_win_loss_ratio</code> de gemiddelde winst gedeeld door het gemiddelde verlies.</p>
+<p><strong>Rekenvoorbeeld.</strong> Uit haar (nog beperkte) logboek en een eerste backtest schat Fenna in: win rate 45% (0,45), gemiddelde winst €220, gemiddeld verlies €100 — een avg_win_loss_ratio van 2,2. Ze gebruikt dezelfde technische stop als in het vorige voorbeeld (stop_afstand €3).</p>
+<pre>kelly_fractie  = 0,45 - ((1 - 0,45) / 2,2)
+               = 0,45 - (0,55 / 2,2)
+               = 0,45 - 0,25
+               = 0,20
+
+half_kelly     = 0,20 / 2 = 0,10
+
+risico_bedrag  = 20.000 × 0,10 = €2.000
+positiegrootte = floor(2.000 / 3) = 666 aandelen
+notional        = 666 × 50 = €33.300</pre>
+<p>Ziet u het verschil met fixed fractional? Bij dezelfde trade en dezelfde stop levert half-Kelly hier 666 aandelen op tegenover 66 bij fixed fractional met 1% risico — tien keer zoveel. Dat is precies waarom Kelly-uitkomsten altijd kritisch tegen het licht gehouden moeten worden, ook na halvering.</p>
+<div class="callout tip"><span class="lbl">Waarom half-Kelly de praktijkstandaard is</span><p>Volledige Kelly is wiskundig optimaal voor kapitaalgroei op lange termijn, maar de weg ernaartoe gaat gepaard met drawdowns van 50% of meer — mathematisch correct, maar psychologisch voor vrijwel niemand vol te houden. Bovendien is Kelly extreem gevoelig voor fouten in de schatting van win rate en win/loss-ratio: een kleine overschatting van de edge leidt tot een veel te grote Kelly-fractie. De helft nemen (half-Kelly) is de professionele vuistregel: de groeivoordelen blijven grotendeels behouden, terwijl de drawdowns aanzienlijk minder extreem worden.</p></div>
+<div class="callout warn"><span class="lbl">Twee waarschuwingssignalen</span><p>Een <code>kelly_fractie</code> kleiner dan 0 betekent dat de ingeschatte edge negatief is — met deze cijfers zou er helemaal niet gehandeld moeten worden, ongeacht de sizing-methode. Een <code>kelly_fractie</code> groter dan 0,25 is verdacht hoog en wijst meestal op een te optimistische, te kleine of overfitte backtest (zie deel 16) — in de praktijk zijn win rates en win/loss-ratio's die zulke hoge Kelly-fracties opleveren zeldzaam voor een discretionaire of licht-systematische strategie.</p></div>
+<p>Vanwege de gevoeligheid van Kelly voor schattingsfouten gebruikt Fenna deze methode voorlopig alleen als kruiscontrole naast fixed fractional, niet als haar hoofdmethode — precies zoals ze in haar blueprint (deel 12) had vastgelegd.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 14, Opdracht 2</p>
+<details class="q"><summary><span class="qn">1</span><span>Fenna schat in: win rate 50% (0,50), gemiddelde winst/verlies-verhouding 1,8. Gebruik stop-afstand €4 en account €15.000. Bereken de kelly_fractie en de half_kelly.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre>kelly_fractie  = 0,50 - ((1 - 0,50) / 1,8)
+               = 0,50 - (0,50 / 1,8)
+               = 0,50 - 0,2778
+               = 0,2222
+
+half_kelly     = 0,2222 / 2 = 0,1111</pre></div></details>
+<details class="q"><summary><span class="qn">2</span><span>Bereken het risicobedrag en de positiegrootte volgens half-Kelly.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre>risico_bedrag  = 15.000 × 0,1111       = €1.666,67
+positiegrootte = floor(1.666,67 / 4)   = 416 aandelen
+notional        = 416 × 80             = €33.280</pre></div></details>
+<details class="q"><summary><span class="qn">3</span><span>Vergelijk de uitkomst met fixed fractional (opdracht 1, 56 aandelen). Wat valt op?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Half-Kelly (416 aandelen) is ruim <strong>zeven keer</strong> zo groot als fixed fractional met 1,5% risico (56 aandelen), bij dezelfde stop. Dit illustreert opnieuw waarom half-Kelly nooit blind gevolgd moet worden zonder een conservatiever plafond ernaast te leggen — hier zou de notional (€33.280) meer dan twee keer de accountgrootte (€15.000) bedragen, wat op zichzelf al een teken van te veel hefboom is.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Volatility/ATR-based sizing</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De derde methode gebruikt de Average True Range (deel 13) om de <code>stop_afstand</code> af te leiden uit de actuele volatiliteit van het instrument, in plaats van uit een handmatig gekozen technisch niveau.</p>
+<pre>risico_bedrag   = account_grootte × (risico_pct / 100)
+stop_afstand    = ATR × atr_multiplier        (atr_multiplier default 2)
+positiegrootte  = floor(risico_bedrag / stop_afstand)
+stop_afgeleid   = entry_prijs ∓ stop_afstand   (long: min, short: plus)</pre>
+<p><strong>Rekenvoorbeeld.</strong> Zelfde trade: account €20.000, risico 1% per trade, entry €50. De 14-daagse ATR van aandeel X staat op €2,00; Fenna gebruikt de standaard atr_multiplier van 2.</p>
+<pre>risico_bedrag   = 20.000 × (1 / 100)   = €200
+stop_afstand    = 2,00 × 2             = €4
+positiegrootte  = floor(200 / 4)       = 50 aandelen
+notional        = 50 × 50              = €2.500
+stop_afgeleid   = 50 - 4               = €46   (long positie)</pre>
+<p>Bij dezelfde risicobereidheid (1%) geeft de ATR-methode hier een iets ruimere stop (€4 in plaats van €3) en dus een iets kleinere positie (50 in plaats van 66 aandelen). Het verschil ontstaat doordat de technische stop uit sectie 2 was gebaseerd op een chartniveau (de steunzone bij €47), terwijl de ATR-stop is gebaseerd op de gemiddelde daadwerkelijke koersbeweging van het aandeel — twee verschillende, allebei legitieme manieren om tot een stop te komen. Een goede gewoonte is beide te berekenen en de ruimste van de twee te gebruiken, zodat de stop niet toevallig binnen normale ruis van het instrument ligt.</p>
+<div class="callout warn"><span class="lbl">Waarschuwing</span><p>Een ATR groter dan 10% van de entryprijs wijst op een extreem volatiel instrument. Bij aandeel X (ATR €2 op een koers van €50, dus 4%) is dat niet het geval; bij een instrument met bijvoorbeeld een ATR van €6 op diezelfde koers (12%) zou de ATR-methode een zeer ruime stop en dus een zeer kleine positie opleveren — een signaal om extra voorzichtig te zijn, niet om de multiplier te verkleinen om toch een "normale" positiegrootte te krijgen.</p></div>
+<figure><img src="figuren/deel-14-figuur-1-sizing-methodes.svg" alt="Vergelijking van de drie sizing-methodes — fixed fractional, half-Kelly en ATR-based — op dezelfde voorbeeldtrade van aandeel X, met per methode de stop-afstand, het risicobedrag, de positiegrootte en de notional naast elkaar"><figcaption>Figuur 14-1 — Vergelijking van de drie sizing-methodes op eenzelfde voorbeeldtrade</figcaption></figure>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 14, Opdracht 3</p>
+<details class="q"><summary><span class="qn">1</span><span>Account €15.000, risico 1,5% per trade, entry €80. De 14-daagse ATR van aandeel Y staat op €3,00, atr_multiplier 2. Bereken de stop-afstand, het risicobedrag, de positiegrootte en de afgeleide stop (long positie).</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre>stop_afstand    = 3,00 × 2             = €6
+risico_bedrag   = 15.000 × (1,5 / 100) = €225
+positiegrootte  = floor(225 / 6)       = 37 aandelen
+notional        = 37 × 80              = €2.960
+stop_afgeleid   = 80 - 6               = €74</pre></div></details>
+<details class="q"><summary><span class="qn">2</span><span>Vergelijk deze stop met een technische stop op €76. Welke is ruimer?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De ATR-afgeleide stop (€74) is <strong>ruimer</strong> dan de technische stop (€76, dus een afstand van €4 tegenover €6 bij ATR). Dat betekent een kleinere positie (37 tegenover 56 aandelen) bij hetzelfde risicopercentage. Een verstandige aanpak is de ruimste van de twee te gebruiken, zodat de stop niet binnen normale koersruis van het instrument ligt.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De drie methodes naast elkaar</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<div class="tablewrap"><table><thead><tr><th>Methode</th><th>Stop_afstand</th><th>Risicobedrag</th><th>Positiegrootte</th><th>Notional</th></tr></thead><tbody>
+<tr><td>Fixed fractional (1%)</td><td>€3 (technisch niveau)</td><td>€200</td><td>66</td><td>€3.300</td></tr>
+<tr><td>Half-Kelly</td><td>€3 (technisch niveau)</td><td>€2.000</td><td>666</td><td>€33.300</td></tr>
+<tr><td>ATR-based (1%, ×2)</td><td>€4 (2× ATR)</td><td>€200</td><td>50</td><td>€2.500</td></tr>
+</tbody></table></div>
+<p>Dit overzicht laat drie dingen zien die u zich goed moet realiseren. Ten eerste: fixed fractional en ATR-based komen, bij hetzelfde risicopercentage, tot een vergelijkbare orde van grootte — het verschil zit in hoe de <code>stop_afstand</code> wordt bepaald, niet in de risicofilosofie. Ten tweede: half-Kelly kan bij een op het eerste gezicht bescheiden edge (win rate 45%, ratio 2,2) toch tot een veel grotere positie leiden dan fixed fractional, omdat Kelly optimaliseert voor groei in plaats van voor een vast, voorzichtig risicoplafond. Ten derde, en het belangrijkst: geen van de drie uitkomsten is "de juiste" — het zijn drie verschillende manieren om risico te definiëren, en een verstandige trader gebruikt fixed fractional (of het conservatiefste van de drie) als plafond, ook wanneer Kelly een hogere positie zou toestaan.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Waarom de meeste traders te groot inzetten</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Er is een simpel, terugkerend mechanisme achter overmatig grote posities: een trader die net een paar keer winst heeft gemaakt, voelt zich bevestigd in de eigen aanpak en verhoogt de inzet — niet op basis van een herberekening, maar op basis van een goed gevoel. Dat gevoel is statistisch niet onderbouwd: een reeks van drie of vier winnende trades zegt, zoals in deel 11 en 13 al bleek, weinig over de werkelijke edge. Fenna herkent dit patroon uit niveau 1: een winnende reeks die tot overmoed leidde, en uiteindelijk tot een positie die veel groter was dan haar (destijds nog niet vastgelegde) risicotolerantie.</p>
+<p>De tegenmaatregel is niet ingewikkeld, maar wel ongemakkelijk om vol te houden: een vast risicopercentage per trade, consistent toegepast, ongeacht hoe de laatste paar trades zijn afgelopen. Dat is precies waarom risk management in de blueprint staat (deel 12) en niet wordt overgelaten aan het gevoel van de dag.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 14, Opdracht 4 — waarschuwingssignalen herkennen</p>
+<details class="q"><summary><span class="qn">1</span><span>Entry €100, stop €99,80, account €10.000, risico 1%. Welke waarschuwing (indien van toepassing) geldt hier, en waarom?</span><span class="qx">Toon antwoord</span></summary><div class="ans">stop_afstand = |100 - 99,80| = €0,20. Dat is 0,20/100 = 0,2% van de entryprijs — kleiner dan de 0,5%-drempel. <strong>Waarschuwing: verdacht kleine stop-afstand</strong>, wijst op een stop die te dicht op de koers staat om realistisch te zijn.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Win rate 30% (0,30), avg_win_loss_ratio 1,0. Welke waarschuwing geldt hier?</span><span class="qx">Toon antwoord</span></summary><div class="ans">kelly_fractie = 0,30 - (0,70 / 1,0) = 0,30 - 0,70 = <strong>-0,40</strong>. <strong>Waarschuwing: negatieve Kelly-fractie</strong> — met deze cijfers is er geen edge; niet handelen, ongeacht de sizing-methode.</div></details>
+<details class="q"><summary><span class="qn">3</span><span>ATR €12, entry €100. Welke waarschuwing geldt hier?</span><span class="qx">Toon antwoord</span></summary><div class="ans">ATR/entry = 12/100 = 12%, groter dan de 10%-drempel. <strong>Waarschuwing: extreem volatiel instrument</strong>, pas op met normale multipliers en risicopercentages.</div></details>
+<details class="q"><summary><span class="qn">4</span><span>Entry €50, stop €45, account €8.000, risico 5%. Welke waarschuwing geldt hier?</span><span class="qx">Toon antwoord</span></summary><div class="ans">risico_bedrag = 8.000 × 0,05 = €400. stop_afstand = |50-45| = €5. positiegrootte = floor(400/5) = 80. notional = 80 × 50 = €4.000. Dat is 4.000/8.000 = 0,5× de accountgrootte — geen extreme hefboom (grens ligt bij 5×). <strong>Geen waarschuwing</strong> van toepassing op basis van deze cijfers; wel is 5% risico per trade zelf structureel hoog en zou in de meeste blueprints als te agressief gelden, ook zonder dat er een harde drempel voor risico_pct is gedefinieerd.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Disclaimer</h2><span class="chip time">⏱ 4 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deze cursus is educatieve content, geen financieel advies. De rekenvoorbeelden in dit deel gebruiken een fictief, generiek "aandeel X" en zijn uitsluitend bedoeld om de formules te illustreren — geen aanbeveling voor een concreet instrument of een concrete positiegrootte. Trading kent verliesrisico, inclusief het volledige verlies van de inzet; bij hefboomproducten kan het verlies groter zijn dan de inzet. Er wordt geen rendement of resultaat gegarandeerd; de genoemde win rate en win/loss-ratio zijn illustratieve aannames, geen prognose.</p>
+<h3>Samenvatting</h3>
+<ul>
+<li>Fixed fractional is de default methode: een vast risicopercentage van de accountgrootte gedeeld door de stop-afstand, bijvoorbeeld €200 risico / €3 stop = 66 aandelen bij een €20.000-account.</li>
+<li>Kelly-criterium berekent een wiskundig optimale fractie op basis van win rate en win/loss-ratio; half-Kelly (de helft van de Kelly-fractie) is de praktijkstandaard omdat volledige Kelly tot onhoudbare drawdowns leidt.</li>
+<li>ATR-based sizing leidt de stop-afstand af uit de volatiliteit van het instrument (ATR × multiplier) in plaats van uit een handmatig chartniveau.</li>
+<li>Bij dezelfde trade kunnen de drie methodes sterk uiteenlopende positiegroottes opleveren; fixed fractional (of de conservatiefste uitkomst) fungeert als verstandig plafond.</li>
+<li>Waarschuwingssignalen: stop_afstand van 0 (fout), stop_afstand &lt; 0,5% van entry (verdacht klein), notional &gt; 5× accountgrootte (extreme hefboom), kelly_fractie &lt; 0 (geen edge, niet handelen), kelly_fractie &gt; 0,25 (verdacht hoog, waarschijnlijk overfitte backtest), ATR &gt; 10% van entry (extreem volatiel instrument).</li>
+<li>De meeste traders zetten te groot in na een winnende reeks, gedreven door gevoel in plaats van herberekening — een vast risicopercentage is de tegenmaatregel.</li>
+</ul>
+<h3>Kernbegrippen</h3>
+<p><strong>Fixed fractional</strong> — sizing-methode die een vast percentage van de accountgrootte riskeert per trade, gedeeld door de stop-afstand.</p>
+<p><strong>Kelly-criterium</strong> — formule die op basis van win rate en win/loss-ratio de wiskundig optimale kapitaalfractie voor groei berekent.</p>
+<p><strong>Half-Kelly</strong> — de helft van de Kelly-fractie, de praktijkstandaard vanwege de gevoeligheid en drawdown-risico's van volledige Kelly.</p>
+<p><strong>ATR-based sizing</strong> — sizing-methode die de stop-afstand afleidt uit de Average True Range in plaats van uit een handmatig chartniveau.</p>
+<p><strong>Notional</strong> — de totale marktwaarde van een positie (positiegrootte × entryprijs), los van hoeveel daadwerkelijk risico wordt gelopen.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 15</h3>
+      <p>Deel 15: Kill switch en drawdown-bewaking.</p>
+      <a class="btn" href="deel-15.html">Deel 15 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 14 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_stx14_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

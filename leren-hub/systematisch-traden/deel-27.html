@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 27 — Paper trading als validatiestap vóór live geld | Eductus</title>
+<meta name="description" content="Waarom een backtest alleen niet volstaat, hoe u paper trading serieus aanpakt (periode, aantal trades, journaling), hoe u paper-resultaten eerlijk naast backtest-resultaten legt, en de casus van Fenna's paper trading-periode.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-27.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 27 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 3 (Geautomatiseerd) · Deel 27 van 30</p>
+  <h1>Paper trading als<br><em>validatiestap vóór live geld.</em></h1>
+  <p class="hero__lead">Fenna heeft haar blueprint omgezet naar Pine Script en een Python-backtest, en de metrics zien er gezond uit. Toch is dat niet genoeg om met echt geld te beginnen. Dit deel legt uit waarom een backtest structureel drie dingen niet test, hoe u paper trading serieus aanpakt — periode, aantal trades, journaling — en hoe u paper-resultaten eerlijk naast backtest-resultaten legt.</p>
+  <div class="hero__stats"><div class="stat"><b>7</b><span>secties</span></div><div class="stat"><b>±45m</b><span>leestijd + werkboek</span></div><div class="stat"><b>5</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Geautomatiseerd</span></div></div>
+  <div class="disclaimer"><strong>Positionering.</strong> Deze cursus is educatieve content, geen financieel advies — zie deel 1 voor de volledige disclaimer. De cijfers in dit deel (winrates, profit factors, expectancy) zijn fictieve voorbeeldwaarden ter illustratie van de methode, geen rendementsbeloftes en geen aanbeveling voor specifieke aandelen of instrumenten. Trading kent verliesrisico, inclusief het risico dat u uw volledige inzet verliest; bij CFD's en andere hefboomproducten kan het verlies groter zijn dan uw inzet.</div>
+  <div class="trail">Niveau 3 · Geautomatiseerd: ㉓ Van blueprint naar code &rarr; … &rarr; ㉖ Backtest in Python &rarr; <b>㉗ Paper trading (hier)</b> &rarr; ㉘ Broker-API's en webhooks &rarr; ㉙ Monitoring &rarr; ㉚ Oplevering</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom een backtest niet genoeg is</a></li>
+<li><a href="#s2" data-target="s2">Wat paper trading wel en niet is</a></li>
+<li><a href="#s3" data-target="s3">Hoe serieus je het aanpakt: periode en aantal trades</a></li>
+<li><a href="#s4" data-target="s4">Journaling tijdens paper trading</a></li>
+<li><a href="#s5" data-target="s5">Paper-resultaten naast backtest-resultaten leggen</a></li>
+<li><a href="#s6" data-target="s6">Wanneer is het genoeg?</a></li>
+<li><a href="#s7" data-target="s7">Fenna's paper trading-periode</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom een backtest niet genoeg is</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In deel 24 t/m 26 heeft Fenna haar blueprint omgezet naar code: een Pine Script-strategie op TradingView die haar entry- en exit-regels herkent, en een Python-backtest met pandas die op historische data laat zien hoe die regels zich zouden hebben gedragen. De backtest-metrics zagen er, na een paar iteraties en een geleerde les over overfitting, redelijk gezond uit: een positieve expectancy, een acceptabele max drawdown, een profit factor ruim boven de 1.</p>
+<p>En toch staat Fenna nog niet klaar om met echt geld te handelen. Tussen "de code werkt op historische data" en "ik zet hier mijn spaargeld op in" zit een stap die net zo belangrijk is als de backtest zelf: <strong>paper trading</strong>. Dit deel gaat over waarom die stap niet overgeslagen mag worden, hoe je haar serieus aanpakt, en hoe je paper-resultaten eerlijk naast je backtest-resultaten legt.</p>
+<p>Een backtest test regels tegen het verleden. Dat is waardevol, maar het dekt drie dingen structureel niet af:</p>
+<p><strong>Coderingsfouten die pas zichtbaar worden in het heden.</strong> Een backtest-script en een live-signaalscript zijn zelden letterlijk dezelfde code. Er kan een subtiele fout zitten in hoe de Pine Script-strategie een signaal genereert versus hoe de Python-backtest diezelfde regel interpreteerde — een off-by-one in welke candle als "vandaag" telt, een verkeerd afgeronde indicatorwaarde, een tijdzoneverschil. Zulke fouten vind je niet door nog een keer naar dezelfde historische data te kijken; je vindt ze door de code daadwerkelijk te laten draaien tegen binnenkomende, nieuwe data.</p>
+<p><strong>Uitvoeringsrealiteit die een backtest vaak vereenvoudigt.</strong> Een simpele backtest rekent doorgaans met de slotkoers van een candle als entryprijs, zonder rekening te houden met slippage (het verschil tussen de prijs waartegen je dacht te handelen en de prijs waartegen je daadwerkelijk terechtkomt) of met momenten waarop de markt dicht is of illiquide. Paper trading confronteert je met die realiteit, ook al gaat er nog geen echt geld om.</p>
+<p><strong>Je eigen discipline onder live-achtige omstandigheden.</strong> Een backtest test geen mens. Paper trading — mits je het serieus aanpakt, zie hieronder — laat zien of jij de signalen die je systeem genereert daadwerkelijk consequent opvolgt, of dat je toch weer gaat twijfelen, signalen negeert die niet uitkomen "voelen", of achteraf regels bijstelt om een verlies te verklaren.</p>
+<p>Paper trading is dus geen herhaling van de backtest met andere data. Het is een andere test, van andere dingen.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 27, Opdracht 27.1</p><details class="q"><summary><span class="qn">1</span><span>Noem de drie dingen die een backtest structureel niet test, maar paper trading wel. Geef bij elk punt een voorbeeld dat niet letterlijk uit de reader komt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">De drie dingen: (1) coderingsfouten die pas zichtbaar worden bij nieuwe, binnenkomende data — bijvoorbeeld een verkeerd afgeronde indicatorwaarde die in de backtest toevallig niet uitmaakte; (2) uitvoeringsrealiteit die de backtest vereenvoudigt, zoals slippage of een gesloten markt op het moment van het signaal; (3) de eigen discipline van de trader om signalen consequent op te volgen, ook tijdens een verliesreeks — een backtest test geen mens.</div></details></div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat paper trading wel en niet is</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Paper trading betekent: je voert de signalen van je systeem uit alsof het echt geld is, maar zonder dat er daadwerkelijk kapitaal beweegt. Dat kan op een paar manieren, generiek gezegd:</p>
+<ul>
+<li>via de <strong>papertrading- of demomodus</strong> die veel chartplatforms en brokers aanbieden, waarbij je orders plaatst in een gesimuleerde omgeving met realtime koersen;</li>
+<li>via een <strong>eigen logboek</strong>, waarbij je handmatig noteert wanneer je systeem een signaal geeft, tegen welke prijs je "had gehandeld", en wat er vervolgens gebeurt.</li>
+</ul>
+<p>Beide zijn bruikbaar; de eigen-logboek-variant heeft als voordeel dat je gedwongen wordt elk signaal bewust te noteren (aansluitend bij de intentie/uitvoering/evaluatie-structuur uit deel 9), de gesimuleerde-omgeving-variant heeft als voordeel dat de uitvoeringscondities realistischer zijn.</p>
+<div class="callout note"><span class="lbl">Nuance</span><p>Wat paper trading <strong>niet</strong> is: een korte proefperiode van een paar dagen waarna je "het gevoel hebt dat het werkt". Dat gevoel is precies het soort onderbuik-oordeel waar Fenna in niveau 1 vanaf probeerde te komen. Het systeem genereert een signaal, een mens beoordeelt het en plaatst het paper-order — er draait hier geen bot die zelf, zonder toezicht, orders plaatst.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Hoe serieus je het aanpakt: periode en aantal trades</h2><span class="chip time">⏱ 7 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een paper trading-periode die te kort is, levert een schijnzekerheid op die net zo misleidend is als een backtest met te weinig trades (zie deel 16). Een paar vuistregels om op te sturen:</p>
+<ul>
+<li><strong>Minimale periode.</strong> Reken op <strong>minstens vier tot zes weken</strong> aaneengesloten paper trading, langer als je strategie een lage handelsfrequentie heeft (bijvoorbeeld swingtrades met een houdperiode van 1-3 weken, zoals Fenna's blueprint). Een strategie die maar een paar keer per maand een signaal geeft, heeft simpelweg meer kalendertijd nodig om genoeg trades te verzamelen.</li>
+<li><strong>Minimaal aantal trades.</strong> Streef naar <strong>minstens 20-30 paper trades</strong> voordat je conclusies trekt. Bij minder trades is de uitkomst te veel toeval — een reeks van vijf winnende trades zegt evenveel over een systeem als vijf keer kruis gooien met een muntstuk zegt over de eerlijkheid van die munt: bijna niets.</li>
+<li><strong>Beide voorwaarden tegelijk.</strong> Een strategie die in twee weken toevallig al 25 trades heeft gedraaid (bijvoorbeeld een kortlopende swingvariant), profiteert nog steeds van een langere kalenderperiode: verschillende marktomstandigheden (trending versus ranging, zie deel 19) testen de robuustheid van de regels beter dan één rustige of juist één zeer volatiele periode.</li>
+</ul>
+<div class="callout warn"><span class="lbl">Let op</span><p>Stop niet vroegtijdig na een paar tegenvallende trades ("dit werkt duidelijk niet") en trek ook geen vroegtijdige conclusie na een paar meevallers ("dit werkt duidelijk wel"). Beide reacties zijn hetzelfde soort fout als vertrouwen op een backtest met te weinig trades.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 27, Opdracht 27.2</p><details class="q"><summary><span class="qn">1</span><span>Drie cursisten melden zich klaar voor live geld. Beoordeel voor elk of dat verantwoord is, en waarom: (1) Peter heeft 3 dagen paper getraded en 8 signalen gezien, allemaal winstgevend. (2) Amira heeft 5 weken paper getraded op een daytrade-strategie en 140 signalen verzameld, met winrate en expectancy dicht bij haar backtest. (3) Bram heeft 7 weken paper getraded op een swingstrategie (houdperiode 1-3 weken) en 11 signalen verzameld; halverwege repareerde hij een bug in zijn signaalcode, maar telt toch alle 7 weken mee voor zijn conclusie.</span><span class="qx">Toon antwoord</span></summary><div class="ans">(1) <strong>Niet verantwoord.</strong> 3 dagen en 8 signalen is veel te kort en te weinig om conclusies te trekken; een reeks van 8 winsten kan puur toeval zijn, vergelijkbaar met acht keer op rij kop gooien.<br>(2) <strong>Verantwoord, mits de daytrade-frequentie de 140 signalen logisch verklaart.</strong> 5 weken en 140 trades voldoet ruim aan zowel de minimale periode als het minimale aantal trades, en de metrics liggen dicht bij de backtest — dit is een redelijk moment om verder te overwegen.<br>(3) <strong>Twijfelachtig.</strong> Het aantal van 11 signalen is aan de lage kant voor een swingstrategie, ook al is de kalenderperiode (7 weken) ruim voldoende. Belangrijker: omdat Bram halverwege een bug repareerde, telt strikt genomen alleen de periode ná de reparatie mee voor een eerlijke conclusie — en dat is waarschijnlijk te kort. Hij zou de periode na de reparatie moeten verlengen.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Journaling tijdens paper trading</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De intentie/uitvoering/evaluatie-structuur uit deel 9 is tijdens paper trading net zo relevant als bij echte trades — misschien nog relevanter, omdat je in deze fase specifiek op zoek bent naar discrepanties tussen wat het systeem zou moeten doen en wat er werkelijk gebeurt.</p>
+<p>Noteer bij elk paper-signaal minimaal:</p>
+<ul>
+<li>het tijdstip en de precieze regel die het signaal triggerde (welke entry-conditie sloeg aan);</li>
+<li>de prijs waartegen het systeem "zou" hebben gehandeld, en de prijs waartegen jij het paper-order daadwerkelijk kon plaatsen (het verschil is een indicatie van slippage);</li>
+<li>of je het signaal daadwerkelijk hebt opgevolgd, en zo niet: waarom niet;</li>
+<li>de uitkomst, gekoppeld terug aan de exit-regel uit de blueprint.</li>
+</ul>
+<div class="callout tip"><span class="lbl">Kern</span><p>Deze laatste twee punten zijn waar paper trading zijn echte waarde bewijst: een systeem dat op papier consequent werkt, maar waarbij jij zelf steeds signalen overslaat "omdat het toch niet goed voelt", vertelt je iets belangrijks — niet over het systeem, maar over jezelf.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Paper-resultaten naast backtest-resultaten leggen</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zodra je voldoende paper trades hebt (zie sectie 3), reken je met dezelfde metrics als in de backtest (zie deel 16 en formules in sectie 4.6 van je referentiemateriaal): winrate, profit factor, expectancy en max drawdown. Zet ze in een tabel naast elkaar.</p>
+<div class="tablewrap"><table><thead><tr><th>Metric</th><th>Backtest</th><th>Paper trading</th></tr></thead><tbody>
+<tr><td>Aantal trades</td><td>84</td><td>27</td></tr>
+<tr><td>Winrate</td><td>54%</td><td>48%</td></tr>
+<tr><td>Profit factor</td><td>1,62</td><td>1,31</td></tr>
+<tr><td>Expectancy per trade</td><td>€38</td><td>€19</td></tr>
+<tr><td>Max drawdown</td><td>11%</td><td>9%</td></tr>
+</tbody></table></div>
+<p>Een voorbeeld zoals hierboven — met een paper-winrate en -expectancy die lager uitvallen dan de backtest, maar niet dramatisch — is precies wat je realistisch mag verwachten. Een backtest optimaliseert per definitie op het verleden; een lichte terugval in live-achtige omstandigheden is normaal en geen reden tot alarm.</p>
+<p>Waar je wél op moet letten:</p>
+<ul>
+<li><strong>Een expectancy die in paper trading negatief wordt terwijl de backtest ruim positief was.</strong> Dat is een sterk signaal dat er iets mis is — een coderingsfout, een te optimistische backtest-aanname (bijvoorbeeld geen slippage meegenomen), of overfitting die nu pas zichtbaar wordt op nieuwe data.</li>
+<li><strong>Een profit factor die in paper trading meer dan gehalveerd is.</strong> Ook dat is meer dan de normale ruis tussen een gesimuleerde en een levende omgeving.</li>
+<li><strong>Een winrate die intact blijft maar een expectancy die instort.</strong> Dat wijst vaak specifiek op slippage of een verkeerde aanname over de uitvoeringsprijs — je wint nog steeds vaak, maar de winsten zijn kleiner en de verliezen groter dan de backtest voorspelde.</li>
+</ul>
+<p>Bij zulke afwijkingen ga je terug naar de code: klopt de vertaling van de blueprint naar Pine Script en Python nog steeds, is de backtest eerlijk (geen look-ahead bias, realistische aannames over uitvoeringsprijs), en is de marktconditie tijdens je paper-periode niet toevallig fundamenteel anders dan de periode waarop je backtest draaide.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 27, Opdracht 27.3</p><details class="q"><summary><span class="qn">1</span><span>Onderstaande tabel toont backtest- en paper-resultaten van een fictieve strategie: aantal trades 96/24, winrate 58%/55%, profit factor 1,80/1,65, expectancy €42/€35, max drawdown 9%/8%. (a) Is dit een gezond beeld, of een reden tot zorg? Motiveer met minstens twee van de vier metrics. (b) Stel dat de paper-expectancy in plaats van €35 op €2 was uitgekomen, met een gelijke winrate. Wat zou dat waarschijnlijk betekenen, en welke twee acties zou u ondernemen voordat u verder gaat?</span><span class="qx">Toon antwoord</span></summary><div class="ans">(a) Een gezond beeld. Alle vier metrics liggen dicht bij de backtest-waarden: de winrate daalt licht (58% → 55%), de profit factor daalt licht (1,80 → 1,65), en de expectancy daalt van €42 naar €35 — een lichte terugval die past bij het verschil tussen een geoptimaliseerde backtest en live-achtige uitvoering, geen instorting.<br>(b) Een val van €42 naar €2 expectancy bij gelijkblijvende winrate wijst sterk op een uitvoeringsprobleem: u wint nog steeds ongeveer even vaak, maar de gemiddelde winst is veel kleiner geworden of het gemiddelde verlies veel groter — kenmerkend voor onderschatte slippage of een verkeerde aanname over de uitvoeringsprijs in de backtest. Twee acties: (1) de daadwerkelijke uitvoeringsprijzen uit het paper-logboek vergelijken met de aannames in de backtest-code en die aanpassen; (2) de backtest opnieuw draaien met de gecorrigeerde aanname en pas daarna verder paper traden of naar live overwegen.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Wanneer is het genoeg?</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Er is geen harde formule die zegt "nu mag je live". Wel een aantal voorwaarden die samen een redelijk moment markeren:</p>
+<ul>
+<li>je hebt de minimale periode en het minimale aantal trades gehaald (sectie 3);</li>
+<li>de paper-metrics liggen in een redelijke marge van de backtest-metrics — een lichte terugval is normaal, een instorting niet;</li>
+<li>je hebt de discipline aangetoond om signalen consequent op te volgen, inclusief tijdens een tegenvallende reeks;</li>
+<li>je hebt eventuele discrepanties (coderingsfouten, verkeerde aannames) gevonden en opgelost, en minstens een deel van de paper-periode daarna herhaald.</li>
+</ul>
+<div class="callout warn"><span class="lbl">Let op</span><p>Dat laatste punt is makkelijk te vergeten: als je halverwege de paper-periode een bug repareert, telt je paper trading eigenlijk pas vanaf dat moment opnieuw mee voor de conclusie.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 27, Opdracht 27.4</p><details class="q"><summary><span class="qn">1</span><span>Stel voor uw eigen (of een fictieve) blueprint een kort paper trading-plan op: (a) verwachte handelsfrequentie en de daaruit volgende minimale kalenderperiode; (b) gesimuleerde omgeving of eigen logboek, en waarom; (c) welke drie velden noteert u minimaal per paper-signaal naast intentie/uitvoering/evaluatie; (d) welke afwijking tussen backtest en paper-resultaten zou voor u een harde stopreden zijn?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Toepassingsopdracht, individueel antwoord. Een compleet antwoord bevat: een expliciete frequentie-inschatting die logisch aansluit bij de timeframe en stijl uit de eigen blueprint; een bewuste keuze tussen gesimuleerde omgeving en eigen logboek met motivatie; minimaal drie extra genoteerde velden (bijvoorbeeld: theoretische versus daadwerkelijke uitvoeringsprijs, marktregime op het moment van het signaal, of het signaal wel/niet is opgevolgd); en een concrete, meetbare stopreden (bijvoorbeeld "expectancy die meer dan 70% lager uitvalt dan de backtest" of "drie opeenvolgende signalen die ik zonder goede reden niet opvolg").</div></details></div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 27, Opdracht 27.5</p><details class="q"><summary><span class="qn">2</span><span>Paper trading test niet alleen het systeem maar ook uzelf. Beschrijf: welk gedrag zou bij ú het grootste risico zijn tijdens paper trading, en hoe zou u dat kunnen opsporen in uw eigen logboek?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Open reflectievraag, geen modelantwoord. Bruikbare indicatoren om op te sturen bij bespreking: het aantal keren dat een signaal is genoteerd maar niet opgevolgd (en de reden erbij), en of de genoteerde "reden om niet op te volgen" steeds legitiem is (bijvoorbeeld een technische storing) of steeds een variant van "voelde niet goed" — dat laatste patroon is precies het discretionaire gedrag dat niveau 2 en 3 juist proberen te vervangen door consequent regels volgen.</div></details></div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Fenna's paper trading-periode</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna start haar paper trading-periode op de swingstrategie die ze in deel 26 in Pine Script en Python heeft uitgewerkt. Ze plant zes weken, met als doel minstens 25 signalen te verzamelen — bij haar 1-3 wekelijkse houdperiode is dat een realistische inschatting.</p>
+<div class="dialogue">
+<p>Na de eerste twee weken valt haar iets op: de prijs waartegen haar paper-orders daadwerkelijk worden uitgevoerd, ligt structureel iets ongunstiger dan de slotkoers die haar backtest als entryprijs gebruikte. Ze noteert dit consequent in haar logboek en ontdekt na een paar weken dat het patroon consistent is: haar backtest ging uit van uitvoering tegen de slotkoers van de signaaldag, terwijl haar signalen in de praktijk pas de volgende ochtend worden uitgevoerd, tegen een iets andere openingsprijs.</p>
+</div>
+<p>Ze past de backtest-aanname aan (een realistischere uitvoeringsprijs: de volgende-dag-opening in plaats van de slotkoers van de signaaldag) en draait de backtest opnieuw. De expectancy zakt iets, maar blijft positief. Ze besluit de laatste twee weken van haar paper-periode te herhalen met deze correctie scherp in het achterhoofd, en komt uiteindelijk uit op 29 paper trades over zes weken, met metrics die redelijk aansluiten bij de herziene backtest.</p>
+<div class="callout tip"><span class="lbl">Kern</span><p>Dat is geen garantie voor live succes — het is wel een aanzienlijk beter onderbouwd startpunt dan waar ze een jaar eerder mee begon: een gevoel, en een los Excel-bestand.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 28</h3>
+      <p>Deel 28: van paper-order naar échte order — hoe broker-API's en webhooks uw signalen (onder menselijk toezicht) kunnen laten uitvoeren.</p>
+      <a class="btn" href="deel-28.html">Deel 28 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 27 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_stx27_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

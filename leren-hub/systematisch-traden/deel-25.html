@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 25 — Intro Python voor trading: een eigen backtest-aanpak met pandas | Eductus</title>
+<meta name="description" content="Python en pandas als tweede gereedschap naast Pine Script: DataFrames, .rolling() en .diff() voor signalen, trades genereren met iterrows(), en winrate, profit factor, expectancy, max drawdown en Sharpe in code.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-25.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--oxblood);background:#f4e2dd;padding:18px 22px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.disclaimer strong{color:var(--oxblood)}
+.disclaimer p{margin:8px 0}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+details.q .ans pre{margin:10px 0}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 25 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 3 (Geautomatiseerd) · Deel 25 van 30</p>
+  <h1>Intro Python voor trading<br><em>Een eigen backtest-aanpak met pandas.</em></h1>
+  <p class="hero__lead">Pine Script (deel 24) is krachtig zolang Fenna binnen TradingView blijft. Zodra ze méér wil — zelf bepalen hoe een backtest rekent, meerdere jaren doorrekenen, resultaten combineren met haar eigen trade-logboek — heeft ze Python nodig, gecombineerd met pandas: de bibliotheek voor tabelvormige data. Dit deel bouwt in code exact de vier stappen die deel 16 al beschreef: data inladen, een regel toepassen, trades genereren, metrics berekenen.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±1u20</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Geautomatiseerd</span></div></div>
+  <div class="disclaimer">
+    <p><strong>Disclaimer bij dit codevoorbeeld.</strong> Ook dit deel bevat een compleet codevoorbeeld met rekenlogica — kort herhaald: dit is <strong>educatieve content, geen financieel advies</strong>. Het voorbeeld gebruikt een fictief, geanonimiseerd instrument ("aandeel X") en illustratieve getallen, geen concrete actuele tickers of koersen als aanbeveling.</p>
+    <p>Er wordt <strong>geen rendement gegarandeerd</strong>; de uitkomst van een backtest op historische data is geen voorspelling van toekomstige resultaten. Trading kent verliesrisico, tot en met het verlies van de volledige inzet; bij CFD's en hefboomproducten kan het verlies groter zijn dan de inzet. Zie deel 1 voor de volledige disclaimer.</p>
+  </div>
+  <div class="trail">Niveau 3 · Geautomatiseerd: ① Denkstap naar automatisering &rarr; ② Intro Pine Script &rarr; <b>③ Intro Python/pandas (hier)</b> &rarr; ④ Blueprint → code &rarr; ⑤ Paper trading &rarr; ⑥ Broker-API's/webhooks &rarr; ⑦ Bot-monitoring + kill switch &rarr; ⑧ Capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom Python naast Pine Script</a></li>
+<li><a href="#s2" data-target="s2">Data inladen als DataFrame</a></li>
+<li><a href="#s3" data-target="s3">Een regel toepassen</a></li>
+<li><a href="#s4" data-target="s4">Trades genereren</a></li>
+<li><a href="#s5" data-target="s5">Metrics berekenen</a></li>
+<li><a href="#s6" data-target="s6">Wat dit voorbeeld wel en niet is</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom Python naast Pine Script</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Pine Script (deel 24) is krachtig zolang je binnen TradingView blijft. Zodra Fenna méér wil — bijvoorbeeld precies zelf bepalen hoe een backtest rekent, meerdere jaren aan data doorrekenen, of resultaten combineren met eigen aantekeningen uit haar trade-logboek — heeft ze een gereedschap nodig dat niet aan een chart-tool gebonden is. Dat gereedschap is <strong>Python</strong>, een algemene programmeertaal, gecombineerd met de bibliotheek <strong>pandas</strong>, die gespecialiseerd is in het werken met tabelvormige data (rijen en kolommen, zoals een spreadsheet, maar dan programmeerbaar).</p>
+<p>Dit deel bouwt geen zware, kant-en-klare backtestbibliotheek. Het principe staat centraal: <strong>data inladen, een regel toepassen, trades genereren, metrics berekenen</strong> — exact de vier stappen die niveau 2 (deel 16) al beschreef, nu in code in plaats van met de hand.</p>
+<h3>Waarom pandas</h3>
+<p>Een lijst historische koersen — datum, open, high, low, close, volume, per dag — is precies het soort data waar pandas voor gemaakt is: een tabel met rijen (dagen) en kolommen (prijsvelden), die je makkelijk kunt filteren, bewerken en samenvatten. Pandas' centrale bouwsteen is de <strong>DataFrame</strong>: een tabel in het geheugen, met per kolom een naam en een gegevenstype.</p>
+<pre><code>import pandas as pd
+import numpy as np</code></pre>
+<p><code>pandas</code> wordt vrijwel altijd geïmporteerd onder de afkorting <code>pd</code>; <code>numpy</code> (afgekort <code>np</code>) is een bibliotheek voor numerieke berekeningen die pandas zelf ook gebruikt, en die we straks nodig hebben voor de Sharpe-berekening (een vierkantswortel).</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Data inladen als DataFrame</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<pre><code>df = pd.read_csv("aandeel_x_daggrafiek.csv", parse_dates=["date"])
+df = df.sort_values("date").reset_index(drop=True)</code></pre>
+<p><code>pd.read_csv(...)</code> leest een CSV-bestand (comma separated values — een simpel tekstformaat voor tabellen, dat TradingView en de meeste brokers kunnen exporteren) in als DataFrame. <code>parse_dates=["date"]</code> zorgt dat de kolom <code>date</code> wordt herkend als datum, niet als tekst. <code>sort_values("date")</code> zet de rijen op chronologische volgorde — cruciaal voor een backtest, want de volgorde van gebeurtenissen bepaalt de uitkomst. <code>reset_index(drop=True)</code> geeft de rijen nette, doorlopende nummers na het sorteren.</p>
+<p>Een DataFrame met koersdata heeft doorgaans de kolommen <code>date</code>, <code>open</code>, <code>high</code>, <code>low</code>, <code>close</code>, <code>volume</code> — het generieke voorbeeld "aandeel X" gebruikt hier fictieve, geanonimiseerde data.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Een regel toepassen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Neem dezelfde eenvoudige regel als in deel 24: een MA-kruising. In pandas bereken je een voortschrijdend gemiddelde met <code>.rolling(window=N).mean()</code>:</p>
+<pre><code>df["ma_fast"] = df["close"].rolling(window=20).mean()
+df["ma_slow"] = df["close"].rolling(window=50).mean()
+
+df["signal"] = 0
+df.loc[df["ma_fast"] &gt; df["ma_slow"], "signal"] = 1
+df["position"] = df["signal"].diff()</code></pre>
+<p><code>df["close"].rolling(window=20).mean()</code> berekent, voor elke rij, het gemiddelde van de 20 meest recente sluitkoersen (inclusief de rij zelf) — hetzelfde principe als <code>ta.sma()</code> in Pine Script. <code>df["signal"] = 1</code> waar de snelle MA boven de langzame staat, geeft een kolom die aangeeft of we ons in het "uptrend-regime" bevinden. <code>.diff()</code> berekent het verschil tussen de huidige en de vorige rij van <code>signal</code>: dat levert <code>+1</code> op precies de rij waar <code>signal</code> van 0 naar 1 springt (instapmoment) en <code>-1</code> op de rij waar het van 1 naar 0 springt (uitstapmoment) — vergelijkbaar met <code>ta.crossover</code>/<code>ta.crossunder</code> in Pine Script, maar dan zelf opgebouwd uit een basisbewerking.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.1</p><details class="q"><summary><span class="qn">1</span><span>Gegeven deze reeks waarden in de kolom <code>signal</code>, dag voor dag: <code>0, 0, 1, 1, 1, 0, 0, 1, 0</code>. a) Bereken met de hand de reeks die <code>.diff()</code> hierop zou opleveren (de eerste waarde is per definitie leeg/NaN, omdat er geen vorige rij is). b) Op welke dagen (dagnummer, tellend vanaf 1) markeert dit een instapmoment (<code>+1</code>), en op welke een uitstapmoment (<code>-1</code>)?</span><span class="qx">Toon antwoord</span></summary><div class="ans">a) Signal-reeks: <code>0, 0, 1, 1, 1, 0, 0, 1, 0</code>. Diff-reeks (dag 2 t/m 9): <code>0, 1, 0, 0, -1, 0, 1, -1</code> (dag 1 heeft geen diff-waarde).<br>b) Instapmomenten (<code>+1</code>): <strong>dag 3 en dag 8</strong>. Uitstapmomenten (<code>-1</code>): <strong>dag 6 en dag 9</strong>.</div></details></div></div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.3</p><details class="q"><summary><span class="qn">2</span><span>Het volgende fragment mist twee regels. Vul ze aan op basis van de reader.</span><span class="qx">Toon antwoord</span></summary><div class="ans">
+<pre><code>df["ma_fast"] = df["close"].rolling(window=20).mean()
+df["ma_slow"] = df["close"].rolling(window=50).mean()
+
+df["signal"] = 0
+# regel a: markeer waar ma_fast boven ma_slow staat als signal = 1
+# regel b: bereken de instap-/uitstapmomenten uit de signal-kolom</code></pre>
+<p>Aanvulling:</p>
+<pre><code>df.loc[df["ma_fast"] &gt; df["ma_slow"], "signal"] = 1   # regel a
+df["position"] = df["signal"].diff()                   # regel b</code></pre>
+</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Trades genereren</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met de instap- en uitstapmomenten bekend, loop je door de data en bouw je een lijst trades op:</p>
+<pre><code>trades = []
+in_position = False
+entry_price = None
+entry_date = None
+
+for i, row in df.iterrows():
+    if row["position"] == 1 and not in_position:
+        in_position = True
+        entry_price = row["close"]
+        entry_date = row["date"]
+    elif row["position"] == -1 and in_position:
+        exit_price = row["close"]
+        exit_date = row["date"]
+        quantity = 10  # vereenvoudigd: vaste grootte in dit basisvoorbeeld
+        pnl = (exit_price - entry_price) * quantity
+        trades.append({
+            "entry_date": entry_date, "exit_date": exit_date,
+            "entry_price": entry_price, "exit_price": exit_price,
+            "pnl": pnl,
+        })
+        in_position = False
+
+trades_df = pd.DataFrame(trades)</code></pre>
+<p><code>df.iterrows()</code> levert rij voor rij op, in volgorde — precies wat een backtest nodig heeft, omdat een trade alleen geopend kan worden als je nog geen positie hebt, en alleen gesloten kan worden als je er wél een hebt. De variabele <code>in_position</code> houdt die staat bij. De P&amp;L-berekening (<code>pnl = (exit_price - entry_price) * quantity</code>) is exact de formule uit sectie 4.1 van deze cursus voor een long-positie.</p>
+<div class="callout note"><span class="lbl">Vereenvoudiging</span><p>Dit voorbeeld gebruikt bewust een vaste <code>quantity = 10</code> om de logica overzichtelijk te houden. Deel 26 vervangt dat door échte positiegrootteberekening met de fixed-fractional-formule (sectie 4.2), zodra Fenna's eigen blueprint aan bod komt.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Metrics berekenen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met <code>trades_df</code> gevuld, reken je exact de metrics uit sectie 4.6 van deze cursus uit:</p>
+<pre><code>winning = trades_df[trades_df["pnl"] &gt; 0]
+losing = trades_df[trades_df["pnl"] &lt; 0]
+
+winrate = len(winning) / len(trades_df) * 100
+profit_factor = (winning["pnl"].sum() / abs(losing["pnl"].sum())
+                  if len(losing) &gt; 0 else float("inf"))
+avg_win = winning["pnl"].mean() if len(winning) &gt; 0 else 0
+avg_loss = abs(losing["pnl"].mean()) if len(losing) &gt; 0 else 0
+
+winrate_fractie = winrate / 100
+expectancy = winrate_fractie * avg_win - (1 - winrate_fractie) * avg_loss</code></pre>
+<p><code>trades_df[trades_df["pnl"] &gt; 0]</code> filtert de rijen waar de winst positief is — pandas' manier om "alle winnende trades" te selecteren. De rest is een directe vertaling van de formules: winrate als percentage winnende trades, profit factor als som van winsten gedeeld door de absolute som van verliezen, expectancy als het verwachte resultaat per trade.</p>
+<p>Voor de max drawdown loop je door de trades heen en houd je de hoogste bereikte equity (het <code>peak</code>) bij:</p>
+<pre><code>initial_capital = 10000
+equity = initial_capital
+peak = initial_capital
+max_drawdown = 0
+equity_curve = [initial_capital]
+
+for pnl in trades_df["pnl"]:
+    equity += pnl
+    peak = max(peak, equity)
+    drawdown = (peak - equity) / peak * 100
+    max_drawdown = max(max_drawdown, drawdown)
+    equity_curve.append(equity)</code></pre>
+<p>Dit is de peak-to-trough-methode uit sectie 4.6: bij elke trade wordt de equity bijgewerkt, het hoogste punt tot nu toe bijgehouden, en de drawdown op dát punt berekend; <code>max_drawdown</code> onthoudt de hoogste waarde die daarbij ooit is voorgekomen.</p>
+<p>Tot slot de vereenvoudigde Sharpe-ratio:</p>
+<pre><code>returns = trades_df["pnl"] / initial_capital
+sharpe = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() != 0 else float("nan")
+
+print(f"Winrate: {winrate:.1f}%")
+print(f"Profit factor: {profit_factor:.2f}")
+print(f"Expectancy: €{expectancy:.2f} per trade")
+print(f"Max drawdown: {max_drawdown:.1f}%")
+print(f"Sharpe (vereenvoudigd): {sharpe:.2f}")</code></pre>
+<p><code>returns</code> is de pnl van elke trade als fractie van het startkapitaal — de vereenvoudigde proxy uit sectie 4.6. <code>np.sqrt(252)</code> is de jaarlijkse annualiseringsfactor. Wanneer <code>returns.std()</code> (de standaarddeviatie) nul is — bijvoorbeeld bij precies één trade — is de Sharpe-ratio ongedefinieerd, vandaar de <code>if</code>-controle die dan <code>nan</code> (not a number) teruggeeft in plaats van een rekenfout te veroorzaken.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.2</p><details class="q"><summary><span class="qn">3</span><span>Een backtest op een fictief instrument levert drie trades op (pnl in €, na een vaste <code>quantity</code>): Trade 1 entry €40,00 / exit €44,00 / quantity 10; Trade 2 entry €52,00 / exit €49,00 / quantity 10; Trade 3 entry €38,00 / exit €41,50 / quantity 10. a) Bereken de pnl per trade (long-formule uit sectie 4.1). b) Bereken winrate, profit factor, avg_win, avg_loss en expectancy over deze drie trades (formules uit sectie 4.6). c) Bereken de max drawdown, uitgaande van <code>initial_capital = 1000</code> (peak-to-trough-methode).</span><span class="qx">Toon antwoord</span></summary><div class="ans">
+<div class="tablewrap"><table><thead><tr><th>Trade</th><th>Entry</th><th>Exit</th><th>Quantity</th><th>PnL</th></tr></thead><tbody>
+<tr><td>1</td><td>€40,00</td><td>€44,00</td><td>10</td><td><strong>€40,00</strong></td></tr>
+<tr><td>2</td><td>€52,00</td><td>€49,00</td><td>10</td><td><strong>−€30,00</strong></td></tr>
+<tr><td>3</td><td>€38,00</td><td>€41,50</td><td>10</td><td><strong>€35,00</strong></td></tr>
+</tbody></table></div>
+<p>a) Trade 1: (44,00 − 40,00) × 10 = <strong>€40,00</strong>. Trade 2: (49,00 − 52,00) × 10 = <strong>−€30,00</strong>. Trade 3: (41,50 − 38,00) × 10 = <strong>€35,00</strong>.</p>
+<p>b) Winnende trades: 1 en 3 (2 van de 3) → winrate = 2/3 × 100 = <strong>66,7%</strong>. Som winsten = 40 + 35 = 75; som verliezen (absoluut) = 30 → profit_factor = 75/30 = <strong>2,5</strong>. avg_win = 75/2 = <strong>€37,50</strong>. avg_loss = 30/1 = <strong>€30,00</strong>. expectancy = (2/3 × 37,50) − (1/3 × 30,00) = 25,00 − 10,00 = <strong>€15,00 per trade</strong>.</p>
+<p>c) Equity-verloop vanaf 1000: na trade 1 → 1040 (peak 1040, drawdown 0%); na trade 2 → 1010 (peak blijft 1040, drawdown = (1040−1010)/1040 × 100 = <strong>2,88%</strong>); na trade 3 → 1045 (nieuw peak 1045, drawdown 0%). <strong>Max drawdown = 2,88%</strong> (na trade 2).</p>
+</div></details></div></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Wat dit voorbeeld wel en niet is</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Dit script is bewust minimaal: één instrument, één regel, vaste positiegrootte, geen kosten (spread, slippage, commissie) meegerekend. Het doel is het principe laten zien, niet een productierijpe backtestengine bouwen. Er bestaan volwassen, zware Python-bibliotheken voor backtesting (met orderbook-simulatie, kostenmodellen, portfolio-niveau-analyse); die zijn voor deze cursus niet verplicht en ook niet nodig om het onderliggende idee te begrijpen. Wie na deze cursus verder wil, kan zo'n bibliotheek gebruiken — maar begrijpt dan wél, dankzij dit deel, wat er achter de schermen gebeurt.</p>
+<div class="callout warn"><span class="lbl">Disclaimer</span><p>Ook dit deel bevat een compleet codevoorbeeld met rekenlogica — kort herhaald: dit is educatieve content, geen financieel advies. Het voorbeeld gebruikt een fictief, geanonimiseerd instrument ("aandeel X") en illustratieve getallen, geen concrete actuele tickers of koersen als aanbeveling. Er wordt geen rendement gegarandeerd; de uitkomst van een backtest op historische data is geen voorspelling van toekomstige resultaten. Trading kent verliesrisico, tot en met het verlies van de volledige inzet; bij CFD's en hefboomproducten kan het verlies groter zijn dan de inzet.</p></div>
+<div class="callout note"><span class="lbl">Kern</span><p>Deze backtest genereert een <strong>signaal</strong>, geen order. Net als in de rest van niveau 3 blijft de menselijke beoordeling het laatste woord voordat een order daadwerkelijk wordt geplaatst — een script dat hier zelfstandig door zou automatiseren, hoort niet bij deze cursus.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.4</p><details class="q"><summary><span class="qn">4</span><span>De reader noemt in sectie 6 expliciet dat dit voorbeeld geen kosten (spread, slippage, commissie) meerekent en een vaste positiegrootte gebruikt. a) Bedenk een concreet scenario waarin het weglaten van kosten de uitkomst van een backtest merkbaar te optimistisch maakt. b) Waarom is een vaste <code>quantity = 10</code> voor élke trade problematisch als je trades vergelijkt op instrumenten met heel verschillende koersniveaus (bijvoorbeeld een aandeel van €15 versus een aandeel van €300)? Verbind uw antwoord aan de positiegrootteformules uit sectie 4.2-4.4.</span><span class="qx">Toon antwoord</span></summary><div class="ans">a) Bijvoorbeeld: een strategie die veel trades genereert (zeg honderd per jaar) met een kleine gemiddelde winst per trade (bijvoorbeeld €15). Als spread en commissie samen €5-10 per trade kosten, verdwijnt een substantieel deel van de expectancy zodra die kosten wél worden meegerekend — de backtest zonder kosten oogt dan aanzienlijk beter dan de praktijk zal zijn.<br><br>b) Een vaste <code>quantity = 10</code> betekent dat een trade op een aandeel van €15 een notional (10 × €15 = €150) heeft die heel anders is dan diezelfde <code>quantity</code> op een aandeel van €300 (10 × €300 = €3.000) — de tweede trade zet twintig keer zoveel kapitaal en risico op het spel bij exact dezelfde vaste hoeveelheid stuks. De positiegrootteformules uit sectie 4.2-4.4 lossen dit juist op door de hoeveelheid te baseren op het risicobedrag en de stop-afstand, niet op een vast aantal stuks — precies wat deel 26 aan dit voorbeeld toevoegt.</div></details></div></div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 26</h3>
+      <p>Deel 26: Fenna's eigen blueprint omzetten naar werkende code — met échte positiegrootteberekening in plaats van een vaste quantity.</p>
+      <a class="btn" href="deel-26.html">Deel 26 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 25 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_stx25_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

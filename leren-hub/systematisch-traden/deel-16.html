@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 16 — Backtesting-methodologie: wat een backtest wel en niet bewijst | Eductus</title>
+<meta name="description" content="Wat een backtest wél en niét aantoont, overfitting/curve-fitting herkennen, en de kernmetrics winrate, profit factor, expectancy, max drawdown en Sharpe-ratio stap voor stap berekend op Fenna's eigen backtest.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-16.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 16 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 2 (Systematisch) · Deel 16 van 30</p>
+  <h1>Backtesting-methodologie<br><em>Wat een backtest wel en niet bewijst.</em></h1>
+  <p class="hero__lead">Een blueprint is een claim. Een backtest is de eerste, ruwe poging om die claim te toetsen op historische data. Dit deel behandelt wat een backtest wél laat zien, wat hij nadrukkelijk niét bewijst, hoe u overfitting herkent, en hoe u winrate, profit factor, expectancy, max drawdown en Sharpe-ratio zelf berekent — inclusief Fenna's eigen overfit-poging als waarschuwend voorbeeld.</p>
+  <div class="hero__stats"><div class="stat"><b>9</b><span>secties</span></div><div class="stat"><b>±60 min</b><span>leestijd + werkboek</span></div><div class="stat"><b>5</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>Systematisch</span></div></div>
+  <div class="disclaimer"><strong>Disclaimer.</strong> Dit deel bevat rekenvoorbeelden met fictieve trades en een fictief startkapitaal, uitsluitend ter illustratie van de rekenmethode. Dit is educatieve content en geen financieel advies. Traden kent verliesrisico, inclusief het risico dat u uw volledige inzet verliest; bij hefboomproducten zoals CFD's kan het verlies groter zijn dan uw inzet. Een gunstige backtest is geen garantie voor toekomstig rendement — dat is precies de kern van dit deel. Er worden nergens concrete actuele tickers of koersen als aanbeveling genoemd.</div>
+  <div class="trail">Niveau 2 · Systematisch: ⑪ Discretionair → systematisch &rarr; ⑫ Strategy blueprint &rarr; ⑬ Indicatoren verdieping &rarr; ⑭ Risk management &rarr; ⑮ Kill switch/high-watermark &rarr; <b>⑯ Backtesting-methodologie (hier)</b> &rarr; ⑰ Tradingplan schrijven &rarr; ⑱ Journaling/review &rarr; ⑲ Marktregimes/volatiliteit &rarr; ⑳ Portfolio/diversificatie &rarr; ㉑ Backtests vergelijken &rarr; ㉒ Proefexamen niveau 2</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Van blueprint naar bewijs</a></li>
+<li><a href="#s2" data-target="s2">Wat een backtest wél bewijst</a></li>
+<li><a href="#s3" data-target="s3">Wat een backtest niét bewijst</a></li>
+<li><a href="#s4" data-target="s4">Overfitting en curve-fitting</a></li>
+<li><a href="#s5" data-target="s5">De kernmetrics, stap voor stap</a></li>
+<li><a href="#s6" data-target="s6">Equity curve en maximale drawdown</a></li>
+<li><a href="#s7" data-target="s7">Sharpe-ratio (vereenvoudigde per-trade proxy)</a></li>
+<li><a href="#s8" data-target="s8">Volledig doorgerekend voorbeeld</a></li>
+<li><a href="#s9" data-target="s9">Wat te doen met deze cijfers &amp; disclaimer</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Van blueprint naar bewijs</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In deel 12 legde u een strategie vast als een blueprint: markt &amp; instrument, timeframe &amp; stijl, entry-regels, exit-regels, risk management, marktfilters en een edge-hypothese, allemaal expliciet op papier. Een blueprint is een claim. Een backtest is de eerste, ruwe poging om die claim te toetsen: u laat de regels van de blueprint los op historische koersdata en kijkt wat er was gebeurd als u die regels consequent had gevolgd.</p>
+<p>Belangrijk om vooraf scherp te hebben: een backtest is geen experiment in de klassieke wetenschappelijke zin, met een controlegroep en herhaalbare, onafhankelijke metingen. Het is een reconstructie op één specifieke, al bekende reeks gebeurtenissen. Dat maakt een backtest waardevol — het dwingt u de blueprint om te zetten in harde, ondubbelzinnige regels, en het levert cijfers op waar "ik heb het gevoel dat dit werkt" nooit aan kan tippen — maar het maakt een backtest ook kwetsbaar voor een specifieke valkuil die dit hele deel centraal staat: overfitting.</p>
+<figure><img src="figuren/deel-16-figuur-1-backtestflow.svg" alt="Backtestflow: van blueprintregels toegepast op historische data, naar een lijst trades, naar de berekende metrics en equity curve"><figcaption>Figuur 16-1 — Backtestflow: van ruwe trades naar metrics en equity curve</figcaption></figure>
+<p>De flow is in de kern altijd hetzelfde: u voert de entry- en exit-regels van de blueprint toe op historische data, dat levert een lijst trades op (elke trade met een entry- en exitmoment en een resultaat in euro's), en uit die lijst trades berekent u vervolgens de metrics die dit deel behandelt. Elke metric is een samenvatting van dezelfde onderliggende lijst trades — geen ervan staat op zichzelf.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat een backtest wél bewijst</h2><span class="chip time">⏱ 4 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een zorgvuldig uitgevoerde backtest bewijst drie dingen, niet meer en niet minder:</p>
+<ul>
+<li><strong>Dat de regels van de blueprint ondubbelzinnig zijn.</strong> Als u een strategie niet kunt backtesten omdat de regels te vaag zijn ("koop als het er sterk uitziet"), dan is dat zelf al een signaal: de blueprint is nog niet af.</li>
+<li><strong>Hoe de strategie zich historisch had gedragen</strong>, gegeven de exacte regels en de exacte periode die u hebt gekozen. Dat is een feit over het verleden, geen voorspelling.</li>
+<li><strong>Een eerste, ruwe indicatie van de risico-rendementsverhouding</strong> — winrate, profit factor, expectancy, drawdown — die u kunt gebruiken om strategieën onderling te vergelijken (deel 21 gaat hier dieper op in) en om grove denkfouten in de blueprint bloot te leggen, bijvoorbeeld een risk-rewardverhouding die op papier goed klonk maar in de praktijk van de cijfers niet houdbaar blijkt.</li>
+</ul>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Wat een backtest niét bewijst</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een backtest bewijst nadrukkelijk <strong>niet</strong> dat de strategie in de toekomst winstgevend zal zijn. Drie redenen daarvoor komen steeds terug:</p>
+<ul>
+<li><strong>De toekomst herhaalt het verleden niet exact.</strong> Marktregimes veranderen (deel 19 gaat hierop in): een strategie die uitstekend werkte in een trending markt kan het moeilijk krijgen zodra de markt langere tijd zijwaarts beweegt.</li>
+<li><strong>Een backtest is per definitie achteraf.</strong> U weet, terwijl u de regels schrijft en test, al hoe de koers zich heeft ontwikkeld. Die kennis sluipt er ongemerkt in, ook als u dat niet bewust doet — dat is precies het mechanisme achter overfitting, hieronder uitgewerkt.</li>
+<li><strong>Padafhankelijkheid.</strong> Dezelfde set trades kan, in een andere volgorde, tot een heel andere ervaring voor de trader leiden — bijvoorbeeld een lange verliesreeks vroeg in de reeks in plaats van verspreid. Een backtest laat u precies één historisch pad zien; in de praktijk had het ook anders kunnen lopen, met dezelfde onderliggende edge.</li>
+</ul>
+<p>Dit is de reden dat professionele backtesters denken in <em>mogelijke</em> paden in plaats van in het ene pad dat toevallig is uitgekomen — een gedachtegang die verwant is aan een Monte Carlo-simulatie (het herschudden van dezelfde trades in duizenden willekeurige volgordes om te zien hoe stabiel de uitkomst is). Een volledige Monte Carlo-implementatie valt buiten deze cursus, maar het denken erover niet: als uw strategie alleen goed oogt bij precies dít ene pad, is dat een zwak signaal.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Overfitting en curve-fitting</h2><span class="chip time">⏱ 9 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Overfitting</strong> (ook wel curve-fitting) is het optimaliseren van regels of parameters totdat een backtest er goed uitziet op de historische data, zonder dat er een robuuste, onderliggende edge aan ten grondslag ligt. Het is de meest voorkomende manier waarop beginnende systematische traders zichzelf voor de gek houden — juist omdat het niet aanvoelt als bedrog. Het voelt aan als zorgvuldig optimaliseren.</p>
+<p>Drie herkenbare signalen van overfitting:</p>
+<ul>
+<li><strong>Te veel vrije parameters.</strong> Elke parameter die u kunt afstellen (welke RSI-periode, welke MACD-instelling, welke stop-afstand) is een vrijheidsgraad waarmee u de backtest naar een mooi resultaat kunt draaien. Hoe meer parameters, hoe groter de kans dat u toevallige ruis in de historische data aan het "verklaren" bent in plaats van een echt patroon.</li>
+<li><strong>Een te korte of te eenzijdige testperiode.</strong> Een backtest over acht maanden in een uitgesproken stijgende markt zegt weinig over hoe de strategie zich houdt in een langdurige ranging markt of een scherpe correctie. Hoe korter en eenzijdiger de periode, hoe makkelijker een toevallig gunstige uitkomst.</li>
+<li><strong>Performance die instort op nieuwe data.</strong> Dit is de meest betrouwbare test achteraf: verdeel de historische data in een periode waarop u optimaliseert (<em>in-sample</em>) en een periode die u pas ná het vastzetten van de regels bekijkt (<em>out-of-sample</em>). Presteert de strategie op de out-of-sample-periode fors slechter dan op de in-sample-periode, dan is dat een sterke aanwijzing voor overfitting. Hetzelfde patroon — mooie backtest, tegenvallende praktijk — ziet u later terug zodra u een strategie in paper trading zet (niveau 3): dat is in wezen dezelfde out-of-sample-toets, dan met echt nieuwe, ongeziene marktdata.</li>
+</ul>
+<div class="dialogue">
+<p><strong>Fenna's eerste overfit backtest.</strong> Fenna had haar swingstrategie op large-cap Europese en Amerikaanse aandelen — daggrafiek, houdperiode één tot drie weken, uit deel 12 vastgelegd als blueprint — over de voorgaande acht maanden getest en kreeg een indrukwekkende winrate van 71% met een profit factor boven de 3. Enthousiast paste ze de RSI-drempel nog iets aan (van 30 naar 27) omdat dat de winrate met nog eens twee procentpunt liet stijgen, en voegde ze een extra filter toe op basis van het handelsvolume van precies de vorige twee dagen — een filter dat ze had bedacht nádat ze had gezien welke van haar verliestrades daardoor zouden zijn weggefilterd. Toen ze diezelfde regels backwards testte op de acht maanden ervóór, een periode met een langere zijwaartse fase, zakte de winrate naar 42% en werd de profit factor kleiner dan 1.</p>
+<p>Haar conclusie: niet de strategie was slecht, maar ze had de regels stap voor stap bijgeschaafd op precies de data die ze aan het bekijken was — het handelsvolumefilter was zelfs achteraf gekozen om specifieke verliestrades weg te poetsen. Ze leerde daaruit een vuistregel die ze sindsdien vasthoudt: elke parameteraanpassing die ze doet nadat ze de resultaten al heeft gezien, is verdacht, en verdient een nieuwe toets op een periode die ze nog niet heeft bekeken.</p>
+</div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 4</p><details class="q"><summary><span class="qn">1</span><span>Beoordeel drie fictieve situaties op overfitting-signalen: (1) Een trader test een strategie over de laatste vier maanden, waarin de markt vrijwel onafgebroken steeg, en concludeert dat de strategie "bewezen winstgevend" is. (2) Een trader stelt zeven verschillende indicatorparameters bij totdat de winrate van 55% naar 68% stijgt, en stopt daar met testen. (3) Een trader test een strategie op twee jaar data, verdeelt die in de eerste achttien maanden (optimalisatie) en de laatste zes maanden (ongezien), en ziet de expectancy dalen van €30 naar €22 per trade, met de profit factor nog altijd boven de 1,3.</span><span class="qx">Toon antwoord</span></summary><div class="ans">1. Signaal: te korte/eenzijdige testperiode. Vier maanden in een vrijwel onafgebroken stijgende markt is geen representatieve steekproef; de strategie is niet getoetst op een zijwaartse of dalende fase.<br>2. Signaal: te veel vrije parameters (en achteraf bijstellen). Zeven parameters aanpassen totdat de winrate stijgt, en stoppen zodra het resultaat goed oogt, is een schoolvoorbeeld van curve-fitting.<br>3. Geen sterk overfitting-signaal. Een daling van expectancy op de out-of-sample-periode is normaal en zelfs te verwachten; belangrijk is dat de strategie out-of-sample nog altijd een positieve expectancy en een profit factor boven de 1 houdt — een correct uitgevoerde out-of-sample-toets die geen instorting laat zien.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Beschrijf in eigen woorden wat Fenna fout deed bij haar eerste backtest, en welke vuistregel ze daaruit meenam. Herken minstens twee concrete signalen van overfitting in haar handelen.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Fenna optimaliseerde haar RSI-drempel (van 30 naar 27) omdat dat de winrate op de geteste periode liet stijgen, en voegde een volumefilter toe dat ze pas bedacht nadat ze had gezien welke verliestrades daardoor zouden verdwijnen. Beide zijn signalen van overfitting: parameters bijstellen ná het zien van de uitkomst, en een regel specifiek ontworpen om bekende verliestrades weg te filteren. Toen ze dezelfde regels op een eerdere, meer zijwaartse periode testte, zakte de winrate van 71% naar 42% en de profit factor onder de 1 — de performance stortte in op ongeziene data, het derde overfitting-signaal. Haar vuistregel sindsdien: elke parameteraanpassing die volgt op het zien van resultaten, is verdacht en verdient een nieuwe toets op een periode die ze nog niet heeft bekeken.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De kernmetrics, stap voor stap</h2><span class="chip time">⏱ 9 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Alle metrics hieronder worden berekend op een lijst trades met een resultaat in euro's per trade (de absolute winst of het absolute verlies, niet het percentage).</p>
+<p><strong>Winrate</strong> — het aandeel winnende trades:</p>
+<pre><code>winrate = (aantal winnende trades / totaal aantal trades) × 100</code></pre>
+<p><strong>Profit factor</strong> — de verhouding tussen wat u met winnende trades verdiende en wat u met verliezende trades kwijtraakte:</p>
+<pre><code>profit_factor = som(winsten) / |som(verliezen)|</code></pre>
+<p>Een profit factor van 1 betekent break-even; hoger dan 1 betekent netto winstgevend over de geteste periode. De profit factor is ongedefinieerd wanneer er geen enkel verlies in de reeks zit (deling door nul) — in de praktijk komt dat alleen voor bij een zeer kleine of gunstig geselecteerde steekproef, wat op zichzelf al een teken is om extra kritisch te kijken.</p>
+<p><strong>Gemiddelde winst en gemiddeld verlies</strong>:</p>
+<pre><code>avg_win  = som(winsten) / aantal winnende trades
+avg_loss = |som(verliezen)| / aantal verliezende trades</code></pre>
+<p><code>avg_loss</code> wordt hier als positief getal uitgedrukt, zodat u winst en verlies rechtstreeks kunt vergelijken.</p>
+<p><strong>Expectancy</strong> — het verwachte resultaat per trade, in euro's, gegeven de winrate en de gemiddelde winst/verlies-verhouding:</p>
+<pre><code>expectancy = winrate_fractie × avg_win − (1 − winrate_fractie) × avg_loss</code></pre>
+<p><code>winrate_fractie</code> is de winrate als fractie tussen 0 en 1 (dus winrate/100). Expectancy is de belangrijkste metric om te onthouden: het vat winrate, gemiddelde winst en gemiddeld verlies samen in één getal dat rechtstreeks vertelt of een strategie op de lange termijn geld oplevert per trade, onafhankelijk van hoe indrukwekkend de winrate alleen klinkt. Een strategie met een winrate van 35% kan een positieve expectancy hebben als de winnende trades gemiddeld groot genoeg zijn ten opzichte van de verliezende — en omgekeerd kan een strategie met een winrate van 65% toch een negatieve expectancy hebben als de verliezen gemiddeld te groot zijn.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 1</p><details class="q"><summary><span class="qn">1</span><span>Acht trades uit een backtest, startkapitaal €5.000, in volgorde: +120, −80, +200, −60, −140, +90, −50, +260. Bereken winrate, profit factor, avg_win, avg_loss en expectancy.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Winnende trades: +120, +200, +90, +260 → 4 trades, som = €670. Verliezende trades: −80, −60, −140, −50 → 4 trades, som (absoluut) = €330.<br><strong>winrate</strong> = (4/8) × 100 = 50%<br><strong>profit_factor</strong> = 670 / 330 = 2,03<br><strong>avg_win</strong> = 670 / 4 = €167,50<br><strong>avg_loss</strong> = 330 / 4 = €82,50<br><strong>expectancy</strong> = 0,50 × 167,50 − 0,50 × 82,50 = 83,75 − 41,25 = €42,50 per trade<br>Controle: totaal resultaat = 670 − 330 = €340; 340 / 8 trades = €42,50 — komt overeen met de expectancy.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Equity curve en maximale drawdown</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De <strong>equity curve</strong> is het verloop van uw accountwaarde, trade na trade, als u de trades in de volgorde waarin ze plaatsvonden optelt bij het startkapitaal. De maximale drawdown is de grootste terugval die die curve op enig moment laat zien, gemeten van een piek naar het laagste punt daarna (<em>peak-to-trough</em>):</p>
+<pre><code>loop door trades, equity += pnl per trade
+peak = hoogste equity tot nu toe
+drawdown_op_dit_punt = (peak - equity) / peak × 100
+max_drawdown = hoogste drawdown_op_dit_punt over de hele reeks</code></pre>
+<p>Dit is dezelfde high-watermark-gedachte die u in deel 15 hebt gezien bij de kill switch — daar bewaakte u dit live, op het actuele account; hier reconstrueert u dezelfde curve achteraf, op de historische trades van de backtest.</p>
+<figure><img src="figuren/deel-16-figuur-2-equity-curve-drawdowns.svg" alt="Equity curve die het accountverloop over een reeks trades toont, met de drawdown-periodes (peak-to-trough terugvallen) gemarkeerd"><figcaption>Figuur 16-2 — Equity curve met drawdown-periodes gemarkeerd</figcaption></figure>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 2</p><details class="q"><summary><span class="qn">1</span><span>Gebruik dezelfde acht trades als hierboven en het startkapitaal van €5.000. Bouw de equity curve op en bepaal de maximale drawdown, en na welke trade hij optreedt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Equity na elke trade: 5.120 / 5.040 / 5.240 / 5.180 / 5.040 / 5.130 / 5.080 / 5.340. De piek van €5.240 (na trade 3) wordt gevolgd door een terugval naar €5.040 (na trade 5).<br><strong>Max drawdown = 3,82%</strong> ((5.240 − 5.040) / 5.240 × 100), optredend na trade 5. Trades 4 en 5 vormen samen de terugval; trade 8 zet met €5.340 een nieuwe piek neer.</div></details></div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Sharpe-ratio (vereenvoudigde per-trade proxy)</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De Sharpe-ratio drukt rendement uit ten opzichte van de spreiding (volatiliteit) van dat rendement — hoe hoger, hoe meer rendement u kreeg per eenheid schommeling. De volledige, in de financiële sector gangbare Sharpe-ratio werkt met samengestelde (<em>compounded</em>) rendementen over vaste tijdsintervallen. Voor educatief gebruik in deze cursus werkt u met een vereenvoudigde per-trade proxy:</p>
+<pre><code>return_per_trade = pnl / initial_capital
+sharpe = (gemiddelde(returns) / stddev(returns)) × wortel(252)</code></pre>
+<p>Elke trade-return wordt hier uitgedrukt ten opzichte van het <em>initiële</em> kapitaal, niet samengesteld over de tussenliggende accountwaarde, en de uitkomst wordt op dezelfde manier geannualiseerd (met de vuistregelfactor 252, het gangbare aantal handelsdagen per jaar) als bij een dagelijkse Sharpe-berekening. Dat is een bewuste versimpeling die prima is voor educatief gebruik en om strategieën onderling te vergelijken; in een professionele of productieomgeving zijn verfijningen gebruikelijk, bijvoorbeeld werken met samengestelde rendementen of met de daadwerkelijke tijdsduur tussen trades. De formule is ongedefinieerd wanneer de standaarddeviatie van de returns nul is (alle trades exact even groot) — in de praktijk komt dat vrijwel nooit voor.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 3</p><details class="q"><summary><span class="qn">1</span><span>Gebruik dezelfde acht trades en het startkapitaal van €5.000. Zet elke trade om naar een return, bereken het gemiddelde, en bereken de Sharpe-ratio met een (populatie-)standaarddeviatie van 0,0272. Wat zegt de omvang van deze steekproef (acht trades) over hoe zwaar u deze uitkomst mag laten wegen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Returns: 0,0240; −0,0160; 0,0400; −0,0120; −0,0280; 0,0180; −0,0100; 0,0520. Gemiddelde = 0,0680 / 8 = 0,0085.<br>sharpe = (0,0085 / 0,0272) × √252 = 0,3125 × 15,87 ≈ 4,96.<br>Bij acht trades is dit een zeer kleine steekproef. De Sharpe-ratio is bij zulke aantallen instabiel: één extra grote winst- of verliestrade kan de uitkomst fors verschuiven. Gebruik de waarde als ruwe indicatie, niet als eindoordeel — betrouwbaarder wordt de Sharpe-ratio pas bij tientallen tot honderden trades, zoals in niveau 3 met een Python-backtest.</div></details></div>
+    </article>
+
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Volledig doorgerekend voorbeeld</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna test een vereenvoudigde variant van haar swingstrategie opnieuw, dit keer zonder de achteraf toegevoegde filters uit haar overfit-poging, op tien trades uit een testperiode die ze niet had gebruikt om de regels te verfijnen. Startkapitaal: €10.000.</p>
+<div class="tablewrap"><table><thead><tr><th>#</th><th>Resultaat (€)</th><th>Winst/verlies</th></tr></thead><tbody>
+<tr><td>1</td><td>+180</td><td>winst</td></tr><tr><td>2</td><td>+220</td><td>winst</td></tr><tr><td>3</td><td>−90</td><td>verlies</td></tr><tr><td>4</td><td>−150</td><td>verlies</td></tr><tr><td>5</td><td>−110</td><td>verlies</td></tr><tr><td>6</td><td>+140</td><td>winst</td></tr><tr><td>7</td><td>−60</td><td>verlies</td></tr><tr><td>8</td><td>+95</td><td>winst</td></tr><tr><td>9</td><td>−70</td><td>verlies</td></tr><tr><td>10</td><td>+260</td><td>winst</td></tr>
+</tbody></table></div>
+<p><strong>Winrate.</strong> Vijf winnende trades op tien: <code>winrate = (5 / 10) × 100 = 50%</code>.</p>
+<p><strong>Profit factor.</strong> Som van de winsten: 180 + 220 + 140 + 95 + 260 = €895. Som van de verliezen (absoluut): 90 + 150 + 110 + 60 + 70 = €480. <code>profit_factor = 895 / 480 = 1,86</code> (afgerond op twee decimalen).</p>
+<p><strong>Gemiddelde winst/verlies.</strong> <code>avg_win = 895 / 5 = €179</code>. <code>avg_loss = 480 / 5 = €96</code>.</p>
+<p><strong>Expectancy.</strong> <code>expectancy = 0,50 × 179 − 0,50 × 96 = 89,50 − 48,00 = €41,50 per trade.</code> Controle: het totale resultaat over de tien trades is 895 − 480 = €415, en €415 / 10 trades = €41,50 per trade — dat komt overeen, zoals het hoort: expectancy is niets anders dan het gemiddelde resultaat per trade.</p>
+<p><strong>Equity curve en max drawdown.</strong> Startend bij €10.000: de drie verliestrades op rij (3 t/m 5) duwen de equity van een piek van €10.400 naar €10.050 — een drawdown van <code>(10.400 − 10.050) / 10.400 × 100 = 3,37%</code>. Dat is het diepste punt in de hele reeks: <strong>max drawdown = 3,37%</strong>. Trade 10 zet met €10.415 een nieuwe piek neer, waarmee de reeks eindigt op een nieuwe high-watermark.</p>
+<p><strong>Sharpe-ratio.</strong> De returns per trade ten opzichte van het startkapitaal van €10.000 zijn: 0,0180; 0,0220; −0,0090; −0,0150; −0,0110; 0,0140; −0,0060; 0,0095; −0,0070; 0,0260. Het gemiddelde van deze tien returns is 0,00415. De (populatie-)standaarddeviatie ervan is ongeveer 0,01453. Dat geeft:</p>
+<pre><code>sharpe = (0,00415 / 0,01453) × √252 = 0,286 × 15,87 ≈ 4,54</code></pre>
+<div class="callout note"><span class="lbl">Nuance</span><p>Een waarde die zo hoog oogt, is met een steekproef van slechts tien trades vooral illustratief: bij zulke kleine aantallen schommelt de Sharpe-ratio enorm met elke extra trade die u toevoegt. Gebruik hem bij kleine datasets dus als ruwe indicatie, niet als eindoordeel — en reken pas serieus met de Sharpe-ratio zodra u backtests met tientallen tot honderden trades kunt draaien, zoals in niveau 3 met een Python-backtest.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s9">
+      <div class="section__head"><div class="section__num">09</div>
+        <div class="section__titles"><h2 class="t">Wat te doen met deze cijfers &amp; disclaimer</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s9"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een backtest met een positieve expectancy, een profit factor ruim boven de 1 en een drawdown die u zich kunt voorstellen vol te houden, is een noodzakelijke maar geen voldoende voorwaarde om door te gaan. Toets uzelf bij elke backtest op minstens deze vragen: heeft u parameters aangepast nádat u resultaten zag? Is de testperiode lang en gevarieerd genoeg (bij voorkeur met zowel trending als ranging fases, zie deel 19)? Houdt de performance stand op data die u nog niet had bekeken toen u de regels vastlegde? Deel 21 bouwt hierop voort: daar legt u twee complete backtests naast elkaar en beslist u wanneer een strategie "goed genoeg" is om naar niveau 3 door te zetten.</p>
+<div class="callout warn"><span class="lbl">Disclaimer</span><p>Dit deel bevat rekenvoorbeelden met fictieve trades en een fictief startkapitaal, uitsluitend ter illustratie van de rekenmethode. Dit is educatieve content en geen financieel advies. Traden kent verliesrisico, inclusief het risico dat u uw volledige inzet verliest; bij hefboomproducten zoals CFD's kan het verlies groter zijn dan uw inzet. Een gunstige backtest is geen garantie voor toekomstig rendement — dat is precies de kern van dit deel. Er worden nergens concrete actuele tickers of koersen als aanbeveling genoemd.</p></div>
+<p>Samengevat: een backtest bewijst hoe een strategie zich historisch had gedragen bij ondubbelzinnige regels; hij bewijst niet dat de strategie in de toekomst winstgevend is. Overfitting ontstaat door te veel vrije parameters, een te korte/eenzijdige testperiode, en het (vaak onbewust) bijschaven van regels nadat u de uitkomst al hebt gezien — herkenbaar aan performance die instort op out-of-sample data. Expectancy is de belangrijkste metric, omdat die winrate en winst/verlies-verhouding samenvat in één getal per trade. De equity curve en de max drawdown laten zien hoe zwaar een verliesreeks aanvoelt, niet alleen of de strategie netto winstgevend is.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 17</h3>
+      <p>Deel 17: een compleet tradingplan schrijven.</p>
+      <a class="btn" href="deel-17.html">Deel 17 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 16 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8","s9"];
+  var KEY="eductus_stx16_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

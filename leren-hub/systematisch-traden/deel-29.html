@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>29. Bot-monitoring, productie-kill-switches en portfolio-risico op systeemniveau | Eductus</title>
+<meta name="description" content="Hoe u herkent dat een geautomatiseerde signaalflow stilletjes ongezond is geworden, de high-watermark kill switch op systeemniveau toepast op gecombineerde equity, en correlatie tussen strategieën beheerst met een gedeeld risicobudget.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-29.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(32px,5.4vw,60px);line-height:1.06;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 29 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 3 (Geautomatiseerd) · Deel 29 van 30</p>
+  <h1>29. Bot-monitoring, productie-kill-switches<br><em>en portfolio-risico op systeemniveau.</em></h1>
+  <p class="hero__lead">Fenna's signaalflow uit deel 28 draait nu een aantal weken. Dit deel behandelt hoe u herkent dat zo'n systeem stilletjes ongezond wordt zonder zichtbare crash, hoe u de high-watermark kill switch uit deel 15 optilt naar systeemniveau — de gecombineerde equity van meerdere strategieën — en hoe correlatie tussen strategieën uw werkelijke portfoliorisico groter kan maken dan de som van de losse delen.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±50 min</b><span>leestijd + werkboek</span></div><div class="stat"><b>11</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Geautomatiseerd</span></div></div>
+  <div class="disclaimer"><strong>Disclaimer.</strong> Deze reader is educatieve content, geen financieel advies. De kill-switch-drempel (15%) en de risicobudgetten in dit deel zijn illustratieve voorbeeldwaarden, geen aanbevolen normen voor uw eigen situatie. Trading kent verliesrisico, inclusief het risico dat u uw volledige inzet verliest; bij CFD's en andere hefboomproducten kan het verlies groter zijn dan uw inzet. Monitoring en een kill switch verkleinen risico, ze sluiten verlies niet uit. Zie deel 1 voor de volledige disclaimer van de cursus.</div>
+  <div class="trail">Niveau 3 · Geautomatiseerd: ㉓ Denkstap naar automatisering &rarr; ㉔ Intro Pine Script &rarr; ㉕ Intro Python/pandas &rarr; ㉖ Blueprint → code &rarr; ㉗ Paper trading &rarr; ㉘ Broker-API's/webhooks &rarr; <b>㉙ Bot-monitoring en kill switch (hier)</b> &rarr; ㉚ Capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom monitoring nodig is</a></li>
+<li><a href="#s2" data-target="s2">Wat u monitort</a></li>
+<li><a href="#s3" data-target="s3">De productie-kill-switch op systeemniveau</a></li>
+<li><a href="#s4" data-target="s4">Portfolio-risico en correlatie op systeemniveau</a></li>
+<li><a href="#s5" data-target="s5">De twee onderwerpen gecombineerd</a></li>
+<li><a href="#s6" data-target="s6">Fenna's voorbeeld</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom monitoring nodig is</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna's signaalflow (deel 28) draait nu een aantal weken: haar Pine Script-strategie herkent setups, een webhook stuurt het signaal naar haar eigen scriptje, en zij beoordeelt en voert zelf uit. Dat roept een nieuwe vraag op, die in niveau 1 en 2 nog niet aan de orde was omdat daar alles nog handmatig gebeurde: <strong>hoe weet Fenna dat haar systeem nog gezond draait?</strong></p>
+<p>Bij handmatig traden merkt u vanzelf als er iets misgaat — u zit zelf achter de charts. Bij een geautomatiseerde signaalflow is dat niet vanzelfsprekend: een script kan stilletjes stoppen met draaien, een dataverbinding kan wegvallen, of een indicator kan door een fout ineens systematisch verkeerde waarden berekenen, zonder dat er ergens een duidelijke foutmelding verschijnt.</p>
+<p>Dit deel behandelt twee onderwerpen die nauw samenhangen zodra u meerdere strategieën of een geautomatiseerde signaalflow laat lopen: <strong>monitoring en een productie-kill-switch</strong>, en <strong>portfolio-risico en correlatie op systeemniveau</strong>.</p>
+<p>Een signaalsysteem dat "draait" kan op meerdere manieren stil gezondheid verliezen, zonder dat er een zichtbare crash is:</p>
+<ul>
+<li><strong>De dataflow valt stil.</strong> Het chartplatform stuurt om wat voor reden dan ook geen alerts meer door, of de webhook bereikt uw ontvangstscript niet meer (bijvoorbeeld door een verlopen sessie, een gewijzigde URL, of een tijdelijke storing).</li>
+<li><strong>Een berekening gaat stilletjes fout.</strong> Een indicator wordt verkeerd berekend door een subtiele bug, een databron levert onverwacht lege of verkeerde waarden, en het systeem "signaleert" gewoon door — met verkeerde signalen, niet met een foutmelding.</li>
+<li><strong>Het ontvangstscript crasht of hangt vast</strong>, zonder dat er iemand kijkt totdat er toevallig een handmatige controle plaatsvindt.</li>
+</ul>
+<div class="callout warn"><span class="lbl">Kern</span><p>Elk van deze situaties is gevaarlijker dan een systeem dat helemaal niets doet, juist omdat het de indruk wekt dat alles normaal functioneert.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat u monitort</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een paar concrete dingen om te bewaken, zonder dat dit een volledige monitoring-cursus is:</p>
+<ul>
+<li><strong>Heartbeat / tijdstip van het laatste signaal.</strong> Houd bij wanneer het laatste signaal (of, bij een rustige strategie, het laatste "levensteken" van het script) binnenkwam. Blijft dat langer stil dan op basis van de strategie te verwachten is, dan is dat een reden om te controleren.</li>
+<li><strong>Foutlogs.</strong> Laat het ontvangstscript fouten expliciet wegschrijven in plaats van stil te falen — een script dat bij een fout gewoon stopt zonder iets te loggen, is voor de gebruiker niet te onderscheiden van een script dat rustig even niets te melden heeft.</li>
+<li><strong>Verwachte-versus-ontvangen-signalen.</strong> Als u weet dat uw strategie gemiddeld twee tot drie signalen per week geeft, en er zijn drie weken niets binnengekomen, is dat een signaal op zichzelf — óf de markt gedraagt zich uitzonderlijk rustig, óf er is iets stuk.</li>
+<li><strong>Eenvoudige alerting.</strong> Een dagelijkse of wekelijkse controle (handmatig, of een klein scriptje dat uzelf een bericht stuurt als er te lang niets is gebeurd) is voor een individuele systematische trader ruim voldoende; een uitgebreid monitoring-dashboard is voor deze schaal overdreven.</li>
+</ul>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.1 — Gezond of stil kapot?</p>
+<details class="q"><summary><span class="qn">1</span><span>Een strategie die gemiddeld 2-3 signalen per week geeft, heeft al 3 weken niets gesignaleerd; de markt is niet uitzonderlijk rustig geweest. Gezond of reden tot controle?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Reden tot controle.</strong> Drie weken stilte bij een strategie die normaal 2-3 signalen per week geeft, zonder dat de markt uitzonderlijk rustig is geweest, wijst op een mogelijk stukgevallen dataflow of ontvangstscript.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Een swingstrategie met een houdperiode van 1-3 weken geeft 4 dagen achter elkaar geen signaal. Gezond of reden tot controle?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Waarschijnlijk normaal.</strong> Bij een houdperiode van 1-3 weken is een paar dagen zonder nieuw signaal volstrekt gebruikelijk; dit is geen reden tot alarm op zich.</div></details>
+<details class="q"><summary><span class="qn">3</span><span>Het ontvangstscript logt sinds twee dagen geen enkele regel meer, ook geen foutmeldingen, terwijl het voorheen dagelijks wel iets logde (ook op dagen zonder signaal). Gezond of reden tot controle?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Reden tot controle.</strong> Het wegvallen van álle logregels, inclusief de regels die voorheen ook op stille dagen verschenen, wijst op een gecrasht of vastgelopen script, niet op een gebrek aan signalen.</div></details>
+<details class="q"><summary><span class="qn">4</span><span>Een strategie geeft plotseling drie keer zoveel signalen als normaal, op een dag met ongewoon hoge marktvolatiliteit. Gezond of reden tot controle?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Waarschijnlijk normaal, wel te verifiëren.</strong> Een piek in signalen tijdens hoge volatiliteit kan een legitieme reactie van de strategie zijn; controleer of de signalen inhoudelijk kloppen (niet bijvoorbeeld dubbel verstuurd door een technische fout), maar het aantal alleen is geen alarmsignaal.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De productie-kill-switch op systeemniveau</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In deel 15 heeft u de high-watermark kill switch leren kennen: een zachte waarschuwing die afgaat wanneer de huidige waarde van een strategie te ver onder de hoogste stand ooit is gezakt (formule in sectie 4.5 van uw referentiemateriaal). Dat principe is direct toepasbaar op een geautomatiseerde signaalflow, maar dan <strong>op systeemniveau</strong> — over één of meerdere strategieën samen, in plaats van over één handmatig bijgehouden account.</p>
+<pre><code>drawdown_pct = ((huidige_waarde - high_watermark) / high_watermark) &times; 100
+kill_switch_actief = drawdown_pct &lt;= -drempel_pct</code></pre>
+<p>Bij een geautomatiseerde signaalflow past u dit principe toe op de <strong>gecombineerde equity</strong> van alle strategieën die u laat lopen, niet alleen op één strategie afzonderlijk. Twee redenen waarom dit belangrijker wordt dan bij één handmatige strategie:</p>
+<ul>
+<li><strong>Een geautomatiseerd systeem genereert signalen ook wanneer u niet oplet.</strong> Bij handmatig traden merkt u een verliesreeks vanzelf; bij een signaalflow die op de achtergrond draait, kan een drawdown zich opbouwen zonder dat u er actief bij stilstaat, tenzij u dat expliciet bewaakt.</li>
+<li><strong>Meerdere strategieën tegelijk kunnen een gecombineerde drawdown veroorzaken die groter is dan elke strategie afzonderlijk zou suggereren</strong> — dit hangt samen met correlatie, zie sectie 4 hieronder.</li>
+</ul>
+<div class="callout tip"><span class="lbl">Nuance</span><p>Net als bij de kill switch op individueel niveau geldt: dit is een <strong>zachte waarschuwing</strong>, geen harde blokkade. Een harde blokkade is zinloos, omdat u als trader altijd zelf een order kunt plaatsen, ook buiten uw eigen systeem om — het gaat om een bewust moment van reflectie op systeemniveau: sta ik alle strategieën nog steeds achter, of is er iets structureel veranderd?</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.2 — Kill switch op systeemniveau berekenen</p>
+<p class="quiz__src" style="margin-top:0">Fenna's gecombineerde account (beide strategieën samen) bereikte een high-watermark van €42.000. De huidige gecombineerde waarde is €35.700. De kill-switch-drempel staat op 15%.</p>
+<details class="q"><summary><span class="qn">a</span><span>Bereken de drawdown_pct.</span><span class="qx">Toon antwoord</span></summary><div class="ans">drawdown_pct = ((35.700 − 42.000) / 42.000) × 100 = (−6.300 / 42.000) × 100 = <strong>−15,0%</strong></div></details>
+<details class="q"><summary><span class="qn">b</span><span>Is de kill switch actief? Toon uw berekening.</span><span class="qx">Toon antwoord</span></summary><div class="ans">kill_switch_actief = drawdown_pct ≤ −drempel_pct → −15,0% ≤ −15% → <strong>ja, de kill switch is actief</strong> (het bereikt precies de drempel).</div></details>
+<details class="q"><summary><span class="qn">c</span><span>Wat betekent "actief zijn" van deze kill switch concreet — wat gebeurt er wel, en wat gebeurt er nadrukkelijk niet?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De kill switch activeert een <strong>zachte waarschuwing</strong>: een melding of banner die Fenna eraan herinnert dat de gecombineerde equity 15% onder de hoogste ooit bereikte stand ligt, bedoeld als moment van bewuste reflectie op alle lopende strategieën samen. Het is nadrukkelijk <strong>geen</strong> harde blokkade — Fenna kan nog steeds gewoon signalen ontvangen en zelf orders plaatsen; er wordt niets automatisch stopgezet.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Portfolio-risico en correlatie op systeemniveau</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zodra u meerdere strategieën of bot-achtige signaalflows tegelijk laat lopen — bijvoorbeeld Fenna's swingstrategie op large-cap aandelen, plus een tweede strategie op een andere set instrumenten — ontstaat een risico dat niet zichtbaar is als u alleen naar elke strategie afzonderlijk kijkt: <strong>correlatie</strong>.</p>
+<p>Deel 20 introduceerde dit al op portefeuilleniveau (met de portfolio/correlatie-matrix uit figuur 20-1). Hetzelfde principe geldt nu op <strong>systeemniveau</strong>, tussen strategieën: als twee strategieën vaak tegelijk long gaan in vergelijkbare instrumenten (bijvoorbeeld allebei voornamelijk technologieaandelen), gedragen ze zich in een neergaande markt vaak gelijktijdig slecht. Het risico van "twee strategieën" is dan niet de som van twee onafhankelijke risico's, maar potentieel veel groter, omdat beide strategieën tegelijk verliezen op hetzelfde onderliggende marktrisico.</p>
+<p>Een paar praktische vuistregels:</p>
+<ul>
+<li><strong>Reken het risicobudget per strategie én het gecombineerde risicobudget uit.</strong> Als elke strategie afzonderlijk 1% van uw account per trade riskeert (fixed fractional, deel 14), maar u laat drie strategieën tegelijk lopen die vaak gelijktijdig signalen geven op gecorreleerde instrumenten, kan uw daadwerkelijke blootstelling op een bepaald moment veel hoger uitvallen dan 1%.</li>
+<li><strong>Kijk niet alleen naar de instrumenten, maar naar het gedrag.</strong> Twee strategieën op totaal verschillende instrumenten kunnen alsnog gecorreleerd zijn als ze beide sterk afhankelijk zijn van hetzelfde marktregime (bijvoorbeeld: beide presteren goed in een trending markt en slecht in een ranging markt, zie deel 19).</li>
+<li><strong>Stel een totaalrisicobudget in, verdeeld over strategieën</strong>, in plaats van elke strategie afzonderlijk te sizen alsof de andere niet bestaat. Een eenvoudige aanpak: bepaal een maximaal totaal risicopercentage van het account (bijvoorbeeld 3%) en verdeel dat bewust over de actieve strategieën, in plaats van elke strategie het volle individuele risicopercentage te geven.</li>
+</ul>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.3 — Correlatie tussen strategieën herkennen</p>
+<details class="q"><summary><span class="qn">1</span><span>A: swingstrategie op large-cap Europese technologieaandelen. B: swingstrategie op large-cap Amerikaanse technologieaandelen, vergelijkbare entry-regels. Hoge, gemiddelde of lage correlatie?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Hoge correlatie.</strong> Beide strategieën handelen in dezelfde sector (technologie) met vergelijkbare regels; ze zullen vaak gelijktijdig long gaan en gelijktijdig lijden onder een sectorbrede daling.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>A: trendvolgende strategie die het beste presteert in een sterk trending markt. B: een andere trendvolgende strategie op andere instrumenten, die ook het beste presteert in een trending markt. Hoge, gemiddelde of lage correlatie?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Gemiddelde tot hoge correlatie.</strong> Ook al zijn de instrumenten verschillend, beide strategieën zijn afhankelijk van hetzelfde onderliggende marktregime (trending markt); in een ranging markt zullen beide waarschijnlijk tegelijk slechter presteren, ook zonder overlap in instrumenten.</div></details>
+<details class="q"><summary><span class="qn">3</span><span>A: swingstrategie op aandelen. B: een strategie die uitsluitend handelt op basis van renteverwachtingen via obligatie-ETF's, met tegengestelde marktlogica. Hoge, gemiddelde of lage correlatie?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Lage correlatie.</strong> Andere instrumentklasse (obligatie-ETF's versus aandelen) én tegengestelde marktlogica maakt gelijktijdig gecorreleerd verlies minder waarschijnlijk — dit is precies het soort combinatie dat diversificatie oplevert (zie deel 20).</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">De twee onderwerpen gecombineerd</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Monitoring en portfolio-risico op systeemniveau versterken elkaar. Een kill switch op gecombineerde equity werkt alleen goed als u ook daadwerkelijk monitort of alle onderliggende strategieën nog gezond draaien — een drawdown die ontstaat doordat één strategie een stille bug heeft, ziet er in de gecombineerde equity-curve niet anders uit dan een drawdown die ontstaat door een normale verliesreeks. Pas als u per strategie monitort (sectie 2) én naar het geheel kijkt (sectie 3 en 4), kunt u onderscheiden of een drawdown "hoort bij het spel" is, of een teken dat er iets stuk is.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Fenna's voorbeeld</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna breidt haar opzet uit met een tweede strategie: naast haar swingstrategie op large-cap Europese en Amerikaanse aandelen start ze een tweede, kortere-termijn CFD-strategie die ze eerder in niveau 2 heeft ontwikkeld en gebacktest. Beide laat ze een aantal weken parallel paper traden, met monitoring zoals in sectie 2 beschreven: een dagelijkse controle van het laatste-signaal-tijdstip per strategie en een wekelijkse blik op de gecombineerde equity-curve met de kill-switch-drempel uit deel 15 (15%), nu toegepast op het totaal.</p>
+<p>Na een paar weken valt haar op dat beide strategieën regelmatig in dezelfde week signalen geven op vergelijkbare technologieaandelen — sterker gecorreleerd dan ze had verwacht. Op een dag dat de hele technologiesector daalt, zakken beide strategieën tegelijk, en de gecombineerde drawdown komt dichter bij haar kill-switch-drempel dan wanneer ze de strategieën als volledig onafhankelijk had beschouwd.</p>
+<div class="dialogue"><p>Ze reageert niet met paniek — de zachte waarschuwing van de kill switch is precies bedoeld als reflectiemoment, geen halt-commando. Ze herverdeelt haar risicobudget: in plaats van beide strategieën het volle individuele risicopercentage te geven, verlaagt ze het risico per trade van beide strategieën zodat het gecombineerde risico op een gelijktijdig signaal binnen haar totale risicobudget blijft. Geen van beide strategieën wordt stopgezet; wel wordt de combinatie bewuster ingericht dan "gewoon twee keer hetzelfde risicopercentage naast elkaar".</p></div>
+<h3>Samenvatting</h3>
+<ul>
+<li>Een geautomatiseerd signaalsysteem kan stilletjes ongezond worden (dataflow stopt, een berekening gaat fout, het script hangt vast) zonder dat dit vanzelf opvalt zoals bij handmatig traden.</li>
+<li>Monitor minimaal: het tijdstip van het laatste signaal, foutlogs, of het aantal ontvangen signalen logisch aansluit bij de verwachting, en zorg voor eenvoudige alerting.</li>
+<li>De high-watermark kill switch (deel 15) is op systeemniveau toepasbaar op de gecombineerde equity van meerdere strategieën — nog steeds een zachte waarschuwing, geen harde blokkade.</li>
+<li>Meerdere strategieën tegelijk kunnen gecorreleerd zijn, ook als de instrumenten verschillen, wanneer ze afhankelijk zijn van hetzelfde marktregime — dat maakt het gecombineerde risico groter dan de som van de losse risico's suggereert.</li>
+<li>Stel een totaalrisicobudget in en verdeel dat bewust over strategieën, in plaats van elke strategie afzonderlijk te sizen alsof de andere niet bestaat.</li>
+<li>Fenna ontdekte via monitoring dat haar twee strategieën sterker gecorreleerd waren dan verwacht en herverdeelde haar risicobudget, zonder een van beide stop te zetten.</li>
+</ul>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.4 — Een monitoring- en risicobudgetplan opstellen</p>
+<details class="q"><summary><span class="qn">1</span><span>Stel dat u, net als Fenna, twee strategieën parallel wilt laten paper traden (of live, na validatie): wat monitort u, welke kill-switch-drempel kiest u, en hoe verdeelt u het risicobudget?</span><span class="qx">Toon voorbeelduitwerking</span></summary><div class="ans">Toepassingsopdracht, individueel antwoord. Een compleet antwoord bevat bij <strong>a)</strong> minstens drie concrete monitoringpunten met frequentie (bijvoorbeeld: dagelijks het laatste-signaal-tijdstip per strategie controleren, wekelijks de foutlogs doorlopen, wekelijks de gecombineerde equity-curve tegen de kill-switch-drempel afzetten). Bij <strong>b)</strong> een expliciet gekozen percentage met motivatie (bijvoorbeeld aansluitend bij de 15% uit de reader, of een andere waarde met onderbouwing). Bij <strong>c)</strong> een verdeling die rekening houdt met eventuele correlatie tussen de strategieën — bijvoorbeeld een lager risicopercentage per strategie naarmate de verwachte correlatie hoger is, in plaats van simpelweg het budget door twee te delen zonder motivatie.</div></details>
+</div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 30 — de capstone</h3>
+      <p>Deel 30 is het laatste deel van de cursus: een integrale verdedigingscasus waarin u uw eigen systematische strategie end-to-end opbouwt — blueprint, backtest, paper-log en reflectie, met de blootstelling en het risico op systeemniveau die u hier heeft leren bewaken.</p>
+      <a class="btn" href="deel-30.html">Deel 30 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 29 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_stx29_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

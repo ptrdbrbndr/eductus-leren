@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 26 — Een blueprint omzetten naar werkende code | Eductus</title>
+<meta name="description" content="Fenna's eigen strategy blueprint — marktfilter, setup-conditie, exit-regels, risk management — stap voor stap vertaald naar zowel Pine Script als Python, inclusief echte positiegrootteberekening.">
+<link rel="canonical" href="https://leren.eductus.nl/systematisch-traden/deel-26.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--oxblood);background:#f4e2dd;padding:18px 22px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.disclaimer strong{color:var(--oxblood)}
+.disclaimer p{margin:8px 0}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Systematisch Traden · Deel 26 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Systematisch Traden · Niveau 3 (Geautomatiseerd) · Deel 26 van 30</p>
+  <h1>Een blueprint omzetten<br><em>naar werkende code.</em></h1>
+  <p class="hero__lead">Deel 24 en 25 leerden Pine Script en Python op een generiek voorbeeld. Nu wordt het concreet: Fenna's eigen strategy blueprint — vastgelegd in deel 12, gevalideerd in niveau 2 — gaat stap voor stap naar werkende code, in beide talen tegelijk. Dezelfde regels, twee implementaties, elk met een eigen doel: signalering versus validatie.</p>
+  <div class="hero__stats"><div class="stat"><b>5</b><span>secties</span></div><div class="stat"><b>±55 min</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Geautomatiseerd</span></div></div>
+  <div class="disclaimer">
+    <p><strong>Belangrijke mededeling.</strong> Dit deel bevat het meest uitgebreide codevoorbeeld tot nu toe in deze cursus — de disclaimer verdient hier daarom een volledige herbevestiging, niet alleen een verwijzing. Dit is <strong>educatieve content, geen financieel advies</strong>, met generieke instrumenten en fictieve data, zonder rendementsgaranties.</p>
+    <p>Trading kent een reëel verliesrisico, inclusief het risico op verlies van de volledige inzet. Bij CFD's en andere hefboomproducten kan dat verlies <strong>groter zijn dan de inzet</strong>. Deze code, hoe zorgvuldig ook opgebouwd, blijft een hulpmiddel dat u zelf beoordeelt — geen advies en geen garantie. Zie deel 1 voor de volledige disclaimer.</p>
+  </div>
+  <div class="trail">Niveau 3 · Geautomatiseerd: ㉓ Denkstap naar automatisering &rarr; ㉔ Intro Pine Script &rarr; ㉕ Intro Python/pandas &rarr; <b>㉖ Blueprint → code (hier)</b> &rarr; ㉗ Paper trading &rarr; ㉘ Broker-API's/webhooks &rarr; ㉙ Monitoring + kill switch &rarr; ㉚ Capstone</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Fenna's blueprint, kort herhaald</a></li>
+<li><a href="#s2" data-target="s2">De vertaalslag in Pine Script</a></li>
+<li><a href="#s3" data-target="s3">De vertaalslag in Python</a></li>
+<li><a href="#s4" data-target="s4">Waarom deze twee versies naast elkaar bestaan</a></li>
+<li><a href="#s5" data-target="s5">Wat nog ontbreekt</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Fenna's blueprint, kort herhaald</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deel 24 en 25 leerden Pine Script en Python op een generiek voorbeeld: een simpele MA-kruising. Nu wordt het concreet. Dit deel vertaalt Fenna's eigen strategy blueprint — vastgelegd in deel 12, gevalideerd in niveau 2 — stap voor stap naar werkende code, in beide talen. Dat is precies de denkstap uit deel 23: de regels waren al expliciet en gevalideerd, nu volgt de vertaalslag naar code die ze kan laten signaleren.</p>
+<p>Fenna's strategie: swing-trades op large-cap Europese en Amerikaanse aandelen en ETF's, daggrafiek, houdperiode één tot drie weken. De kern van haar setup-conditie, zoals vastgelegd in haar blueprint:</p>
+<ul>
+<li><strong>Marktfilter:</strong> alleen longs zoeken wanneer het instrument zich in een langetermijn-uptrend bevindt — de koers staat boven het 200-daags voortschrijdend gemiddelde (MA200).</li>
+<li><strong>Setup-conditie:</strong> de koers staat boven het 50-daags voortschrijdend gemiddelde (MA50), én de RSI(14) herstelt zich uit oversold-gebied — kruist van onder de 30 naar erboven. Dat vangt een pullback binnen een bestaande uptrend: een kortstondige daling die weer opveert, in plaats van blind achter elke stijging aan te hollen.</li>
+<li><strong>Exit-regels:</strong> een stop-loss op ATR-afstand (ATR-multiplier 2, zoals in sectie 4.4 van deze cursus), en een tijdgebonden exit als de stop niet eerder geraakt wordt binnen de beoogde houdperiode.</li>
+<li><strong>Risk management:</strong> fixed fractional positiegrootte, 1% risico per trade — haar default sizing-methode uit deel 14.</li>
+<li><strong>Edge-hypothese:</strong> op liquide large-cap instrumenten herstelt een korte pullback binnen een gezonde uptrend doorgaans, omdat kortetermijnverkoopdruk uitdooft terwijl de onderliggende trend intact blijft; geen garantie, een hypothese die in niveau 2 is gebacktest en "goed genoeg" bevonden.</li>
+</ul>
+<p>Dit is dezelfde logica als het generieke MA-kruisingsvoorbeeld uit deel 24-25, maar met een extra trendfilter, een tweede indicator (RSI in plaats van alleen MA's), en een expliciete stop-afstand die ook de positiegrootte bepaalt.</p>
+<figure><img src="figuren/deel-26-figuur-1-pipeline-blueprint-code.svg" alt="Pipeline met drie stappen: een gevalideerde strategy blueprint wordt vertaald naar werkende code in Pine Script en Python, die code wordt vervolgens getoetst met paper trading, vóór er sprake is van live geld"><figcaption>Figuur 26-1 — De pipeline blueprint → code → paper trading: dit deel behandelt de middelste stap, deel 27 sluit de pijl naar paper trading</figcaption></figure>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De vertaalslag in Pine Script</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elke sectie van de blueprint krijgt een eigen blok code, in dezelfde volgorde als hierboven beschreven.</p>
+<pre><code>//@version=5
+indicator("Fenna's blueprint — pullback in uptrend", overlay=true)
+
+// Marktfilter: alleen longs in een langetermijn-uptrend
+trendFilterLength = input.int(200, title="Trendfilter MA-periode")
+trendMA = ta.sma(close, trendFilterLength)
+inUptrend = close &gt; trendMA
+
+// Setup: prijs boven MA50 én RSI herstelt uit oversold
+maLength = input.int(50, title="MA-periode")
+ma = ta.sma(close, maLength)
+rsiLength = input.int(14, title="RSI-periode")
+rsiOversold = input.int(30, title="RSI oversold-niveau")
+rsiValue = ta.rsi(close, rsiLength)
+
+pullbackHerstel = ta.crossover(rsiValue, rsiOversold)
+setupActief = close &gt; ma and inUptrend and pullbackHerstel
+
+// ATR voor stop-afstand (zie sectie 4.4)
+atrLength = input.int(14, title="ATR-periode")
+atrMultiplier = input.float(2.0, title="ATR-multiplier")
+atrValue = ta.atr(atrLength)
+stopAfstand = atrValue * atrMultiplier
+stopNiveau = close - stopAfstand
+
+plot(ma, color=color.blue, title="MA50")
+plot(trendMA, color=color.gray, title="MA200 (trendfilter)")
+plotshape(setupActief, style=shape.triangleup, location=location.belowbar,
+     color=color.green, size=size.small, title="Pullback-signaal")
+plot(setupActief ? stopNiveau : na, style=plot.style_circles,
+     color=color.red, title="Afgeleide stop-afstand")
+
+alertcondition(setupActief, title="Pullback-signaal",
+     message="Setup actief: prijs boven MA50 in uptrend, RSI herstelt uit oversold")</code></pre>
+<p>Loop de vertaling na, sectie voor sectie:</p>
+<ul>
+<li>De <strong>marktfilter</strong> (<code>inUptrend</code>) is een losse, herbruikbare boolean — precies zoals de blueprint marktfilters als apart onderdeel beschrijft, niet vermengd met de entry-conditie zelf.</li>
+<li>De <strong>setup-conditie</strong> (<code>setupActief</code>) combineert drie deelcondities met <code>and</code>: prijs boven MA50, in een uptrend, én het RSI-herstelmoment. Alle drie moeten waar zijn — exact zoals de blueprint het beschrijft.</li>
+<li>De <strong>exit-regel</strong> (stop-loss) wordt hier alvast berekend (<code>stopNiveau</code>) en getekend, zodat Fenna op de chart ziet waar haar stop zou liggen als ze nu zou instappen. Merk op: het script plaatst geen stop-order — het toont waar die zou liggen, Fenna (of haar broker-app) zet die zelf.</li>
+<li><strong>Risk management</strong> (de positiegrootte zelf) is in Pine Script minder natuurlijk te tonen zonder een <code>strategy()</code>-declaratie te gebruiken die we bewust vermijden; de positiegrootteberekening staat daarom uitgewerkt in de Python-versie hieronder, die Fenna naast het TradingView-signaal gebruikt om haar order voor te bereiden.</li>
+</ul>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 26, Opdracht 26.1</p><details class="q"><summary><span class="qn">1</span><span>Wijs voor elk van de volgende blueprint-onderdelen de bijbehorende regel(s) code aan in de Pine Script-versie: a) de marktfilter (langetermijn-uptrend); b) de setup-conditie (alle deelcondities samen); c) de afgeleide stop-afstand.</span><span class="qx">Toon antwoord</span></summary><div class="ans">a) <code>trendFilterLength</code>, <code>trendMA = ta.sma(close, trendFilterLength)</code> en <code>inUptrend = close &gt; trendMA</code>.<br>b) <code>pullbackHerstel = ta.crossover(rsiValue, rsiOversold)</code> gecombineerd met <code>setupActief = close &gt; ma and inUptrend and pullbackHerstel</code> — alle drie deelcondities samen.<br>c) <code>atrValue = ta.atr(atrLength)</code>, <code>stopAfstand = atrValue * atrMultiplier</code> en <code>stopNiveau = close - stopAfstand</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De vertaalslag in Python</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De Python-versie bouwt voort op deel 25, met dezelfde vier stappen, nu met Fenna's volledige setup-conditie én echte positiegrootteberekening.</p>
+<pre><code>import pandas as pd
+import numpy as np
+
+# 1. Data inladen
+df = pd.read_csv("aandeel_x_daggrafiek.csv", parse_dates=["date"])
+df = df.sort_values("date").reset_index(drop=True)
+
+# 2. Indicatoren berekenen
+df["ma50"] = df["close"].rolling(window=50).mean()
+df["ma200"] = df["close"].rolling(window=200).mean()
+
+delta = df["close"].diff()
+gain = delta.clip(lower=0)
+loss = -delta.clip(upper=0)
+avg_gain = gain.rolling(window=14).mean()
+avg_loss = loss.rolling(window=14).mean()
+rs = avg_gain / avg_loss
+df["rsi"] = 100 - (100 / (1 + rs))
+
+high_low = df["high"] - df["low"]
+high_close = (df["high"] - df["close"].shift()).abs()
+low_close = (df["low"] - df["close"].shift()).abs()
+true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+df["atr"] = true_range.rolling(window=14).mean()
+
+# 3. Setup-conditie: marktfilter + MA50 + RSI-herstel uit oversold
+df["in_uptrend"] = df["close"] &gt; df["ma200"]
+df["boven_ma50"] = df["close"] &gt; df["ma50"]
+df["rsi_vorige"] = df["rsi"].shift(1)
+df["pullback_herstel"] = (df["rsi_vorige"] &lt; 30) &amp; (df["rsi"] &gt;= 30)
+df["setup_actief"] = df["in_uptrend"] &amp; df["boven_ma50"] &amp; df["pullback_herstel"]
+
+# 4. Trades genereren met echte positiegrootte (fixed fractional, sectie 4.2)
+account_grootte = 10000
+risico_pct = 1.0
+atr_multiplier = 2
+houdperiode_dagen = 15  # circa drie weken handelsdagen, blueprint-houdperiode
+
+trades = []
+for i, row in df[df["setup_actief"]].iterrows():
+    if pd.isna(row["atr"]) or i + 1 &gt;= len(df):
+        continue
+
+    entry_prijs = row["close"]
+    stop_afstand = row["atr"] * atr_multiplier
+    if stop_afstand &lt;= 0:
+        continue
+
+    risico_bedrag = account_grootte * (risico_pct / 100)
+    positiegrootte = int(risico_bedrag // stop_afstand)
+    if positiegrootte &lt;= 0:
+        continue
+    stop_prijs = entry_prijs - stop_afstand
+
+    exit_idx = min(i + houdperiode_dagen, len(df) - 1)
+    toekomst = df.iloc[i + 1: exit_idx + 1]
+    stop_geraakt = toekomst[toekomst["low"] &lt;= stop_prijs]
+
+    if not stop_geraakt.empty:
+        exit_rij = stop_geraakt.iloc[0]
+        exit_prijs = stop_prijs
+        exit_date = exit_rij["date"]
+    else:
+        exit_rij = df.iloc[exit_idx]
+        exit_prijs = exit_rij["close"]
+        exit_date = exit_rij["date"]
+
+    pnl = (exit_prijs - entry_prijs) * positiegrootte
+    trades.append({
+        "entry_date": row["date"], "exit_date": exit_date,
+        "entry_prijs": entry_prijs, "exit_prijs": exit_prijs,
+        "positiegrootte": positiegrootte, "pnl": pnl,
+    })
+
+trades_df = pd.DataFrame(trades)
+# Metrics-berekening (winrate, profit factor, expectancy, max drawdown, Sharpe)
+# verloopt identiek aan sectie 5 van deel 25, toegepast op deze trades_df.</code></pre>
+<p>Wat hier is toegevoegd ten opzichte van deel 25:</p>
+<ul>
+<li><strong>RSI en ATR zelf berekend</strong>, zonder een externe indicatorbibliotheek — met alleen <code>.diff()</code>, <code>.clip()</code> en <code>.rolling()</code>, precies de basisbewerkingen die deel 25 al introduceerde. <code>.clip(lower=0)</code> behoudt alleen positieve waarden (stijgingen) en zet de rest op 0; <code>.clip(upper=0)</code> doet het omgekeerde voor dalingen.</li>
+<li><strong>Drie condities gecombineerd met <code>&amp;</code></strong> (het pandas-equivalent van <code>and</code> bij het combineren van boolean-kolommen), exact zoals de Pine Script-versie <code>and</code> gebruikt.</li>
+<li><strong>Echte positiegrootte</strong> via de fixed-fractional-formule uit sectie 4.2: risicobedrag gedeeld door stop-afstand, naar beneden afgerond (<code>//</code>) naar een geheel aantal stuks.</li>
+<li><strong>Een exit-regel die zowel de stop als de tijdslimiet respecteert</strong>: de code zoekt binnen de houdperiode naar de eerste dag waarop de koers de stop raakt; vindt ze die niet, dan sluit de trade op de slotkoers van de laatste dag van de houdperiode. Dit is de code-vertaling van "stop-loss óf tijdgebonden exit, wat het eerst komt" uit de blueprint.</li>
+</ul>
+<div class="callout note"><span class="lbl">Voorbeeld met cijfers</span><p>Setup activeert bij entry_prijs €86,00, ATR €1,80 (multiplier 2), account_grootte €10.000, risico 1%. Dan: stop_afstand = 1,80 × 2 = <strong>€3,60</strong>; risico_bedrag = 10.000 × 0,01 = <strong>€100,00</strong>; positiegrootte = floor(100 / 3,60) = <strong>27 stuks</strong>; notional = 27 × 86,00 = <strong>€2.322,00</strong> — ruim onder 5× de accountgrootte, dus geen extreme hefboom volgens de vuistregel uit sectie 4.2.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 26, Opdracht 26.2</p><details class="q"><summary><span class="qn">1</span><span>Fenna's setup-conditie activeert op een aandeel met entry_prijs €86,00 en een ATR van €1,80 (ATR-multiplier 2). Haar account_grootte is €10.000 en ze hanteert 1% risico per trade. Bereken: a) de stop_afstand; b) het risico_bedrag; c) de positiegrootte (naar beneden afgerond); d) de notional, en beoordeel of dit een extreme hefboom is volgens de vuistregel uit sectie 4.2 (notional &gt; 5× accountgrootte).</span><span class="qx">Toon antwoord</span></summary><div class="ans">a) stop_afstand = ATR × atr_multiplier = 1,80 × 2 = <strong>€3,60</strong>.<br>b) risico_bedrag = account_grootte × (risico_pct / 100) = 10.000 × 0,01 = <strong>€100,00</strong>.<br>c) positiegrootte = floor(risico_bedrag / stop_afstand) = floor(100 / 3,60) = floor(27,78) = <strong>27 stuks</strong>.<br>d) notional = 27 × 86,00 = <strong>€2.322,00</strong>. Dat is ruim onder 5× de accountgrootte (5 × 10.000 = €50.000) — geen sprake van extreme hefboom, een normale, risicogecontroleerde positie.</div></details></div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 26, Opdracht 26.3</p><details class="q"><summary><span class="qn">2</span><span>Bekijk het Python-fragment vanaf <code>exit_idx = min(...)</code>. a) Wat gebeurt er als de stop binnen de houdperiode wordt geraakt? b) Wat gebeurt er als de stop niet wordt geraakt binnen de houdperiode? c) Waarom wordt bij een geraakte stop <code>exit_prijs = stop_prijs</code> gebruikt, en niet de slotkoers van de dag waarop de stop geraakt werd?</span><span class="qx">Toon antwoord</span></summary><div class="ans">a) Zodra binnen de houdperiode een dag voorkomt waarop de laagste koers (<code>low</code>) op of onder de stop_prijs zakt, wordt de trade gesloten tegen de stop_prijs zelf, op de datum van die eerste dag — de stop-loss is geraakt en de code neemt aan dat de order daar is uitgevoerd.<br>b) Wordt de stop nooit geraakt binnen de houdperiode (<code>houdperiode_dagen</code>, hier 15 handelsdagen), dan sluit de code de trade op de slotkoers van de laatste dag van die periode — de tijdgebonden exit uit de blueprint.<br>c) Omdat de aanname is dat de order bij het raken van de stop tegen de stop_prijs wordt uitgevoerd — dat is een vereenvoudiging (in werkelijkheid kan slippage ervoor zorgen dat de daadwerkelijke uitvoeringsprijs iets afwijkt), maar wel de meest voor de hand liggende, conservatieve aanname voor een backtest: je gaat niet uit van een gunstigere prijs dan de stop zelf.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Waarom deze twee versies naast elkaar bestaan</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna gebruikt de Pine Script-versie live op TradingView om setups te herkennen en zich te laten waarschuwen (via <code>alertcondition</code>, straks gekoppeld aan een webhook in deel 28). Ze gebruikt de Python-versie om, los van TradingView, haar strategie grondig te backtesten op jaren historische data en de metrics uit sectie 4.6 te berekenen. Beide versies coderen dezelfde blueprint-logica; ze zijn geen concurrenten maar aanvullend — signalering versus validatie.</p>
+<div class="callout tip"><span class="lbl">Kern</span><p>Dat twee onafhankelijke implementaties tot dezelfde signalen zouden moeten leiden, is bovendien een goede controle: wijken ze structureel af, dan zit er een fout in een van beide, of in de interpretatie van de blueprint.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Toepassingsopdracht</div><p class="quiz__src">Uit Werkboek deel 26, Opdracht 26.4</p><details class="q"><summary><span class="qn">1</span><span>Vertaal deze setup-conditie naar pseudocode of pandas-code: "koers boven het 20-daags gemiddelde, én het handelsvolume van vandaag is minstens 1,5 keer het gemiddelde volume van de laatste 20 dagen" — een volumefilter in plaats van een RSI-filter. Minimaal: de twee benodigde berekende kolommen, en de gecombineerde setup_actief-conditie.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Voorbeelduitwerking (kleine variaties in naamgeving zijn prima, beoordeel op logica):<br><code>df["ma20"] = df["close"].rolling(window=20).mean()</code><br><code>df["volume_gemiddeld"] = df["volume"].rolling(window=20).mean()</code><br><code>df["boven_ma20"] = df["close"] &gt; df["ma20"]</code><br><code>df["volume_uitschieter"] = df["volume"] &gt;= 1.5 * df["volume_gemiddeld"]</code><br><code>df["setup_actief"] = df["boven_ma20"] &amp; df["volume_uitschieter"]</code><br>Een goed antwoord herkent dat dit dezelfde opbouw volgt als sectie 3: eerst de losse indicatoren/kolommen berekenen, dan de deelcondities als boolean-kolommen, dan die combineren met <code>&amp;</code> (of <code>and</code> in pseudocode) tot één <code>setup_actief</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Wat nog ontbreekt</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Deze code herkent en berekent, maar plaatst nog geen order en test nog niets in de praktijk. Twee stappen volgen in dit niveau: <strong>paper trading</strong> (deel 27) om te zien of de code zich in levende marktomstandigheden gedraagt zoals de backtest suggereert, vóórdat er ook maar één signaal met echt geld gemoeid is; en <strong>broker-API's/webhooks</strong> (deel 28) om een signaal daadwerkelijk bij Fenna's broker-app te krijgen, zonder dat de code zelf ooit een order uitvoert.</p>
+<div class="callout warn"><span class="lbl">Let op</span><p>Dat laatste punt is geen bijzaak. Ook in niveau 3 blijft de code een <strong>signaleringsinstrument</strong>, geen bot die zelfstandig orders plaatst. De code herkent een setup en toont wat er berekend is; Fenna beoordeelt het signaal en voert de order zelf uit. Die menselijke beoordeling als laatste stap komt in deel 28 nadrukkelijk terug.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 27</h3>
+      <p>Deel 27: paper trading — de code uit dit deel toetsen op levende marktomstandigheden, zonder één euro risico, als validatiestap vóór er ooit sprake is van live geld.</p>
+      <a class="btn" href="deel-27.html">Deel 27 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Systematisch Traden · Deel 26 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5"];
+  var KEY="eductus_stx26_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
