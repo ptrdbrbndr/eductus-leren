@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 15 — SSH | Eductus</title>
+<meta name="description" content="Van wachtwoord- naar key-authenticatie: een SSH-sleutelpaar genereren met ssh-keygen, de publieke sleutel plaatsen, Host-aliassen in ~/.ssh/config, serverside hardening in sshd_config en SSH-tunneling met local port forwarding — uitgewerkt aan het Rapportagecluster van Meridiaan Pensioen.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-15.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 15 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 2 (Professional) · Deel 15 van 30</p>
+  <h1>SSH<br><em>Van wachtwoord naar sleutel, en verder.</em></h1>
+  <p class="hero__lead">Milan stapt op het Rapportagecluster over van wachtwoord- naar key-authenticatie: een sleutelpaar genereren met <code>ssh-keygen</code>, de publieke sleutel plaatsen met <code>ssh-copy-id</code> of handmatig, meerdere servers overzichtelijk beheren via <code>~/.ssh/config</code>, de eerste serverside hardening in <code>sshd_config</code>, en met local port forwarding bij een dienst komen die alleen lokaal op een server luistert.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±1u</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>Professional</span></div></div>
+  <div class="trail">Niveau 2: ⑪ Users, groups &amp; permissions &rarr; ⑫ Vi(m)-basis &rarr; ⑬ Input/output &amp; pipes &rarr; ⑭ Processen &rarr; <b>⑮ SSH (hier)</b> &rarr; ⑯ Tmux &rarr; ⑰ Dotfiles &amp; customization &rarr; ⑱ Netwerken &rarr; ⑲ systemd &amp; services &rarr; ⑳ Opslag &rarr; ㉑ Bash-scripting &rarr; ㉒ Cron &amp; geplande taken</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Wat is SSH, en waarom geen wachtwoord meer</a></li>
+<li><a href="#s2" data-target="s2">Een sleutelpaar genereren</a></li>
+<li><a href="#s3" data-target="s3">De publieke sleutel op de server zetten</a></li>
+<li><a href="#s4" data-target="s4">Clientconfiguratie: ~/.ssh/config</a></li>
+<li><a href="#s5" data-target="s5">Serverside hardening — kort geïntroduceerd</a></li>
+<li><a href="#s6" data-target="s6">SSH-tunneling</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Wat is SSH, en waarom geen wachtwoord meer</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>SSH (Secure Shell) is het protocol waarmee u versleuteld op afstand inlogt op een Linux-server en daar commando's uitvoert. Alles wat u tot nu toe op uw eigen Raspberry Pi of VM lokaal deed, doet u vanaf dit deel ook op afstand: op het <strong>Rapportagecluster</strong> bij Meridiaan Pensioen, het kleine cluster Ubuntu Server-machines waar Milan Struik sinds niveau 2 mee werkt.</p>
+<p>Tot nu toe logde Milan in met een wachtwoord: <code>ssh milan@10.20.4.11</code>, gevolgd door een prompt. Dat werkt, maar heeft twee structurele zwaktes. Een wachtwoord is te raden of te brute-forcen, zeker als een server vanaf een groter netwerk bereikbaar is. En een wachtwoord kan worden onderschept of afgekeken op het moment dat het wordt ingetikt. Key-authenticatie lost beide op: er wordt nooit een geheim over de verbinding gestuurd, en de sleutel zelf is praktisch niet te raden.</p>
+<div class="dialogue"><p>Fenna Oudshoorn maakt hier op het Rapportagecluster geen uitzondering voor: "Wachtwoord-login op een server die vanaf ons kantoornetwerk bereikbaar is, is voor mij een openstaand incident, geen configuratiekeuze."</p></div>
+<p>Dit deel behandelt hoe Milan van wachtwoord- naar key-authenticatie overstapt, en wat hij daarna met die verbinding kan doen.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Een sleutelpaar genereren</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>SSH-key-authenticatie werkt met een sleutelpaar: een <strong>privésleutel</strong>, die nooit de eigen laptop verlaat, en een <strong>publieke sleutel</strong>, die op elke server komt te staan waarop wordt ingelogd. Genereren doet u met <code>ssh-keygen</code>:</p>
+<pre><code>ssh-keygen -t ed25519 -C "milan@meridiaan"</code></pre>
+<p><code>-t ed25519</code> kiest het sleuteltype, <code>-C</code> voegt een commentaar toe (meestal naam of gebruiker@organisatie) zodat een sleutel later herkenbaar is in een lijst met <code>authorized_keys</code>. Het commando vraagt om een opslaglocatie (standaard <code>~/.ssh/id_ed25519</code>) en optioneel een <strong>passphrase</strong> — een extra wachtwoord dat de privésleutel zelf versleutelt op schijf.</p>
+<div class="callout warn"><span class="lbl">Waarschuwing</span><p>Sla die passphrase niet over: zonder passphrase is een gestolen laptop ook een gestolen sleutel.</p></div>
+<p>Ed25519 is tegenwoordig het standaard aan te raden sleuteltype. Het is een moderner elliptischecurve-algoritme dat kortere sleutels oplevert dan RSA bij een vergelijkbaar of hoger beveiligingsniveau, sneller rekent bij het ondertekenen en verifiëren, en van nature geen zwakke sleutellengtes toestaat (bij RSA moet u zelf bewust een lengte van minimaal 3072, bij voorkeur 4096 bit kiezen — een verouderd voorbeeld met 1024 bit is nog altijd te vinden in oude documentatie en is inmiddels onveilig). Voor de meeste moderne Linux-servers, inclusief elke Ubuntu Server-versie die in deze cursus wordt gebruikt, is ed25519 zonder voorbehoud de juiste keuze.</p>
+<p>Er zijn nog systemen die ed25519 niet ondersteunen: sommige verouderde netwerkapparatuur of legacy-appliances met een oude OpenSSH-versie. Voor die uitzonderingsgevallen valt u terug op RSA:</p>
+<pre><code>ssh-keygen -t rsa -b 4096 -C "milan@meridiaan-legacy"</code></pre>
+<p><code>-b 4096</code> zet de sleutellengte expliciet op 4096 bit — RSA zonder deze vlag valt terug op een kortere, minder wenselijke standaardlengte.</p>
+<p>Hoe key-authenticatie vervolgens werkt zonder ooit een wachtwoord of de privésleutel zelf over de lijn te sturen: de server daagt de client uit met een willekeurig gegenereerd bericht (een <em>challenge</em>), de client ondertekent dat bericht met de privésleutel, en de server verifieert die ondertekening met de publieke sleutel die al op de server staat. Klopt de ondertekening, dan weet de server met zekerheid dat de client de bijbehorende privésleutel bezit — zonder dat die privésleutel ooit is verzonden.</p>
+<figure><img src="figuren/deel-15-figuur-1-ssh-handshake.svg" alt="SSH-handshake met key-authenticatie: client en server naast elkaar, met de stappen challenge van server naar client, ondertekening met de privésleutel die lokaal bij de client blijft, verificatie met de publieke sleutel op de server, en het resultaat: toegang zonder dat een wachtwoord of de privésleutel ooit over de verbinding is gegaan"><figcaption>Figuur 15-1 — de SSH-handshake bij key-authenticatie: challenge, ondertekening, verificatie, toegang</figcaption></figure>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 15, Uitwerking 15.1a</p><details class="q"><summary><span class="qn">1</span><span>Welk commando genereert een ed25519-sleutelpaar met een herkenbaar commentaarveld?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>ssh-keygen -t ed25519 -C "milan@meridiaan"</code>, gevolgd door een locatie (standaard is prima) en een passphrase.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De publieke sleutel op de server zetten</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De eenvoudigste manier om de publieke sleutel op een server te plaatsen is <code>ssh-copy-id</code>:</p>
+<pre><code>ssh-copy-id milan@10.20.4.11</code></pre>
+<p>Dit commando logt (nog met wachtwoord) in op de server, plaatst de inhoud van uw publieke sleutel in <code>~/.ssh/authorized_keys</code> van die gebruiker, en zet meteen de juiste permissies op map en bestand.</p>
+<p>Waar <code>ssh-copy-id</code> niet beschikbaar is, of waar u precies wilt zien wat er gebeurt, doet u het handmatig:</p>
+<pre><code>cat ~/.ssh/id_ed25519.pub</code></pre>
+<p>De uitvoer (één lange regel beginnend met <code>ssh-ed25519</code>) plakt u op de server aan het eind van <code>~/.ssh/authorized_keys</code> van de doelgebruiker. Daarna de permissies:</p>
+<pre><code>chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys</code></pre>
+<div class="callout warn"><span class="lbl">Harde eis, geen suggestie</span><p>SSH weigert een <code>authorized_keys</code>-bestand te gebruiken, en soms zelfs een hele <code>.ssh</code>-map, als die te ruim toegankelijk is voor anderen dan de eigenaar. Een map met groeps- of wereldschrijfrechten, of een <code>authorized_keys</code> die door de groep beschreven mag worden, wordt door de SSH-daemon stilzwijgend genegeerd — de meest voorkomende oorzaak van "mijn key werkt niet" bij wie dit voor het eerst handmatig doet.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.2c / Uitwerking 15.2c</p><details class="q"><summary><span class="qn">1</span><span>U verandert tijdelijk de permissies van <code>~/.ssh</code> op de server naar 755 en probeert opnieuw met key in te loggen. Wat gebeurt er?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Met <code>~/.ssh</code> op 755 (voor groep en anderen leesbaar en doorloopbaar) weigert SSH de sleutel te gebruiken en valt de verbinding terug op wachtwoord-authenticatie, of wordt geweigerd als die is uitgeschakeld — met een foutmelding of stille terugval, afhankelijk van de serverconfiguratie. Na <code>chmod 700 ~/.ssh</code> werkt key-login weer normaal.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Clientconfiguratie: ~/.ssh/config</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zodra Milan meerdere machines op het Rapportagecluster beheert, wordt <code>ssh -i ~/.ssh/id_ed25519 milan@10.20.4.11 -p 2222</code> voor elke server onhandig om te onthouden. <code>~/.ssh/config</code> op de eigen laptop biedt Host-aliassen:</p>
+<pre><code>Host rapportagecluster1
+    HostName 10.20.4.11
+    User milan
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+Host rapportagecluster2
+    HostName 10.20.4.12
+    User milan
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519</code></pre>
+<p>Met dit bestand op zijn plek volstaat:</p>
+<pre><code>ssh rapportagecluster1</code></pre>
+<p><code>HostName</code> is het echte adres, <code>User</code> de inlognaam, <code>Port</code> de SSH-poort (van standaard 22 afwijkend is een bekende, lichte hardeningsmaatregel), <code>IdentityFile</code> de te gebruiken privésleutel. Dezelfde aliassen werken ook met <code>scp</code> en <code>rsync</code>, wat verderop in de cursus (bijvoorbeeld back-up en recovery) terugkomt.</p>
+<p>Milan beheert in de praktijk drie machines op het Rapportagecluster:</p>
+<div class="tablewrap"><table><thead><tr><th>Naam</th><th>Adres</th><th>Gebruiker</th><th>Poort</th></tr></thead><tbody>
+<tr><td>rapportagecluster1</td><td>10.20.4.11</td><td>milan</td><td>2222</td></tr>
+<tr><td>rapportagecluster2</td><td>10.20.4.12</td><td>milan</td><td>2222</td></tr>
+<tr><td>rapportagecluster-db</td><td>10.20.4.20</td><td>milan</td><td>22</td></tr>
+</tbody></table></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.3 / Uitwerking 15.3</p><details class="q"><summary><span class="qn">1</span><span>Schrijf het <code>~/.ssh/config</code>-fragment voor de drie machines uit de tabel (allen met privésleutel <code>~/.ssh/id_ed25519</code>), en geef het commando waarmee Milan daarna op rapportagecluster-db inlogt.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code>Host rapportagecluster1
+    HostName 10.20.4.11
+    User milan
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+Host rapportagecluster2
+    HostName 10.20.4.12
+    User milan
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+Host rapportagecluster-db
+    HostName 10.20.4.20
+    User milan
+    Port 22
+    IdentityFile ~/.ssh/id_ed25519</code></pre>Inloggen: <code>ssh rapportagecluster-db</code></div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Serverside hardening — kort geïntroduceerd</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zodra key-authenticatie werkt, is de logische vervolgstap wachtwoord-login op de server zelf uitschakelen. Dit gebeurt in <code>/etc/ssh/sshd_config</code>:</p>
+<pre><code>PasswordAuthentication no
+PermitRootLogin no</code></pre>
+<p><code>PasswordAuthentication no</code> staat alleen nog key-authenticatie toe. <code>PermitRootLogin no</code> verbiedt direct inloggen als root — beheerders loggen in als eigen gebruiker en gebruiken <code>sudo</code>, precies zoals in deel 11 behandeld. Na een wijziging herlaadt u de daemon:</p>
+<pre><code>sudo systemctl restart ssh</code></pre>
+<div class="callout warn"><span class="lbl">Fenna's vaste regel</span><p>Nooit de sessie sluiten voordat een tweede, nieuwe verbinding is getest. Een fout in <code>sshd_config</code> die de daemon niet meer laat starten, of die per ongeluk de eigen toegang blokkeert, is op een server zonder fysieke of out-of-band toegang lastig te herstellen.</p></div>
+<p>Dit onderwerp — samen met fail2ban en verdere hardening — komt in deel 25 uitgebreid terug; hier is het doel alleen te weten dat deze opties bestaan en waarvoor ze dienen.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.5 / Uitwerking 15.5</p><details class="q"><summary><span class="qn">1</span><span>In welke volgorde voert u de stappen uit om op het Rapportagecluster over te gaan naar <code>PasswordAuthentication no</code>, waarom is die volgorde belangrijk, en welke voorzorgsmaatregel neemt u vlak voordat u <code>sudo systemctl restart ssh</code> uitvoert op een server waar u alleen via SSH bij kunt?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Volgorde: (1) sleutelpaar genereren op de client, (2) publieke sleutel op de server plaatsen via <code>ssh-copy-id</code> of handmatig, (3) testen dat inloggen met de sleutel daadwerkelijk werkt — in een nieuwe, aparte sessie, met de oude sessie nog open — en pas daarna (4) <code>PasswordAuthentication no</code> instellen in <code>sshd_config</code> en de daemon herstarten. Deze volgorde is belangrijk omdat stap 4 wachtwoord-login onherroepelijk uitschakelt: als de sleutel in stap 2 niet goed staat en dat pas na stap 4 wordt ontdekt, is er geen wachtwoord meer als terugvaloptie. Voorzorgsmaatregel: een tweede, actieve SSH-sessie naar dezelfde server openhouden totdat de nieuwe configuratie in een derde, verse sessie is bevestigd te werken. Gaat het mis, dan is die tweede sessie de enige weg om de fout in <code>sshd_config</code> te herstellen zonder fysieke of out-of-band toegang tot de machine.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">SSH-tunneling</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>SSH kan meer dan een shell openen: het kan ook netwerkverkeer door de versleutelde verbinding heen tunnelen. <strong>Local port forwarding</strong> maakt een poort op de eigen laptop beschikbaar die feitelijk naar een dienst op (of achter) de server wijst:</p>
+<pre><code>ssh -L 3000:localhost:3000 rapportagecluster1</code></pre>
+<p>Grafana op het Rapportagecluster luistert bewust alleen op <code>localhost</code> van de clustermachine zelf — niet direct vanaf het kantoornetwerk bereikbaar, uit voorzorg. Met bovenstaand commando opent Milan op zijn eigen laptop <code>localhost:3000</code> in de browser, en SSH stuurt dat verkeer via de versleutelde verbinding door naar poort 3000 op de server. Het eerste getal is de lokale poort op de laptop, het tweede deel (<code>localhost:3000</code>) is het adres zoals de server dat zelf ziet, wat niet per se hetzelfde hoeft te zijn als het adres van de sshserver.</p>
+<p><strong>Remote port forwarding</strong> is de tegenhanger, met <code>-R</code> in plaats van <code>-L</code>: een poort op de server wordt doorgestuurd naar een dienst op de eigen laptop (of een derde machine die vanaf de laptop bereikbaar is). Dit is minder vaak nodig in het dagelijks beheer van het Rapportagecluster, maar bijvoorbeeld bruikbaar om vanaf een server tijdelijk bij een dienst te komen die alleen lokaal op de laptop van een ontwikkelaar draait.</p>
+<div class="callout tip"><span class="lbl">Toepassing: Grafana op poort 8080</span><p>Op <code>rapportagecluster1</code> draait Grafana, alleen bereikbaar op <code>localhost:3000</code> van die machine zelf. Milan wil het dashboard op zijn eigen laptop bekijken, op lokale poort 8080 (poort 3000 is daar al in gebruik). Met de Host-alias uit sectie 4: <code>ssh -L 8080:localhost:3000 rapportagecluster1</code>, en daarna <code>localhost:8080</code> in de browser.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 15, Opdracht 15.4c / Uitwerking 15.4c</p><details class="q"><summary><span class="qn">1</span><span>Leg in twee zinnen uit waarom Grafana via local port forwarding bereikbaar maken veiliger is dan Grafana rechtstreeks op alle netwerkinterfaces te laten luisteren.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Grafana blijft dan alleen bereikbaar voor wie al een SSH-verbinding met geldige key-authenticatie naar de server heeft opgezet — er is geen extra, apart te beveiligen netwerkpoort die vanaf het kantoornetwerk (of breder) rechtstreeks aanvalbaar is. De toegang loopt via hetzelfde, al geharde SSH-kanaal in plaats van via een tweede blootgestelde dienst.</div></details></div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 16</h3>
+      <p>Deel 16: Tmux.</p>
+      <a class="btn" href="deel-16.html">Deel 16 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 15 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_lsb15_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

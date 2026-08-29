@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 7 — Shell, command line & terminal fundamenten | Eductus</title>
+<meta name="description" content="Wat gebeurt er tussen het typen van een commando en het verschijnen van de uitvoer? Dit deel legt de vier lagen terminal, shell, kernel en hardware naast elkaar, laat zien wat Enter drukken precies doet, en behandelt shells, omgevingsvariabelen en het verschil tussen login- en niet-interactieve shells.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-07.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 7 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 1 (Fundament) · Deel 7 van 30</p>
+  <h1>Shell, terminal &amp; kernel<br><em>Vier lagen tussen vinger en hardware.</em></h1>
+  <p class="hero__lead">Milan typt <code>ls -l</code> en ziet meteen resultaat — maar onder de motorkap doorloopt dat commando minstens vier lagen. Dit deel legt terminal, shell, kernel en hardware naast elkaar, laat het traject van een commando stap voor stap zien, en behandelt shells, omgevingsvariabelen (met name <code>$PATH</code>) en het verschil tussen een login-shell en een niet-interactieve shell — kennis die vanaf deel 21 (scripting) en deel 22 (cron) rechtstreeks terugkomt.</p>
+  <div class="hero__stats"><div class="stat"><b>5</b><span>secties</span></div><div class="stat"><b>±50 min</b><span>reader + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N1</b><span>Fundament</span></div></div>
+  <div class="trail">Niveau 1 · Fundament: ① Introductie &rarr; ② Pi &rarr; ③ VM macOS &rarr; ④ VM Windows &rarr; ⑤ Cursus volgen &rarr; ⑥ Eerste commando &rarr; <b>⑦ Shell &amp; terminal (hier)</b> &rarr; ⑧ Package managers &rarr; ⑨ Bestandssysteem &rarr; ⑩ Bestanden bekijken &amp; proefexamen</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Vier lagen, van vinger tot hardware</a></li>
+<li><a href="#s2" data-target="s2">Wat er gebeurt als u Enter drukt</a></li>
+<li><a href="#s3" data-target="s3">Welke shell draait er?</a></li>
+<li><a href="#s4" data-target="s4">Omgevingsvariabelen: het geheugen van de shell</a></li>
+<li><a href="#s5" data-target="s5">Login-shell versus niet-interactieve shell</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Vier lagen, van vinger tot hardware</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Wanneer Milan <code>ls -l</code> intypt en op Enter drukt, ervaart hij dat als één handeling. Onder de motorkap zijn het minstens vier lagen die na elkaar iets doen. Fenna tekent dit voor hem op een whiteboard tijdens hun eerste een-op-een over de shell.</p>
+<figure><img src="figuren/deel-07-figuur-1-terminal-shell-kernel.svg" alt="Gelaagd schema: terminal geeft tekst door aan shell, shell interpreteert en roept systeemaanroepen aan, kernel voert uit en spreekt hardware aan, resultaat gaat dezelfde weg terug"><figcaption>Figuur 7-1 — het pad van een commando: terminal → shell → kernel → hardware, en weer terug</figcaption></figure>
+<p><strong>Terminal (of terminalemulator).</strong> Het venster waarin u typt en waarin tekst verschijnt. De terminal zelf begrijpt geen commando's — hij is niet meer dan een tekstvenster dat toetsaanslagen doorstuurt en tekens tekent. Voorbeelden: GNOME Terminal, iTerm2, Windows Terminal, of de virtuele console die verschijnt als u op een Raspberry Pi zonder desktopomgeving inlogt.</p>
+<p><strong>Shell.</strong> Het programma dat de tekst die u typt interpreteert als commando, syntax controleert, en de opdracht uitvoert of doorgeeft. De shell is het onderwerp van dit deel. Op Ubuntu Server is dat standaard <strong>bash</strong> (Bourne Again SHell).</p>
+<p><strong>Kernel.</strong> De kern van het besturingssysteem. De kernel praat niet rechtstreeks met u; programma's — waaronder de shell — vragen via <em>systeemaanroepen</em> (system calls) aan de kernel om dingen te doen: een bestand lezen, een proces starten, geheugen toewijzen.</p>
+<p><strong>Hardware.</strong> Waar het uiteindelijk gebeurt: de schijf die gelezen wordt, de CPU die rekent, het netwerkkaartje dat een pakket verstuurt.</p>
+<p>Het punt van dit onderscheid is niet academisch. Als een commando een foutmelding geeft, helpt het te weten in welke laag het misgaat: "command not found" is een shell-fout (het commando bestaat niet of staat niet in het zoekpad), "permission denied" is meestal een kernel-beslissing op basis van bestandsrechten (deel 11), en een bevroren terminal kan op elke laag liggen — van een kapotte SSH-verbinding tot een proces dat wacht op hardware die niet reageert.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.1</p><details class="q"><summary><span class="qn">1</span><span>Wat gebeurt er in elke laag (terminal, shell, kernel, hardware) bij het commando <code>cat /etc/os-release</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><strong>Terminal:</strong> ontvangt de toetsaanslagen en de Enter-toets, stuurt de tekenreeks door naar de shell, tekent later de teruggekomen uitvoer op het scherm. <strong>Shell:</strong> herkent <code>cat</code> als commando en <code>/etc/os-release</code> als argument, zoekt <code>cat</code> op via <code>$PATH</code>, start het als proces. <strong>Kernel:</strong> ontvangt van het proces <code>cat</code> de systeemaanroep om het bestand te openen en te lezen, controleert leesrechten, levert de bytes. <strong>Hardware:</strong> de daadwerkelijke opslag (meestal cache in RAM, mogelijk van schijf/SD-kaart) waar de inhoud vandaan komt.</div></details></div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Wat er gebeurt als u Enter drukt</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Concreet, voor het commando <code>ls -l /home</code>:</p>
+<ol>
+<li>De terminal geeft de getypte tekenreeks door aan de shell zodra u Enter drukt.</li>
+<li>De shell <strong>parseert</strong> de regel: herkent <code>ls</code> als commando, <code>-l</code> als optie, <code>/home</code> als argument.</li>
+<li>De shell zoekt het programma <code>ls</code> op via de omgevingsvariabele <code>$PATH</code> en start het als nieuw proces.</li>
+<li>Het proces <code>ls</code> doet systeemaanroepen naar de kernel om de inhoud van <code>/home</code> op te vragen.</li>
+<li>De kernel leest de benodigde gegevens (via het bestandssysteem, mogelijk van schijf) en geeft ze terug aan het proces.</li>
+<li>Het proces <code>ls</code> formatteert de uitvoer en schrijft die naar <em>standard output</em>.</li>
+<li>De terminal ontvangt die uitvoer en tekent hem op het scherm.</li>
+<li>De shell wacht het proces af, toont een nieuwe prompt, en is klaar voor het volgende commando.</li>
+</ol>
+<p>Dit hele traject duurt bij een lokaal commando als <code>ls</code> doorgaans minder dan een milliseconde. Bij een commando dat over het netwerk gaat (zoals <code>ssh</code> of <code>curl</code>), of dat op een trage schijf leest, wordt dit traject zichtbaar vertraagd — en dat is precies waarom het nuttig is te weten welke laag verantwoordelijk is voor de vertraging.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Welke shell draait er?</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Er bestaan meerdere shells, elk met eigen syntax-nuances en functies:</p>
+<pre><code>echo $SHELL       # toont het pad naar uw huidige (login-)shell
+bash --version    # toont de bash-versie
+ps -p $$          # toont het proces van de huidige shell zelf</code></pre>
+<p>De meest voorkomende shells:</p>
+<div class="tablewrap"><table><thead><tr><th>Shell</th><th>Kenmerk</th></tr></thead><tbody>
+<tr><td><code>bash</code></td><td>standaard op vrijwel alle Linux-distributies, inclusief Ubuntu Server</td></tr>
+<tr><td><code>sh</code></td><td>de oorspronkelijke Bourne shell of een POSIX-compatibele opvolger; scripts die overal moeten werken schrijven vaak tegen <code>sh</code></td></tr>
+<tr><td><code>zsh</code></td><td>populair op macOS (standaard sinds Catalina) en bij interactief gebruik, uitgebreide autocompletie</td></tr>
+<tr><td><code>dash</code></td><td>lichtgewicht, op Ubuntu vaak de shell die <code>/bin/sh</code> uitvoert bij scripts (niet bij interactief gebruik)</td></tr>
+</tbody></table></div>
+<p>Voor deze cursus werkt u met bash, de standaard op Ubuntu Server. Wat u leert is grotendeels overdraagbaar naar zsh; de examens LPIC-1 en Linux+ veronderstellen eveneens bash-kennis.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Omgevingsvariabelen: het geheugen van de shell</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De shell houdt een verzameling naam-waardeparen bij, <strong>omgevingsvariabelen</strong>, die het gedrag van de shell en van programma's beïnvloeden.</p>
+<pre><code>echo $HOME     # uw home directory, bijvoorbeeld /home/milan
+echo $USER     # uw gebruikersnaam
+echo $PATH     # de lijst mappen waarin de shell naar programma's zoekt
+env            # toont alle omgevingsvariabelen in de huidige sessie</code></pre>
+<p><code>$PATH</code> verdient bijzondere aandacht: dit is een dubbelepunt-gescheiden lijst van mappen (bijvoorbeeld <code>/usr/local/bin:/usr/bin:/bin</code>) die de shell van links naar rechts doorzoekt zodra u een commandonaam typt zonder volledig pad. Dit verklaart waarom <code>ls</code> werkt zonder dat u <code>/usr/bin/ls</code> hoeft te typen, en ook waarom een "command not found"-melding soms betekent dat een programma wél geïnstalleerd is, maar niet in een map staat die in <code>$PATH</code> voorkomt.</p>
+<p>Een tijdelijke variabele instellen en gebruiken:</p>
+<pre><code>export MIJN_OMGEVING="homelab"
+echo $MIJN_OMGEVING</code></pre>
+<p>Deze variabele bestaat alleen in de huidige shell-sessie en is weg zodra u de terminal sluit. Permanent instellen (bijvoorbeeld in <code>~/.bashrc</code>) komt in deel 17 (dotfiles) aan bod.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.2 en 7.3</p>
+<details class="q"><summary><span class="qn">1</span><span>Als <code>which python3</code> niets teruggeeft, wat zegt dat over de oorzaak?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Dat betekent ofwel dat Python 3 niet geïnstalleerd is, ofwel dat het wél geïnstalleerd is maar in een map staat die niet in <code>$PATH</code> voorkomt — beide zijn mogelijk en vragen verder onderzoek, bijvoorbeeld met <code>apt list --installed | grep python3</code> (deel 8).</div></details>
+<details class="q"><summary><span class="qn">2</span><span>U maakt met <code>export MEDEWERKER="uw naam"</code> een variabele aan en opent daarna een tweede terminalvenster naar dezelfde machine. Is de variabele daar ook zichtbaar, en waarom?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Nee. <code>export</code> maakt een variabele beschikbaar voor subprocessen van de huidige shell-sessie, maar niet voor een geheel nieuwe, onafhankelijke shell-sessie zoals een tweede SSH-verbinding. Tijdelijke variabelen leven in het geheugen van één shell-proces en zijn weg zodra dat proces stopt of een andere, losstaande sessie start. Om een variabele in élke sessie beschikbaar te maken, moet hij worden vastgelegd in een configuratiebestand dat bij het starten van de shell wordt gelezen (<code>~/.bashrc</code> of <code>~/.profile</code>) — dit is het onderwerp van deel 17.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Login-shell versus niet-interactieve shell</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een detail dat later in de cursus relevant wordt (met name bij cron in deel 22 en bij scripting in deel 21): een shell kan op verschillende manieren starten, en niet elke manier leest dezelfde configuratiebestanden.</p>
+<ul>
+<li><strong>Interactieve login-shell</strong> — u logt in via SSH of console. Leest onder andere <code>/etc/profile</code> en <code>~/.bash_profile</code> of <code>~/.profile</code>.</li>
+<li><strong>Interactieve niet-login-shell</strong> — u opent een nieuw terminalvenster binnen een al lopende sessie. Leest <code>~/.bashrc</code>.</li>
+<li><strong>Niet-interactieve shell</strong> — een script wordt uitgevoerd zonder dat u er direct mee "praat" (bijvoorbeeld via cron). Leest doorgaans geen van beide, tenzij expliciet aangeroepen.</li>
+</ul>
+<p>Het praktische gevolg: een omgevingsvariabele die u alleen in <code>~/.bashrc</code> instelt, is soms onverwacht afwezig in een cron-taak. Dit is een klassieke bron van "het werkt op mijn terminal maar niet in het script" — onthoud deze paragraaf als u daar in deel 21 en 22 tegenaan loopt.</p>
+<div class="callout warn"><span class="lbl">Fenna's storingscasus</span><p>Fenna belt Milan: "het rapportagescript dat 's nachts via cron draait, faalt met <code>command not found</code> voor een commando dat Milan handmatig in zijn terminal wél gewoon kan uitvoeren." Zie de controlevraag hieronder voor de verklaring.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 7, Opdracht 7.4 — Fenna's storingscasus</p><details class="q"><summary><span class="qn">1</span><span>Wat is waarschijnlijk de oorzaak van Fenna's storing, en welke twee dingen kan Milan controleren om dit te bevestigen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Waarschijnlijke oorzaak: het commando dat faalt, is geïnstalleerd op een locatie die wél in Milans interactieve login-shell in <code>$PATH</code> staat, maar niet in de (beperktere) omgeving waarin cron scripts uitvoert. Cron-taken draaien namelijk niet als interactieve login-shell en lezen dus <code>~/.bashrc</code> of <code>~/.profile</code> doorgaans niet. Twee controles: (1) vergelijk <code>echo $PATH</code> in de interactieve terminal met de <code>$PATH</code> die het cron-script daadwerkelijk gebruikt, bijvoorbeeld door het script tijdelijk <code>echo $PATH >> /tmp/cronpath.log</code> te laten uitvoeren; (2) gebruik in het script het volledige pad naar het commando (bijvoorbeeld <code>/usr/local/bin/rapportagetool</code>), of stel <code>$PATH</code> expliciet in bovenaan het script of in de crontab zelf. Dit onderwerp komt volledig terug in deel 22 (cron).</div></details></div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 8</h3>
+      <p>Deel 8: Software installeren — package managers.</p>
+      <a class="btn" href="deel-08.html">Deel 8 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 7 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5"];
+  var KEY="eductus_lsb7_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 25 — Security hardening: SSH, fail2ban en SELinux/AppArmor | Eductus</title>
+<meta name="description" content="Het Rapportagecluster is werkend, maar nog niet productierijp. Milan hardt SSH met sleutelverificatie, installeert fail2ban tegen herhaalde inlogpogingen en leert de basis van SELinux en AppArmor als mandatory access control.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-25.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 25 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 3 (Expert) · Deel 25 van 30</p>
+  <h1>Security hardening<br><em>SSH, fail2ban en SELinux/AppArmor.</em></h1>
+  <p class="hero__lead">Het Rapportagecluster draait, maar Fenna Oudshoorn wil meer dan "werkend" voordat ze het productierijp verklaart. In dit deel hardt Milan Struik SSH met sleutelverificatie, zet hij fail2ban in tegen herhaalde inlogpogingen, en leert hij de basis van mandatory access control via SELinux en AppArmor — de laag die beperkt wat een proces mag, ook nadat het is overgenomen.</p>
+  <div class="hero__stats"><div class="stat"><b>5</b><span>secties</span></div><div class="stat"><b>±1u</b><span>leestijd + werkboek</span></div><div class="stat"><b>3</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Expert</span></div></div>
+  <div class="trail">Niveau 3 · Expert: ㉓ Gebruikersbeheer op schaal &rarr; ㉔ Pakketbeheer verdieping &rarr; <b>㉕ Security hardening (hier)</b> &rarr; ㉖ Containers: Docker-fundamenten &rarr; ㉗ Automatisering: Ansible-basis</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Fenna's opdracht: van werkend naar productierijp</a></li>
+<li><a href="#s2" data-target="s2">SSH-hardening</a></li>
+<li><a href="#s3" data-target="s3">fail2ban: herhaalde pogingen automatisch blokkeren</a></li>
+<li><a href="#s4" data-target="s4">Mandatory access control: SELinux versus AppArmor</a></li>
+<li><a href="#s5" data-target="s5">Waarom lagen, niet één maatregel</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Fenna's opdracht: van werkend naar productierijp</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het Rapportagecluster draait. De drie Ubuntu Server-machines verwerken rapportageverzoeken, de monitoringstack toont groene vinkjes, en Milan is trots op wat er in de voorgaande delen is opgebouwd. Fenna is content, maar niet klaar. "Werkend is niet hetzelfde als productierijp," zegt ze bij het teamoverleg waarin het cluster op de agenda staat voor definitieve oplevering. "Voordat ik mijn handtekening zet, wil ik weten dat een aanvaller met een scanner en een woordenlijst niet binnen een middag naar binnen kan."</p>
+<p>Ze geeft Milan een concrete opdracht: hard het cluster op drie fronten. SSH-toegang, die nu nog met wachtwoorden werkt en openstaat voor elk account. Herhaalde inlogpogingen, die nu onbeperkt en ongestraft blijven. En de toegangscontrole op besturingssysteemniveau, die tot nu toe volledig op standaard Unix-permissies (deel 11) leunt. Dat laatste is precies waar de discretionaire toegangscontrole van gewone permissies tekortschiet: een proces dat is overgenomen door een aanvaller, erft de rechten van de gebruiker waaronder het draait, en niets in <code>chmod</code>/<code>chown</code> beperkt wat dat proces daarna nog mag doen op de rest van het systeem.</p>
+<p>Dit deel behandelt de drie fronten in die volgorde: SSH-hardening, fail2ban, en tot slot de twee grote mandatory access control-systemen van Linux — SELinux en AppArmor.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">SSH-hardening</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De standaardconfiguratie van SSH is bruikbaar om snel te beginnen, niet om productie te draaien. Het hoofdbestand is <code>/etc/ssh/sshd_config</code>; wijzigingen vergen een herstart van de daemon en, cruciaal, een tweede sessie om uzelf niet buiten te sluiten voordat u de nieuwe configuratie hebt bevestigd.</p>
+<p><strong>Alleen sleutelverificatie, geen wachtwoorden.</strong> Dit is de belangrijkste maatregel: een gestolen of geraden wachtwoord is waardeloos zonder de bijbehorende privésleutel.</p>
+<pre><code>sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+sudo nano /etc/ssh/sshd_config</code></pre>
+<pre><code>PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+MaxAuthTries 3
+LoginGraceTime 20
+ClientAliveInterval 300
+ClientAliveCountMax 2
+AllowUsers milan fenna</code></pre>
+<p><code>PermitRootLogin no</code> sluit direct root-inloggen via SSH uit — beheer verloopt via een genoemde gebruiker met <code>sudo</code> (deel 11). <code>PasswordAuthentication no</code> schakelt wachtwoordauthenticatie voor SSH volledig uit; zorg dat er vóór deze stap al een werkende sleutel op het account staat, anders sluit u zichzelf buiten. <code>MaxAuthTries 3</code> beperkt het aantal authenticatiepogingen per verbinding. <code>AllowUsers</code> (of het grovere <code>AllowGroups</code> met een beheergroep) beperkt SSH-toegang tot een expliciete lijst; alle andere accounts, ook geldige lokale accounts, worden geweigerd.</p>
+<p>Test de configuratie vóór herstart, en herstart pas daarna:</p>
+<pre><code>sudo sshd -t
+sudo systemctl restart sshd</code></pre>
+<div class="callout warn"><span class="lbl">Houd een uitweg achter de hand</span><p>Houd bij elke wijziging aan <code>sshd_config</code> een tweede, al ingelogde sessie open totdat u de nieuwe configuratie in een derde sessie hebt geverifieerd. Fenna's vaste vraag aan Milan bij elke SSH-wijziging: "heb je een console-sessie achter de hand als dit misgaat?" Bij het Rapportagecluster is dat de out-of-band-toegang van de hostingpartij; op zijn eigen homelab-Raspberry Pi is dat simpelweg een toetsenbord en scherm.</p></div>
+<h3>De poort wijzigen — een kanttekening</h3>
+<p>Sommige teams zetten SSH van poort 22 naar een willekeurige hoge poort:</p>
+<pre><code>Port 2222</code></pre>
+<p>Dit is <em>geen</em> beveiligingsmaatregel in de strikte zin: het verandert niets aan de sterkte van de authenticatie en is met een simpele poortscan (<code>nmap</code>) binnen seconden te achterhalen. Het effect is uitsluitend dat de stroom van geautomatiseerde, ongerichte scans tegen poort 22 wegvalt uit de logs, wat ruis vermindert en gerichte aanvallen makkelijker herkenbaar maakt. Milan mag dit toepassen als aanvullende maatregel, nooit als vervanging van sleutelverificatie en de overige maatregelen in deze paragraaf.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.1d/e</p><details class="q"><summary><span class="qn">1</span><span>U logt bewust in met een wachtwoord op een gehardende server. Wat gebeurt er, en welke regel in <code>sshd_config</code> is daarvoor verantwoordelijk?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Bij een correct doorgevoerde configuratie weigert de server de wachtwoordpoging direct, met een melding als <strong>Permission denied (publickey)</strong> — de server biedt wachtwoordauthenticatie niet eens meer aan als methode. De bepalende regel is <code>PasswordAuthentication no</code> (eventueel aangevuld met <code>KbdInteractiveAuthentication no</code>, dat ook interactieve wachtwoordprompts via PAM blokkeert). <code>AllowUsers</code> speelt alleen een rol als de gebruikersnaam niet op de lijst staat; bij een geldige, toegestane gebruiker zonder sleutel is <code>PasswordAuthentication no</code> de bepalende regel.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">fail2ban: herhaalde pogingen automatisch blokkeren</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Sleutelverificatie voorkomt dat een geraden wachtwoord werkt, maar voorkomt niet dat een aanvaller het blijft proberen en daarmee de daemon en de logs belast. fail2ban leest logbestanden, herkent patronen van mislukte pogingen en past automatisch firewallregels toe om de bron tijdelijk te blokkeren.</p>
+<pre><code>sudo apt update
+sudo apt install -y fail2ban</code></pre>
+<p>fail2ban levert <code>/etc/fail2ban/jail.conf</code> als het door pakketupdates beheerde standaardbestand — dat bestand nooit rechtstreeks bewerken. Eigen instellingen horen in <code>/etc/fail2ban/jail.local</code>, dat <code>jail.conf</code> overschrijft en pakketupdates overleeft:</p>
+<pre><code>sudo nano /etc/fail2ban/jail.local</code></pre>
+<pre><code>[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 4
+ignoreip = 127.0.0.1/8 10.0.0.0/8
+
+[sshd]
+enabled  = true
+port     = ssh
+filter   = sshd
+backend  = systemd
+maxretry = 3
+bantime  = 2h</code></pre>
+<p><code>findtime</code> is het tijdvenster waarbinnen mislukte pogingen worden meegeteld, <code>maxretry</code> het aantal pogingen binnen dat venster voordat een ban volgt, en <code>bantime</code> de duur van de ban. De <code>[sshd]</code>-jail overschrijft hier de defaultwaarden met een strengere instelling. <code>ignoreip</code> sluit vertrouwde bronnen — het eigen beheernetwerk — expliciet uit, zodat een team dat zichzelf verkeerd typt niet zichzelf buitensluit.</p>
+<pre><code>sudo systemctl enable --now fail2ban
+sudo fail2ban-client status
+sudo fail2ban-client status sshd</code></pre>
+<p>Het tweede commando toont per jail het aantal huidige bans en de gebande adressen. Milan test dit doelbewust vanaf zijn eigen laptop, met een paar (opzettelijk) mislukte SSH-pogingen tegen het Rapportagecluster, en ziet zijn eigen IP-adres in de bannedlijst verschijnen — een leerzaam moment, en de reden dat <code>ignoreip</code> in productie zorgvuldig moet worden ingesteld voordat het team zelf gaat testen. Een adres handmatig deblokkeren:</p>
+<pre><code>sudo fail2ban-client set sshd unbanip 203.0.113.7</code></pre>
+<div class="callout note"><span class="lbl">Veelgemaakte misvatting</span><p>Een ban is niet automatisch permanent: met <code>bantime = 10m</code> verloopt de ban ook vanzelf, ook zonder handmatig ingrijpen. In het werkboek test u beide paden — vanzelf verlopen en handmatig opheffen.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.2</p><details class="q"><summary><span class="qn">1</span><span>Na drie mislukte SSH-pogingen binnen het <code>findtime</code>-venster van 5 minuten: wat toont <code>fail2ban-client status sshd</code>, en wat gebeurt er na het verlopen van <code>bantime</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Het bronadres verschijnt onder "Banned IP list" zodra <code>maxretry</code> is bereikt; het logbestand toont een reeks regels met <strong>Found &lt;adres&gt;</strong> gevolgd door een regel <strong>Ban &lt;adres&gt;</strong>. Na afloop van <code>bantime</code> (bijvoorbeeld 10 minuten) verloopt de ban vanzelf, zonder handmatig ingrijpen — een ban is dus niet standaard permanent. Handmatig opheffen met <code>fail2ban-client set sshd unbanip &lt;adres&gt;</code> werkt onmiddellijk en vergt geen herstart van de dienst.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Mandatory access control: SELinux versus AppArmor</h2><span class="chip time">⏱ 16 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>SSH-hardening en fail2ban beperken wie binnenkomt. Mandatory access control (MAC) beperkt wat een proces mag doen zodra het draait — ook als dat proces is overgenomen. Waar gewone Unix-permissies (discretionary access control) bepalen wat een <em>gebruiker</em> mag, bepaalt MAC wat een <em>proces</em> mag, onafhankelijk van de rechten van de gebruiker die het startte.</p>
+<p>Linux kent twee gangbare MAC-implementaties, en welke u tegenkomt hangt af van de distributie. <strong>SELinux</strong> (Security-Enhanced Linux, ontwikkeld door de NSA en Red Hat) is standaard op RHEL, Fedora, CentOS en Rocky Linux, en werkt met <strong>labels</strong> (contexten) die aan elk bestand, proces en poort hangen; een beleid bepaalt welke labels met elkaar mogen interacteren. <strong>AppArmor</strong> is standaard op Ubuntu en Debian-afgeleiden, en werkt <strong>pad-gebaseerd</strong>: een profiel beschrijft per programma welke bestandspaden en mogelijkheden het mag gebruiken.</p>
+<p>Voor het Rapportagecluster, dat op Ubuntu Server draait, is AppArmor het systeem dat al actief is. Fenna wil dat Milan het niettemin ook met SELinux leert werken: de LFCE-certificering is distributieneutraal, en Milan komt bij Meridiaan ook een aantal Red Hat-machines tegen bij een ander team. Beide horen daarom in dit deel thuis.</p>
+<h3>SELinux-basis</h3>
+<pre><code>getenforce
+sestatus</code></pre>
+<p><code>getenforce</code> toont de actuele modus: <code>Enforcing</code> (beleid wordt afgedwongen), <code>Permissive</code> (overtredingen worden alleen gelogd) of <code>Disabled</code>. Tijdelijk wisselen, tot de volgende herstart:</p>
+<pre><code>sudo setenforce 0        # permissive
+sudo setenforce 1        # enforcing</code></pre>
+<p>Permanent instellen gebeurt in <code>/etc/selinux/config</code>, met <code>SELINUX=enforcing</code>, <code>SELINUX=permissive</code> of <code>SELINUX=disabled</code>.</p>
+<p>Elk bestand, proces en netwerkpoort krijgt onder SELinux een context, zichtbaar met <code>-Z</code>:</p>
+<pre><code>ls -Z /var/www/html
+ps -Z</code></pre>
+<p>Wanneer een dienst op een niet-standaardpoort of -pad draait, moet de context expliciet worden gezet — anders weigert SELinux de toegang, ook als de Unix-permissies verder correct zijn:</p>
+<pre><code>sudo semanage port -a -t http_port_t -p tcp 8081
+sudo semanage fcontext -a -t httpd_sys_content_t "/rapportage/web(/.*)?"
+sudo restorecon -Rv /rapportage/web</code></pre>
+<p><code>semanage fcontext</code> registreert de gewenste context in het beleid; <code>restorecon</code> past die context daadwerkelijk toe op de bestaande bestanden. Dit onderscheid — beleid registreren versus context toepassen — is de meest gemaakte fout bij SELinux: een <code>semanage</code>-regel zonder aansluitende <code>restorecon</code> heeft geen enkel effect op bestaande bestanden.</p>
+<h3>AppArmor-basis</h3>
+<pre><code>sudo aa-status</code></pre>
+<p>Toont per profiel of het in <code>enforce</code>- of <code>complain</code>-modus staat, en welke processen eronder vallen. Profielen staan als leesbare tekstbestanden in <code>/etc/apparmor.d/</code>, genoemd naar het volledige pad van het programma (bijvoorbeeld <code>/etc/apparmor.d/usr.sbin.sshd</code>).</p>
+<pre><code>sudo aa-complain /etc/apparmor.d/usr.sbin.nginx
+sudo aa-enforce /etc/apparmor.d/usr.sbin.nginx</code></pre>
+<p><code>aa-complain</code> zet een profiel in klaagmodus (overtredingen loggen, niet blokkeren) — nuttig bij het uittesten van een nieuw of gewijzigd profiel. <code>aa-enforce</code> zet het profiel weer actief afdwingend. Na een handmatige wijziging van een profielbestand wordt het opnieuw geladen met:</p>
+<pre><code>sudo apparmor_parser -r /etc/apparmor.d/usr.sbin.nginx</code></pre>
+<figure><img src="figuren/deel-25-figuur-1-defense-in-depth.svg" alt="Verdedigingslagen rond het Rapportagecluster: netwerkfirewall, SSH-hardening en fail2ban, AppArmor/SELinux, Unix-permissies en sudo, applicatielogica"><figcaption>Figuur 25-1 — verdedigingslagen (defense in depth) rond het Rapportagecluster, van buiten naar binnen: netwerkfirewall (deel 18), SSH-hardening en fail2ban (toegangslaag), MAC via AppArmor/SELinux (procesniveau), Unix-permissies en sudo (deel 11), applicatielogica</figcaption></figure>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.3c</p><details class="q"><summary><span class="qn">1</span><span>Een webserver op een SELinux-systeem in enforcing-modus moet op poort 8081 gaan luisteren in plaats van poort 80. Welke commando's zijn nodig, en waarom is bij een vergelijkbaar contextprobleem op een bestandslocatie de eerste stap zonder de tweede zonder effect?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Voor de poort volstaat <code>semanage port -a -t http_port_t -p tcp 8081</code>, gevolgd door het herstarten of testen van de dienst — een poortlabel wordt direct in het beleid geregistreerd en door de kernel geraadpleegd op het moment van binden, zonder aparte toepassingsstap. Voor bestandslocaties geldt wél een tweestapspatroon: <code>semanage fcontext -a -t &lt;type&gt; "&lt;pad&gt;"</code> registreert alleen het gewenste beleid; zonder een aansluitende <code>restorecon -Rv &lt;pad&gt;</code> blijven bestaande bestanden hun oude context houden en wordt de toegang nog steeds geweigerd. Poortregistratie werkt dus direct, bestandscontext vereist een expliciete toepassingsstap — precies de valkuil uit paragraaf 25.4.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Waarom lagen, niet één maatregel</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Geen van de maatregelen in dit deel is op zichzelf voldoende. Sleutelverificatie helpt niet tegen een kwetsbaarheid in de applicatie zelf; fail2ban helpt niet tegen een aanvaller die al binnen is; AppArmor of SELinux helpt niet als het account waarmee wordt ingelogd te ruime rechten heeft. Het idee achter defense in depth is dat elke laag een ander soort fout opvangt, en dat een aanvaller door meerdere, onafhankelijke lagen heen moet om schade te veroorzaken.</p>
+<div class="dialogue"><p>"Als deze ene maatregel faalt," vraagt Fenna bij elke productierijp-verklaring, "wat houdt de aanvaller dan nog tegen?"</p></div>
+<p>Voor het Rapportagecluster is het antwoord na dit deel: de firewall van deel 18, sleutelverificatie en fail2ban op de toegang, en AppArmor op wat een gecompromitteerd proces daarna nog mag.</p>
+<h3>Samenvatting</h3>
+<ul>
+<li>SSH-hardening draait om sleutelverificatie in plaats van wachtwoorden (<code>PasswordAuthentication no</code>), het uitsluiten van root-inloggen (<code>PermitRootLogin no</code>), een beperkte gebruikerslijst (<code>AllowUsers</code>/<code>AllowGroups</code>) en een laag aantal toegestane pogingen (<code>MaxAuthTries</code>). Test wijzigingen altijd met een tweede sessie achter de hand.</li>
+<li>Het wijzigen van de SSH-poort vermindert ruis van geautomatiseerde scans, maar is geen vervanging van echte authenticatiemaatregelen.</li>
+<li>fail2ban blokkeert automatisch bronnen die herhaaldelijk mislukte inlogpogingen doen. Eigen configuratie hoort in <code>jail.local</code>, nooit in <code>jail.conf</code>; <code>bantime</code>, <code>findtime</code> en <code>maxretry</code> bepalen het gedrag per jail.</li>
+<li>SELinux (label-gebaseerd, standaard op de Red Hat-familie) en AppArmor (pad-gebaseerd, standaard op Ubuntu) zijn beide mandatory access control-systemen die beperken wat een proces mag, los van de rechten van de gebruiker die het startte.</li>
+<li>Een SELinux-contextprobleem los je in twee stappen op: het beleid registreren (<code>semanage fcontext</code>) en de context daadwerkelijk toepassen (<code>restorecon</code>).</li>
+<li>Hardening werkt alleen als gelaagd stelsel: elke laag vangt een ander type fout op, en geen enkele maatregel is op zichzelf voldoende.</li>
+</ul>
+<h3>Kernbegrippen</h3>
+<p><strong>Defense in depth (verdedigingslagen)</strong> — het principe dat beveiliging uit meerdere, onafhankelijke lagen bestaat, zodat het falen van één laag niet direct tot compromittering leidt.</p>
+<p><strong>Mandatory access control (MAC)</strong> — toegangscontrole die door het systeembeleid wordt afgedwongen, los van de rechten die een gebruiker aan een proces meegeeft; tegenover discretionary access control (gewone Unix-permissies).</p>
+<p><strong>Jail (fail2ban)</strong> — een configuratie-eenheid in fail2ban die één logbron en één set regels (filter, bantime, findtime, maxretry) aan elkaar koppelt, meestal per dienst (bijvoorbeeld <code>sshd</code>).</p>
+<p><strong>SELinux-context (label)</strong> — de veiligheidsmarkering die SELinux aan bestanden, processen en poorten hangt, en die bepaalt welke interacties het beleid toestaat.</p>
+<p><strong>AppArmor-profiel</strong> — een pad-gebaseerd tekstbestand in <code>/etc/apparmor.d/</code> dat per programma vastlegt welke bestanden en mogelijkheden het mag gebruiken, in <code>enforce</code>- of <code>complain</code>-modus.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 25, Opdracht 25.5</p><details class="q"><summary><span class="qn">1</span><span>Een collega wil de SSH-poort naar 2222 wijzigen "voor de veiligheid" en verder geen andere maatregelen nemen. Waarom is dat als vervanging onvoldoende, en wanneer is het wél een zinvolle aanvulling?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Een poortwijziging verandert niets aan de sterkte van de authenticatie en is met een simpele poortscan binnen seconden te achterhalen. Het onderscheid is "ruis verminderen" (het effect dat de poortwijziging wél heeft, doordat ongerichte scans wegvallen uit de logs) tegenover "beveiligen" (wat sleutelverificatie en fail2ban wél doen). De poortwijziging is alleen zinvol <strong>bovenop</strong>, niet <strong>in plaats van</strong>, sleutelverificatie, <code>AllowUsers</code> en fail2ban.</div></details></div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 26</h3>
+      <p>Deel 26: Containers — Docker-fundamenten.</p>
+      <a class="btn" href="deel-26.html">Deel 26 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 25 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5"];
+  var KEY="eductus_lsb25_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

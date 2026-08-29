@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 16 — Tmux | Eductus</title>
+<meta name="description" content="Dit deel behandelt tmux als terminal multiplexer: sessies starten, loskoppelen en hervatten, werken met meerdere windows en panes, tekstselectie in copy mode zonder muis, en een minimale ~/.tmux.conf — toegepast op het Rapportagecluster van Meridiaan Pensioen.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-16.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 16 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 2 (Professional) · Deel 16 van 30</p>
+  <h1>Tmux<br><em>Sessies die de SSH-verbinding overleven.</em></h1>
+  <p class="hero__lead">Milan draait een nachtelijke batchcontrole op het Rapportagecluster als zijn laptop in slaap valt en de SSH-verbinding wegvalt — en daarmee het script. Dit deel behandelt tmux: sessies starten, loskoppelen en hervatten, werken met meerdere windows en panes, tekst selecteren in copy mode zonder muis, en een minimale <code>~/.tmux.conf</code>.</p>
+  <div class="hero__stats"><div class="stat"><b>5</b><span>secties</span></div><div class="stat"><b>±45m</b><span>leestijd + werkboek</span></div><div class="stat"><b>3</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>LFCS</span></div></div>
+  <div class="trail">Niveau 2: ⑪ Users, groups &amp; permissions &rarr; ⑫ Vi(m)-basis &rarr; ⑬ Input/output &amp; pipes &rarr; ⑭ Processen &rarr; ⑮ SSH &rarr; <b>⑯ Tmux (hier)</b> &rarr; ⑰ Dotfiles &amp; customization &rarr; ⑱ Netwerken &rarr; ⑲ systemd &amp; services &rarr; ⑳ Opslag &rarr; ㉑ Bash-scripting &rarr; ㉒ Cron &amp; geplande taken</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Het probleem dat tmux oplost</a></li>
+<li><a href="#s2" data-target="s2">Sessies starten, loskoppelen, hervatten</a></li>
+<li><a href="#s3" data-target="s3">Windows en panes</a></li>
+<li><a href="#s4" data-target="s4">Copy mode: scrollen en kopiëren zonder muis</a></li>
+<li><a href="#s5" data-target="s5">Een minimale tmux-configuratie</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Het probleem dat tmux oplost</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Milan draait een nachtelijke batchcontrole op het Rapportagecluster: een script dat een uur lang de aanlevering van mutatiebestanden bewaakt en foutmeldingen wegschrijft naar een logbestand. Hij start het script via SSH vanaf zijn laptop, loopt naar de koffieautomaat, en zijn laptop gaat na tien minuten in slaap. De SSH-verbinding valt weg — en daarmee ook het script, want het draaide in de voorgrond van die ene shell-sessie.</p>
+<p>Dit is het probleem dat een <strong>terminal multiplexer</strong> oplost. Tmux (terminal multiplexer) laat processen draaien binnen een sessie die losstaat van de SSH-verbinding waarmee u hem bereikt. U start een sessie op de server, koppelt hem los (detach) zonder hem te stoppen, sluit uw laptop, en op een later moment — vanaf een ander toestel als het moet — koppelt u weer aan (attach) en ziet u precies de terminal zoals u hem achterliet, inclusief alle output die intussen is verschenen.</p>
+<div class="callout tip"><span class="lbl">Fenna's vuistregel</span><p>"Alles wat langer draait dan de tijd die je zeker weet dat je verbonden blijft, start je in tmux. Op een server twijfel je altijd, dus start je het altijd in tmux."</p></div>
+<p>Naast dat losstaan van de verbinding biedt tmux een tweede voordeel: één terminalvenster opdelen in meerdere windows en panes, zodat u bijvoorbeeld in het ene deelvenster een logbestand volgt en in het andere commando's uitvoert — zonder tussen meerdere SSH-sessies te hoeven schakelen.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Sessies starten, loskoppelen, hervatten</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een nieuwe, benoemde sessie starten:</p>
+<pre><code>tmux new -s batchcontrole</code></pre>
+<p>De naam (<code>batchcontrole</code>) is optioneel maar sterk aan te raden — een naamloze sessie heet dan een nummer, en op een server met meerdere lopende sessies is dat onoverzichtelijk.</p>
+<p>Loskoppelen zonder de sessie te stoppen: de toetscombinatie is standaard <code>Ctrl+b</code>, gevolgd door <code>d</code> (detach). U ziet dan weer de gewone shell-prompt, en de sessie blijft op de achtergrond draaien.</p>
+<p>Lopende sessies bekijken:</p>
+<pre><code>tmux ls</code></pre>
+<p>Een sessie weer hervatten:</p>
+<pre><code>tmux attach -t batchcontrole</code></pre>
+<p>(kort: <code>tmux a -t batchcontrole</code>). Zit u al in een andere tmux-sessie en wilt u wisselen, dan koppelt u eerst los en attacht u opnieuw, of gebruikt u <code>tmux switch -t &lt;naam&gt;</code> binnen tmux zelf.</p>
+<p>Een sessie definitief stoppen (het proces erin wordt beëindigd):</p>
+<pre><code>tmux kill-session -t batchcontrole</code></pre>
+<div class="callout note"><span class="lbl">Casus</span><p>Milan start zijn batchcontrole zo:</p></div>
+<pre><code>tmux new -s batchcontrole
+./bewaak_aanlevering.sh
+# Ctrl+b, dan d</code></pre>
+<p>Hij logt uit, loopt naar de koffieautomaat, en logt een half uur later opnieuw in op het Rapportagecluster:</p>
+<pre><code>tmux attach -t batchcontrole</code></pre>
+<p>Het script draait onverstoord door en de output staat gewoon op het scherm.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.1</p><details class="q"><summary><span class="qn">1</span><span>Start een tmux-sessie met de naam <code>oefening</code>, start daarin <code>top</code>, koppel de sessie los zonder <code>top</code> te stoppen, controleer met <code>tmux ls</code> dat de sessie nog bestaat, en koppel opnieuw aan om <code>top</code> af te sluiten.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code>tmux new -s oefening
+top
+# Ctrl+b, dan d
+tmux ls
+# oefening: 1 windows (created ...)
+tmux attach -t oefening
+# in top: q om af te sluiten</code></pre></div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Windows en panes</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Binnen één tmux-sessie kunt u meerdere <strong>windows</strong> hebben (vergelijkbaar met tabbladen) en elk window opdelen in meerdere <strong>panes</strong> (deelvensters).</p>
+<p>Nieuw window aanmaken: <code>Ctrl+b c</code>. Wisselen tussen windows: <code>Ctrl+b n</code> (next), <code>Ctrl+b p</code> (previous), of direct naar nummer met <code>Ctrl+b 0</code> tot <code>Ctrl+b 9</code>. Een overzicht van alle windows: <code>Ctrl+b w</code>.</p>
+<p>Een pane verticaal splitsen (naast elkaar): <code>Ctrl+b %</code>. Horizontaal splitsen (boven/onder elkaar): <code>Ctrl+b "</code>. Tussen panes bewegen: <code>Ctrl+b</code> gevolgd door een pijltoets. Een pane groter maken: <code>Ctrl+b</code> gevolgd door <code>Ctrl+pijltoets</code> (herhaald indrukken vergroot verder). Een pane sluiten: typ <code>exit</code> in die pane, of <code>Ctrl+b x</code> en bevestig met <code>y</code>.</p>
+<div class="callout note"><span class="lbl">Casus</span><p>Fenna laat Milan tijdens een storing drie panes opzetten in één window: linksboven <code>journalctl -u rapportage-agent -f</code> om logs live te volgen, rechtsboven <code>htop</code> om resourcegebruik te zien, en onder een pane om zelf commando's uit te voeren. Zo hoeft hij niet drie keer via SSH in te loggen om hetzelfde beeld te krijgen.</p></div>
+<pre><code>tmux new -s storing
+# Ctrl+b %        (verticale split)
+# Ctrl+b "         (in de rechterhelft nogmaals horizontaal splitsen)</code></pre>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.2</p><details class="q"><summary><span class="qn">1</span><span>Bouw in een nieuwe sessie <code>dashboard</code> de volgende indeling: window 1 met twee panes naast elkaar (links <code>journalctl -f</code>, rechts <code>htop</code>) en window 2 met één vrije pane. Wissel minstens drie keer tussen windows en panes zonder de muis te gebruiken.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code>tmux new -s dashboard
+# Ctrl+b %          -&gt; verticale split
+journalctl -f        # linkerpane
+# Ctrl+b pijl-rechts -&gt; naar rechterpane
+htop
+# Ctrl+b c           -&gt; nieuw window (window 2)
+# Ctrl+b 0 / Ctrl+b 1 -&gt; wisselen tussen windows</code></pre><p>Controlepunt: <code>tmux list-windows</code> toont twee windows; <code>Ctrl+b w</code> geeft een overzicht.</p></div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Copy mode: scrollen en kopiëren zonder muis</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Standaard scrollt de muis in een tmux-pane niet door de geschiedenis zoals in een gewone terminal. Daarvoor is <strong>copy mode</strong>: <code>Ctrl+b [</code> activeert copy mode, waarna u met de pijltoetsen (of <code>PageUp</code>/<code>PageDown</code>) door de buffer kunt scrollen. Tekst selecteren doet u door op de startpositie <code>Space</code> in te drukken en naar het einde te bewegen; <code>Enter</code> kopieert de selectie naar de tmux-plakbuffer. Verlaten van copy mode zonder te kopiëren: <code>q</code>. Plakken van de laatst gekopieerde selectie: <code>Ctrl+b ]</code>.</p>
+<p>Dit is vooral nuttig als u een foutmelding uit een lang logbestand wilt overnemen zonder de muis te gebruiken — praktisch als u via een trage SSH-verbinding of een terminalvenster zonder muisondersteuning werkt.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.3</p><details class="q"><summary><span class="qn">1</span><span>Genereer scrollback met <code>ls -la /etc</code> en <code>dmesg</code>, ga in copy mode (<code>Ctrl+b [</code>), scroll terug naar een regel uit <code>dmesg</code>, selecteer die regel en plak hem (<code>Ctrl+b ]</code>) achter de prompt.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code>ls -la /etc
+dmesg
+# Ctrl+b [           -&gt; copy mode aan
+# PageUp / pijltjes   -&gt; scrollen naar een dmesg-regel
+# Space               -&gt; selectie starten
+# pijltjes            -&gt; selectie uitbreiden
+# Enter               -&gt; kopiëren, copy mode sluit
+# Ctrl+b ]            -&gt; plakken</code></pre></div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Een minimale tmux-configuratie</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Tmux leest bij het starten <code>~/.tmux.conf</code>. Drie instellingen die de meeste gebruikers al vroeg toevoegen:</p>
+<pre><code># ~/.tmux.conf
+set -g mouse on              # muisscrollen en pane-selectie met de muis toestaan
+set -g history-limit 10000   # meer scrollback dan de standaard 2000 regels
+set -g base-index 1          # windows tellen vanaf 1 in plaats van 0</code></pre>
+<p>Na een wijziging herlaadt u de configuratie zonder de sessie te verlaten:</p>
+<pre><code>tmux source-file ~/.tmux.conf</code></pre>
+<p>De prefix-toets (<code>Ctrl+b</code>) is naar smaak te herbinden, bijvoorbeeld naar <code>Ctrl+a</code> (de klassieke <code>screen</code>-toets):</p>
+<pre><code>set -g prefix C-a
+unbind C-b
+bind C-a send-prefix</code></pre>
+<div class="callout warn"><span class="lbl">Fenna's advies aan Milan</span><p>Begin met de standaard prefix. Pas als u tientallen keren per dag in tmux werkt, weegt het herbinden op tegen de verwarring dat elke andere machine nog de standaardtoets gebruikt.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 16, Opdracht 16.4</p><details class="q"><summary><span class="qn">1</span><span>Maak <code>~/.tmux.conf</code> aan met minstens: <code>mouse on</code>, een aangepaste <code>history-limit</code>, en <code>base-index 1</code>. Herlaad de configuratie met <code>tmux source-file</code> zonder tmux te herstarten en controleer dat muisscrollen werkt.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code># ~/.tmux.conf
+set -g mouse on
+set -g history-limit 20000
+set -g base-index 1</code></pre><pre><code>tmux source-file ~/.tmux.conf</code></pre><p>Controlepunt: met de muis scrollen in een pane laat nu de geschiedenis zien in plaats van tekens in te voeren.</p></div></details></div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 17</h3>
+      <p>Deel 17: Dotfiles &amp; customization.</p>
+      <a class="btn" href="deel-17.html">Deel 17 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 16 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5"];
+  var KEY="eductus_lsb16_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

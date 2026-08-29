@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 29 — Backup & recovery | Eductus</title>
+<meta name="description" content="De 3-2-1-regel, incrementeel synchroniseren met rsync, archiveren met tar, deduplicatie en versiegeschiedenis met restic, plannen met cron — en de restore-oefening die bewijst dat de back-up echt werkt.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-29.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 29 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 3 (Expert) · Deel 29 van 30</p>
+  <h1>Backup &amp; recovery<br><em>Pas geldig als u hem hebt teruggezet.</em></h1>
+  <p class="hero__lead">De 3-2-1-regel als toetssteen, incrementeel synchroniseren met <code>rsync</code>, momentopnamen maken met <code>tar</code>, deduplicatie en versiegeschiedenis met restic, en een back-upjob die fouten expliciet afvangt in plaats van ze te negeren. Elke opdracht in dit deel eindigt met een daadwerkelijke restore.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±1u</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Expert</span></div></div>
+  <div class="trail">Niveau 3 · Expert: … ㉗ Automatisering met Ansible &rarr; ㉘ Performance troubleshooting &rarr; <b>㉙ Backup &amp; recovery (hier)</b> &rarr; ㉚ Capstone: oplevering</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Een back-up die nooit is teruggezet</a></li>
+<li><a href="#s2" data-target="s2">rsync: synchroniseren, ook incrementeel</a></li>
+<li><a href="#s3" data-target="s3">tar: archiveren</a></li>
+<li><a href="#s4" data-target="s4">Deduplicatie en versiegeschiedenis: restic</a></li>
+<li><a href="#s5" data-target="s5">Plannen met cron</a></li>
+<li><a href="#s6" data-target="s6">De restore-oefening</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Een back-up die nooit is teruggezet, is geen back-up</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Fenna's meest geciteerde uitspraak in Team Infrastructuur &amp; Platform is kort: "een back-up telt pas als je hem hebt teruggezet." Ze heeft daar een reden voor. Bij een vorige werkgever draaide een nachtelijke back-upjob al anderhalf jaar "succesvol" volgens het cronlog, tot een schijfstoring een restore noodzakelijk maakte — en bleek dat het back-upscript weliswaar draaide, maar al maanden een leeg archief wegschreef door een stille padwijziging. Niemand had het gemerkt, omdat niemand ooit had geprobeerd terug te zetten.</p>
+<p>Voor het Rapportagecluster is dit deel daarom niet alleen "hoe maak ik een back-up" maar evenzeer "hoe bewijs ik dat de back-up bruikbaar is". Elke opdracht in het werkboek eindigt met een daadwerkelijke restore.</p>
+<h3>De 3-2-1-regel</h3>
+<p>De vuistregel voor een verdedigbare back-upstrategie: <strong>3</strong> kopieën van uw data (de productiedata plus twee back-ups), op <strong>2</strong> verschillende soorten opslagmedia, waarvan <strong>1</strong> kopie op een andere locatie (offsite).</p>
+<p>Elk onderdeel dekt een ander risico af:</p>
+<ul>
+<li><strong>3 kopieën</strong> — een enkele back-up is zelf een single point of failure; met twee back-ups overleeft u ook de corruptie of het falen van één ervan.</li>
+<li><strong>2 soorten media</strong> — een back-up op hetzelfde type opslag als de bron (bijvoorbeeld dezelfde SSD-serie in dezelfde machine) deelt een deel van de faalmodi van die bron.</li>
+<li><strong>1 offsite</strong> — een back-up in hetzelfde rek of dezelfde serverruimte overleeft geen brand, stroomstoring van het hele pand, of (in de context van Meridiaan) een ransomware-aanval die zich over het interne netwerk verspreidt.</li>
+</ul>
+<p>Voor het Rapportagecluster vertaalt dit zich naar: de productiedata op het cluster zelf, een dagelijkse back-up op een lokale back-upserver binnen het datacenter, en een wekelijkse (voor de belangrijkste rapportagedata dagelijkse) kopie naar een fysiek gescheiden locatie of cloudopslag.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.1</p><details class="q"><summary><span class="qn">1</span><span>Meridiaan heeft: productiedata op het Rapportagecluster, en een dagelijkse rsync-kopie naar een andere machine in hetzelfde serverrek. Welk onderdeel van de 3-2-1-regel ontbreekt, en welk risico blijft onafgedekt?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Er is wel sprake van meerdere kopieën en mogelijk zelfs een tweede medium, maar het <strong>offsite</strong>-onderdeel ontbreekt volledig: beide locaties bevinden zich in hetzelfde serverrek. Het onafgedekte risico is elke gebeurtenis die het hele rek of de hele serverruimte raakt: brand, stroomuitval van het pand, waterschade, of — gezien Meridiaan's dreigingsbeeld — ransomware die zich via het interne netwerk naar beide machines verspreidt omdat ze in hetzelfde segment staan. Een concrete aanvulling: een wekelijkse (of voor kritieke data dagelijkse) overdracht naar een fysiek gescheiden locatie, beveiligd met een ander toegangsmechanisme dan het interne netwerk — anders biedt de offsite-kopie tegen ransomware weinig extra bescherming.</div></details></div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">rsync: synchroniseren, ook incrementeel</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><code>rsync</code> kopieert alleen de wijzigingen tussen bron en doel, wat het efficiënt maakt voor herhaalde back-ups van grote datasets:</p>
+<pre><code>rsync -avz /data/rapportages/ backup-svc@backupserver:/backups/rapportage-01/</code></pre>
+<ul>
+<li><code>-a</code> (archive) behoudt eigenaarschap, rechten, tijdstempels en symbolische links;</li>
+<li><code>-v</code> (verbose) toont wat er gebeurt;</li>
+<li><code>-z</code> (compress) comprimeert data tijdens de overdracht.</li>
+</ul>
+<p>Voor een lokale back-up naar een ander volume op dezelfde machine:</p>
+<pre><code>rsync -av --delete /data/rapportages/ /mnt/backup-lokaal/rapportages/</code></pre>
+<p><code>--delete</code> zorgt dat bestanden die in de bron zijn verwijderd, ook uit het doel verdwijnen — zodat het doel een exacte spiegel blijft. Gebruik dit bewust: zonder aanvullende versiegeschiedenis (zie sectie 4) betekent dit dat een per ongeluk verwijderd bestand ook uit de back-up verdwijnt zodra de volgende sync draait.</p>
+<p>Voor herhaalde runs is een dry-run onmisbaar om vooraf te zien wat er zou gebeuren:</p>
+<pre><code>rsync -avz --delete --dry-run /data/rapportages/ backup-svc@backupserver:/backups/rapportage-01/</code></pre>
+<div class="callout warn"><span class="lbl">Let op</span><p>De afsluitende <code>/</code> op de bronmap bepaalt dat de inhoud van de map wordt gesynchroniseerd, niet de map zelf als submap. Vergeet dit teken en de structuur op het doel klopt niet.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.2</p><details class="q"><summary><span class="qn">1</span><span>U synchroniseert met rsync -avz --delete. U voegt een bestand toe en verwijdert een ander bestand in de bron, en draait de sync opnieuw. Wat gebeurt er in het doel, en waarom kan dat een risico zijn?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Na de sync bevat het doel het nieuwe bestand, maar het verwijderde bestand is ook uit het doel verdwenen, omdat <code>--delete</code> de doelmap een exacte spiegel van de bron maakt. Risico: als een gebruiker per ongeluk een bestand verwijdert en de geplande sync draait vóórdat iemand het opmerkt, is het bestand ook uit de "back-up" weg — een spiegel beschermt niet tegen per ongeluk verwijderen, alleen tegen het verlies van de bronmachine zelf. Dit is precies de reden waarom een deduplicerende tool met snapshotgeschiedenis (restic/Borg) een sterkere aanvulling is dan alleen <code>rsync --delete</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">tar: archiveren</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><code>tar</code> bundelt een boomstructuur tot één archiefbestand, desgewenst gecomprimeerd:</p>
+<pre><code>tar -czvf rapportage-2026-08-28.tar.gz /data/rapportages/</code></pre>
+<p><code>-c</code> create, <code>-z</code> gzip-compressie, <code>-v</code> verbose, <code>-f</code> bestandsnaam.</p>
+<p>Terugzetten:</p>
+<pre><code>tar -xzvf rapportage-2026-08-28.tar.gz -C /herstel/doelmap/</code></pre>
+<p><code>-x</code> extract, <code>-C</code> doelmap.</p>
+<p>Inhoud bekijken zonder uit te pakken (nuttig vóór een restore, om te controleren wat er in zit):</p>
+<pre><code>tar -tzvf rapportage-2026-08-28.tar.gz</code></pre>
+<p><code>tar</code> is geschikt voor een volledige, op zichzelf staande momentopname — bijvoorbeeld vóór een risicovolle wijziging, of als exportformaat naar offsite-opslag. Het is minder geschikt als dagelijks werkpaard voor grote, deels-wijzigende datasets, omdat elk archief in zijn geheel opnieuw wordt opgebouwd; daarvoor is <code>rsync</code> of een deduplicerende tool efficiënter.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Deduplicatie en versiegeschiedenis: restic</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Zowel <code>rsync</code> als <code>tar</code> missen twee dingen die in een volwassen back-upstrategie waardevol zijn: <strong>deduplicatie</strong> (niet elke back-up slaat dezelfde ongewijzigde data nogmaals op) en een <strong>ingebouwde versiegeschiedenis</strong> (meerdere momentopnamen terugvinden, niet alleen de laatste). Tools als restic en Borg Backup bieden dat, met versleuteling als standaardonderdeel.</p>
+<pre><code>sudo apt install -y restic
+
+restic init --repo /mnt/backup-lokaal/restic-repo
+export RESTIC_REPOSITORY=/mnt/backup-lokaal/restic-repo
+export RESTIC_PASSWORD_FILE=/etc/restic/wachtwoord
+
+restic backup /data/rapportages/
+restic snapshots</code></pre>
+<pre><code>ID        Time                 Host             Paths
+a1b2c3d4  2026-08-28 02:00:03  rapportage-01    /data/rapportages
+f5e6d7c8  2026-08-27 02:00:04  rapportage-01    /data/rapportages</code></pre>
+<p>Elke <code>restic backup</code>-run maakt een nieuwe <strong>snapshot</strong>, maar door deduplicatie op blokniveau kost een run met weinig wijzigingen nauwelijks extra opslagruimte. Oudere snapshots opruimen volgens een bewaarbeleid:</p>
+<pre><code>restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune</code></pre>
+<p>Dit bewaart de laatste 7 dagelijkse, 4 wekelijkse en 6 maandelijkse snapshots en verwijdert (met <code>--prune</code>) de daadwerkelijk overbodige data.</p>
+<div class="callout note"><span class="lbl">forget versus prune</span><p><code>forget</code> zonder <code>--prune</code> markeert oude snapshots alleen als niet langer te bewaren in de metadata, maar verwijdert de onderliggende datablokken nog niet. <code>--prune</code> voert de daadwerkelijke opschoning van niet meer gerefereerde data uit en maakt daarmee de opslagruimte echt vrij. Zonder <code>--prune</code> groeit de repository dus door, ook na <code>forget</code>.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.4d</p><details class="q"><summary><span class="qn">1</span><span>U past restic forget --keep-daily 3 --prune toe. Wat doet --prune hier extra ten opzichte van forget alleen?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>forget</code> zonder <code>--prune</code> markeert oude snapshots alleen als niet langer te bewaren in de metadata, maar verwijdert de onderliggende datablokken nog niet. <code>--prune</code> voert de daadwerkelijke opschoning van niet meer gerefereerde data uit en maakt daarmee de opslagruimte echt vrij. Zonder <code>--prune</code> groeit de repository dus door, ook na <code>forget</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Plannen met cron</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Terugkoppelend naar deel 22 van niveau 2 (cron &amp; geplande taken), plant Milan de back-upjob:</p>
+<pre><code>sudo crontab -e</code></pre>
+<pre><code>0 2 * * * /usr/local/bin/backup-rapportage.sh >> /var/log/backup-rapportage.log 2>&amp;1</code></pre>
+<p>Een backupscript vangt fouten expliciet op in plaats van ze stilzwijgend te negeren — precies de les uit Fenna's anekdote in sectie 1:</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+LOGTAG="backup-rapportage"
+BRON="/data/rapportages/"
+REPO="/mnt/backup-lokaal/restic-repo"
+
+if ! restic -r "$REPO" backup "$BRON"; then
+    logger -t "$LOGTAG" "FOUT: restic backup mislukt, zie logbestand"
+    exit 1
+fi
+
+logger -t "$LOGTAG" "back-up geslaagd: $(date)"</code></pre>
+<p><code>set -euo pipefail</code> laat het script direct stoppen bij een fout (<code>-e</code>), bij gebruik van een niet-gedefinieerde variabele (<code>-u</code>) en bij een fout ergens in een pipe (<code>pipefail</code>) — zonder deze regel zou een mislukte <code>restic</code>-aanroep het script gewoon laten doorlopen alsof er niets gebeurd was, en dat is exact het scenario waarin een back-up maandenlang stilzwijgend leeg blijft.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 29, Opdracht 29.5</p><details class="q"><summary><span class="qn">1</span><span>Een backupscript bevat: <code>rsync -avz $BRON $DOEL</code> gevolgd door <code>echo "back-up klaar"</code>, zonder set -euo pipefail. Welke fout(en) maken dit script kwetsbaar voor een stilzwijgend lege of onvolledige back-up?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Twee fouten die samen precies dit risico vormen: er is geen foutafhandeling — als <code>rsync</code> om welke reden dan ook faalt (doelmap niet bereikbaar, schijf vol, rechtenprobleem), print het script alsnog "back-up klaar", zonder onderscheid tussen een geslaagde en een mislukte run en zonder logregel die dat onderscheid vastlegt; daarnaast zijn de variabelen niet gequote (<code>$BRON</code> in plaats van <code>"$BRON"</code>), wat bij paden met spaties tot onverwacht gedrag leidt. De oplossing is <code>set -euo pipefail</code> samen met een expliciete <code>if</code>-controle rond <code>rsync</code> die bij falen naar <code>logger</code> schrijft en het script met een foutcode laat stoppen.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">De restore-oefening</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De enige manier om te weten of een back-up werkt, is hem terugzetten:</p>
+<pre><code>mkdir -p /tmp/restore-test
+restic -r /mnt/backup-lokaal/restic-repo restore latest --target /tmp/restore-test
+diff -r /data/rapportages/ /tmp/restore-test/data/rapportages/</code></pre>
+<p>Een lege uitvoer van <code>diff -r</code> bevestigt dat de teruggezette data identiek is aan de bron. Fenna's regel voor het Rapportagecluster: elke maand een restore-oefening naar een geïsoleerde testmap, met een korte notitie van de resultaten — niet omdat het team eraan twijfelt, maar omdat dat de enige manier is om aannames tijdig te ontkrachten in plaats van tijdens een echte storing.</p>
+<h3>Samenvatting</h3>
+<ul>
+<li>De 3-2-1-regel (3 kopieën, 2 mediatypen, 1 offsite) dekt drie verschillende faalscenario's af, niet één.</li>
+<li><code>rsync -avz</code> is efficiënt voor herhaalde, incrementele synchronisatie; <code>--delete</code> houdt bron en doel gelijk maar verwijdert ook aan de doelzijde.</li>
+<li><code>tar -czvf</code>/<code>-xzvf</code> maakt en herstelt op zichzelf staande archieven, geschikt voor momentopnamen.</li>
+<li>Restic (of Borg) voegt deduplicatie, versleuteling en een ingebouwde versiegeschiedenis toe via snapshots en een bewaarbeleid (<code>--keep-daily</code> e.d.).</li>
+<li>Een back-upscript moet fouten expliciet afvangen (<code>set -euo pipefail</code>) in plaats van ze te negeren.</li>
+<li>Een back-up telt pas als hij aantoonbaar is teruggezet; plan een terugkerende restore-oefening.</li>
+</ul>
+<h3>Kernbegrippen</h3>
+<p><strong>3-2-1-regel</strong> — 3 kopieën van de data, op 2 mediatypen, waarvan 1 offsite.<br>
+<strong>Incrementele back-up</strong> — een back-up die alleen de wijzigingen sinds de vorige overdracht overbrengt of opslaat.<br>
+<strong>Deduplicatie</strong> — het niet opnieuw opslaan van data die al ongewijzigd in een eerdere back-up aanwezig is.<br>
+<strong>Snapshot</strong> — een momentopname van de data op een bepaald tijdstip binnen een deduplicerend back-upsysteem zoals restic of Borg.<br>
+<strong>Restore</strong> — het daadwerkelijk terugzetten van data uit een back-up; de enige geldige verificatie dat een back-up bruikbaar is.</p>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 30</h3>
+      <p>Deel 30: de capstone — Milan levert het productierijpe Rapportagecluster op en verdedigt de oplevering.</p>
+      <a class="btn" href="deel-30.html">Deel 30 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 29 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_lsb29_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

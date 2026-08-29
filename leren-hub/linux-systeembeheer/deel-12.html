@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 12 — Vi(m)-basis | Eductus</title>
+<meta name="description" content="Waarom vim onvermijdelijk is voor serverbeheer over SSH, de vier modi van vim, navigeren en bewerken zonder muis, zoeken-en-vervangen met :%s, en opslaan en afsluiten — met het Rapportagecluster van Meridiaan Pensioen als casus.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-12.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 12 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 2 (Professional) · Deel 12 van 30</p>
+  <h1>Vi(m)-basis<br><em>Bewerken zonder muis, overal.</em></h1>
+  <p class="hero__lead">Op het Rapportagecluster staat geen desktopomgeving en soms zelfs geen <code>nano</code> — wél altijd <code>vi</code>. Dit deel leert u de vier modi van vim, navigeren en bewerken met het toetsenbord, zoeken-en-vervangen over een heel bestand met <code>:%s</code>, en veilig opslaan en afsluiten, aan de hand van Milans eerste, mislukte poging in <code>sudo visudo</code>.</p>
+  <div class="hero__stats"><div class="stat"><b>7</b><span>secties</span></div><div class="stat"><b>±1u15</b><span>leestijd + werkboek</span></div><div class="stat"><b>9</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>Professional</span></div></div>
+  <div class="trail">Niveau 2 · Professional: ⑪ Users, groups &amp; permissions → <b>⑫ Vi(m)-basis (hier)</b> → ⑬ Input/output &amp; pipes → ⑭ Processen → ⑮ SSH → … → ㉒ Cron &amp; geplande taken</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom vim onvermijdelijk is</a></li>
+<li><a href="#s2" data-target="s2">De modi van vim</a></li>
+<li><a href="#s3" data-target="s3">Navigeren zonder muis</a></li>
+<li><a href="#s4" data-target="s4">Tekst bewerken</a></li>
+<li><a href="#s5" data-target="s5">Zoeken en vervangen</a></li>
+<li><a href="#s6" data-target="s6">Opslaan en afsluiten</a></li>
+<li><a href="#s7" data-target="s7">Praktische instellingen</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom vim onvermijdelijk is</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In deel 11 draaide Milan voor het eerst <code>sudo visudo</code> — en kwam daarbij, min of meer per ongeluk, in vim terecht. Hij probeerde te scrollen met de muis, typte een letter die niets deed en drukte uiteindelijk op een toetsencombinatie die het bestand in een onbekende staat achterliet. Fenna's reactie was kort: "Dat gebeurt iedereen de eerste keer. Vandaag leer je waarom het zo werkt, en dan werkt het voortaan vóór je."</p>
+<p>Op het Rapportagecluster is dit geen incident dat zich één keer voordoet. De machines zijn minimale Ubuntu Server-installaties: geen desktopomgeving, geen grafische teksteditor, en soms zelfs geen <code>nano</code> — dat pakket staat niet standaard op elke minimale installatie, en op sommige gehardende images wordt het bewust weggelaten. Wat er wél altijd staat, is <code>vi</code>. Op vrijwel elk Unix- en Linux-systeem ter wereld — van een tien jaar oude productieserver tot een minimale container-image — is <code>vi</code> aanwezig, omdat het al decennia deel uitmaakt van de POSIX-standaard waaraan Unix-achtige systemen voldoen. <code>vim</code> ("Vi IMproved") is een uitbreiding daarop met onder andere syntax highlighting, meerdere niveaus van undo en visuele selectie, en is op de meeste moderne distributies (waaronder Ubuntu Server) standaard geïnstalleerd of met één commando toe te voegen:</p>
+<pre><code>sudo apt install vim</code></pre>
+<p>Het verschil is in de praktijk klein: wie vim-commando's beheerst, kan ook overweg met kale <code>vi</code> op een systeem waar vim ontbreekt. Daarom leert u in dit deel vim, met de wetenschap dat vrijwel alles ervan ook in <code>vi</code> werkt.</p>
+<div class="callout note"><span class="lbl">Waarom dit ertoe doet</span><p>Bij serverbeheer via SSH is er geen muis, geen klembord in de gebruikelijke zin, en vaak geen grafische omgeving. Een configuratiebestand aanpassen op een server op afstand betekent typen, niet klikken en slepen. Vim is daarvoor ontworpen.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De modi van vim</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Vim werkt fundamenteel anders dan een teksteditor als Kladblok of zelfs <code>nano</code>: het kent verschillende <strong>modi</strong>, en welke toets wat doet hangt af van de modus waarin u zich bevindt.</p>
+<ul>
+<li><strong>Normal mode</strong> — de modus waarin u start. Toetsen zijn hier commando's (navigeren, verwijderen, kopiëren), geen letters die worden getypt. Dit is de modus waar u na elke bewerking naar terugkeert.</li>
+<li><strong>Insert mode</strong> — hier typt u daadwerkelijk tekst, zoals in een gewone editor. U bereikt deze modus vanuit normal mode met onder andere <code>i</code>, <code>a</code>, <code>o</code> of <code>O</code>.</li>
+<li><strong>Visual mode</strong> — voor het selecteren van tekst, vergelijkbaar met slepen met de muis maar dan met het toetsenbord. U start deze modus met <code>v</code> (per teken), <code>V</code> (per regel) of Ctrl+v (blokgewijs).</li>
+<li><strong>Command-line mode</strong> — bereikt met <code>:</code> vanuit normal mode, voor commando's die op het hele bestand werken: opslaan, afsluiten, zoeken-en-vervangen, springen naar een regelnummer.</li>
+</ul>
+<p>Met de <code>Esc</code>-toets keert u vanuit elke andere modus terug naar normal mode. Dit is de belangrijkste toets om te onthouden: bij twijfel over wat er gaat gebeuren, drukt u eerst <code>Esc</code>.</p>
+<div class="callout warn"><span class="lbl">Milans eerste fout</span><p>Precies dit ging in deel 11 mis: hij begon te typen zonder eerst insert mode te starten, waardoor elke letter als commando werd geïnterpreteerd. <code>Esc</code> en dan opnieuw beginnen, is in vim vrijwel altijd een veilige eerste stap.</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Navigeren zonder muis</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>In normal mode navigeert u met de toetsen direct onder uw rechterhand:</p>
+<pre><code>h   ← één teken naar links
+j   ↓ één regel naar beneden
+k   ↑ één regel naar boven
+l   → één teken naar rechts</code></pre>
+<p>Efficiënter voor grotere afstanden:</p>
+<ul>
+<li><code>w</code> — een woord vooruit springen, <code>b</code> — een woord terug.</li>
+<li><code>0</code> — naar het begin van de regel, <code>$</code> — naar het einde van de regel.</li>
+<li><code>gg</code> — naar de eerste regel van het bestand, <code>G</code> — naar de laatste regel.</li>
+<li><code>:42</code> (in command-line mode) — direct naar regel 42 springen.</li>
+</ul>
+<p>Zoeken doet u met <code>/patroon</code>, gevolgd door Enter. Vim springt naar de eerstvolgende match. Met <code>n</code> herhaalt u de zoekactie voorwaarts, met <code>N</code> gaat u terug naar de vorige match. Zoeken achterwaarts vanaf de cursor kan met <code>?patroon</code>.</p>
+<div class="dialogue"><p><strong>Casus: een regel terugvinden in sshd_config.</strong> Fenna vraagt Milan de regel met <code>PermitRootLogin</code> te vinden in <code>/etc/ssh/sshd_config</code> op een van de rapportageservers. In plaats van met <code>j</code> regel voor regel naar beneden te scrollen, typt Milan in normal mode:</p>
+<pre><code>/PermitRootLogin</code></pre>
+<p>en drukt Enter. De cursor springt direct naar de eerste treffer — in een bestand van enkele honderden regels een aanzienlijke tijdwinst ten opzichte van handmatig scrollen, en precies het soort snelheid dat het verschil maakt tussen vim vermijden en vim gebruiken.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.1</p>
+<details class="q"><summary><span class="qn">1</span><span>Hoe springt u vanuit de eerste regel van een bestand direct naar de laatste regel, met één commando?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>G</code> (hoofdletter) in normal mode springt direct naar de laatste regel.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>En hoe springt u weer terug naar de eerste regel?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>gg</code> springt terug naar de eerste regel.</div></details>
+<details class="q"><summary><span class="qn">3</span><span>Hoe springt u met een command-line-commando naar regel 10?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>:10</code> gevolgd door Enter, in command-line mode.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Tekst bewerken</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Om te typen, moet u eerst insert mode starten. Er zijn meerdere ingangen, elk met een net iets andere startpositie:</p>
+<ul>
+<li><code>i</code> — insert vóór de cursor.</li>
+<li><code>a</code> — insert ná de cursor ("append").</li>
+<li><code>o</code> — open een nieuwe regel ónder de huidige en start daar insert mode.</li>
+<li><code>O</code> — open een nieuwe regel bóven de huidige.</li>
+</ul>
+<p>Vanuit insert mode keert <code>Esc</code> terug naar normal mode. In normal mode zijn dit de meest gebruikte bewerkingscommando's:</p>
+<ul>
+<li><code>x</code> — verwijder één teken onder de cursor.</li>
+<li><code>dd</code> — verwijder de hele huidige regel (en plaatst deze in het register).</li>
+<li><code>dw</code> — verwijder vanaf de cursor tot het einde van het huidige woord.</li>
+<li><code>yy</code> — kopieer ("yank") de huidige regel.</li>
+<li><code>p</code> — plak wat het laatst verwijderd of gekopieerd is, ná de cursor of onder de huidige regel.</li>
+<li><code>u</code> — maak de laatste actie ongedaan (undo); herhaald <code>u</code> gaat verder terug. Ctrl+r doet een undo weer opnieuw (redo).</li>
+<li><code>r</code> gevolgd door een teken — vervang precies één teken onder de cursor door het getypte teken, zonder in insert mode te gaan.</li>
+</ul>
+<p>Deze commando's zijn combineerbaar met een aantal: <code>3dd</code> verwijdert drie regels, <code>5j</code> springt vijf regels naar beneden. Dat patroon — een getal vóór een commando — geldt breed in vim en is de reden dat ervaren gebruikers zelden meer dan een paar toetsaanslagen nodig hebben voor een bewerking die in een muisgestuurde editor meerdere handelingen zou kosten.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.2</p>
+<details class="q"><summary><span class="qn">1</span><span>U heeft regel 5 zojuist verwijderd met <code>dd</code>. Hoe voegt u op die plek een nieuwe regel toe met de tekst <code>nieuwe regel</code>, met het commando dat een regel ónder de huidige positie opent?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>O</code> opent een nieuwe regel bóven de huidige cursorpositie en start insert mode; na het typen van <code>nieuwe regel</code> keert <code>Esc</code> terug naar normal mode. Omdat regel 5 net verwijderd is, staat de cursor nu op wat voorheen regel 6 was — <code>O</code> plaatst de nieuwe regel dus op de juiste positie, ervoor.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Hoe vervangt u met <code>r</code> het eerste teken van de huidige regel door een <code>X</code>, zonder in insert mode te gaan?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>r</code> gevolgd door <code>X</code> (dus toetsaanslagen <code>rX</code>) vervangt exact het teken onder de cursor door een <code>X</code>, zonder insert mode te starten en zonder verdere toetsaanslagen te vereisen.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Zoeken en vervangen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Voor een gerichte tekstvervanging over het hele bestand gebruikt u command-line mode:</p>
+<pre><code>:%s/oud/nieuw/g</code></pre>
+<p><code>%</code> betekent "alle regels", <code>s</code> staat voor substitute, <code>oud</code> en <code>nieuw</code> zijn respectievelijk het te zoeken en het vervangende patroon, en de afsluitende <code>g</code> (global) zorgt dat ook meerdere voorkomens per regel worden vervangen — zonder die <code>g</code> wordt alleen de eerste match per regel vervangen. Wilt u alleen op één regel vervangen, laat <code>%</code> dan weg en gebruik het huidige regelnummer of een bereik zoals <code>:5,10s/oud/nieuw/g</code> voor regel 5 tot en met 10.</p>
+<div class="dialogue"><p><strong>Casus: een poortnummer aanpassen.</strong> Op het Rapportagecluster moet Milan in een configuratiebestand elke verwijzing naar poort <code>8080</code> vervangen door <code>8443</code>, na een wijziging in het netwerkontwerp. In plaats van elke regel handmatig op te zoeken:</p>
+<pre><code>:%s/8080/8443/g</code></pre>
+<p>Vim toont daarna hoeveel vervangingen zijn uitgevoerd.</p></div>
+<div class="callout warn"><span class="lbl">Let op</span><p>Bij een gevoelig productiebestand is het verstandig eerst te controleren met <code>/8080</code> of het patroon niet per ongeluk ook onbedoelde plekken raakt (bijvoorbeeld een IP-adres dat toevallig op 8080 eindigt), voordat u de globale vervanging uitvoert.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.3 — bestand <code>rapportage.conf</code> met de regels <code>listen_port = 8080</code>, <code>backup_port = 8080</code>, <code>admin_port = 9090</code> en het commentaar <code># default listen 8080 unless overridden</code></p>
+<details class="q"><summary><span class="qn">1</span><span>U springt met <code>n</code> steeds naar het volgende voorkomen van <code>8080</code>. Hoe vaak komt <code>8080</code> in dit bestand voor?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>8080</code> komt in dit bestand drie keer voor: in <code>listen_port</code>, in <code>backup_port</code> en in de commentaarregel onderaan.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Met welk command-line-commando vervangt u alle voorkomens van <code>8080</code> door <code>8443</code> in één keer?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>:%s/8080/8443/g</code> — <code>%</code> past het commando toe op alle regels, <code>g</code> zorgt dat ook een eventuele tweede match op dezelfde regel wordt vervangen. Na <code>:w</code> en <code>cat rapportage.conf</code> buiten vim blijkt dat alle drie de voorkomens nu <code>8443</code> zijn — inclusief die in de commentaarregel, want <code>:%s</code> maakt geen onderscheid tussen commentaar en actieve configuratie.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Opslaan en afsluiten</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Ook opslaan en afsluiten gaat via command-line mode of via een directe toetsencombinatie:</p>
+<div class="tablewrap"><table><thead><tr><th>Commando</th><th>Effect</th></tr></thead><tbody>
+<tr><td><strong><code>:w</code></strong></td><td>opslaan (write), blijft in de editor.</td></tr>
+<tr><td><strong><code>:q</code></strong></td><td>afsluiten; werkt alleen als er geen niet-opgeslagen wijzigingen zijn.</td></tr>
+<tr><td><strong><code>:wq</code></strong></td><td>opslaan én afsluiten in één stap.</td></tr>
+<tr><td><strong><code>:q!</code></strong></td><td>afsluiten zonder opslaan, ook als er wijzigingen zijn — de <code>!</code> dwingt het commando af.</td></tr>
+<tr><td><strong><code>ZZ</code></strong></td><td>(hoofdletters, in normal mode, zonder dubbele punt) opslaan en afsluiten, functioneel gelijk aan <code>:wq</code>.</td></tr>
+</tbody></table></div>
+<p><code>:q!</code> is het commando dat Milan in deel 11 had moeten kennen: wanneer een bewerking uit de hand loopt en u wilt terug naar de staat van vóór het openen van het bestand, is dit de veilige uitweg — mits u nog niet had opgeslagen.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 12, Opdracht 12.4 — Milan bewerkt over SSH een configuratiebestand, drukt per ongeluk een aantal willekeurige toetsen in normal mode in en heeft nog niet opgeslagen</p>
+<details class="q"><summary><span class="qn">1</span><span>Wat is de snelste manier voor Milan om terug te keren naar de staat van het bestand zoals het was toen hij het opende?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>:q!</code> — afsluiten zonder op te slaan. Omdat er nog niet is opgeslagen, staat de oorspronkelijke inhoud nog gewoon op schijf; <code>:q!</code> verlaat vim zonder de aangebrachte (foutieve) wijzigingen weg te schrijven, en het bestand is daarmee exact terug in de staat van vóór het openen.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Fenna's regel voor iedereen die op productieservers configuratiebestanden bewerkt: nooit direct in het bestand zelf werken zonder eerst iets te doen. Wat is die stap, en waarom lost die het probleem (deels) op, ook wanneer er al is opgeslagen?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Eerst een kopie maken van het bestand voordat u het bewerkt, bijvoorbeeld <code>sudo cp sshd_config sshd_config.bak</code>. Dat lost het probleem ook op wanneer er al is opgeslagen: in plaats van te vertrouwen op undo-geschiedenis binnen een sessie, kopieert u de bak-versie simpelweg terug. Dit is dezelfde onderliggende gewoonte als het advies uit deel 11 om bij het bewerken van <code>sudoers</code> een tweede, ingelogde sessie open te houden — een herstelpad achter de hand hebben vóórdat er iets misgaat.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Praktische instellingen</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een paar instellingen die het werken in vim direct prettiger maken, alle in te typen in command-line mode:</p>
+<pre><code>:set number
+:syntax on</code></pre>
+<p><code>:set number</code> toont regelnummers links in het scherm — onmisbaar zodra u met foutmeldingen werkt die naar een specifiek regelnummer verwijzen. <code>:syntax on</code> schakelt kleuren in voor herkende bestandstypen (bijvoorbeeld een shellscript of een configuratiebestand met bekende syntax), wat typefouten en structuur sneller zichtbaar maakt.</p>
+<div class="callout tip"><span class="lbl">Vooruitblik</span><p>Instellingen die u permanent wilt, zet u in <code>~/.vimrc</code>, een configuratiebestand dat vim bij elke start inleest. Dotfiles zoals deze komen uitgebreider aan bod in deel 17.</p></div>
+      </div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 13</h3>
+      <p>Deel 13: Input/output &amp; pipes.</p>
+      <a class="btn" href="deel-13.html">Deel 13 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 12 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_lsb12_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

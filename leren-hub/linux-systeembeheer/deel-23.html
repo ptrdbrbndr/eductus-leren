@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 23 — Gebruikersbeheer op schaal | Eductus</title>
+<meta name="description" content="LDAP en PAM als basis voor centraal gebruikersbeheer: een OpenLDAP-directory opzetten en beheren met LDIF, een client koppelen via sssd en NSS, en de PAM-stack lezen en veilig aanpassen.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-23.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 23 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 3 (Expert) · Deel 23 van 30</p>
+  <h1>Gebruikersbeheer op schaal<br><em>LDAP &amp; PAM-basis.</em></h1>
+  <p class="hero__lead">Lokaal gebruikersbeheer per machine schaalt niet: bij vijf machines is elke wijziging vijf keer werk, met het risico op UID/GID-drift en vergeten accounts. Dit deel behandelt de standaardoplossing — een centrale LDAP-directory — en het mechanisme waarmee een machine die directory daadwerkelijk gebruikt bij het inloggen: PAM.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±1u15</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Expert</span></div></div>
+  <div class="trail">Niveau 3 · Expert: <b>① LDAP &amp; PAM (hier)</b> &rarr; ② Pakketbeheer verdieping &rarr; ③ Security hardening &rarr; ④ Containers (Docker) &rarr; ⑤ Automatisering (Ansible) &rarr; ⑥ Performance monitoring &rarr; ⑦ Backup &amp; recovery &rarr; ⑧ Capstone: Rapportagecluster</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Van niveau 2 naar niveau 3</a></li>
+<li><a href="#s2" data-target="s2">LDAP: een directory, geen database</a></li>
+<li><a href="#s3" data-target="s3">De client koppelen: NSS, sssd</a></li>
+<li><a href="#s4" data-target="s4">PAM: hoe authenticatie verloopt</a></li>
+<li><a href="#s5" data-target="s5">LDAP-authenticatie activeren via PAM</a></li>
+<li><a href="#s6" data-target="s6">Wat account-controle toevoegt</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Van niveau 2 naar niveau 3: hetzelfde probleem, andere schaal</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niveau 3 begint waar niveau 2 stopte. In deel 11 leerde u gebruikers en groepen beheren op één machine: <code>useradd</code>, <code>/etc/passwd</code>, <code>chmod</code>, <code>sudo</code>. Dat werkt uitstekend zolang er één machine is.</p>
+<p>Meridiaan Pensioen heeft dat niet meer. Het Rapportagecluster bestaat inmiddels uit vijf Ubuntu Server-machines: twee voor de rapportage-API, een voor batchverwerking, een voor de monitoringstack en een jump host. Fenna Oudshoorn heeft Milan Struik de leiding gegeven over de doorontwikkeling van dit cluster naar een productierijpe omgeving — het traject dat in deel 30 wordt opgeleverd. De eerste opdracht die ze hem geeft, is niet een nieuwe dienst of een firewallregel.</p>
+<div class="dialogue">
+<p>"Tel eens hoeveel keer je <code>useradd</code> hebt gedraaid op dit cluster," zegt Fenna. Milan telt: vijf machines, elk met lokale accounts voor hemzelf, Fenna en twee collega's. Bij iemands vertrek moet dat op vijf plekken worden opgeruimd, en bij een nieuwe collega vijf keer aanmaken — met het risico dat één van de vijf wordt vergeten of met een ander UID ontstaat, wat bestandseigendom over gedeelde NFS-mounts stilletjes laat rammelen.</p>
+</div>
+<p>Dit is het probleem dat dit deel oplost: gebruikersbeheer <strong>centraliseren</strong>, zodat een account op één plek bestaat en overal hetzelfde is. De standaardoplossing, decennialang de ruggengraat van bedrijfsnetwerken, is <strong>LDAP</strong> (Lightweight Directory Access Protocol). Hoe een machine die centrale bron daadwerkelijk gebruikt bij het inloggen, is het domein van <strong>PAM</strong> (Pluggable Authentication Modules). Beide staan centraal in de LFCE-route, waar het LFCS-niveau zich tot één machine tegelijk beperkte.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">LDAP: een directory, geen database</h2><span class="chip time">⏱ 20 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een LDAP-directory is geoptimaliseerd voor lezen, niet voor transacties: gebruikersgegevens worden voortdurend opgezocht (bij elke login, elke <code>ls -l</code>, elke <code>sudo</code>) en relatief zelden gewijzigd.</p>
+<p>Gegevens in LDAP staan in een boomstructuur, de <strong>DIT</strong> (Directory Information Tree). Elk element heeft een unieke plek, aangeduid met een <strong>DN</strong> (Distinguished Name), opgebouwd uit componenten als <code>dc</code> (domain component), <code>ou</code> (organizational unit) en <code>cn</code> (common name):</p>
+<pre><code>dn: uid=milan,ou=people,dc=meridiaan,dc=local</code></pre>
+<p>Deze DN leest u van rechts naar links: het domein <code>meridiaan.local</code>, daarbinnen de organizational unit <code>people</code>, daarbinnen het object met uid <code>milan</code>.</p>
+<h3>OpenLDAP installeren</h3>
+<p>Op Ubuntu Server installeert u OpenLDAP met:</p>
+<pre><code>sudo apt update
+sudo DEBIAN_FRONTEND=noninteractive apt install -y slapd ldap-utils
+sudo dpkg-reconfigure slapd</code></pre>
+<p><code>slapd</code> is de LDAP-daemon, <code>ldap-utils</code> levert de clientcommando's (<code>ldapsearch</code>, <code>ldapadd</code>, <code>ldapmodify</code>). <code>dpkg-reconfigure slapd</code> doorloopt de basisconfiguratie: domeinnaam (bijvoorbeeld <code>meridiaan.local</code>, wat de base-DN <code>dc=meridiaan,dc=local</code> oplevert), organisatienaam en het admin-wachtwoord.</p>
+<p>Test de installatie met een zoekopdracht op de root van de directory:</p>
+<pre><code>ldapsearch -x -b "dc=meridiaan,dc=local" -H ldapi:/// -LLL</code></pre>
+<p><code>-x</code> gebruikt simple authentication in plaats van SASL, <code>-b</code> geeft de base-DN, <code>-H ldapi:///</code> verbindt via de lokale UNIX-socket, <code>-LLL</code> levert compacte LDIF-output zonder commentaarregels.</p>
+<h3>Structuur klaarzetten met LDIF</h3>
+<p>Wijzigingen aan een LDAP-directory worden meestal beschreven in <strong>LDIF</strong> (LDAP Data Interchange Format) en daarna toegepast. Eerst de organizational units voor mensen en groepen:</p>
+<pre><code>cat &lt;&lt;'EOF' &gt; ou-structuur.ldif
+dn: ou=people,dc=meridiaan,dc=local
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=meridiaan,dc=local
+objectClass: organizationalUnit
+ou: groups
+EOF
+
+sudo ldapadd -x -D "cn=admin,dc=meridiaan,dc=local" -W -f ou-structuur.ldif</code></pre>
+<p><code>-D</code> geeft de DN waarmee wordt geauthenticeerd (de admin-account), <code>-W</code> vraagt interactief om het wachtwoord, <code>-f</code> wijst naar het LDIF-bestand.</p>
+<p>Daarna een gebruiker en een groep:</p>
+<pre><code>cat &lt;&lt;'EOF' &gt; milan.ldif
+dn: uid=milan,ou=people,dc=meridiaan,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: milan
+cn: Milan Struik
+sn: Struik
+uidNumber: 10001
+gidNumber: 10001
+homeDirectory: /home/milan
+loginShell: /bin/bash
+userPassword: {CRYPT}x
+
+dn: cn=rapportage-team,ou=groups,dc=meridiaan,dc=local
+objectClass: posixGroup
+gidNumber: 10001
+memberUid: milan
+EOF
+
+sudo ldapadd -x -D "cn=admin,dc=meridiaan,dc=local" -W -f milan.ldif</code></pre>
+<p>De objectclasses <code>posixAccount</code> en <code>posixGroup</code> (RFC 2307) leveren precies de velden die <code>/etc/passwd</code> en <code>/etc/group</code> ook kennen — <code>uidNumber</code>, <code>gidNumber</code>, <code>homeDirectory</code>, <code>loginShell</code>. Een LDAP-directory met deze schema's is in feite een netwerkversie van <code>/etc/passwd</code>.</p>
+<p>Een bestaand object wijzigen gaat met <code>ldapmodify</code> en een LDIF met een <code>changetype</code>:</p>
+<pre><code>cat &lt;&lt;'EOF' &gt; wijziging.ldif
+dn: uid=milan,ou=people,dc=meridiaan,dc=local
+changetype: modify
+replace: loginShell
+loginShell: /bin/zsh
+EOF
+
+sudo ldapmodify -x -D "cn=admin,dc=meridiaan,dc=local" -W -f wijziging.ldif</code></pre>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 23, Opdracht 23.1 / Uitwerking 23.1</p><details class="q"><summary><span class="qn">1</span><span>Wat toont een geslaagde <code>ldapsearch</code> op de base-DN direct na installatie, vóórdat u zelf iets heeft toegevoegd?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Twee entries: de root van de directory zelf (<code>dn: dc=&lt;domein&gt;</code>, met objectclasses <code>top</code>, <code>dcObject</code>, <code>organization</code>) en de admin-rol (<code>cn=admin,dc=&lt;domein&gt;</code>, met objectclasses <code>simpleSecurityObject</code> en <code>organizationalRole</code>). Na het toepassen van de LDIF voor <code>ou=people</code> en <code>ou=groups</code> komen daar twee entries bij.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Waarom leveren <code>posixAccount</code> en <code>posixGroup</code> een LDAP-directory op die functioneert als "netwerkversie van <code>/etc/passwd</code>"?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat deze objectclasses uit RFC 2307 precies dezelfde velden meegeven die <code>/etc/passwd</code> en <code>/etc/group</code> lokaal kennen: <code>uidNumber</code>, <code>gidNumber</code>, <code>homeDirectory</code> en <code>loginShell</code>. Een client die deze velden kan opzoeken, heeft dezelfde informatie beschikbaar als bij een lokaal account — alleen centraal in plaats van per machine.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">De client koppelen: NSS, sssd en de identiteit oplossen</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een LDAP-server alleen is nog geen centrale authenticatie. Elke client-machine moet weten dat hij een gebruikersnaam niet alleen in <code>/etc/passwd</code> maar ook in LDAP moet opzoeken. Dat is het domein van <strong>NSS</strong> (Name Service Switch), geconfigureerd in <code>/etc/nsswitch.conf</code>.</p>
+<p>Historisch gebeurde die koppeling met <code>nss-pam-ldapd</code> (<code>nslcd</code>), rechtstreeks tegen LDAP. Op moderne Ubuntu-installaties is <strong>sssd</strong> (System Security Services Daemon) de voorkeursroute: het cachet identiteitsgegevens lokaal, werkt met meerdere backends (LDAP, Active Directory, Kerberos) en blijft functioneren als de verbinding met de directory tijdelijk wegvalt.</p>
+<pre><code>sudo apt install -y sssd sssd-ldap libnss-sss libpam-sss</code></pre>
+<p>De configuratie staat in <code>/etc/sssd/sssd.conf</code>:</p>
+<pre><code>[sssd]
+services = nss, pam
+domains = meridiaan.local
+
+[domain/meridiaan.local]
+id_provider = ldap
+auth_provider = ldap
+ldap_uri = ldap://ldap.meridiaan.local
+ldap_search_base = dc=meridiaan,dc=local
+cache_credentials = True
+enumerate = False</code></pre>
+<p><code>id_provider</code> en <code>auth_provider</code> geven aan dat zowel identiteit als authenticatie via LDAP lopen. <code>cache_credentials = True</code> onderscheidt sssd van de oudere nslcd-route: bij een tijdelijke netwerkstoring kan een gebruiker die al eerder is ingelogd, nog altijd inloggen op basis van de gecachete hash.</p>
+<div class="callout warn"><span class="lbl">Let op</span><p>Dit bestand moet strikte rechten hebben, anders weigert sssd te starten:</p>
+<pre><code>sudo chmod 600 /etc/sssd/sssd.conf
+sudo systemctl enable --now sssd</code></pre></div>
+<p><code>/etc/nsswitch.conf</code> wordt door de installatie van <code>libnss-sss</code> automatisch bijgewerkt zodat <code>sss</code> aan de passwd- en group-regels wordt toegevoegd:</p>
+<pre><code>passwd:  files systemd sss
+group:   files systemd sss</code></pre>
+<p>De volgorde is van belang: <code>files</code> eerst betekent dat lokale accounts (zoals <code>root</code> en systeemaccounts) altijd voorrang krijgen boven LDAP — een LDAP-storing mag nooit de root-toegang blokkeren. Test de koppeling met:</p>
+<pre><code>getent passwd milan
+id milan</code></pre>
+<p>Levert <code>getent passwd milan</code> de LDAP-gegevens van Milan op, dan resolvet NSS correct. Dat zegt nog niets over inloggen — dat is de volgende stap.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">PAM: hoe authenticatie daadwerkelijk verloopt</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>NSS lost identiteit op ("wie beweert deze gebruiker te zijn"). Of iemand daadwerkelijk mag inloggen is het domein van <strong>PAM</strong>: geen authenticatiemethode zelf, maar een raamwerk waarmee programma's (<code>sshd</code>, <code>login</code>, <code>sudo</code>, <code>su</code>) authenticatie <strong>uitbesteden</strong> aan een stapel pluggable modules, zonder dat het programma zelf hoeft te weten of de controle tegen <code>/etc/shadow</code>, LDAP of een tweefactorsysteem gebeurt.</p>
+<p>Elk PAM-bewust programma heeft een configuratiebestand in <code>/etc/pam.d/</code>, bijvoorbeeld <code>/etc/pam.d/sshd</code>. Dat bestand bestaat uit regels in vier <strong>managementgroepen</strong>: <strong>auth</strong> (wie is de gebruiker — wachtwoord, sleutel, token), <strong>account</strong> (mag dit account nu inloggen — verlopen, tijdvenster, groepslidmaatschap), <strong>password</strong> (wachtwoord wijzigen) en <strong>session</strong> (sessie inrichten en opruimen — thuismap, omgevingsvariabelen, logging).</p>
+<p>Elke regel volgt hetzelfde patroon: <code>type control module argumenten</code>. De <strong>control-vlag</strong> bepaalt wat er gebeurt met het resultaat:</p>
+<ul>
+<li><code>required</code> — moet slagen; bij falen gaat de stack door (om niet te lekken welke stap faalde) maar het eindresultaat is een weigering;</li>
+<li><code>requisite</code> — moet slagen; bij falen stopt de hele stack onmiddellijk;</li>
+<li><code>sufficient</code> — bij succes, en als geen eerdere <code>required</code>-module faalde, is de stack meteen klaar;</li>
+<li><code>optional</code> — telt alleen mee als geen enkele andere module een uitspraak deed.</li>
+</ul>
+<p>Een representatief fragment uit <code>/etc/pam.d/common-auth</code> op Ubuntu:</p>
+<pre><code>auth    [success=1 default=ignore]  pam_unix.so nullok
+auth    requisite                   pam_deny.so
+auth    required                    pam_permit.so</code></pre>
+<p><code>pam_unix.so</code> is de klassieke module die tegen <code>/etc/passwd</code> en <code>/etc/shadow</code> controleert. De vlag <code>[success=1 default=ignore]</code> is een uitgebreide vorm van control: bij succes wordt de volgende regel overgeslagen (rechtstreeks naar <code>pam_permit.so</code>, dus geslaagd); bij elke andere uitkomst gaat de stack door naar de volgende regel.</p>
+<p>Op Ubuntu worden <code>common-auth</code>, <code>common-account</code>, <code>common-password</code> en <code>common-session</code> centraal beheerd en per dienst ingesloten met <code>@include</code>:</p>
+<pre><code># /etc/pam.d/sshd (fragment)
+@include common-auth
+@include common-account
+@include common-password
+@include common-session</code></pre>
+<p>Een wijziging in <code>common-auth</code> werkt zo door in élke dienst die deze regel insluit — het aangrijpingspunt om LDAP-authenticatie voor het hele systeem in één keer te activeren.</p>
+<figure><img src="figuren/deel-23-figuur-1-pam-stack-flow.svg" alt="Stroomschema van de PAM-stack bij een SSH-login: de vier managementgroepen auth, account, password en session als opeenvolgende stappen, per stap de module (pam_unix.so of pam_sss.so) met de bijbehorende control-vlag (required, sufficient, requisite) die bepaalt of de stack doorgaat of stopt, eindigend in toegang verleend of geweigerd"><figcaption>Figuur 23-1 — de PAM-stack bij inloggen: van auth via account en password naar session, met per stap de module en de control-vlag die de doorgang bepaalt</figcaption></figure>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 23, Opdracht 23.3 / Uitwerking 23.3</p><details class="q"><summary><span class="qn">1</span><span>Wat doen de vier regels in het representatieve <code>common-auth</code>-fragment (met <code>pam_unix.so</code>, <code>pam_sss.so</code>, <code>pam_deny.so</code>, <code>pam_permit.so</code>), en welke control-vlag hoort bij elke regel?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Regel 1 — <code>pam_unix.so nullok</code> met <code>[success=1 default=ignore]</code>: controleert het lokale wachtwoord; bij succes wordt de volgende regel overgeslagen. Regel 2 — <code>pam_sss.so use_first_pass</code> met <code>[default=1 ignore=ignore]</code>: controleert tegen sssd/LDAP met het al ingevoerde wachtwoord; bij een ander resultaat dan "ignore" wordt de volgende regel overgeslagen. Regel 3 — <code>pam_deny.so</code> met <code>requisite</code>: weigert direct als de stack hier wordt bereikt, dus als geen van beide voorgaande modules een positief antwoord gaf. Regel 4 — <code>pam_permit.so</code> met <code>required</code>: laat door als de stack tot hier komt zonder eerdere weigering.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">LDAP-authenticatie activeren via PAM</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met sssd als backend hoeft u de PAM-stack zelden handmatig te bewerken: <code>libpam-sss</code> registreert bij installatie automatisch de benodigde regel. Voor het begrip, en omdat u dit op examen- en troubleshootmomenten terugziet, het effect in <code>/etc/pam.d/common-auth</code>:</p>
+<pre><code>auth    [success=1 default=ignore]  pam_unix.so nullok
+auth    [default=1 ignore=ignore]   pam_sss.so use_first_pass
+auth    requisite                   pam_deny.so
+auth    required                    pam_permit.so</code></pre>
+<p>De volgorde is bewust: eerst <code>pam_unix.so</code> proberen (lokale accounts, inclusief root, blijven zonder netwerkafhankelijkheid werken), en alleen als die geen uitspraak doet, <code>pam_sss.so</code> proberen tegen de gecachete of live LDAP-gegevens. <code>use_first_pass</code> voorkomt dat de gebruiker twee keer om een wachtwoord wordt gevraagd.</p>
+<div class="callout"><span class="lbl">Casus: Milan schakelt het cluster om</span><p>Fenna's opdracht: één van de vijf machines krijgt als pilot de LDAP-koppeling, met lokale toegang als terugvaloptie. Milans stappenplan: <code>sssd</code> installeren en eerst testen met <code>getent passwd</code> zonder dat PAM al is aangepast; daarna <code>libpam-sss</code> installeren; vervolgens testen vanuit een <strong>tweede, nog open sessie</strong> — nooit de enige actieve SSH-verbinding gebruiken om een PAM-wijziging te testen; pas na een geslaagde test volgen de andere vier machines, later geautomatiseerd met Ansible (deel 27).</p></div>
+<div class="callout warn"><span class="lbl">Waarschuwing</span><p>Die tweede sessie is Fenna's vaste regel: een foutieve PAM-configuratie kan alle inlogpogingen blokkeren, inclusief die van root via <code>sudo</code>. Zonder tweede sessie of console-toegang is de enige weg terug een herstart in recovery mode.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 23, Opdracht 23.3 (reflectievraag) / Uitwerking 23.3</p><details class="q"><summary><span class="qn">1</span><span>Wat gebeurt er als <code>pam_unix.so</code> in <code>common-auth</code> op <code>requisite</code> zou staan in plaats van de standaard <code>[success=1 default=ignore]</code>, op een systeem waar ook LDAP-authenticatie via <code>pam_sss.so</code> is geconfigureerd?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Dan stopt de hele stack onmiddellijk zodra het lokale account niet bestaat of het lokale wachtwoord niet klopt — óók als de gebruiker wel een geldig LDAP-account met <code>pam_sss.so</code> heeft. Elke gebruiker die uitsluitend in LDAP bestaat (geen lokaal account) zou dan nooit meer kunnen inloggen, omdat de stack al bij de eerste regel afbreekt voordat <code>pam_sss.so</code> aan bod komt. Dit is precies waarom de standaardvlag <code>[success=1 default=ignore]</code> is: bij het ontbreken van een lokaal account (geen "succes", maar ook geen harde weigering) gaat de stack door naar de volgende module in plaats van te stoppen.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Wat account-controle toevoegt</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De <code>account</code>-groep in PAM wordt vaak onderschat. Een voorbeeld met <code>pam_access.so</code>, dat toegang beperkt op basis van een regelbestand:</p>
+<pre><code># /etc/pam.d/common-account (fragment)
+account required   pam_access.so</code></pre>
+<pre><code># /etc/security/access.conf (fragment)
++ : rapportage-team : cron01 cron02
+- : ALL : cron01 cron02</code></pre>
+<p>Deze twee regels laten alleen leden van <code>rapportage-team</code> toe op <code>cron01</code> en <code>cron02</code>, en weigeren alle andere gebruikers — ongeacht of hun LDAP-account verder geldig is. Fenna gebruikt dit mechanisme later, in de hardeningsfase (deel 25), om toegang tot productiemachines verder in te perken.</p>
+<div class="callout note"><span class="lbl">Troubleshoot: toegang geweigerd ondanks correct wachtwoord</span><p>Een collega van Milan meldt dat hij, na de LDAP-koppeling van <code>cron01</code>, niet meer kan inloggen met zijn LDAP-account — terwijl <code>getent passwd</code> zijn gegevens correct toont en zijn wachtwoord klopt (bevestigd door een succesvolle login op een andere machine). De meest waarschijnlijke oorzaak: hij is in LDAP niet lid van de groep <code>rapportage-team</code>, waardoor <code>pam_access.so</code> de login weigert ondanks een correct wachtwoord en een vindbaar account — de authenticatie-fase (<code>auth</code>) slaagt, maar de account-fase blokkeert.</p></div>
+<p>Controleer het groepslidmaatschap met:</p>
+<pre><code>id gebruikersnaam
+ldapsearch -x -b "cn=rapportage-team,ou=groups,dc=meridiaan,dc=local"</code></pre>
+<p>Ontbreekt de collega inderdaad in de LDAP-groep, dan lost een LDIF-wijziging het op:</p>
+<pre><code>dn: cn=rapportage-team,ou=groups,dc=meridiaan,dc=local
+changetype: modify
+add: memberUid
+memberUid: gebruikersnaam</code></pre>
+<p>Toegepast met <code>ldapmodify -x -D "cn=admin,dc=meridiaan,dc=local" -W -f wijziging.ldif</code>. Na deze wijziging (en eventueel een <code>sudo sss_cache -E</code> op de client om de cache te legen) zou de login moeten slagen.</p>
+<h3>Samenvatting</h3>
+<ul>
+<li>Lokaal gebruikersbeheer per machine schaalt niet: elke wijziging moet apart, met risico op UID/GID-drift en gemiste accounts bij vertrek.</li>
+<li>LDAP is een boomstructuur (DIT) van objecten, elk uniek geadresseerd via een DN; wijzigingen verlopen via LDIF en <code>ldapadd</code>/<code>ldapmodify</code>/<code>ldapsearch</code>.</li>
+<li><code>posixAccount</code> en <code>posixGroup</code> maken een LDAP-directory bruikbaar als netwerkversie van <code>/etc/passwd</code> en <code>/etc/group</code>.</li>
+<li>NSS (<code>/etc/nsswitch.conf</code>) bepaalt waar identiteitsgegevens vandaan komen; <code>sssd</code> is de moderne, cachende voorkeursroute om een client aan LDAP te koppelen.</li>
+<li>PAM regelt authenticatie via een stapel modules per managementgroep; de control-vlag bepaalt hoe de stack met falen en slagen omgaat.</li>
+<li>Lokale authenticatie (<code>pam_unix.so</code>) blijft altijd als eerste stap staan, zodat een LDAP-storing nooit de root-toegang blokkeert.</li>
+</ul>
+      </div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 24</h3>
+      <p>Deel 24: Pakketbeheer verdieping — eigen repositories bouwen.</p>
+      <a class="btn" href="deel-24.html">Deel 24 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 23 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_lsb23_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

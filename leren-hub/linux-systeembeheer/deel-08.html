@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 8 — Software installeren: package managers | Eductus</title>
+<meta name="description" content="Hoe installeert u software op een Linux-server zonder de rommel van handmatige .exe-installaties? Dit deel behandelt apt op Ubuntu (update, upgrade, install, remove, purge), pakketinformatie opvragen, repositories als vertrouwde bron, en de functioneel gelijkwaardige alternatieven dnf en pacman.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-08.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 8 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 1 (Fundament) · Deel 8 van 30</p>
+  <h1>Software installeren<br><em>apt, repositories, en de rest van de familie.</em></h1>
+  <p class="hero__lead">Milan is gewend software op Windows te installeren met "Volgende, Volgende, Voltooien". Op een Linux-server werkt dat niet: een pakketbeheerder houdt centraal bij welke software er staat, lost afhankelijkheden automatisch op, en kan alles ook weer netjes verwijderen. Dit deel behandelt <code>apt</code> op Ubuntu — de eerste keer dat u het systeem daadwerkelijk wijzigt — en de functioneel gelijkwaardige alternatieven <code>dnf</code> en <code>pacman</code>.</p>
+  <div class="hero__stats"><div class="stat"><b>5</b><span>secties</span></div><div class="stat"><b>±1u</b><span>reader + werkboek</span></div><div class="stat"><b>5</b><span>controlevragen</span></div><div class="stat"><b>N1</b><span>Fundament</span></div></div>
+  <div class="trail">Niveau 1 · Fundament: ① Introductie &rarr; ② Pi &rarr; ③ VM macOS &rarr; ④ VM Windows &rarr; ⑤ Cursus volgen &rarr; ⑥ Eerste commando &rarr; ⑦ Shell &amp; terminal &rarr; <b>⑧ Package managers (hier)</b> &rarr; ⑨ Bestandssysteem &rarr; ⑩ Bestanden bekijken &amp; proefexamen</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Het probleem dat een pakketbeheerder oplost</a></li>
+<li><a href="#s2" data-target="s2">apt: de basiscommando's</a></li>
+<li><a href="#s3" data-target="s3">Zoeken en pakketinformatie opvragen</a></li>
+<li><a href="#s4" data-target="s4">Repositories: waar komt software vandaan?</a></li>
+<li><a href="#s5" data-target="s5">Andere distributies: dnf en pacman</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Het probleem dat een pakketbeheerder oplost</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Milan is gewend software op Windows te installeren door een <code>.exe</code> te downloaden en "Volgende, Volgende, Voltooien" te klikken. Fenna legt hem uit waarom dat op een Linux-server geen goed idee is: elk los gedownload installatieprogramma brengt zijn eigen versie van afhankelijkheden mee, houdt zelf niets bij over updates, en laat bij verwijderen vaak rommel achter.</p>
+<p>Een <strong>pakketbeheerder</strong> (package manager) lost dit centraal op: hij houdt een catalogus bij van beschikbare software (het <strong>repository</strong>), controleert en installeert <strong>afhankelijkheden</strong> automatisch, registreert precies welke bestanden bij welk pakket horen, en kan software dus ook weer volledig en netjes verwijderen. Op serverniveau is dit niet optioneel maar noodzakelijk — een productieomgeving met tientallen handmatig geïnstalleerde programma's zonder centrale registratie is binnen een jaar onbeheersbaar.</p>
+<p>Ubuntu (en Debian, waarop Ubuntu is gebaseerd) gebruikt <strong>APT</strong> (Advanced Package Tool) met pakketten in het <code>.deb</code>-formaat. Dit is de hoofdlijn van deze cursus.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">apt: de basiscommando's</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Alle commando's die het systeem daadwerkelijk wijzigen, vereisen <code>sudo</code> (root-rechten — deel 11 gaat hier dieper op in; voor nu: typ <code>sudo</code> vóór commando's die iets installeren, verwijderen of bijwerken).</p>
+<pre><code>sudo apt update              # ververst de lokale lijst van beschikbare pakketten en versies
+sudo apt upgrade             # installeert beschikbare updates voor geïnstalleerde pakketten
+sudo apt install nginx       # installeert het pakket "nginx"
+sudo apt remove nginx        # verwijdert nginx, laat configuratiebestanden staan
+sudo apt purge nginx         # verwijdert nginx inclusief configuratiebestanden
+sudo apt autoremove          # verwijdert pakketten die als afhankelijkheid zijn binnengehaald en nergens meer nodig zijn</code></pre>
+<p><strong><code>apt update</code> is geen upgrade.</strong> Dit is de meest voorkomende misvatting bij nieuwe Linux-beheerders. <code>apt update</code> haalt alleen de <em>lijst</em> met beschikbare versies op bij de geconfigureerde repositories — er wordt geen enkel pakket op uw systeem aangeraakt. Pas <code>apt upgrade</code> installeert daadwerkelijk nieuwere versies van al geïnstalleerde software. De twee horen altijd na elkaar:</p>
+<pre><code>sudo apt update && sudo apt upgrade -y</code></pre>
+<p>Het <code>&amp;&amp;</code>-teken (behandeld in deel 13) zorgt dat <code>upgrade</code> alleen start als <code>update</code> succesvol was; <code>-y</code> beantwoordt de bevestigingsvraag automatisch met "ja", nuttig in scripts maar gebruik dit bewust — op een systeem dat u nog niet goed kent, is het eerste keer zonder <code>-y</code> verstandiger, zodat u ziet wat er precies wordt gewijzigd.</p>
+<div class="callout warn"><span class="lbl">remove versus purge</span><p><code>remove</code> verwijdert het pakket maar laat configuratiebestanden staan (statuscode <code>rc</code> in <code>dpkg -l</code>); <code>purge</code> verwijdert ook die configuratie. Gebruik <code>remove</code> bij tijdelijk weghalen met kans op herinstallatie, <code>purge</code> bij definitief opschonen van een server.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevragen</div><p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.1 en 8.3</p>
+<details class="q"><summary><span class="qn">1</span><span>Waarom kan <code>apt upgrade</code> "0 upgraded" tonen terwijl er wel degelijk updates beschikbaar zijn?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Omdat <code>apt update</code> niet vooraf is uitgevoerd: de lokale pakketlijst is dan verouderd, waardoor <code>apt</code> denkt dat er niets nieuws is. <code>apt update</code> zelf installeert niets — het ververst alleen de lijst — pas de combinatie <code>sudo apt update &amp;&amp; sudo apt upgrade -y</code> toont en installeert de daadwerkelijk beschikbare updates.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Na <code>sudo apt remove tree</code> toont <code>dpkg -l | grep tree</code> een regel die begint met <code>rc</code>. Wat betekent dat, en hoe verwijdert u dat restant volledig?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>rc</code> staat voor "removed, config remains": het pakket zelf is weg, maar configuratiebestanden staan nog op het systeem. Met <code>sudo apt purge tree</code> verwijdert u ook die resterende configuratie, waarna de regel volledig uit <code>dpkg -l</code> verdwijnt.</div></details>
+</div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Zoeken en pakketinformatie opvragen</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<pre><code>apt search grafana           # zoekt pakketten waarvan naam of omschrijving "grafana" bevat
+apt show prometheus          # toont details van een specifiek pakket: versie, grootte, afhankelijkheden, omschrijving
+apt list --installed         # toont alle geïnstalleerde pakketten
+apt list --installed | grep python3   # filtert die lijst op "python3"
+dpkg -L nginx                # toont welke bestanden het pakket nginx op schijf heeft geplaatst
+dpkg -S /usr/bin/nginx       # zoekt uit bij welk pakket een bestand hoort (omgekeerde vraag)</code></pre>
+<p><code>apt</code> is het gebruiksvriendelijke commando voor dagelijks werk; <code>dpkg</code> is het onderliggende, lagere-niveau gereedschap dat met individuele <code>.deb</code>-pakketten werkt. U gebruikt <code>dpkg</code> vooral om vragen te beantwoorden over wat er al op het systeem staat.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.2</p><details class="q"><summary><span class="qn">1</span><span>U installeerde het pakket <code>tree</code>. Met welke twee commando's vindt u het uitvoerbare bestand op schijf, en hoe bevestigt u dat dit bestand bij het pakket <code>tree</code> hoort?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>dpkg -L tree</code> toont een lijst paden, waaronder typisch <code>/usr/bin/tree</code> — dit is het uitvoerbare programma zelf; de overige regels zijn documentatie- en manualbestanden. Met <code>dpkg -S /usr/bin/tree</code> bevestigt u vervolgens met een regel als <code>tree: /usr/bin/tree</code> dat dit bestand inderdaad bij het pakket <code>tree</code> hoort — de omgekeerde vraag van <code>-L</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Repositories: waar komt software vandaan?</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Ubuntu haalt pakketten op uit <strong>repositories</strong>: online (of lokale) verzamelingen van pakketten die APT als vertrouwde bron beschouwt. Welke repositories actief zijn, staat in <code>/etc/apt/sources.list</code> en in bestanden onder <code>/etc/apt/sources.list.d/</code>.</p>
+<pre><code>cat /etc/apt/sources.list
+ls /etc/apt/sources.list.d/</code></pre>
+<p>Elke repository is digitaal ondertekend; APT controleert bij <code>apt update</code> of pakketten inderdaad van de opgegeven bron komen en niet onderweg zijn gemanipuleerd. Software toevoegen buiten de standaardrepositories om (bijvoorbeeld de officiële Grafana- of Docker-repository) betekent in de praktijk: een <code>.list</code>-bestand toevoegen én de bijbehorende ondertekeningssleutel vertrouwen. Dit onderwerp — inclusief het zelf inrichten van een repository — komt uitgebreid terug in deel 24 (pakketbeheer verdieping); voor nu is het voldoende te weten dát dit mechanisme bestaat en waarom het niet verstandig is een repository toe te voegen die u niet vertrouwt.</p>
+<div class="callout note"><span class="lbl">Fenna's regel</span><p>"Voeg nooit een repository toe die je niet kunt uitleggen aan een collega."</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.4</p><details class="q"><summary><span class="qn">1</span><span>Welke soorten componenten treft u typisch aan in <code>/etc/apt/sources.list</code> op een Ubuntu Server LTS-installatie, naast de codenaam van de release?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Naast de codenaam (bijvoorbeeld <code>jammy</code> voor 22.04 of <code>noble</code> voor 24.04) staan er componenten als <code>main</code> (door Canonical ondersteunde open-sourcesoftware), <code>universe</code> (door de gemeenschap onderhouden), <code>restricted</code> (gesloten stuurprogramma's) en <code>multiverse</code> (software met beperkingen, bijvoorbeeld licentie), plus aparte regels voor <code>-security</code> en <code>-updates</code>. Op recentere Ubuntu-versies (24.04+) kan deze informatie ook in een <code>.sources</code>-bestand in DEB822-formaat staan in plaats van in het klassieke <code>sources.list</code>-formaat — beide zijn correct, alleen technisch anders genoteerd.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Andere distributies: dnf en pacman</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>LPIC-1 en Linux+ zijn distributieneutrale certificeringen: de examens veronderstellen dat u weet dat er meerdere pakketbeheerders bestaan, ook als u dagelijks met APT werkt. De twee belangrijkste alternatieven:</p>
+<p><strong>dnf</strong> (Red Hat, Fedora, Rocky Linux, AlmaLinux) — werkt met <code>.rpm</code>-pakketten:</p>
+<pre><code>sudo dnf check-update    # equivalent van apt update (lijst verversen)
+sudo dnf upgrade         # equivalent van apt upgrade
+sudo dnf install nginx   # equivalent van apt install
+sudo dnf remove nginx    # equivalent van apt remove
+dnf search grafana       # equivalent van apt search</code></pre>
+<p><strong>pacman</strong> (Arch Linux en afgeleiden) — kent geen apart update/upgrade-onderscheid; <code>-Syu</code> doet beide in één stap:</p>
+<pre><code>sudo pacman -Syu          # synchroniseert pakketlijst én werkt het systeem bij, in één commando
+sudo pacman -S nginx      # installeert nginx
+sudo pacman -R nginx      # verwijdert nginx
+pacman -Ss grafana        # zoekt naar grafana</code></pre>
+<p>De onderliggende gedachte is bij alle drie identiek: een centrale, digitaal ondertekende catalogus, automatische afhankelijkheidsresolutie, en een duidelijke scheiding tussen "wat is beschikbaar" en "wat installeer ik nu". Het examen kan u vragen een <code>apt</code>-commando te herkennen naast zijn <code>dnf</code>- of <code>pacman</code>-equivalent — u hoeft ze niet allemaal uit uw hoofd te kennen, wel de basislogica te herkennen.</p>
+<div class="tablewrap"><table><thead><tr><th>Actie</th><th>apt</th><th>dnf</th><th>pacman</th></tr></thead><tbody>
+<tr><td>Pakketlijst verversen</td><td><code>apt update</code></td><td><code>dnf check-update</code></td><td>(onderdeel van <code>-Syu</code>)</td></tr>
+<tr><td>Updates installeren</td><td><code>apt upgrade</code></td><td><code>dnf upgrade</code></td><td><code>pacman -Syu</code></td></tr>
+<tr><td>Pakket installeren</td><td><code>apt install nginx</code></td><td><code>dnf install nginx</code></td><td><code>pacman -S nginx</code></td></tr>
+<tr><td>Pakket verwijderen</td><td><code>apt remove nginx</code></td><td><code>dnf remove nginx</code></td><td><code>pacman -R nginx</code></td></tr>
+<tr><td>Zoeken</td><td><code>apt search grafana</code></td><td><code>dnf search grafana</code></td><td><code>pacman -Ss grafana</code></td></tr>
+</tbody></table></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 8, Opdracht 8.5</p><details class="q"><summary><span class="qn">1</span><span>Waarom doet <code>pacman -Syu</code> in één commando wat <code>apt</code> in twee commando's doet?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Dit is een bewust ontwerpverschil, geen fout: Arch/pacman combineert het verversen van de pakketlijst (het <code>apt update</code>-equivalent) en het daadwerkelijk installeren van updates (het <code>apt upgrade</code>-equivalent) in één stap, terwijl APT deze twee handelingen bewust gescheiden houdt.</div></details></div>
+    </article>
+
+    <div class="finish">
+      <h3>Verder naar deel 9</h3>
+      <p>Deel 9: Het bestandssysteem — FHS, mount points, paden.</p>
+      <a class="btn" href="deel-09.html">Deel 9 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 8 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5"];
+  var KEY="eductus_lsb8_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

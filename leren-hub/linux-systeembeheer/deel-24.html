@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 24 — Pakketbeheer verdieping | Eductus</title>
+<meta name="description" content="Een eigen APT-repository opzetten en onderhouden met reprepro, ontsluiten via HTTP en signeren met GPG, plus de lichte alternatieven apt-ftparchive/dpkg-scanpackages en een zijstap naar createrepo_c op Red Hat en Fedora.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-24.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 24 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 3 (Expert) · Deel 24 van 30</p>
+  <h1>Pakketbeheer verdieping<br><em>Eigen repositories bouwen.</em></h1>
+  <p class="hero__lead">Het Rapportagecluster krijgt eigen tooling: beheerscripts en een interne Python-CLI die als <code>.deb</code> op tien tot vijftien machines terecht moeten komen, telkens in dezelfde versie. <code>scp</code> en <code>dpkg -i</code> schalen niet, een publieke PPA past niet bij de compliance-eisen van een pensioenuitvoerder. De oplossing is een eigen, interne APT-repository — dit deel bouwt die met <code>reprepro</code>, ontsluit hem via HTTP en signeert hem met GPG.</p>
+  <div class="hero__stats"><div class="stat"><b>7</b><span>secties</span></div><div class="stat"><b>±1u20</b><span>leestijd + werkboek</span></div><div class="stat"><b>4</b><span>controlevragen</span></div><div class="stat"><b>N3</b><span>Expert</span></div></div>
+  <div class="trail">Niveau 3 · Expert: ① LDAP &amp; PAM &rarr; <b>② Pakketbeheer verdieping (hier)</b> &rarr; ③ Security hardening &rarr; ④ Containers (Docker) &rarr; ⑤ Automatisering (Ansible) &rarr; ⑥ Performance monitoring &rarr; ⑦ Backup &amp; recovery &rarr; ⑧ Capstone: Rapportagecluster</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom een eigen repository</a></li>
+<li><a href="#s2" data-target="s2">De bouwstenen van een APT-repository</a></li>
+<li><a href="#s3" data-target="s3">Een repository opzetten met reprepro</a></li>
+<li><a href="#s4" data-target="s4">De repository ontsluiten en koppelen</a></li>
+<li><a href="#s5" data-target="s5">Alternatief: apt-ftparchive</a></li>
+<li><a href="#s6" data-target="s6">Zijstap: Red Hat en Fedora</a></li>
+<li><a href="#s7" data-target="s7">Beheer, updates en air-gapped</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom een eigen repository</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Milan heeft in deel 8 geleerd hoe <code>apt</code> en <code>dnf</code> pakketten uit een repository installeren. Op het Rapportagecluster bij Meridiaan Pensioen is dat tot nu toe voldoende geweest: de standaard Ubuntu-repositories dekken vrijwel alles. Maar het team bouwt inmiddels eigen tooling — een command-line hulpprogramma dat rapportagejobs valideert, een set beheerscripts die Fenna en Milan onderhouden, en een interne Python-CLI die als <code>.deb</code> wordt gebouwd. Die tools moeten op tien tot vijftien machines terechtkomen, telkens in dezelfde versie, met een controleerbare installatie- en updateroute.</p>
+<p>Fenna legt Milan de opties voor. De eerste is handmatig: het <code>.deb</code>-bestand via <code>scp</code> naar elke machine kopiëren en lokaal installeren met <code>dpkg -i</code>. Dat werkt voor één machine, maar schaalt niet — er is geen centraal overzicht van welke versie waar draait, en afhankelijkheden worden niet automatisch meegenomen. De tweede optie is een publieke PPA (Personal Package Archive) op Launchpad. Dat is voor open-source projecten een prima route, maar voor Meridiaan ongeschikt: de interne tools bevatten bedrijfslogica die niet publiek hoort te zijn, en het Rapportagecluster heeft om compliance-redenen beperkt internetverkeer naar buiten (een pensioenuitvoerder wil niet dat productieservers vrij naar het publieke internet praten). De derde optie — en die kiest het team — is een <strong>eigen, interne APT-repository</strong>: een map met pakketten en metadata, gehost op een server binnen het eigen netwerk, die cliënten net zo behandelen als <code>archive.ubuntu.com</code>.</p>
+<p>Het voordeel is drieledig. Eén: <code>apt install meridiaan-rapporttool</code> en <code>apt upgrade</code> werken zoals cursisten al gewend zijn — geen aparte tooling nodig. Twee: afhankelijkheden en versiebeheer lopen via het bestaande pakketmechanisme. Drie: de repository is te signeren, zodat cliënten kunnen verifiëren dat een pakket echt van Meridiaan komt en niet onderweg is aangepast — belangrijk in een omgeving met strikte auditvereisten.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De bouwstenen van een APT-repository</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een APT-repository is in de kern een mapstructuur met twee soorten bestanden: de pakketten zelf (<code>.deb</code>-bestanden) en metadata-bestanden die beschrijven welke pakketten er staan, met welke checksums en afhankelijkheden. Wanneer u <code>apt update</code> uitvoert, haalt de client die metadata op (<code>Packages</code>, <code>Packages.gz</code>, een <code>Release</code>-bestand met een handtekening) en bouwt daarmee lokaal een cache op. Pas bij <code>apt install</code> wordt het daadwerkelijke <code>.deb</code>-bestand gedownload.</p>
+<p>Er zijn twee gangbare manieren om die metadata te genereren:</p>
+<ul>
+<li><strong>reprepro</strong> — een volwaardig repositorybeheertool dat een complete, gestructureerde repository onderhoudt (met distributies, componenten, meerdere architecturen) en die na elke wijziging automatisch consistent herbouwt en signeert.</li>
+<li><strong>apt-ftparchive</strong> in combinatie met <strong>dpkg-scanpackages</strong> — lagere-niveau gereedschappen die alleen de metadata genereren op basis van de <code>.deb</code>-bestanden die u zelf in een map zet. Sneller op te zetten voor een eenvoudige, platte repository, maar u beheert de structuur zelf.</li>
+</ul>
+<p>Voor het Rapportagecluster kiest het team <code>reprepro</code>, omdat het een repository met meerdere Ubuntu-releases (de huidige LTS en de voorganger, voor de overgangsperiode tijdens een upgrade) op een onderhoudbare manier ondersteunt.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Een repository opzetten met reprepro</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Installeer <code>reprepro</code> en <code>gnupg</code> op de server die de repository gaat hosten:</p>
+<pre><code>sudo apt update
+sudo apt install -y reprepro gnupg</code></pre>
+<p>Maak eerst een GPG-sleutel aan waarmee de repository wordt gesigneerd. Dit gebeurt één keer, meestal onder een dienstaccount of een gedeelde teamsleutel:</p>
+<pre><code>gpg --full-generate-key</code></pre>
+<p>Kies RSA, 4096 bits, geen vervaldatum (of een lange, bewust gekozen termijn) en vul een naam en e-mailadres in, bijvoorbeeld <code>Meridiaan Infra Repo &lt;infra@meridiaan.example&gt;</code>. Noteer de key-ID:</p>
+<pre><code>gpg --list-secret-keys --keyid-format=long</code></pre>
+<p>Richt daarna de mapstructuur in die <code>reprepro</code> verwacht:</p>
+<pre><code>sudo mkdir -p /srv/repo/conf
+cd /srv/repo</code></pre>
+<p>In <code>conf/distributions</code> beschrijft u welke distributie(s) de repository bedient. Voor de huidige Ubuntu LTS-release (in dit voorbeeld <code>noble</code>):</p>
+<pre><code>Origin: Meridiaan Pensioen
+Label: Meridiaan Internal
+Codename: noble
+Architectures: amd64
+Components: main
+Description: Interne pakketten Team Infrastructuur &amp; Platform
+SignWith: 3F2A9C1B4E5D6A70</code></pre>
+<p><code>SignWith</code> bevat de key-ID van de zojuist aangemaakte GPG-sleutel. Initialiseer de repository:</p>
+<pre><code>cd /srv/repo
+reprepro export noble</code></pre>
+<p>Bij een lege repository maakt dit commando de metadata-structuur (<code>dists/noble/...</code>) aan, ook zonder pakketten. Voeg nu een zelfgebouwd <code>.deb</code>-pakket toe:</p>
+<pre><code>reprepro includedeb noble /pad/naar/meridiaan-rapporttool_1.4.0_amd64.deb</code></pre>
+<p><code>reprepro</code> kopieert het pakket naar <code>pool/main/</code>, werkt de <code>Packages</code>-bestanden bij, herbouwt het <code>Release</code>-bestand en signeert dat automatisch met de sleutel uit <code>SignWith</code>. Controleer de inhoud:</p>
+<pre><code>reprepro list noble</code></pre>
+<p>Bij een nieuwe versie van hetzelfde pakket herhaalt u <code>includedeb</code>; <code>reprepro</code> vervangt de oude versie in de metadata (het oude <code>.deb</code>-bestand blijft desgewenst staan voor rollback, afhankelijk van de gekozen retentie-instellingen).</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 24, Opdracht 24.2 / Uitwerking 24.2</p><details class="q"><summary><span class="qn">1</span><span>Welke minimale velden bevat het <code>DEBIAN/control</code>-bestand van een zelfgebouwd <code>.deb</code>-pakket, en met welk commando bouwt en publiceert u het daarna?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Minimaal <code>Package</code>, <code>Version</code>, <code>Architecture</code>, <code>Maintainer</code> en <code>Description</code>. Het pakket wordt gebouwd met <code>dpkg-deb --build &lt;mapnaam&gt;</code> en gepubliceerd met <code>reprepro includedeb &lt;codenaam&gt; &lt;pakket&gt;.deb</code>. Een geslaagde publicatie is te controleren met <code>reprepro list &lt;codenaam&gt;</code>, dat een regel toont in de vorm <code>&lt;codenaam&gt;|main|amd64: &lt;pakketnaam&gt; &lt;versie&gt;</code>.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">De repository ontsluiten en op een cliënt toevoegen</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>De repository is nu een mapstructuur onder <code>/srv/repo</code>. Ontsluit die via een eenvoudige webserver, bijvoorbeeld nginx:</p>
+<pre><code>sudo apt install -y nginx
+sudo tee /etc/nginx/sites-available/repo.conf &lt;&lt;'EOF'
+server {
+    listen 80;
+    server_name repo.intern.meridiaan.example;
+    root /srv/repo;
+    autoindex on;
+}
+EOF
+sudo ln -s /etc/nginx/sites-available/repo.conf /etc/nginx/sites-enabled/
+sudo systemctl reload nginx</code></pre>
+<p>Op elke cliëntmachine die de repository moet gebruiken, importeert u eerst de publieke sleutel en zet die op een vaste plek:</p>
+<pre><code>curl -fsSL http://repo.intern.meridiaan.example/meridiaan-repo.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/meridiaan-repo.gpg</code></pre>
+<p>(De publieke sleutel exporteert u op de repositoryserver met <code>gpg --armor --export &lt;key-id&gt; &gt; /srv/repo/meridiaan-repo.gpg</code>, zodat cliënten hem via HTTP kunnen ophalen.)</p>
+<p>Voeg vervolgens de repository toe als bron. De moderne, aanbevolen manier is een <code>sources.list.d</code>-bestand met een expliciete <code>signed-by</code>-verwijzing naar de keyring — dit vervangt het oudere, systeembrede <code>apt-key add</code>, dat sinds Ubuntu 22.04 als verouderd geldt omdat het elke geïmporteerde sleutel systeembreed vertrouwt in plaats van alleen voor die ene bron:</p>
+<pre><code>sudo tee /etc/apt/sources.list.d/meridiaan.list &lt;&lt;'EOF'
+deb [signed-by=/usr/share/keyrings/meridiaan-repo.gpg] http://repo.intern.meridiaan.example noble main
+EOF
+sudo apt update
+sudo apt install meridiaan-rapporttool</code></pre>
+<p><code>apt update</code> haalt nu de metadata op, controleert de handtekening tegen de opgegeven keyring en toont een foutmelding als die niet klopt — precies het gedrag dat Meridiaan's auditors verwachten van een interne softwarebron.</p>
+<div class="callout warn"><span class="lbl">Troubleshoot: signed-by ontbreekt of wijst verkeerd</span><p>Bij een ontbrekende of foutieve <code>signed-by</code>-verwijzing meldt <code>apt update</code> een fout in de trant van "NO_PUBKEY" of "The following signatures couldn't be verified because the public key is not available", en weigert het de repository te gebruiken totdat de keyring correct staat. De oplossing is de sleutel opnieuw exporteren en importeren, en het pad in <code>signed-by</code> exact te laten overeenkomen met het bestand op schijf.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Deel 24 — reader §24.4</p><details class="q"><summary><span class="qn">1</span><span>Waarom is een <code>sources.list.d</code>-bestand met een expliciete <code>signed-by</code>-verwijzing te verkiezen boven het oudere <code>apt-key add</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>apt-key add</code> vertrouwt een geïmporteerde sleutel systeembreed: die sleutel mag dan élke repository op het systeem ondertekenen, niet alleen degene waarvoor hij bedoeld was. Een <code>signed-by</code>-verwijzing in het bronbestand koppelt de sleutel expliciet aan die ene bron, zodat een gecompromitteerde of foutief vertrouwde sleutel niet automatisch andere repositories kan meetekenen. Sinds Ubuntu 22.04 geldt <code>apt-key</code> daarom als verouderd.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Alternatief: apt-ftparchive en dpkg-scanpackages</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Voor een eenvoudige, platte repository zonder de structuur van <code>reprepro</code> (bijvoorbeeld een tijdelijke repository voor één testcluster) volstaat <code>dpkg-scanpackages</code>:</p>
+<pre><code>mkdir -p /srv/repo-simple/pool
+cp *.deb /srv/repo-simple/pool/
+cd /srv/repo-simple
+dpkg-scanpackages pool /dev/null | gzip -9c &gt; pool/Packages.gz</code></pre>
+<p><code>apt-ftparchive</code> kan hetzelfde, en voegt er een <code>Release</code>-bestand aan toe:</p>
+<pre><code>apt-ftparchive packages pool &gt; pool/Packages
+apt-ftparchive release . &gt; Release
+gpg --default-key 3F2A9C1B4E5D6A70 --detach-sign --armor -o Release.gpg Release</code></pre>
+<p>Fenna wijst Milan erop dat dit precies laat zien wat <code>reprepro</code> voor u automatiseert: het genereren van <code>Packages</code>, het bouwen van een <code>Release</code>-bestand en het signeren daarvan met <code>gpg --detach-sign</code>. Voor een repository die vaker wijzigt en meerdere componenten of releases bedient, is <code>reprepro</code> de onderhoudbaardere keuze; voor een eenmalige, kleine set pakketten is de handmatige route sneller opgezet.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 24, Opdracht 24.4 / Uitwerking 24.4</p><details class="q"><summary><span class="qn">1</span><span>Welke stappen doet <code>reprepro includedeb</code> automatisch, die u bij de <code>apt-ftparchive</code>-route zelf handmatig uitvoert?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>reprepro includedeb</code> kopieert het <code>.deb</code>-bestand naar <code>pool/</code>, genereert het bijbehorende <code>Packages</code>-bestand, bouwt het <code>Release</code>-bestand opnieuw op basis van de checksums van alle metadata, en signeert dat <code>Release</code>-bestand met de sleutel uit <code>SignWith</code> — in één commando. Bij de <code>apt-ftparchive</code>-route voert u het scannen (<code>dpkg-scanpackages</code> of <code>apt-ftparchive packages</code>), het genereren van het <code>Release</code>-bestand (<code>apt-ftparchive release</code>) en het signeren (<code>gpg --detach-sign</code>) elk apart uit, en moet u dat bij elke wijziging herhalen.</div></details>
+<details class="q"><summary><span class="qn">2</span><span>Wat verandert er als de repository niet één maar drie Ubuntu-releases tegelijk moet bedienen, bijvoorbeeld tijdens een geleidelijke LTS-upgrade van het cluster?</span><span class="qx">Toon antwoord</span></summary><div class="ans">Met <code>reprepro</code> moet <code>conf/distributions</code> meerdere <code>Codename</code>-blokken bevatten, gescheiden door een lege regel, en voert u <code>includedeb</code> per doelrelease uit — <code>reprepro</code> houdt de metadata van elke distributie apart bij. Bij de handmatige <code>apt-ftparchive</code>-route zou u zelf aparte mapstructuren per release moeten onderhouden, wat foutgevoeliger wordt naarmate het aantal releases groeit.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Zijstap: repositories op Red Hat en Fedora</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>LFCE is distributie-neutraal, en Meridiaan draait weliswaar Ubuntu Server op het Rapportagecluster, maar Fenna laat Milan ook de Red Hat/Fedora-route zien — die komt in het examen terug en in de praktijk ontmoet Milan die bij klanten die RHEL of Rocky Linux draaien.</p>
+<p>Het RPM-equivalent van <code>reprepro</code>/<code>apt-ftparchive</code> is <code>createrepo_c</code>. Installatie en gebruik:</p>
+<pre><code>sudo dnf install -y createrepo_c
+mkdir -p /srv/repo-rpm
+cp *.rpm /srv/repo-rpm/
+createrepo_c /srv/repo-rpm/</code></pre>
+<p>Dit genereert een <code>repodata/</code>-map met XML-metadata — functioneel vergelijkbaar met de <code>Packages</code>-bestanden van APT. Na een wijziging in de mapinhoud herhaalt u het commando, of gebruikt u <code>--update</code> om alleen de wijzigingen te verwerken:</p>
+<pre><code>createrepo_c --update /srv/repo-rpm/</code></pre>
+<p>Op de client registreert u de repository via een <code>.repo</code>-bestand in <code>/etc/yum.repos.d/</code>:</p>
+<pre><code>[meridiaan-internal]
+name=Meridiaan Interne Pakketten
+baseurl=http://repo.intern.meridiaan.example/repo-rpm/
+enabled=1
+gpgcheck=1
+gpgkey=http://repo.intern.meridiaan.example/RPM-GPG-KEY-meridiaan</code></pre>
+<p>Installeren gaat dan via het vertrouwde <code>dnf</code>:</p>
+<pre><code>sudo dnf install meridiaan-rapporttool</code></pre>
+<p>De kernstructuur is hetzelfde als bij APT: een map met pakketten, gegenereerde metadata, een GPG-handtekening en een cliëntconfiguratie die naar die bron verwijst. De naamgeving verschilt (<code>Packages</code> versus <code>repodata</code>, <code>sources.list.d</code> versus <code>yum.repos.d</code>), het principe niet.</p>
+<div class="tablewrap"><table><thead><tr><th>Aspect</th><th>Debian/Ubuntu (APT)</th><th>Red Hat/Fedora (DNF)</th></tr></thead><tbody>
+<tr><td>Beheertool</td><td><code>reprepro</code> / <code>apt-ftparchive</code></td><td><code>createrepo_c</code></td></tr>
+<tr><td>Metadata</td><td><code>Packages</code>, <code>Release</code></td><td><code>repodata/*.xml</code></td></tr>
+<tr><td>Cliëntconfiguratie</td><td><code>.list</code> in <code>/etc/apt/sources.list.d/</code></td><td><code>.repo</code> in <code>/etc/yum.repos.d/</code></td></tr>
+<tr><td>Signeersleutel-verwijzing</td><td><code>signed-by</code></td><td><code>gpgkey</code> + <code>gpgcheck=1</code></td></tr>
+</tbody></table></div>
+      </div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Beheer, updates en air-gapped overwegingen</h2><span class="chip time">⏱ 9 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een interne repository vraagt om onderhoud: nieuwe pakketversies toevoegen, oude versies op een bewuste termijn opruimen, en de repository zelf beschikbaar houden. Fenna's checklist voor Milan bij elke release van een intern pakket:</p>
+<ul>
+<li>bouw het <code>.deb</code>-bestand met een consistent versienummer (semantic versioning, geen <code>-latest</code>-tags die de geschiedenis onduidelijk maken);</li>
+<li>voer <code>reprepro includedeb</code> uit en controleer met <code>reprepro list</code> dat de nieuwe versie zichtbaar is;</li>
+<li>test de installatie op een niet-productiemachine voordat de repository breed wordt uitgerold (<code>apt update &amp;&amp; apt install --only-upgrade meridiaan-rapporttool</code>);</li>
+<li>documenteer de wijziging kort in het teamlogboek, zodat een storing achteraf te herleiden is naar een specifieke pakketversie.</li>
+</ul>
+<p>Bij Meridiaan speelt daarnaast de compliance-context mee: het Rapportagecluster heeft beperkt uitgaand internetverkeer, en de eigen repository is bewust de enige bron die cliënten daar mogen benaderen naast de officiële Ubuntu-spiegels. Voor omgevingen die volledig air-gapped zijn (geen internettoegang, zoals sommige gevoelige verwerkingsomgevingen), is dezelfde <code>reprepro</code>-structuur bruikbaar als volledige, offline mirror: pakketten worden dan op een aangesloten machine gedownload en via een gecontroleerde overdracht naar de afgesloten omgeving gebracht, waar <code>reprepro</code> ze in de lokale repository opneemt. De repository-mechaniek verandert niet — alleen de manier waarop pakketten er binnenkomen.</p>
+<div class="callout"><span class="lbl">Casus: repositorybeleid voor het Rapportagecluster</span><p>Fenna vraagt Milan een kort voorstel voor hoe Team Infrastructuur &amp; Platform de interne repository gaat beheren. Een sterk voorstel benoemt in elk geval: een dienstaccount (geen persoonlijke sleutel) voor het signeren, een gedocumenteerde procedure voor sleutelrotatie inclusief het opnieuw uitrollen van de publieke sleutel naar alle cliënten, een testfase op een acceptatiemachine vóórdat een nieuwe versie breed wordt uitgerold — zodat een kwetsbare of kapotte versie niet direct op productie belandt — en de repository als de enige toegestane uitgaande softwarebron naast de officiële Ubuntu-spiegels, passend bij het beperkte uitgaande verkeer op het Rapportagecluster.</p></div>
+<h3>Samenvatting</h3>
+<ul>
+<li>Een eigen APT-repository is voor Meridiaan de aangewezen route voor interne tools: het hergebruikt het bestaande pakketmechanisme, ondersteunt versiebeheer en is te signeren voor auditeerbaarheid.</li>
+<li><code>reprepro</code> beheert een complete, gestructureerde repository (distributies, componenten, architecturen) en signeert automatisch via <code>SignWith</code> in <code>conf/distributions</code>.</li>
+<li>Cliënten voegen de repository toe via een bestand in <code>sources.list.d</code> met een expliciete <code>signed-by</code>-verwijzing naar een keyring; dit vervangt het verouderde, systeembrede <code>apt-key</code>.</li>
+<li><code>apt-ftparchive</code> en <code>dpkg-scanpackages</code> zijn lichtgewicht alternatieven voor een eenvoudige, platte repository zonder de structuur van <code>reprepro</code>.</li>
+<li>Op Red Hat/Fedora is <code>createrepo_c</code> het equivalent, met <code>.repo</code>-bestanden in <code>/etc/yum.repos.d/</code> als cliëntconfiguratie — dezelfde principes, andere bestandsnamen.</li>
+<li>In een omgeving met beperkt internetverkeer functioneert dezelfde repositorystructuur ook als gecontroleerde, (deels) offline pakketbron.</li>
+</ul>
+      </div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 25</h3>
+      <p>Deel 25: Security hardening — SSH, fail2ban en SELinux/AppArmor.</p>
+      <a class="btn" href="deel-25.html">Deel 25 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 24 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7"];
+  var KEY="eductus_lsb24_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

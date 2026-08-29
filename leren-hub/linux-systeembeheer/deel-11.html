@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 11 — Users, groups & permissions | Eductus</title>
+<meta name="description" content="Het eerste deel van niveau 2: gebruikers en groepen beheren met useradd, usermod en groupadd, de opbouw van /etc/passwd, /etc/shadow en /etc/group, permissies lezen en berekenen met chmod, eigenaarschap wijzigen met chown en chgrp, sudo correct configureren via visudo, en de speciale bits SUID, SGID en sticky bit.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-11.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 11 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 2 (Professional) · Deel 11 van 30</p>
+  <h1>Users, groups &amp; permissions<br><em>Wie mag wat, en waarom.</em></h1>
+  <p class="hero__lead">Dit is het eerste deel van niveau 2: de casus verschuift van uw eigen homelab naar het Rapportagecluster bij Meridiaan Pensioen, een omgeving die u met collega's deelt. Dit deel legt de basis die daarvoor nodig is: gebruikers en groepen beheren, permissies lezen en berekenen, eigenaarschap wijzigen, sudo correct inzetten en de speciale permissiebits herkennen.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±70 min</b><span>reader + werkboek</span></div><div class="stat"><b>5</b><span>controlevragen</span></div><div class="stat"><b>N2</b><span>Professional</span></div></div>
+  <div class="trail">Niveau 2 · Professional: <b>① Users, groups &amp; permissions (hier)</b> &rarr; ② Vi(m)-basis &rarr; ③ Input/output &amp; pipes &rarr; ④ Processen &rarr; ⑤ SSH &rarr; ⑥ Tmux &rarr; ⑦ Dotfiles &amp; customization &rarr; ⑧ Netwerken &rarr; ⑨ systemd &amp; services &rarr; ⑩ Opslag &rarr; ⑪ Bash-scripting &rarr; ⑫ Cron &amp; geplande taken</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom dit deel er nu staat</a></li>
+<li><a href="#s2" data-target="s2">Gebruikers en groepen: de basis</a></li>
+<li><a href="#s3" data-target="s3">Permissies: rwx voor owner, group, other</a></li>
+<li><a href="#s4" data-target="s4">Eigenaar en groep wijzigen: chown en chgrp</a></li>
+<li><a href="#s5" data-target="s5">sudo: gecontroleerde verhoging van rechten</a></li>
+<li><a href="#s6" data-target="s6">SUID, SGID en de sticky bit</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom dit deel er nu staat</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Niveau 1 eindigde met bestanden bekijken en bewerken op een systeem waar u zelf de enige gebruiker was — uw eigen Raspberry Pi of VM. Vanaf dit deel werkt u toe naar een omgeving waarin dat niet meer zo is: het <strong>Rapportagecluster</strong> bij Meridiaan Pensioen, een klein cluster Ubuntu Server-machines waarop straks meerdere teamleden en diensten naast elkaar draaien.</p>
+<p>Fenna Oudshoorn, senior systeembeheerder bij Team Infrastructuur &amp; Platform, geeft Milan Struik bij de start van niveau 2 een simpele opdracht mee: "Voordat je één service op het cluster zet, wil ik dat je kunt uitleggen wie er iets mag en waarom." Dat is precies de inhoud van dit deel.</p>
+<div class="callout note"><span class="lbl">Waarom dit ertoe doet</span><p>Permissiebeheer is niet de meest opwindende stof in de cursus, maar het is de stof waar de meeste productie-incidenten uit voortkomen: een verkeerd gezette permissie op een configuratiebestand, een service die per ongeluk als root draait, een gedeelde map waar iedereen alles mag.</p></div>
+
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">Gebruikers en groepen: de basis</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elk Linux-systeem kent gebruikers (users) en groepen (groups). Een gebruiker heeft altijd een primaire groep en kan daarnaast lid zijn van nul of meer aanvullende (secundaire) groepen.</p>
+<p>Een nieuwe gebruiker aanmaken:</p>
+<pre><code>sudo useradd -m -s /bin/bash milan
+sudo passwd milan</code></pre>
+<p>De vlag <code>-m</code> maakt een thuismap aan (<code>/home/milan</code>), <code>-s /bin/bash</code> stelt de inlogshell in. Zonder <code>-m</code> bestaat de gebruiker wel, maar heeft hij geen thuismap — nuttig voor systeemaccounts die nooit interactief inloggen, minder nuttig voor een collega.</p>
+<p>Een gebruiker aan een groep toevoegen:</p>
+<pre><code>sudo usermod -aG sudo milan</code></pre>
+<div class="callout warn"><span class="lbl">Let op</span><p>De combinatie <code>-aG</code> is essentieel: <code>-a</code> (append) voegt toe zonder de bestaande groepslidmaatschappen te verwijderen, <code>-G</code> geeft de lijst met aanvullende groepen. Vergeet u <code>-a</code>, dan overschrijft <code>usermod -G</code> alle secundaire groepslidmaatschappen van de gebruiker met de nieuwe lijst — een klassieke fout die Fenna Milan in zijn eerste week laat ervaren op een testmachine, juist omdat het op een gedeeld cluster onherstelbaar vervelend kan zijn.</p></div>
+<p>Een groep aanmaken en een gebruiker verwijderen:</p>
+<pre><code>sudo groupadd rapportage-team
+sudo userdel -r milan</code></pre>
+<p><code>-r</code> bij <code>userdel</code> verwijdert ook de thuismap en de mailbox van de gebruiker. Zonder <code>-r</code> blijft die data staan — soms gewenst (bewaarplicht, overdracht), soms een lek dat niemand opmerkt.</p>
+<h3>/etc/passwd, /etc/shadow en /etc/group</h3>
+<p><code>/etc/passwd</code> bevat één regel per gebruiker, met zeven velden gescheiden door dubbele punten:</p>
+<pre><code>milan:x:1001:1001:Milan Struik:/home/milan:/bin/bash</code></pre>
+<p>Achtereenvolgens: gebruikersnaam, wachtwoordplaatshouder (<code>x</code>, het echte hash-wachtwoord staat elders), UID, GID van de primaire groep, GECOS-veld (vrije naam/omschrijving), thuismap, inlogshell.</p>
+<p>Het wachtwoord zelf — gehasht, nooit in leesbare vorm — staat in <code>/etc/shadow</code>, een bestand dat alleen door root leesbaar is:</p>
+<pre><code>milan:$6$abcd1234$hash...:19800:0:99999:7:::</code></pre>
+<p><code>/etc/group</code> volgt hetzelfde patroon voor groepen:</p>
+<pre><code>sudo:x:27:milan,fenna</code></pre>
+<p>Groepsnaam, plaatshouder, GID, kommagescheiden lijst van secundaire leden.</p>
+<pre><code>id milan
+groups milan</code></pre>
+<p><code>id</code> toont UID, GID en alle groeps-ID's van een gebruiker in één keer; <code>groups</code> toont alleen de groepsnamen. Beide zijn de eerste commando's die u draait als iets "geen toegang" geeft en u niet weet waarom.</p>
+
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.1c/d en Uitwerking 11.1</p><details class="q"><summary><span class="qn">1</span><span>Hoe voegt u de gebruiker <code>fenna</code> toe aan de groep <code>platform-team</code> zonder haar bestaande groepslidmaatschappen te verliezen, en hoe controleert u met één commando in welke groepen ze nu zit?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>sudo usermod -aG platform-team fenna</code> — de <code>-a</code> is noodzakelijk, zonder die vlag verliest Fenna elke andere secundaire groep waarin ze al zat. Controleren met <code>groups fenna</code> of <code>id fenna</code> (dit laatste toont ook de UID/GID's numeriek).</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Permissies: rwx voor owner, group, other</h2><span class="chip time">⏱ 15 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elk bestand en elke map heeft drie sets rechten: voor de eigenaar (owner/user), voor de groep (group) en voor iedereen anders (other). Elke set kent drie rechten: lezen (read, r), schrijven (write, w) en uitvoeren (execute, x).</p>
+<pre><code>ls -l /etc/ssh/sshd_config</code></pre>
+<pre><code>-rw-r----- 1 root root 3624 aug 20 09:14 /etc/ssh/sshd_config</code></pre>
+<p>Het eerste teken geeft het bestandstype aan (<code>-</code> regulier bestand, <code>d</code> map, <code>l</code> symbolische link). Daarna volgen drie groepjes van drie: <code>rw-</code> voor owner, <code>r--</code> voor group, <code>---</code> voor other.</p>
+<p>Voor een map betekent <code>x</code> iets anders dan bij een bestand: geen "uitvoeren" maar "erin kunnen navigeren" (bijvoorbeeld met <code>cd</code>). Een map met <code>r--</code> maar zonder <code>x</code> laat u de bestandsnamen zien via <code>ls</code>, maar u kunt niet in de map komen of de bestanden erin openen. Dat verschil is een veelvoorkomende bron van verwarring.</p>
+<h3>Octale notatie</h3>
+<p>Elk recht heeft een getalswaarde: r=4, w=2, x=1. Per blok telt u ze op: <code>rwx</code> = 7, <code>rw-</code> = 6, <code>r-x</code> = 5, <code>r--</code> = 4. De drie blokken samen vormen het bekende driecijferige getal, bijvoorbeeld <code>755</code> (owner: rwx, group: r-x, other: r-x) of <code>640</code> (owner: rw-, group: r--, other: geen rechten).</p>
+<pre><code>chmod 755 deploy.sh
+chmod 640 /etc/rapportage/database.conf</code></pre>
+<p>Symbolische notatie is even geldig en soms duidelijker als u maar één blok wilt wijzigen:</p>
+<pre><code>chmod u+x deploy.sh
+chmod g-w gedeelde-map/
+chmod o=r rapport.csv</code></pre>
+<p><code>u</code>, <code>g</code>, <code>o</code> (en <code>a</code> voor alle drie) gecombineerd met <code>+</code>, <code>-</code> of <code>=</code> en de letters <code>r</code>, <code>w</code>, <code>x</code>.</p>
+<div class="callout tip"><span class="lbl">Fenna's vuistregel</span><p>Beredeneer eerst wie iets nodig heeft, kies dan het getal — nooit andersom. <code>chmod 777</code> lost bijna elk toegangsprobleem "op", en is bijna altijd fout: het geeft schrijf- en uitvoerrechten aan elke gebruiker op het systeem, ook aan diensten die daar niets te zoeken hebben.</p></div>
+
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.2 en Uitwerking 11.2</p><details class="q"><summary><span class="qn">1</span><span>Bereken het octale getal en het bijbehorende <code>chmod</code>-commando voor: een gedeelde map waarin eigenaar en groep alles mogen (lezen, schrijven, erin navigeren) en anderen alleen mogen lezen en navigeren.</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>775</code> — <code>chmod 775 gedeelde-map/</code>. Owner rwx (7), group rwx (7), other r-x (5, lezen en navigeren zonder wijzigen).</div></details><details class="q"><summary><span class="qn">2</span><span>En voor: een script dat alleen de eigenaar mag lezen, schrijven en uitvoeren, en niemand anders iets?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>700</code> — <code>chmod 700 script.sh</code>. Owner rwx (7), group niets (0), other niets (0).</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Eigenaar en groep wijzigen: chown en chgrp</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<pre><code>sudo chown fenna rapport.csv
+sudo chown fenna:rapportage-team rapport.csv
+sudo chgrp rapportage-team rapport.csv
+sudo chown -R milan:rapportage-team /srv/rapportage/</code></pre>
+<p><code>chown gebruiker:groep</code> wijzigt beide in één keer; <code>chgrp</code> wijzigt alleen de groep. <code>-R</code> werkt recursief door een hele mapstructuur — gebruik die vlag met aandacht, want op een gedeelde map met bestanden van meerdere eigenaren overschrijft u in één klap alle eigenaarschap.</p>
+<h3>Casus: de gedeelde rapportagemap</h3>
+<p>Fenna vraagt Milan een map in te richten waarin het hele team rapportagebestanden mag lezen en schrijven, maar waarin bestanden van anderen niet per ongeluk verwijderd kunnen worden. De aanpak:</p>
+<pre><code>sudo mkdir /srv/rapportage
+sudo chown root:rapportage-team /srv/rapportage
+sudo chmod 2775 /srv/rapportage</code></pre>
+<p><code>2775</code> combineert <code>775</code> (owner rwx, group rwx, other r-x) met de SGID-bit (het voorloopcijfer <code>2</code>). Sectie 6 laat zien wat die bit doet en waarom hij hier nodig is.</p>
+
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.3 en Uitwerking 11.3</p><details class="q"><summary><span class="qn">1</span><span>Richt <code>/srv/rapportage</code> zo in dat alle leden van groep <code>platform-team</code> bestanden mogen lezen en schrijven, nieuwe bestanden automatisch bij <code>platform-team</code> horen, en andere gebruikers alleen mogen lezen. Welke commando's gebruikt u, en wat verwacht u als resultaat van <code>ls -ld</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><pre><code>sudo mkdir -p /srv/rapportage
+sudo chown root:platform-team /srv/rapportage
+sudo chmod 2775 /srv/rapportage
+ls -ld /srv/rapportage</code></pre>Verwacht resultaat: <code>drwxrwsr-x ... root platform-team /srv/rapportage</code>. De <code>s</code> op de groepspositie (in plaats van <code>x</code>) toont dat de SGID-bit actief is: nieuwe bestanden in deze map erven automatisch de groep <code>platform-team</code>, ongeacht de primaire groep van wie het bestand aanmaakt. De <code>775</code> regelt dat owner en groep volledige rechten hebben en anderen alleen mogen lezen en navigeren, niet schrijven.</div></details></div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">sudo: gecontroleerde verhoging van rechten</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Direct inloggen als root is op een productieomgeving zoals het Rapportagecluster niet de praktijk. In plaats daarvan krijgen beheerders via <code>sudo</code> tijdelijk en gelogd rechten om als root (of een andere gebruiker) commando's uit te voeren.</p>
+<pre><code>sudo systemctl restart nginx
+sudo -u postgres psql
+sudo -i</code></pre>
+<p><code>sudo commando</code> voert één commando uit met verhoogde rechten. <code>sudo -u gebruiker commando</code> voert het uit als een andere gebruiker dan root. <code>sudo -i</code> opent een volledige rootshell — krachtig, en dus spaarzaam te gebruiken.</p>
+<p>Wie welke commando's mag uitvoeren, staat in <code>/etc/sudoers</code> en in bestanden onder <code>/etc/sudoers.d/</code>.</p>
+<div class="callout warn"><span class="lbl">Nooit met een gewone editor</span><p>Bewerk <code>/etc/sudoers</code> nooit met een gewone editor, maar altijd met <code>sudo visudo</code>. <code>visudo</code> controleert de syntax voordat het bestand wordt weggeschreven. Een syntaxfout in <code>/etc/sudoers</code> die u met een gewone editor introduceert, kan ertoe leiden dat niemand meer <code>sudo</code> kan gebruiken om het te herstellen — op een server zonder fysieke of out-of-band toegang is dat een ernstig incident.</p></div>
+<p>Een voorbeeldregel die Milan mag toevoegen via een bestand in <code>sudoers.d</code>:</p>
+<pre><code>sudo visudo -f /etc/sudoers.d/milan</code></pre>
+<pre><code>milan ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart rapportage-api</code></pre>
+<p>Deze regel geeft Milan het recht om, zonder wachtwoord, precies één commando met sudo uit te voeren: de rapportage-API herstarten. Dit is het principe van <strong>least privilege</strong> in de praktijk: niet "Milan mag alles", maar "Milan mag precies wat zijn werk vereist".</p>
+
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.4 en Uitwerking 11.4</p><details class="q"><summary><span class="qn">1</span><span>Milan mag op het Rapportagecluster precies twee dingen met sudo doen: de service <code>rapportage-api</code> herstarten, en de logs ervan met <code>journalctl</code> bekijken — beide zonder wachtwoordprompt. Schrijf de sudoers-regels en beschrijf hoe u ze veilig toevoegt.</span><span class="qx">Toon antwoord</span></summary><div class="ans">In <code>/etc/sudoers.d/milan</code>:<pre><code>milan ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart rapportage-api
+milan ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u rapportage-api</code></pre>Deze twee regels beperken Milan tot precies deze commando's met precies deze argumenten; hij krijgt geen algemene sudo-toegang en geen wachtwoordprompt op deze twee acties. Toevoegen met <code>sudo visudo -f /etc/sudoers.d/milan</code>: <code>visudo</code> controleert de syntax vóór het wegschrijven, terwijl een tikfout via een gewone editor ertoe kan leiden dat <code>sudo</code> voor niemand meer werkt, ook niet om de fout te herstellen.</div></details></div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">SUID, SGID en de sticky bit</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Naast de negen gewone permissiebits bestaan drie speciale bits.</p>
+<p><strong>SUID (set user ID, octaal 4000)</strong> op een uitvoerbaar bestand zorgt ervoor dat het programma draait met de rechten van de eigenaar van het bestand, niet met de rechten van wie het uitvoert. Het klassieke voorbeeld is <code>/usr/bin/passwd</code>: elke gebruiker mag zijn eigen wachtwoord wijzigen, wat betekent dat het programma moet kunnen schrijven naar <code>/etc/shadow</code>, dat alleen root mag bewerken. SUID op <code>passwd</code> lost dat op.</p>
+<pre><code>ls -l /usr/bin/passwd
+-rwsr-xr-x 1 root root 68208 ... /usr/bin/passwd</code></pre>
+<p>De <code>s</code> op de plek van de owner-x toont de SUID-bit.</p>
+<p><strong>SGID (set group ID, octaal 2000)</strong> heeft op een uitvoerbaar bestand een vergelijkbaar effect voor de groep. Op een <strong>map</strong> betekent SGID iets nuttigers voor dagelijks beheer: nieuwe bestanden die in de map worden aangemaakt, erven automatisch de groep van de map in plaats van de primaire groep van de aanmaker. Dat is precies wat in sectie 4 de gedeelde rapportagemap consistent hield — zonder SGID zou elk teamlid bestanden aanmaken met zijn eigen primaire groep, en zouden collega's er zonder extra <code>chgrp</code> geen rechten op hebben.</p>
+<p><strong>Sticky bit (octaal 1000)</strong> op een map zorgt ervoor dat gebruikers alleen hun eigen bestanden in die map kunnen verwijderen of hernoemen, ook als ze schrijfrechten op de map als geheel hebben. <code>/tmp</code> heeft dit standaard:</p>
+<pre><code>ls -ld /tmp
+drwxrwxrwt 12 root root 4096 ... /tmp</code></pre>
+<p>De <code>t</code> aan het einde toont de sticky bit.</p>
+<p>Speciale bits combineert u met de gewone permissies door een vierde cijfer vooraan te zetten: <code>2775</code>, <code>4755</code>, <code>1777</code>.</p>
+<div class="callout warn"><span class="lbl">Fenna's waarschuwing</span><p>SUID op een zelfgeschreven script is bijna altijd een slecht idee — shellscripts met SUID zijn een bekend beveiligingsrisico, omdat de shell die het script uitvoert eenvoudig te manipuleren is. SUID hoort bij gecompileerde programma's van vertrouwde herkomst, niet bij eigen scripts.</p></div>
+
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 11, Opdracht 11.5 en Uitwerking 11.5</p><details class="q"><summary><span class="qn">1</span><span>U treft op een server een zelfgeschreven shellscript aan met permissies <code>-rwsr-xr-x</code>, eigenaar root. Wat betekent deze permissiecombinatie, waarom is dit risicovol bij een shellscript specifiek, en welke actie onderneemt u als eerste?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De permissies tonen SUID (de <code>s</code> op de owner-executepositie): het script draait, ongeacht wie het start, met de rechten van de eigenaar — hier root. Bij een shellscript is dit specifiek risicovol omdat de shell die het script interpreteert door de aanroeper te beïnvloeden is (bijvoorbeeld via omgevingsvariabelen, <code>PATH</code>-manipulatie, of race conditions tussen het aanroepen en het daadwerkelijk lezen van het scriptbestand) — een aanvaller kan zo code met rootrechten laten uitvoeren die niet in het script zelf staat. Gecompileerde programma's met SUID (zoals <code>/usr/bin/passwd</code>) zijn hiertegen doorgaans specifiek gehard; shellscripts met SUID zijn dat vrijwel nooit. Eerste actie: vaststellen waarom het script SUID heeft, en zo snel mogelijk <code>chmod -s</code> toepassen tenzij er een aantoonbaar goede reden is — in dat geval de functionaliteit herbouwen zonder SUID op het script, bijvoorbeeld via een specifieke, beperkte sudoers-regel zoals in sectie 5.</div></details></div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 12</h3>
+      <p>Deel 12: Vi(m)-basis.</p>
+      <a class="btn" href="deel-12.html">Deel 12 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 11 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_lsb11_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

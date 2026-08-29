@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 22 — Cron & geplande taken | Eductus</title>
+<meta name="description" content="De crontab-syntax, crontab -e/-l/-r beheren, systeembrede cron via /etc/crontab en /etc/cron.d, periodieke mappen met run-parts, cron-output loggen, eenmalige taken met at, en het volledige proefexamen niveau 2 (LFCS-stijl, 30 vragen).">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-22.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+.examitem{margin:14px 0;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.examitem p{margin:6px 0}
+.examitem .opts{list-style:none;padding-left:0;margin:8px 0 0}
+.examitem .opts li{margin:4px 0;font-size:15.5px}
+.examkey{font-family:"IBM Plex Mono",monospace;font-size:13px}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 22 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 2 (Professional) · Deel 22 van 30</p>
+  <h1>Cron &amp; geplande taken<br><em>Plus het proefexamen niveau 2.</em></h1>
+  <p class="hero__lead">De crontab-syntax, <code>crontab -e</code>/<code>-l</code>/<code>-r</code>, systeembrede cron via <code>/etc/crontab</code> en <code>/etc/cron.d</code>, periodieke mappen met <code>run-parts</code>, cron-output correct loggen, eenmalige taken met <code>at</code> — en tot slot het volledige proefexamen niveau 2 in LFCS-stijl, dat de hele stof van deel 11 tot en met 22 toetst.</p>
+  <div class="hero__stats"><div class="stat"><b>8</b><span>secties</span></div><div class="stat"><b>±1u30</b><span>leestijd + werkboek + examen</span></div><div class="stat"><b>30</b><span>examenvragen</span></div><div class="stat"><b>N2</b><span>LFCS</span></div></div>
+  <div class="trail">Niveau 2 · Professional: … ㉑ Bash-scripting &rarr; <b>㉒ Cron &amp; geplande taken (hier, met proefexamen)</b> &rarr; niveau 3 (deel 23: LDAP &amp; PAM)</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Waarom geplande taken</a></li>
+<li><a href="#s2" data-target="s2">De crontab-syntax</a></li>
+<li><a href="#s3" data-target="s3">Je eigen crontab beheren</a></li>
+<li><a href="#s4" data-target="s4">Systeembrede cron: /etc/crontab en /etc/cron.d</a></li>
+<li><a href="#s5" data-target="s5">Periodieke mappen: cron.hourly t/m cron.monthly</a></li>
+<li><a href="#s6" data-target="s6">Output, logging en foutafhandeling</a></li>
+<li><a href="#s7" data-target="s7">Eenmalige taken met at &amp; systemd-timers</a></li>
+<li><a href="#s8" data-target="s8">Proefexamen niveau 2 — LFCS</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Waarom geplande taken</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Het Rapportagecluster van Meridiaan Pensioen draait 's nachts batchtaken: mutatiebestanden worden opgehaald, gevalideerd en klaargezet voor de kernadministratie, en de monitoringstack ruimt oude logbestanden op. Niemand wil daarvoor om drie uur 's nachts inloggen en handmatig een commando typen. Dat is precies het probleem dat cron oplost: een taak één keer definiëren, en het systeem laten zorgen dat hij op tijd draait — elke dag, elke maandag, elk uur, of op een willekeurig ander ritme.</p>
+<div class="callout note"><span class="lbl">Casus</span><p>Fenna geeft Milan zijn eerste opdracht op dit vlak nuchter mee: "Voordat je iets in cron zet, moet het commando zelf foutloos draaien als je het met de hand uittikt. Cron lost geen kapotte scripts op, het voert ze alleen onbewaakt uit — en dan merk je een fout pas als iemand klaagt dat er geen rapport is."</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">De crontab-syntax</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Een cron-regel bestaat uit vijf tijdvelden gevolgd door het uit te voeren commando:</p>
+<pre><code># minuut (0-59) uur (0-23) dag-van-maand (1-31) maand (1-12) dag-van-week (0-6, 0=zondag)
+#  *        *         *           *               *
+#  |        |         |           |               |
+  30       2         *           *               *   /usr/local/bin/rapport-export.sh</code></pre>
+<p>Deze regel voert <code>/usr/local/bin/rapport-export.sh</code> elke dag om 02:30 uit. Elk veld accepteert:</p>
+<ul>
+<li><code>*</code> — elke waarde (elke minuut, elk uur, ...)</li>
+<li>een vaste waarde, bijv. <code>5</code></li>
+<li>een lijst met komma's, bijv. <code>1,15</code> (op de 1e en de 15e)</li>
+<li>een bereik met een streepje, bijv. <code>1-5</code> (maandag tot en met vrijdag in het dag-van-week-veld)</li>
+<li>een stapgrootte met een schuine streep, bijv. <code>*/15</code> (elke 15 minuten) of <code>2-10/2</code></li>
+</ul>
+<p>Enkele voorbeelden die Milan in de praktijk gebruikt:</p>
+<pre><code># elke werkdag om 06:00
+0 6 * * 1-5 /usr/local/bin/mutatie-batch.sh
+
+# elke 15 minuten, altijd
+*/15 * * * * /usr/local/bin/health-check.sh
+
+# elke eerste dag van de maand om 04:00
+0 4 1 * * /usr/local/bin/maand-rapport.sh
+
+# elk kwartier tussen 08:00 en 18:00 op werkdagen
+*/15 8-18 * * 1-5 /usr/local/bin/sync-status.sh</code></pre>
+<p>Sommige cron-implementaties (waaronder die op Ubuntu Server) ondersteunen ook de afkortingen <code>@daily</code>, <code>@hourly</code>, <code>@weekly</code>, <code>@monthly</code> en <code>@reboot</code> als vervanging van de vijf velden. <code>@reboot /usr/local/bin/start-monitor.sh</code> voert het commando één keer uit bij het opstarten van de machine.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Je eigen crontab beheren</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Elke gebruiker heeft een eigen crontab. Die bewerkt u nooit rechtstreeks als bestand, maar via het commando <code>crontab</code>:</p>
+<pre><code># de eigen crontab openen in de standaard-editor
+crontab -e
+
+# de eigen crontab bekijken zonder te bewerken
+crontab -l
+
+# de eigen crontab volledig verwijderen
+crontab -r
+
+# de crontab van een andere gebruiker bekijken (root-rechten nodig)
+sudo crontab -u fenna -l</code></pre>
+<p><code>crontab -e</code> opent de crontab in de editor die in de omgevingsvariabele <code>EDITOR</code> staat (vaak <code>nano</code>, op Meridiaan's servers stelt Fenna <code>vim</code> in via <code>export EDITOR=vim</code> in <code>.bashrc</code> — zie deel 17). Na opslaan installeert <code>crontab</code> de nieuwe versie automatisch; er is geen aparte "activeer"-stap. De ingeplande taken worden per gebruiker bijgehouden in <code>/var/spool/cron/crontabs/&lt;gebruiker&gt;</code> — dat bestand bewerkt u nooit rechtstreeks, altijd via <code>crontab -e</code>, anders raakt de eigenaarschaps- en permissie-administratie die cron verwacht in de war.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 22, Opdracht 22.2d + Uitwerking 22.2</p><details class="q"><summary><span class="qn">1</span><span>U wilt een testregel uit uw crontab verwijderen, maar er staan meerdere taken in. Waarom gebruikt u daarvoor <code>crontab -e</code> en niet <code>crontab -r</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>crontab -r</code> verwijdert de gehele crontab in één keer, zonder te vragen welke regel; als er meerdere taken in staan verliest u ze allemaal. <code>crontab -e</code> opent de editor zodat u gericht alleen de testregel weghaalt en de rest laat staan.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Systeembrede cron: /etc/crontab en /etc/cron.d</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Naast de per-gebruiker crontab bestaat er systeembrede cron-configuratie. <code>/etc/crontab</code> heeft dezelfde vijf tijdvelden, maar met een extra zesde kolom: de gebruiker onder wiens naam het commando draait.</p>
+<pre><code># /etc/crontab (uittreksel)
+# m h  dom mon dow user  command
+17 *   * * *      root   cd / && run-parts --report /etc/cron.hourly
+25 6   * * *      root   test -x /usr/sbin/anacron || run-parts --report /etc/cron.daily</code></pre>
+<p>Voor eigen systeemtaken is <code>/etc/cron.d/</code> de gangbare plek: een map waarin elk bestand een mini-crontab is, met dezelfde zes kolommen als <code>/etc/crontab</code>. Het voordeel ten opzichte van <code>/etc/crontab</code> is dat pakketten en configuratiebeheertools (zoals Ansible, dat in niveau 3 aan bod komt) een eigen bestand kunnen neerzetten zonder een gedeeld bestand te hoeven bewerken:</p>
+<pre><code>sudo tee /etc/cron.d/rapportage-export <<'EOF'
+# mutatiebestanden exporteren voor de kernadministratie
+30 2 * * * rapportservice /usr/local/bin/rapport-export.sh
+EOF
+sudo chmod 644 /etc/cron.d/rapportage-export</code></pre>
+<p>Merk op dat het commando hier draait als de systeemgebruiker <code>rapportservice</code>, niet als root — een concreet toepassing van het least-privilege-principe uit deel 11.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Periodieke mappen: cron.hourly t/m cron.monthly</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Voor taken die simpelweg "elke dag" of "elke week" moeten draaien, zonder dat het precieze tijdstip ertoe doet, biedt Ubuntu Server de mappen <code>/etc/cron.hourly/</code>, <code>/etc/cron.daily/</code>, <code>/etc/cron.weekly/</code> en <code>/etc/cron.monthly/</code>. Elk uitvoerbaar script dat u in zo'n map plaatst, wordt automatisch op het bijbehorende ritme uitgevoerd:</p>
+<pre><code>sudo tee /etc/cron.daily/logrotate-check <<'EOF'
+#!/bin/bash
+/usr/local/bin/controleer-logrotatie.sh
+EOF
+sudo chmod 755 /etc/cron.daily/logrotate-check</code></pre>
+<p>Het commando dat deze mappen daadwerkelijk afwerkt is <code>run-parts</code>, zoals u in <code>/etc/crontab</code> hierboven zag: het doorloopt een map en voert elk uitvoerbaar bestand daarin uit, in alfabetische volgorde. U kunt dit ook los uittesten:</p>
+<pre><code>run-parts --test /etc/cron.daily</code></pre>
+<p><code>--test</code> toont welke scripts zouden draaien zonder ze daadwerkelijk uit te voeren — handig om te controleren of een nieuw script wordt meegenomen voordat u het risico van een echte nachtelijke run neemt.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Output, logging en foutafhandeling</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Cron voert taken onbewaakt uit, zonder terminal. Twee zaken zijn daarom cruciaal.</p>
+<p><strong>Ten eerste: de omgeving is minimaal.</strong> Cron start met een kale <code>PATH</code> (meestal alleen <code>/usr/bin:/bin</code>) en zonder de omgevingsvariabelen uit uw interactieve shell. Een script dat in de terminal werkt omdat het aliassen of een uitgebreide <code>PATH</code> uit <code>.bashrc</code> gebruikt, kan in cron stuk gaan. De oplossing is altijd volledige paden gebruiken en, indien nodig, <code>PATH</code> expliciet bovenaan de crontab zetten:</p>
+<pre><code>PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 2 * * * /usr/local/bin/rapport-export.sh</code></pre>
+<p><strong>Ten tweede: standaarduitvoer wordt gemaild, niet getoond.</strong> Cron mailt de stdout en stderr van elke taak naar de lokale gebruiker (via <code>MAILTO</code> in te stellen, of leeg te laten om mail te onderdrukken). Op de meeste servers is er geen mailtransport ingericht, dus verdwijnt die output stilletjes. De praktijk is daarom om zelf naar een logbestand te schrijven:</p>
+<pre><code>30 2 * * * /usr/local/bin/rapport-export.sh >> /var/log/rapport-export.log 2>&1</code></pre>
+<p>Cron zelf logt ook: wanneer een taak start (niet of hij slaagt) staat in de systemlog. Op Ubuntu Server controleert u dat met:</p>
+<pre><code># de cron-eigen logregels
+journalctl -u cron --since "1 hour ago"
+
+# of, op systemen die nog naar bestand loggen
+grep CRON /var/log/syslog | tail -n 20</code></pre>
+<div class="callout note"><span class="lbl">Casus</span><p>Toen Milans eerste export-taak drie nachten op rij niet draaide, bleek de oorzaak een ontbrekend uitvoerbaarheidsbit op het script. <code>journalctl -u cron</code> toonde keurig dat cron de taak had gestart; het script zelf faalde direct met "Permission denied", zichtbaar pas nadat Milan ook naar het eigen logbestand van het script keek. Fenna's les: "Cron-logging vertelt je dát hij gestart is. Of het script ook gelukt is, moet het script zelf vastleggen."</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 22, Opdracht 22.4 + Uitwerking 22.4</p><details class="q"><summary><span class="qn">1</span><span>Milan heeft de regel <code>0 6 * * * backup.sh</code> in zijn crontab staan, maar de taak lijkt niets te doen. Noem minstens twee waarschijnlijke oorzaken, en schrijf een gecorrigeerde regel.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Twee waarschijnlijke oorzaken: (1) <code>backup.sh</code> staat niet in het cron-<code>PATH</code> (dat is standaard kaal, meestal <code>/usr/bin:/bin</code>) — cron kan het script dus niet vinden tenzij het volledige pad wordt opgegeven; (2) het script is mogelijk niet uitvoerbaar (ontbrekend x-bit), of gebruikt zelf relatieve paden die vanuit cron's andere werkmap niet kloppen.<pre><code>0 6 * * * /usr/local/bin/backup.sh >> /var/log/backup-cron.log 2>&1</code></pre></div></details></div>
+    </article>
+
+    <article class="section" id="s7">
+      <div class="section__head"><div class="section__num">07</div>
+        <div class="section__titles"><h2 class="t">Eenmalige taken met at &amp; systemd-timers</h2><span class="chip time">⏱ 10 min</span></div>
+        <label class="done-toggle" data-done="s7"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Waar cron voor herhalende taken is, is <code>at</code> voor een taak die precies één keer op een toekomstig tijdstip moet draaien:</p>
+<pre><code># installeren indien nodig
+sudo apt install at
+
+# een eenmalige taak inplannen
+echo "/usr/local/bin/herstart-service.sh" | at 23:00
+
+# of interactief
+at now + 30 minutes
+at> /usr/local/bin/tijdelijke-opschoning.sh
+at> <Ctrl+D>
+
+# ingeplande taken bekijken
+atq
+
+# een taak verwijderen (op basis van het jobnummer uit atq)
+atrm 3</code></pre>
+<p>Milan gebruikt <code>at</code> bijvoorbeeld om een geplande servicerestart voor middernacht klaar te zetten zonder zelf op te hoeven blijven, terwijl het een eenmalige actie is en dus niet in cron thuishoort.</p>
+<p>Op moderne systemen met systemd (zie deel 19) kan geplande uitvoering ook via een <strong>systemd-timer</strong>: een <code>.timer</code>-unit die een bijbehorende <code>.service</code>-unit activeert op een schema. Het voordeel is dat een timer meedraait in dezelfde infrastructuur als andere services — met afhankelijkheden, met <code>journalctl</code>-logging per unit, en met de mogelijkheid gemiste runs na een uitgeschakelde periode alsnog uit te voeren (<code>Persistent=true</code>). Het nadeel is meer boilerplate: twee bestanden in plaats van één regel.</p>
+<pre><code>systemctl list-timers</code></pre>
+<p>toont alle actieve timers op een systeem, inclusief de ingebouwde (zoals de dagelijkse <code>apt</code>-updatecontrole). Cron blijft in de praktijk het meest gebruikte mechanisme voor eenvoudige, op zichzelf staande taken — en is ook wat het LFCS-examen van u verwacht te kennen.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 22, Opdracht 22.5</p><details class="q"><summary><span class="qn">1</span><span>Fenna vraagt Milan drie taken in te delen: (1) een dagelijkse opschoning waarbij het tijdstip niet uitmaakt, (2) een rapportexport die exact om 02:30 moet starten, (3) een taak die precies één keer, aankomende vrijdag 18:00, een onderhoudsvenster aankondigt. Welk mechanisme past bij elke taak?</span><span class="qx">Toon antwoord</span></summary><div class="ans">(1) Dagelijkse opschoning, tijdstip maakt niet uit → <code>/etc/cron.daily</code>, want dat is precies waarvoor deze mappen bedoeld zijn: periodieke taken zonder harde tijdseis. (2) Rapportexport om exact 02:30 → een expliciete crontab-regel (in <code>/etc/crontab</code> of <code>/etc/cron.d/</code>), omdat het tijdstip een harde afhankelijkheid heeft (beschikbaarheid van de kernadministratie) die <code>run-parts</code> niet garandeert. (3) Eenmalige aankondiging aankomende vrijdag 18:00 → <code>at</code>, omdat de taak precies één keer moet draaien en niet blijvend in een crontab thuishoort.</div></details></div>
+    </article>
+
+    <article class="section" id="s8">
+      <div class="section__head"><div class="section__num">08</div>
+        <div class="section__titles"><h2 class="t">Proefexamen niveau 2 — LFCS</h2><span class="chip time">⏱ 45 min</span></div>
+        <label class="done-toggle" data-done="s8"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Dit proefexamen bestrijkt de stof van deel 11 tot en met 22: gebruikers/groepen/permissies, vi(m), I/O &amp; pipes, processen, SSH, tmux, dotfiles, netwerken, systemd, opslag/LVM, bash-scripting en cron. Zoals het echte LFCS-examen is dit een praktisch, performance-based examen: naast meerkeuzevragen staan er scenariovragen ("welk commando gebruikt u om...") en korte-antwoordvragen. Beantwoord alle vragen eerst zelfstandig, zonder naslag, voordat u de antwoorden opent.</p>
+<div class="callout warn"><span class="lbl">Let op</span><p>Dit proefexamen is geschreven op de inhoud van deze cursus en is korter dan het echte LFCS-examen, dat bovendien volledig hands-on op een live terminal wordt afgenomen (geen meerkeuzevragen). Een goede score hier voorspelt een goede beheersing van de stof, geen geslaagd examen. Oefen daarnaast met de officiële LFCS-examenomgeving en het curriculum van de Linux Foundation.</p></div>
+      </div>
+
+<div class="quiz">
+<div class="quiz__h">Proefexamen — 30 vragen</div>
+<p class="quiz__src">Uit Werkboek deel 22 — Proefexamen niveau 2 (LFCS-stijl) + Antwoordsleutel, verbatim</p>
+
+<details class="q"><summary><span class="qn">1</span><span>Welk commando geeft aan gebruiker <code>milan</code> lees-, schrijf- en uitvoerrechten, aan groep <code>it</code> lees- en uitvoerrechten, en aan overigen geen rechten, op het bestand <code>deploy.sh</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>chmod 750 deploy.sh</code> — b) <code>chmod 754 deploy.sh</code> — c) <code>chmod 570 deploy.sh</code> — d) <code>chmod 705 deploy.sh</code></p><p><strong>Antwoord: a.</strong> <code>750</code> = eigenaar rwx (7), groep r-x (5), overigen niets (0) — precies wat gevraagd wordt.</p></div></details>
+
+<details class="q"><summary><span class="qn">2</span><span>Welk commando gebruikt u om het eigenaarschap van <code>/data/rapport.csv</code> te wijzigen naar gebruiker <code>fenna</code> én groep <code>infrabeheer</code> in één keer?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>chmod fenna:infrabeheer /data/rapport.csv</code> — b) <code>chown fenna:infrabeheer /data/rapport.csv</code> — c) <code>chgrp fenna:infrabeheer /data/rapport.csv</code> — d) <code>usermod fenna:infrabeheer /data/rapport.csv</code></p><p><strong>Antwoord: b.</strong> <code>chown gebruiker:groep bestand</code> wijzigt eigenaar én groep in één commando; <code>chgrp</code> wijzigt alleen de groep.</p></div></details>
+
+<details class="q"><summary><span class="qn">3</span><span>Een bestand heeft het SUID-bit gezet en is eigendom van root. Wat betekent dat voor een gebruiker die het bestand uitvoert?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) Het bestand draait met de rechten van de uitvoerende gebruiker — b) Het bestand draait met de rechten van root, ongeacht wie het uitvoert — c) Alleen root mag het bestand uitvoeren — d) Het bestand is automatisch ook uitvoerbaar voor de groep</p><p><strong>Antwoord: b.</strong> SUID laat het programma draaien met de rechten van de bestandseigenaar (hier root), ongeacht wie het start — vandaar de voorzichtigheid met SUID-bits.</p></div></details>
+
+<details class="q"><summary><span class="qn">4</span><span>In vim staat u in normaalmodus. Welke toetsenreeks verwijdert de huidige regel én slaat hem op in het register (klaar om te plakken)?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>x</code> — b) <code>dd</code> — c) <code>:d</code> — d) <code>yy</code></p><p><strong>Antwoord: b.</strong> <code>dd</code> verwijdert de regel én plaatst hem in het register, zodat <code>p</code> hem kan plakken; <code>x</code> verwijdert alleen een teken.</p></div></details>
+
+<details class="q"><summary><span class="qn">5</span><span>In vim: welk commando slaat het bestand op én sluit de editor?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>:q</code> — b) <code>:w</code> — c) <code>:wq</code> — d) <code>:x!</code></p><p><strong>Antwoord: c.</strong> <code>:wq</code> slaat op en sluit; <code>:x!</code> bestaat niet als zodanig (wel <code>:x</code> zonder uitroepteken, gelijk aan <code>:wq</code> als er wijzigingen zijn).</p></div></details>
+
+<details class="q"><summary><span class="qn">6</span><span>Wat is het verschil tussen <code>&gt;</code> en <code>&gt;&gt;</code> bij redirection?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>&gt;</code> stuurt naar stderr, <code>&gt;&gt;</code> naar stdout — b) <code>&gt;</code> overschrijft het doelbestand, <code>&gt;&gt;</code> voegt toe aan het einde — c) <code>&gt;</code> werkt alleen met tekstbestanden, <code>&gt;&gt;</code> met alle bestanden — d) Er is geen verschil, beide overschrijven</p><p><strong>Antwoord: b.</strong> <code>&gt;</code> overschrijft, <code>&gt;&gt;</code> voegt toe; beide gaan over stdout tenzij anders aangegeven met een file descriptor.</p></div></details>
+
+<details class="q"><summary><span class="qn">7</span><span>Welk commando stuurt zowel stdout als stderr van <code>./build.sh</code> naar <code>build.log</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>./build.sh &gt; build.log</code> — b) <code>./build.sh 2&gt; build.log</code> — c) <code>./build.sh &gt; build.log 2&gt;&amp;1</code> — d) <code>./build.sh 2&gt;&amp;1 | build.log</code></p><p><strong>Antwoord: c.</strong> <code>2&gt;&amp;1</code> na <code>&gt; build.log</code> stuurt stderr naar dezelfde plek als stdout inmiddels wijst (het logbestand); de volgorde is hier essentieel.</p></div></details>
+
+<details class="q"><summary><span class="qn">8</span><span>U wilt de bestandsnamen die <code>find /var/log -name "*.log"</code> oplevert, één voor één laten verwijderen. Welk commando past hierbij?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>find /var/log -name "*.log" | rm</code> — b) <code>find /var/log -name "*.log" | xargs rm</code> — c) <code>find /var/log -name "*.log" &gt; rm</code> — d) <code>find /var/log -name "*.log" &amp;&amp; rm</code></p><p><strong>Antwoord: b.</strong> <code>xargs</code> neemt regels van stdin en bouwt er commando-aanroepen mee op; <code>rm</code> zelf leest geen stdin als argumentenlijst.</p></div></details>
+
+<details class="q"><summary><span class="qn">9</span><span>Welk commando toont een continu ververst, interactief overzicht van processen inclusief CPU- en geheugengebruik?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>ps aux</code> — b) <code>top</code> — c) <code>jobs</code> — d) <code>pgrep</code></p><p><strong>Antwoord: b.</strong> <code>top</code> is het interactieve, continu verversende overzicht; <code>ps aux</code> is een momentopname.</p></div></details>
+
+<details class="q"><summary><span class="qn">10</span><span>Een proces met PID 4821 reageert niet meer op <code>kill -15 4821</code> (SIGTERM). Welk commando forceert de beëindiging?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>kill -1 4821</code> — b) <code>kill -9 4821</code> — c) <code>nice 4821</code> — d) <code>killall -0 4821</code></p><p><strong>Antwoord: b.</strong> <code>kill -9</code> (SIGKILL) kan niet genegeerd worden door het proces, in tegenstelling tot <code>-15</code> (SIGTERM), dat om een nette afsluiting vraagt.</p></div></details>
+
+<details class="q"><summary><span class="qn">11</span><span>U start een langlopend script op de achtergrond met <code>./backup.sh &amp;</code>, sluit per ongeluk uw terminalvenster, en de taak stopt. Welk commando had u vooraf moeten gebruiken om dat te voorkomen?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>bg ./backup.sh &amp;</code> — b) <code>nohup ./backup.sh &amp;</code> — c) <code>fg ./backup.sh &amp;</code> — d) <code>jobs ./backup.sh &amp;</code></p><p><strong>Antwoord: b.</strong> <code>nohup</code> zorgt dat het proces het SIGHUP-signaal (dat bij het sluiten van de terminal wordt verstuurd) negeert en blijft doorlopen.</p></div></details>
+
+<details class="q"><summary><span class="qn">12</span><span>Welk bestand bevat, standaard, de publieke SSH-sleutels die toegang geven tot een gebruikersaccount op een Linux-server?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>~/.ssh/id_rsa</code> — b) <code>~/.ssh/known_hosts</code> — c) <code>~/.ssh/authorized_keys</code> — d) <code>~/.ssh/config</code></p><p><strong>Antwoord: c.</strong> <code>authorized_keys</code> bevat de publieke sleutels die toegang mogen krijgen; <code>id_rsa</code> is een privésleutel, <code>known_hosts</code> gaat over vertrouwde serverkeys.</p></div></details>
+
+<details class="q"><summary><span class="qn">13</span><span>Welk commando genereert een nieuw Ed25519-sleutelpaar voor SSH?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>ssh-keygen -t ed25519</code> — b) <code>ssh-copy-id -t ed25519</code> — c) <code>ssh-add -t ed25519</code> — d) <code>ssh -t ed25519</code></p><p><strong>Antwoord: a.</strong> <code>ssh-keygen -t ed25519</code> genereert een sleutelpaar met het Ed25519-algoritme; de andere commando's doen iets anders (kopiëren, toevoegen aan agent, verbinden).</p></div></details>
+
+<details class="q"><summary><span class="qn">14</span><span>U wilt lokale poort 8080 doorsturen naar poort 80 op een server die alleen via een jump host bereikbaar is. Welk mechanisme gebruikt u?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>scp</code> — b) SSH local port forwarding (<code>ssh -L</code>) — c) <code>rsync</code> — d) <code>ssh-agent</code></p><p><strong>Antwoord: b.</strong> <code>ssh -L 8080:localhost:80 gebruiker@jumphost</code> is precies local port forwarding.</p></div></details>
+
+<details class="q"><summary><span class="qn">15</span><span>In tmux: welke toetsencombinatie (standaard prefix <code>Ctrl+b</code>) splitst het huidige venster horizontaal in twee panes?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>Ctrl+b</code> gevolgd door <code>%</code> — b) <code>Ctrl+b</code> gevolgd door <code>"</code> — c) <code>Ctrl+b</code> gevolgd door <code>c</code> — d) <code>Ctrl+b</code> gevolgd door <code>d</code></p><p><strong>Antwoord: a.</strong> <code>Ctrl+b</code> <code>%</code> zet twee panes naast elkaar (tmux noemt dit zelf een "horizontal split"); <code>"</code> zet ze boven/onder elkaar.</p></div></details>
+
+<details class="q"><summary><span class="qn">16</span><span>Welk bestand is de aangewezen plek om een permanente alias zoals <code>alias ll='ls -la'</code> voor een interactieve bash-shell te definiëren?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>/etc/hosts</code> — b) <code>~/.bashrc</code> — c) <code>~/.ssh/config</code> — d) <code>/etc/fstab</code></p><p><strong>Antwoord: b.</strong> <code>.bashrc</code> wordt bij elke nieuwe interactieve shell geladen en is de standaardplek voor aliassen.</p></div></details>
+
+<details class="q"><summary><span class="qn">17</span><span>Welk commando toont het huidige IP-adres en de netwerkinterfaces van een systeem, als moderne vervanging van het verouderde <code>ifconfig</code>?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>ip addr show</code> — b) <code>nmcli device</code> — c) <code>netstat -i</code> — d) <code>ss -tulpn</code></p><p><strong>Antwoord: a.</strong> <code>ip addr show</code> (of kort <code>ip a</code>) is de moderne vervanging van <code>ifconfig</code> uit het <code>iproute2</code>-pakket.</p></div></details>
+
+<details class="q"><summary><span class="qn">18</span><span>Op een systeem met <code>ufw</code> als firewall: welk commando staat inkomend verkeer op poort 22 (SSH) toe?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>ufw open 22</code> — b) <code>ufw allow 22</code> — c) <code>ufw enable 22/tcp</code> — d) <code>ufw accept ssh</code></p><p><strong>Antwoord: b.</strong> <code>ufw allow 22</code> (of <code>ufw allow ssh</code>) staat het verkeer toe; <code>open</code>/<code>enable 22/tcp</code>/<code>accept</code> zijn geen geldige ufw-subcommando's in die vorm.</p></div></details>
+
+<details class="q"><summary><span class="qn">19</span><span>Welk commando toont de status van de <code>nginx</code>-service, inclusief of hij actief is en de laatste paar logregels?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>systemctl status nginx</code> — b) <code>systemctl show nginx</code> — c) <code>service nginx info</code> — d) <code>journalctl nginx --status</code></p><p><strong>Antwoord: a.</strong> <code>systemctl status</code> toont actieve status én de laatste logregels in één overzicht.</p></div></details>
+
+<details class="q"><summary><span class="qn">20</span><span>Welk commando zorgt ervoor dat een service automatisch start bij het opstarten van het systeem, zonder hem nu direct te starten?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>systemctl start nginx</code> — b) <code>systemctl enable nginx</code> — c) <code>systemctl enable --now nginx</code> — d) <code>systemctl reload nginx</code></p><p><strong>Antwoord: b.</strong> <code>enable</code> regelt autostart bij boot zonder de service nu te starten; <code>enable --now</code> doet beide, <code>start</code> alleen nu.</p></div></details>
+
+<details class="q"><summary><span class="qn">21</span><span>Welk commando toont de logregels van de service <code>myapp</code> van de afgelopen uur, live meelezend?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>journalctl -u myapp --since "1 hour ago" -f</code> — b) <code>journalctl myapp --last 1h --tail</code> — c) <code>systemctl logs myapp --live</code> — d) <code>tail -f /etc/systemd/myapp.log</code></p><p><strong>Antwoord: a.</strong> <code>journalctl -u &lt;unit&gt; --since ... -f</code> combineert filtering op unit, tijdvenster en live meelezen (<code>-f</code> net als <code>tail -f</code>).</p></div></details>
+
+<details class="q"><summary><span class="qn">22</span><span>In LVM: wat is de juiste laagvolgorde van klein naar groot?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) Volume Group → Physical Volume → Logical Volume — b) Physical Volume → Volume Group → Logical Volume — c) Logical Volume → Physical Volume → Volume Group — d) Physical Volume → Logical Volume → Volume Group</p><p><strong>Antwoord: b.</strong> PV (fysieke schijf/partitie) → VG (pool van PV's) → LV (het deel dat daadwerkelijk gemount wordt).</p></div></details>
+
+<details class="q"><summary><span class="qn">23</span><span>Welk commando breidt een logical volume <code>/dev/vg_data/lv_rapportage</code> uit met 5 GB en past het bijbehorende ext4-filesystem meteen aan?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>lvextend -L +5G /dev/vg_data/lv_rapportage</code> — b) <code>lvextend -L +5G -r /dev/vg_data/lv_rapportage</code> — c) <code>resize2fs -L +5G /dev/vg_data/lv_rapportage</code> — d) <code>vgextend -L +5G /dev/vg_data/lv_rapportage</code></p><p><strong>Antwoord: b.</strong> <code>lvextend -L +5G -r ...</code> breidt het logical volume uit én roept met <code>-r</code> meteen de juiste resize-tool voor het filesystem aan.</p></div></details>
+
+<details class="q"><summary><span class="qn">24</span><span>Welk bestand zorgt ervoor dat een filesystem automatisch gemount wordt bij het opstarten van het systeem?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>/etc/mtab</code> — b) <code>/etc/fstab</code> — c) <code>/etc/mounts.conf</code> — d) <code>/proc/mounts</code></p><p><strong>Antwoord: b.</strong> <code>/etc/fstab</code> bevat de mount-definities die bij boot (en bij <code>mount -a</code>) worden toegepast.</p></div></details>
+
+<details class="q"><summary><span class="qn">25</span><span>In een bash-script wilt u stoppen zodra een commando faalt, in plaats van door te gaan met de volgende regel. Welke regel zet u bovenaan het script?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>#!/bin/bash -x</code> — b) <code>set -e</code> — c) <code>trap ERR</code> — d) <code>exit 1</code></p><p><strong>Antwoord: b.</strong> <code>set -e</code> laat het script stoppen zodra een commando een niet-nul exitcode geeft.</p></div></details>
+
+<details class="q"><summary><span class="qn">26</span><span>Welke testconstructie in bash controleert of het bestand <code>/etc/myapp.conf</code> bestaat?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>if [ -f /etc/myapp.conf ]; then</code> — b) <code>if [ -e /etc/myapp.conf = true ]; then</code> — c) <code>if exists /etc/myapp.conf; then</code> — d) <code>if [ /etc/myapp.conf -d ]; then</code></p><p><strong>Antwoord: a.</strong> <code>[ -f bestand ]</code> test of het pad bestaat én een gewoon bestand is.</p></div></details>
+
+<details class="q"><summary><span class="qn">27</span><span>Welke cron-regel voert een taak uit elke werkdag om 07:30?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) <code>30 7 * * 1-5 /usr/local/bin/taak.sh</code> — b) <code>7 30 * * 1-5 /usr/local/bin/taak.sh</code> — c) <code>30 7 1-5 * * /usr/local/bin/taak.sh</code> — d) <code>*/30 7 * * 1-5 /usr/local/bin/taak.sh</code></p><p><strong>Antwoord: a.</strong> Volgorde is minuut, uur, dag-van-maand, maand, dag-van-week: <code>30 7 * * 1-5</code> is 07:30 op werkdagen.</p></div></details>
+
+<details class="q"><summary><span class="qn">28</span><span>Waar staat een systeembrede cron-taak die door een configuratiebeheertool los van andere taken beheerd moet kunnen worden, bij voorkeur?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><p>a) In <code>/etc/crontab</code>, onderaan toegevoegd — b) Als los bestand in <code>/etc/cron.d/</code> — c) In de crontab van root via <code>crontab -e</code> — d) In <code>/etc/cron.allow</code></p><p><strong>Antwoord: b.</strong> <code>/etc/cron.d/</code> is bedoeld voor losse, door tools beheerde cron-bestanden, juist om niet in een gedeeld bestand te hoeven schrijven.</p></div></details>
+
+<details class="q"><summary><span class="qn">29 (praktijkscenario)</span><span>Een nachtelijke cron-taak op het Rapportagecluster faalt telkens met "command not found", terwijl hetzelfde commando in een interactieve shell van dezelfde gebruiker prima werkt. Beschrijf in twee zinnen de meest waarschijnlijke oorzaak en hoe u dat oplost.</span><span class="qx">Toon antwoord</span></summary><div class="ans">Cron start met een minimale <code>PATH</code> die niet gelijk is aan die van een interactieve shell. Oplossing: het commando met een volledig pad aanroepen (bijvoorbeeld <code>/usr/local/bin/commando</code>) of <code>PATH</code> bovenaan de crontab expliciet zetten.</div></details>
+
+<details class="q"><summary><span class="qn">30 (praktijkscenario)</span><span>U moet een script dat maar één keer moet draaien — aankomende zaterdag om 05:00, om een eenmalige migratie uit te voeren — inplannen zonder dat het als terugkerende taak in een crontab blijft staan. Welk commando gebruikt u, en hoe controleert u achteraf dat de taak nog staat ingepland?</span><span class="qx">Toon antwoord</span></summary><div class="ans"><code>at 05:00 Saturday</code> plant de eenmalige taak op het eerstvolgende zaterdag 05:00-tijdstip; met <code>atq</code> controleert u dat de taak nog in de wachtrij staat.</div></details>
+
+</div>
+
+<div class="tablewrap" style="margin-top:24px">
+<table><thead><tr><th>Score</th><th>Kalibratie</th></tr></thead><tbody>
+<tr><td><strong>24 of meer</strong> (van de 30) goed</td><td>U bent goed voorbereid op de praktische kant van het LFCS-examen.</td></tr>
+<tr><td><strong>18 tot 23</strong> goed</td><td>Neem de delen door waarin uw fouten vielen.</td></tr>
+<tr><td><strong>Onder de 18</strong> goed</td><td>Herhaal niveau 2 systematisch voordat u zich aanmeldt voor het officiële examen.</td></tr>
+</tbody></table>
+</div>
+
+    </article>
+
+    <div class="finish">
+      <h3>Niveau 2 afgerond — verder naar niveau 3</h3>
+      <p>Deel 23 opent niveau 3 (Expert, richting LFCE): gebruikersbeheer op schaal met LDAP &amp; PAM. Het Rapportagecluster wordt vanaf hier productierijp gemaakt.</p>
+      <a class="btn" href="deel-23.html">Deel 23 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 22 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6","s7","s8"];
+  var KEY="eductus_lsb22_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>

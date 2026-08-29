@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deel 4 — Een Linux-VM aanmaken op Windows | Eductus</title>
+<meta name="description" content="WSL2, VirtualBox of Hyper-V: dit deel zet Milans derde homelab-node neer op zijn Windows-laptop, van installatie tot een werkende SSH-verbinding, met de netwerkmodus als beslissende keuze.">
+<link rel="canonical" href="https://leren.eductus.nl/linux-systeembeheer/deel-04.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(38px,6.5vw,76px);line-height:1.02;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:62ch;margin:24px 0 0;font-size:21px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--ochre);background:var(--ochre-tint);padding:14px 20px;border-radius:0 12px 12px 0;font-size:16px;color:var(--ink-soft)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 100px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"✓";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,3.6vw,38px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:23px;margin:34px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:26px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.prose pre{background:var(--ink);color:#e9e2d3;padding:16px 18px;border-radius:12px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:14px;line-height:1.55;margin:16px 0}
+.prose code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.prose pre code{background:none;padding:0}
+figure{margin:22px 0}
+figure img{max-width:100%;display:block;margin:0 auto;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+figcaption{margin-top:10px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-faint);letter-spacing:.3px}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.dialogue{margin:20px 0;padding:16px 22px;border-radius:14px;border:1px solid var(--line);background:var(--paper)}
+.dialogue p{margin:8px 0;font-style:italic;color:var(--ink-soft)}
+.quiz{margin:30px 0 6px;background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:8px 22px 18px;box-shadow:var(--shadow)}
+.quiz__h{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:18px 0 6px;display:flex;align-items:center;gap:9px}
+.quiz__h::before{content:"?";display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ochre);color:#fff;font-family:"Fraunces",serif;font-size:14px}
+.quiz__src{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin:-4px 0 4px}
+details.q{border-bottom:1px solid var(--line)}details.q:last-child{border-bottom:none}
+details.q>summary{list-style:none;cursor:pointer;padding:14px 4px;display:flex;gap:12px;align-items:flex-start;font-weight:500}
+details.q>summary::-webkit-details-marker{display:none}
+details.q>summary .qn{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);font-weight:600;flex:none;padding-top:1px}
+details.q>summary .qx{margin-left:auto;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;transition:.2s}
+details.q[open]>summary .qx{color:var(--teal)}
+details.q .ans{padding:2px 4px 18px 36px;color:var(--ink-soft);font-size:16px;animation:fade .3s ease}
+details.q .ans strong{color:var(--teal-deep)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.finish{margin-top:40px;text-align:center;padding:46px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:30px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:54ch;color:#cfe2dc;position:relative}
+.finish a.btn{display:inline-block;margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;background:#fff;color:var(--teal-deep);border-radius:999px;padding:13px 26px;position:relative}
+footer{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Linux Systeembeheer · Deel 4 van 30</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Cursus Linux Systeembeheer · Niveau 1 (Fundament) · Deel 4 van 30</p>
+  <h1>Een Linux-VM aanmaken op Windows<br><em>WSL2, VirtualBox of Hyper-V.</em></h1>
+  <p class="hero__lead">Milan werkt dagelijks op een Windows-laptop en zet daar zijn derde homelab-node neer. Dit deel loopt de drie routes langs — WSL2, een volwaardige VirtualBox-VM en het ingebouwde Hyper-V — en eindigt met een werkende SSH-verbinding vanaf Windows naar een Ubuntu Server-VM.</p>
+  <div class="hero__stats"><div class="stat"><b>6</b><span>secties</span></div><div class="stat"><b>±1,5u</b><span>leestijd + hands-on</span></div><div class="stat"><b>2</b><span>controlevragen</span></div><div class="stat"><b>N1</b><span>Fundament</span></div></div>
+  <div class="trail">Niveau 1 · Fundament: ① Introductie &rarr; ② Raspberry Pi &rarr; ③ VM op macOS &rarr; <b>④ VM op Windows (hier)</b> &rarr; ⑤ Hoe te volgen &rarr; ⑥ Eerste commando &rarr; ⑦ Shell-fundamenten &rarr; ⑧ Software installeren &rarr; ⑨ Bestandssysteem &rarr; ⑩ Bestanden bekijken &amp; bewerken</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+<li><a href="#s1" data-target="s1">Drie routes, één doel</a></li>
+<li><a href="#s2" data-target="s2">WSL2 installeren</a></li>
+<li><a href="#s3" data-target="s3">Een volwaardige VM met VirtualBox</a></li>
+<li><a href="#s4" data-target="s4">Hyper-V: het ingebouwde alternatief</a></li>
+<li><a href="#s5" data-target="s5">Verbinden met SSH vanaf Windows</a></li>
+<li><a href="#s6" data-target="s6">Terug naar het homelab</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+      <div class="section__head"><div class="section__num">01</div>
+        <div class="section__titles"><h2 class="t">Drie routes, één doel</h2><span class="chip time">⏱ 8 min</span></div>
+        <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Milan werkt op zijn Windows-werklaptop en wil daar, net als eerder op de Raspberry Pi (deel 2) en op de Mac van een collega (deel 3), een omgeving hebben waarin hij vrijelijk kan oefenen. Windows biedt daarvoor drie routes, en ze zijn niet uitwisselbaar in wat ze opleveren.</p>
+<p><strong>WSL2 (Windows Subsystem for Linux, versie 2)</strong> is geen virtuele machine in de klassieke zin, al draait er onder de motorkap wel een lichte, door Microsoft beheerde virtualisatielaag met een eigen Linux-kernel. Het bijzondere is de integratie: uw Windows-bestanden zijn bereikbaar vanuit Linux en omgekeerd, u start Linux-programma's direct vanuit de Windows-terminal, en er is geen apart installatiescherm, geen ISO, geen netwerkconfiguratie. Voor leren, scripten en het grootste deel van deze cursus is dit de snelste en prettigste route.</p>
+<p><strong>Een volwaardige VM met VirtualBox</strong> simuleert complete hardware: een eigen virtuele schijf, een eigen netwerkkaart, een eigen BIOS. U installeert Ubuntu Server zoals u dat op fysieke hardware zou doen, inclusief de installer, partitionering en een echte <code>systemd</code>-boot. Dit is dichter bij hoe een serveromgeving er in het echt uitziet, en is de route die het meest lijkt op wat Milan bij Meridiaan op het Rapportagecluster tegenkomt.</p>
+<p><strong>Hyper-V</strong> is Windows' eigen, ingebouwde hypervisor (alleen op Windows Pro, Enterprise en Education — niet op Windows Home). Functioneel vergelijkbaar met VirtualBox, maar dieper in Windows verweven.</p>
+<div class="callout note"><span class="lbl">Fenna's advies</span><p>Begin met WSL2 voor het dagelijkse oefenen, en zet daarnaast één volwaardige VM met VirtualBox neer voor de onderdelen waar een echte installer, een eigen netwerkstack of een systeem dat u volledig vanaf nul opbouwt, meerwaarde heeft — met name vanaf deel 19 (systemd) en deel 20 (opslag).</p></div>
+      </div>
+    </article>
+
+    <article class="section" id="s2">
+      <div class="section__head"><div class="section__num">02</div>
+        <div class="section__titles"><h2 class="t">WSL2 installeren</h2><span class="chip time">⏱ 12 min</span></div>
+        <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p><strong>Vereisten.</strong> Windows 10 versie 2004 (build 19041) of hoger, of Windows 11. Virtualisatie moet aanstaan in de BIOS/UEFI (op de meeste moderne laptops staat dit standaard aan; bij twijfel controleert u dit via Taakbeheer → tabblad Prestaties → CPU, waar "Virtualisatie" op "Ingeschakeld" moet staan).</p>
+<p>Open een <strong>verhoogde</strong> (als administrator gestarte) PowerShell of Windows Terminal en voer uit:</p>
+<pre><code>wsl --install</code></pre>
+<p>Dit commando schakelt de benodigde Windows-features in (WSL en Virtual Machine Platform), installeert de WSL2-kernel en zet standaard Ubuntu als distributie klaar. Wilt u expliciet zijn over de distributie, dan kan dat ook:</p>
+<pre><code>wsl --install -d Ubuntu</code></pre>
+<p>Na afloop vraagt Windows om een herstart. Doe dat. Na de herstart start Ubuntu automatisch op (of start het handmatig via het Startmenu); de eerste keer vraagt Ubuntu om een Unix-gebruikersnaam en -wachtwoord. Dit is een account <strong>binnen</strong> de Linux-omgeving en staat los van uw Windows-account.</p>
+<p>Controleer daarna de installatie:</p>
+<pre><code>wsl --list --verbose
+wsl --status</code></pre>
+<p>Het eerste commando toont welke distributies geïnstalleerd zijn en of ze op WSL-versie 1 of 2 draaien (u wilt hier <code>2</code> zien staan); het tweede toont de standaarddistributie en -versie. Werkt een bestaande installatie nog op WSL1, dan zet u die om met <code>wsl --set-version Ubuntu 2</code>.</p>
+<p>Ga vervolgens in de Ubuntu-shell direct naar de vertrouwde eerste stap uit iedere Linux-installatie:</p>
+<pre><code>sudo apt update && sudo apt upgrade -y</code></pre>
+<p>Uw Windows-schijven zijn vanuit WSL bereikbaar onder <code>/mnt/c/</code>, <code>/mnt/d/</code>, enzovoort; omgekeerd is uw Linux-thuismap vanuit Windows Verkenner bereikbaar via <code>\\wsl$\Ubuntu\home\&lt;gebruiker&gt;</code> (of door in de Ubuntu-shell <code>explorer.exe .</code> te typen). Voor deze cursus werkt u het prettigst binnen de Linux-bestandsstructuur zelf, niet op <code>/mnt/c/</code> — dat laatste is trager en niet altijd rechtenveilig.</p>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 4, Uitwerking 4.1</p><details class="q"><summary><span class="qn">1</span><span>Bij <code>wsl --list --verbose</code> staat bij uw Ubuntu-installatie een <code>1</code> in de kolom VERSION. Wat betekent dit, en hoe lost u het op?</span><span class="qx">Toon antwoord</span></summary><div class="ans">De distributie draait nog op WSL1 in plaats van WSL2. U zet hem om met <strong><code>wsl --set-version Ubuntu 2</code></strong>. Ook <code>wsl --status</code> moet daarna <code>2</code> tonen als standaard-WSL-versie voor nieuwe installaties.</div></details></div>
+    </article>
+
+    <article class="section" id="s3">
+      <div class="section__head"><div class="section__num">03</div>
+        <div class="section__titles"><h2 class="t">Een volwaardige VM met VirtualBox</h2><span class="chip time">⏱ 18 min</span></div>
+        <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>VirtualBox is gratis, open source (met een aparte, ook gratis Extension Pack voor extra hardware-emulatie) en wordt onderhouden door Oracle.</p>
+<p><strong>Stap 1 — VirtualBox installeren.</strong> Download de Windows-installer van virtualbox.org en doorloop de installatiewizard met de standaardopties.</p>
+<p><strong>Stap 2 — Ubuntu Server-ISO downloaden.</strong> Ga naar ubuntu.com/download/server en download de nieuwste LTS-versie (Long Term Support) als ISO-bestand. Voor het homelab is de LTS-lijn de juiste keuze: vijf jaar ondersteuning, stabiel, en dezelfde lijn die in niveau 2 en 3 als Rapportagecluster-basis wordt gebruikt.</p>
+<p><strong>Stap 3 — Nieuwe VM aanmaken.</strong> Open VirtualBox, klik op "Nieuw" en geef de machine een naam (bijvoorbeeld <code>ubuntu-homelab-03</code>). VirtualBox herkent aan de naam meestal automatisch type "Linux" en versie "Ubuntu (64-bit)"; controleer dit expliciet.</p>
+<p><strong>Stap 4 — Resources toewijzen.</strong> Realistische minimums voor leerwerk:</p>
+<ul>
+<li>Geheugen: 2048 MB (2 GB); meer is prettiger als uw laptop het toelaat.</li>
+<li>Processoren: 2 virtuele CPU's.</li>
+<li>Vaste schijf: nieuwe virtuele schijf (VDI, dynamisch toegewezen), 10–20 GB.</li>
+</ul>
+<p><strong>Stap 5 — ISO koppelen als opstartmedium.</strong> Ga naar de instellingen van de VM → Opslag, selecteer het (lege) optische station onder de controller, en koppel het gedownloade Ubuntu Server-ISO-bestand.</p>
+<p><strong>Stap 6 — Netwerkmodus instellen.</strong> Dit bepaalt of u straks vanaf Windows kunt inloggen. Twee bruikbare opties onder Instellingen → Netwerk:</p>
+<ul>
+<li><strong>NAT met poort-forwarding.</strong> De VM deelt het netwerkadres van de Windows-host en is van buitenaf niet direct zichtbaar. Voeg onder "Geavanceerd → Poort-forwarding" een regel toe die bijvoorbeeld hostpoort 2222 doorstuurt naar gastpoort 22 (SSH). U verbindt dan vanaf Windows met <code>ssh -p 2222 &lt;gebruiker&gt;@127.0.0.1</code>.</li>
+<li><strong>Bridged Adapter.</strong> De VM krijgt een eigen IP-adres op uw thuisnetwerk, alsof het een fysieke machine is. Eenvoudiger voor SSH (<code>ssh &lt;gebruiker&gt;@&lt;ip-van-vm&gt;</code>, zonder aparte poort), maar de VM is dan ook zichtbaar voor andere apparaten op hetzelfde netwerk.</li>
+</ul>
+<p>Voor een thuisnetwerk is Bridged Adapter meestal het prettigst om mee te oefenen; op een zakelijk of gedeeld netwerk is NAT met poort-forwarding de veiligere keuze.</p>
+<p><strong>Stap 7 — VM starten en installeren.</strong> Start de VM; deze boot vanaf het gekoppelde ISO-bestand en toont de Ubuntu Server-installer (een tekstgebaseerde, met toetsenbord te bedienen installer). Doorloop de stappen: taal, toetsenbordindeling, netwerkconfiguratie (bij Bridged meestal automatisch via DHCP), schijfindeling (de voorgestelde "gebruik hele schijf" volstaat voor het homelab), gebruikersaccount (naam, servernaam, wachtwoord) en tot slot het schermpje met optionele serverpakketten.</p>
+<div class="callout warn"><span class="lbl">Meest gemaakte fout</span><p>Vink hier expliciet "OpenSSH server" aan — zonder deze stap is er na installatie geen SSH-toegang en moet u dit later alsnog handmatig installeren met <code>sudo apt install openssh-server</code>. Na de installatie rondt u af, koppelt u het ISO-bestand los (Instellingen → Opslag) en herstart u de VM, die nu vanaf de virtuele schijf opstart.</p></div>
+      </div>
+<div class="quiz"><div class="quiz__h">Controlevraag</div><p class="quiz__src">Uit Werkboek deel 4, Opdracht 4.2e / Uitwerking 4.2</p><details class="q"><summary><span class="qn">1</span><span>U bent vergeten "OpenSSH server" aan te vinken tijdens de Ubuntu Server-installer. Wat doet u?</span><span class="qx">Toon antwoord</span></summary><div class="ans">U voert op de VM zelf, via het VirtualBox-schermvenster met het ingestelde wachtwoord, het commando <strong><code>sudo apt update && sudo apt install openssh-server -y</code></strong> uit. Dit is geen halt — het is het meest voorkomende struikelblok van dit deel en eenvoudig te herstellen.</div></details></div>
+    </article>
+
+    <article class="section" id="s4">
+      <div class="section__head"><div class="section__num">04</div>
+        <div class="section__titles"><h2 class="t">Hyper-V: het ingebouwde alternatief</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s4"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Windows Pro, Enterprise en Education hebben een eigen hypervisor ingebouwd: <strong>Hyper-V</strong>. U schakelt deze in via "Windows-onderdelen in- of uitschakelen" in het configuratiescherm, of met PowerShell (verhoogd):</p>
+<pre><code>Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All</code></pre>
+<p>Functioneel kan Hyper-V hetzelfde als VirtualBox: een Ubuntu Server-VM aanmaken, een ISO koppelen, installeren, netwerken configureren. Eén technisch punt is belangrijk om te weten voordat u kiest.</p>
+<div class="callout warn"><span class="lbl">Let op</span><p><strong>Hyper-V en VirtualBox gebruiken beide de virtualisatie-extensies van uw processor, en concurreren daarom om dezelfde hardwarelaag.</strong> Staat Hyper-V aan, dan kan VirtualBox (afhankelijk van versie) alsnog werken maar merkbaar trager draaien, of foutmeldingen geven over ontbrekende VT-x-toegang. Voor dit homelab is de praktische regel: <strong>kies er één.</strong></p></div>
+<p>Deze cursus gaat in de voorbeelden uit van VirtualBox, omdat het overal beschikbaar is (ook op Windows Home) en niet aan een Windows-editie gebonden is; wie al met Hyper-V werkt (bijvoorbeeld omdat de organisatie dat voorschrijft) kan dezelfde stappen in Hyper-V Manager doorlopen.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s5">
+      <div class="section__head"><div class="section__num">05</div>
+        <div class="section__titles"><h2 class="t">Verbinden met SSH vanaf Windows</h2><span class="chip time">⏱ 6 min</span></div>
+        <label class="done-toggle" data-done="s5"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Moderne Windows-versies leveren een OpenSSH-client standaard mee in PowerShell — er is geen aparte installatie nodig. Vanuit een gewone (niet-verhoogde) PowerShell of Windows Terminal:</p>
+<pre><code>ssh &lt;gebruiker&gt;@&lt;ip-van-vm&gt;</code></pre>
+<p>Bij de eerste verbinding vraagt SSH om de fingerprint van de host te bevestigen (typ <code>yes</code>); daarna wordt om het wachtwoord van de Linux-gebruiker gevraagd. Bij een NAT-VM met poort-forwarding gebruikt u in plaats daarvan:</p>
+<pre><code>ssh -p 2222 &lt;gebruiker&gt;@127.0.0.1</code></pre>
+<p>Werksleutel-authenticatie in plaats van wachtwoorden komt uitgebreid terug in deel 15.</p>
+      </div>
+    </article>
+
+    <article class="section" id="s6">
+      <div class="section__head"><div class="section__num">06</div>
+        <div class="section__titles"><h2 class="t">Terug naar het homelab</h2><span class="chip time">⏱ 5 min</span></div>
+        <label class="done-toggle" data-done="s6"><input type="checkbox">Afgerond</label></div>
+      <div class="prose">
+<p>Met deze VM heeft Milan zijn derde homelab-node: de Raspberry Pi (deel 2), de macOS-VM van een collega ter vergelijking (deel 3), en nu een Ubuntu Server-VM op zijn eigen Windows-werklaptop. Fenna geeft hem een concrete checklist mee, die ook de basis vormt voor de opdrachten in het werkboek: installeer de VM, controleer dat SSH werkt vanaf de Windows-terminal, en houd bij welke netwerkmodus en welk IP-adres bij welke node hoort — dat overzicht heeft hij vanaf deel 15 (SSH-config) opnieuw nodig.</p>
+      </div>
+    </article>
+
+
+    <div class="finish">
+      <h3>Verder naar deel 5</h3>
+      <p>Deel 5: Hoe deze cursus te volgen.</p>
+      <a class="btn" href="deel-05.html">Deel 5 openen →</a>
+    </div>
+
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer>Eductus · Cursus Linux Systeembeheer · Deel 4 van 30 · <a href="index.html">terug naar cursusoverzicht</a> · Voortgang lokaal in je browser (localStorage).</footer>
+
+<script>
+(function(){
+  var SECTIONS=["s1","s2","s3","s4","s5","s6"];
+  var KEY="eductus_lsb4_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){state={};save(KEY,state);updateProgress();});
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+})();
+</script>
+</body>
+</html>
