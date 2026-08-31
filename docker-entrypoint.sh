@@ -33,8 +33,9 @@ add_traden_user "${TRADEN_USER_JW:-}" "${TRADEN_PASS_JW:-}"
 mkdir -p /var/log/nginx-persist
 chmod 755 /var/log/nginx-persist
 
-# Achtergrondlus die traden-admin.html elke 5 minuten vers genereert vanuit
-# het logbestand (module 3, alleen zichtbaar voor Pieter via de nginx-check).
+# Achtergrondlus die admin.html elke 5 minuten vers genereert vanuit de drie
+# access-logs (leren/cursus/traden), alleen zichtbaar voor Pieter via de
+# nginx-check op elk van de drie serverblokken.
 # Draait vóór exec nginx zodat de pagina niet leeg is als iemand meteen na
 # een deploy kijkt (eerste run gebeurt meteen, niet pas na 300s).
 (
