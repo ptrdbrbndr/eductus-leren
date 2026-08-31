@@ -17,6 +17,7 @@ RUN chmod +x /docker-entrypoint.sh /generate-admin.sh
 COPY index.html /usr/share/nginx/html/cursus/
 COPY sap-*.html /usr/share/nginx/html/cursus/
 COPY courses.json /usr/share/nginx/html/cursus/
+COPY whoami /usr/share/nginx/html/cursus/
 COPY domain-driven-design/ /usr/share/nginx/html/cursus/domain-driven-design/
 COPY enterprise-integration-patterns/ /usr/share/nginx/html/cursus/enterprise-integration-patterns/
 COPY sap-voor-business-analysts/ /usr/share/nginx/html/cursus/sap-voor-business-analysts/
