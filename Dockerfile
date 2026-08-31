@@ -10,7 +10,8 @@ RUN apk add --no-cache apache2-utils
 # Eigen configuratie (caching, security headers, SPA-vrij: gewone statische bestanden)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY generate-admin.sh /generate-admin.sh
+RUN chmod +x /docker-entrypoint.sh /generate-admin.sh
 
 # ---- cursus.eductus.nl — oude vormgeving, ongewijzigd per cursus -----------
 COPY index.html /usr/share/nginx/html/cursus/

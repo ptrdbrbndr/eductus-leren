@@ -27,4 +27,21 @@ add_traden_user "${TRADEN_USER_PIETER:-}" "${TRADEN_PASS_PIETER:-}"
 add_traden_user "${TRADEN_USER_CHRIS:-}" "${TRADEN_PASS_CHRIS:-}"
 add_traden_user "${TRADEN_USER_JW:-}" "${TRADEN_PASS_JW:-}"
 
+# Persistent volume voor het traden-access-log (mount_path uit Coolify storage
+# 'traden-nginx-logs' — overleeft redeploys, in tegenstelling tot de rest van
+# de container). Map moet bestaan en schrijfbaar zijn vóór nginx erin logt.
+mkdir -p /var/log/nginx-persist
+chmod 755 /var/log/nginx-persist
+
+# Achtergrondlus die traden-admin.html elke 5 minuten vers genereert vanuit
+# het logbestand (module 3, alleen zichtbaar voor Pieter via de nginx-check).
+# Draait vóór exec nginx zodat de pagina niet leeg is als iemand meteen na
+# een deploy kijkt (eerste run gebeurt meteen, niet pas na 300s).
+(
+  while true; do
+    /generate-admin.sh || echo "WAARSCHUWING: generate-admin.sh mislukt." >&2
+    sleep 300
+  done
+) &
+
 exec "$@"
