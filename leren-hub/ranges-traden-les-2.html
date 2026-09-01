@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Les 2 — De range markeren | Eductus</title>
+<meta name="description" content="De eerste swing high en low als ankerpunten, de doorrol-regel bij een breuk, en het instellen van de fixed range volume profile om VAH, VAL en POC af te lezen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;--paper-2:#ece2d1;--ink:#211c17;--ink-soft:#544a3e;--ink-faint:#857a6b;
+  --line:#d8cbb4;--teal:#0e5a51;--teal-deep:#0a423b;--ochre:#bd7d27;--oxblood:#8a3324;
+  --teal-tint:#e2ece8;--ochre-tint:#f3e7cf;
+  --shadow:0 1px 2px rgba(33,28,23,.06),0 10px 30px -12px rgba(33,28,23,.22);
+  --shadow-lg:0 2px 4px rgba(33,28,23,.08),0 24px 60px -20px rgba(33,28,23,.32);
+  --maxw:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--paper);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(14,90,81,.06),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(189,125,39,.06),transparent 55%);
+  color:var(--ink);font-family:"Spectral",Georgia,serif;font-size:18px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+.progress-rail{position:fixed;top:0;left:0;right:0;height:4px;z-index:60}
+.progress-rail__fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--ochre));transition:width .35s ease}
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(244,237,224,.82);border-bottom:1px solid var(--line)}
+.topbar__inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:"Fraunces",serif;font-weight:600;letter-spacing:.5px}
+.brand .dot{color:var(--ochre)}
+.brand small{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint)}
+.topbar__meta{margin-left:auto;display:flex;align-items:center;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+.pct{font-weight:600;color:var(--teal)}
+.btn-reset{font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);padding:6px 10px;border-radius:999px;cursor:pointer;transition:.2s}
+.btn-reset:hover{border-color:var(--teal);color:var(--teal)}
+.hero{max-width:var(--maxw);margin:0 auto;padding:64px 28px 40px;position:relative;z-index:2}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ochre);font-weight:600;margin:0 0 18px}
+.hero h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(34px,6vw,68px);line-height:1.04;margin:0;letter-spacing:-1px}
+.hero h1 em{font-style:italic;color:var(--teal)}
+.hero__lead{max-width:64ch;margin:24px 0 0;font-size:20px;color:var(--ink-soft)}
+.hero__stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.stat{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:120px;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:26px;line-height:1;color:var(--teal)}
+.stat span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+.disclaimer{margin-top:34px;border-left:3px solid var(--oxblood);background:#f4e2dd;padding:14px 20px;border-radius:0 12px 12px 0;font-size:15.5px;color:var(--ink-soft)}
+.disclaimer b{color:var(--oxblood)}
+.trail{margin-top:20px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-faint);letter-spacing:.5px}
+.trail b{color:var(--teal)}
+.shell{max-width:var(--maxw);margin:0 auto;padding:20px 28px 120px;display:grid;grid-template-columns:248px 1fr;gap:48px;position:relative;z-index:2}
+@media(max-width:920px){.shell{grid-template-columns:1fr;gap:0}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 110px);overflow:auto}
+.toc h2{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 14px;padding-left:14px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;margin:1px 0}
+.toc a{display:flex;gap:10px;align-items:flex-start;padding:9px 12px 9px 14px;border-radius:10px;color:var(--ink-soft);font-size:15px;line-height:1.3;border-left:2px solid transparent;transition:.18s}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);padding-top:2px}
+.toc a:hover{background:var(--paper-2);text-decoration:none}
+.toc a.active{background:var(--teal-tint);color:var(--teal-deep);border-left-color:var(--teal);font-weight:600}
+.toc a.done::after{content:"\2713";margin-left:auto;color:var(--teal);font-weight:700}
+@media(max-width:920px){.toc{display:none}}
+.content{min-width:0}
+.section{padding:30px 0 12px;border-top:1px solid var(--line);margin-top:28px;scroll-margin-top:80px}
+.section:first-child{border-top:none;margin-top:0}
+.section__head{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.section__num{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:#fff;background:var(--teal);width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;box-shadow:var(--shadow)}
+.section__titles{flex:1;min-width:240px}
+.section h2.t{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(24px,3.4vw,34px);margin:0;line-height:1.08;letter-spacing:-.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);border:1px solid var(--line);color:var(--ink-soft);padding:5px 11px;border-radius:999px;margin-top:8px}
+.chip.time{color:var(--ochre);border-color:#e3cfa6;background:var(--ochre-tint)}
+.done-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;color:var(--ink-soft);user-select:none;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:var(--paper);transition:.2s}
+.done-toggle:hover{border-color:var(--teal)}
+.done-toggle input{accent-color:var(--teal);width:16px;height:16px}
+.done-toggle.is-done{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-deep);font-weight:600}
+.prose{margin-top:26px}
+.prose h3{font-family:"Fraunces",serif;font-weight:600;font-size:22px;margin:32px 0 10px;letter-spacing:-.3px}
+.prose h4{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:24px 0 8px}
+.prose p{margin:12px 0}.prose ul,.prose ol{margin:12px 0;padding-left:22px}.prose li{margin:6px 0}
+.prose li::marker{color:var(--ochre)}.prose strong{color:var(--ink);font-weight:600}
+.kernzin{font-family:"Fraunces",serif;font-style:italic;font-size:21px;color:var(--teal-deep);margin:0 0 20px;padding:14px 20px;border-left:4px solid var(--teal);background:var(--teal-tint);border-radius:0 12px 12px 0}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--paper-2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:var(--oxblood)}
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--teal-deep);color:#eef5f2;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+tbody tr:nth-child(even){background:var(--paper-2)}tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--teal-deep)}
+.callout{margin:20px 0;padding:16px 20px 16px 22px;border-radius:0 14px 14px 0;border-left:4px solid var(--teal);background:var(--teal-tint)}
+.callout.warn{border-left-color:var(--oxblood);background:#f4e2dd}
+.callout.note{border-left-color:var(--ochre);background:var(--ochre-tint)}
+.callout .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;display:block;margin-bottom:5px}
+.callout.tip .lbl{color:var(--teal-deep)}.callout.warn .lbl{color:var(--oxblood)}.callout.note .lbl{color:#9a6418}
+.callout p{margin:4px 0}
+.onchart{margin:20px 0;padding:18px 22px;border:1px dashed var(--line);border-radius:14px;background:var(--paper-2)}
+.onchart .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;color:var(--teal);display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.onchart .lbl::before{content:"\1F4C8";font-family:initial}
+.workfield{margin:14px 0 0}
+.workfield textarea{width:100%;min-height:90px;font-family:"Spectral",serif;font-size:16px;line-height:1.6;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);resize:vertical}
+.workfield textarea:focus{outline:none;border-color:var(--teal)}
+.savehint{margin-top:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint)}
+.savehint.show{color:var(--teal)}
+.exam{margin-top:12px;background:var(--paper-2);border:1px solid var(--line);border-radius:18px;padding:8px 26px 26px;box-shadow:var(--shadow-lg)}
+.exam__intro{padding:22px 0 6px;border-bottom:1px solid var(--line)}
+.exam__intro h3{font-family:"Fraunces",serif;font-weight:600;font-size:24px;margin:0 0 6px}
+.exam__intro p{margin:6px 0;color:var(--ink-soft);font-size:15.5px}
+.mcq{padding:20px 0;border-bottom:1px solid var(--line)}.mcq:last-of-type{border-bottom:none}
+.mcq__q{display:flex;gap:12px;font-weight:600;font-size:17px;margin-bottom:12px}
+.mcq__q .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--teal);flex:none;padding-top:2px}
+.opt{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;padding:11px 14px;border:1px solid var(--line);border-radius:11px;margin:7px 0 7px 34px;cursor:pointer;background:var(--paper);transition:.15s;font-size:15.5px}
+.opt:hover{border-color:var(--teal)}
+.opt input{margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex:none}
+.opt .otxt{flex:1}
+.opt.correct{border-color:var(--teal);background:var(--teal-tint)}
+.opt.wrong{border-color:var(--oxblood);background:#f4e2dd}
+.opt .mark{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;opacity:0;flex:none}
+.opt.correct .mark{opacity:1;color:var(--teal-deep)}.opt.correct .mark::after{content:"\2713 juist"}
+.opt.wrong .mark{opacity:1;color:var(--oxblood)}.opt.wrong .mark::after{content:"\2717"}
+.opt .exp{display:none;flex-basis:100%;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);font-size:13.5px;color:var(--ink-soft)}
+.exam.graded .opt .exp{display:block}
+.exam.graded .opt{cursor:default;pointer-events:none}
+.exam__actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding-top:22px}
+.btn{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;border:none;border-radius:999px;padding:13px 24px;cursor:pointer;transition:.2s}
+.btn-primary{background:var(--teal);color:#fff;box-shadow:var(--shadow)}.btn-primary:hover{background:var(--teal-deep)}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink-soft)}.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
+.scorebox{display:none;align-items:center;gap:18px;font-family:"IBM Plex Mono",monospace;font-size:14px}.scorebox.show{display:flex}
+.scorebox .ring{--v:0;width:64px;height:64px;border-radius:50%;flex:none;display:grid;place-items:center;background:conic-gradient(var(--teal) calc(var(--v)*1%),var(--line) 0);position:relative}
+.scorebox .ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--paper-2)}
+.scorebox .ring b{position:relative;font-family:"Fraunces",serif;font-size:19px;color:var(--teal-deep)}
+.scorebox .verdict{font-size:15px}.scorebox .verdict b{font-family:"Fraunces",serif;font-size:19px}
+.scorebox .verdict.pass b{color:var(--teal)}.scorebox .verdict.fail b{color:var(--oxblood)}
+.les-ref{display:inline-block;margin-top:2px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint)}
+.finish{margin-top:40px;text-align:center;padding:40px 28px;border-radius:20px;background:linear-gradient(135deg,var(--teal-deep),var(--teal));color:#eef5f2;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.finish::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 80% 0,rgba(189,125,39,.35),transparent 60%);pointer-events:none}
+.finish h3{font-family:"Fraunces",serif;font-size:27px;margin:0 0 10px;color:#fff;position:relative}
+.finish p{margin:6px auto;max-width:56ch;color:#cfe2dc;position:relative}
+.finish .navrow{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:24px;position:relative}
+.finish .navrow a{display:inline-flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;font-weight:600;padding:13px 22px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;transition:.2s}
+.finish .navrow a:hover{background:rgba(255,255,255,.22);text-decoration:none}
+.finish .navrow a.primary{background:var(--ochre);border-color:var(--ochre)}
+.finish .navrow a.primary:hover{background:#a6701f}
+footer.sitefoot{max-width:var(--maxw);margin:0 auto;padding:30px 28px 60px;color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.5px;position:relative;z-index:2;border-top:1px solid var(--line)}
+footer.sitefoot a{color:var(--ink-soft);text-decoration:underline}
+.toTop{position:fixed;right:22px;bottom:22px;z-index:55;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--teal);cursor:pointer;font-size:18px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+.toTop.show{opacity:1;transform:none;pointer-events:auto}
+@media print{
+  .topbar,.toc,.toTop,.progress-rail,.done-toggle,.btn-reset,.finish{display:none!important}
+  .shell{grid-template-columns:1fr;display:block}
+  body{background:#fff;font-size:12pt}body::before{display:none}
+}
+
+</style>
+</head>
+<body>
+<div class="progress-rail"><div class="progress-rail__fill" id="rail"></div></div>
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">Eductus<span class="dot">.</span><small>Ranges traden · Les 2</small></div>
+    <div class="topbar__meta"><span>Voortgang <span class="pct" id="pct">0%</span></span>
+      <button class="btn-reset" id="reset" title="Voortgang wissen">Reset</button></div>
+  </div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow">Ranges traden · Les 2 van 8 · Zelfstudie</p>
+  <h1>De range markeren</h1>
+  <p class="hero__lead">Twee punten bepalen je hele analyse. Hoe je ze kiest, wanneer je ze verplaatst, en hoe je het volume erbij haalt.</p>
+  <div class="trail">Leerreeks: ❶ L1 → <b>❷ L2 (hier)</b> → ❸ L3 → ❹ L4 → ❺ L5 → ❻ L6 → ❼ L7 → ❽ L8 → ⭐ Eindtoets</div>
+</section>
+
+<div class="shell">
+  <nav class="toc" aria-label="Inhoudsopgave">
+    <h2>Inhoud</h2>
+    <ol id="tocList">
+      <li><a href="#s1" data-target="s1">Kernidee</a></li>
+      <li><a href="#s2" data-target="s2">Schema: de vijf niveaus</a></li>
+      <li><a href="#s3" data-target="s3">Op de chart</a></li>
+      <li><a href="#squiz" data-target="squiz">Controlevragen</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <article class="section" id="s1">
+  <div class="section__head"><div class="section__num">01</div>
+    <div class="section__titles"><h2 class="t">Kernidee</h2><span class="chip time">⏱ 13 min</span></div>
+    <label class="done-toggle" data-done="s1"><input type="checkbox">Afgerond</label></div>
+  <div class="prose">
+
+<p class="kernzin">Je range is precies zo betrouwbaar als de twee punten waarmee je hem trekt.</p>
+
+<p>Een range markeren is één beslissing die je de rest van de sessie achtervolgt. Kies je de verkeerde high of low, dan klopt je hele indeling niet: je value area zit scheef, je middenlijn ligt op de verkeerde plek, en elk niveau dat je er straks uit afleidt is een paar procent verschoven. Er is geen tool die dat later repareert.</p>
+
+<h3>De eerste high en de eerste low</h3>
+
+<p>De werkregel is simpel: <strong>gebruik de eerste duidelijke swing high en de eerste duidelijke swing low van de consolidatie.</strong> Niet de hoogste en laagste punten die je achteraf in de hele periode kunt vinden, maar de twee punten waar de markt voor het eerst zei "hier stopt het".</p>
+
+<p>Dat is geen esthetische keuze. Die eerste twee punten zijn de niveaus die iedereen zag ontstaan, en dus de niveaus waar de meeste orders bij liggen: stops van wie de beweging miste, limieten van wie op een tweede kans wacht. Een extreem dat er drie dagen later bijkomt na een korte wick heeft die geschiedenis niet.</p>
+
+<p>Met "duidelijk" bedoelen we een punt dat de markt daadwerkelijk heeft afgemaakt: een high met een lagere high erna, een low met een hogere low erna. Zolang de prijs nog lager handelt, is je low geen low &mdash; hij is een kandidaat. In les 4 komt daar een concreet hulpmiddel voor terug (fractals), maar de gedachte is nu al bruikbaar: <strong>wacht tot het punt af is, in plaats van het te voorspellen.</strong></p>
+
+<h3>Wanneer verplaats je je randen</h3>
+
+<p>Een range die zich nog ontwikkelt, breidt uit. De prijs maakt een nieuwe high binnen de consolidatie, of zakt dieper weg dan je eerste low. Dan schuif je je rand mee. De regel daarbij: <strong>je markeert opnieuw naar de huidige prijsactie, maar je houdt je oude niveaus in beeld.</strong> Zeker de eerste keer dat de prijs een oud niveau opnieuw raakt, is dat oude niveau nog altijd een plek waar veel orders liggen.</p>
+
+<p>Breekt de range echt, dan geldt de doorrol uit les 1: de gebroken rand wordt na een geslaagde test de tegenoverliggende rand van de nieuwe range. Je hoeft dus niet opnieuw te beginnen, je verschuift je raamwerk één stap op.</p>
+
+<h3>Het volume erbij: de fixed range volume profile</h3>
+
+<p>Met twee horizontale lijnen weet je waar de grenzen liggen. Je weet nog niet waar binnen die grenzen het echte werk is gedaan. Daarvoor gebruik je een <strong>volumeprofiel over precies dat stuk grafiek</strong> &mdash; in TradingView heet dat de <em>fixed range volume profile</em>. Het draait het volume een kwartslag: in plaats van "hoeveel is er verhandeld per tijdseenheid" krijg je "hoeveel is er verhandeld per prijs".</p>
+
+<p>Dat levert drie niveaus op die je de hele cursus blijft gebruiken:</p>
+
+<ul>
+<li><strong>POC</strong> (point of control) &mdash; de prijs waar het meeste volume is verhandeld. Het zwaartepunt van de range, en het niveau waar de markt het meest "thuis" is.</li>
+<li><strong>VAH</strong> (value area high) en <strong>VAL</strong> (value area low) &mdash; de boven- en ondergrens van het gebied waarin een vast percentage van het totale volume is verhandeld, standaard 70%. Samen heet dat de <strong>value area</strong>: het gebied waar de markt het over de prijs eens was.</li>
+</ul>
+
+<p>De instellingen die in het bronmateriaal worden gebruikt zijn <strong>500 rows en een value area van 70</strong>. Die 70 is de gangbare conventie uit market profile; 500 rows bepaalt hoe fijn het profiel wordt opgedeeld, en fijner betekent hier preciezere niveaus. Als je platform standaard op veel minder rijen staat, worden je VAH en VAL merkbaar grover.</p>
+
+<h3>Waar begint en eindigt de pull</h3>
+
+<p>Dit is de vraag die de meeste mensen overslaan, terwijl hij je niveaus bepaalt. Er zijn twee bruikbare manieren.</p>
+
+<p><strong>Alleen het range-volume.</strong> Je begint het profiel op de eerste candle ná de candle die de vorige range uit brak, en je eindigt op de laatste candle vóór de candle die deze range uit breekt. Je meet dus precies de consolidatie en niets anders. Dit geeft de schoonste VAH, VAL en POC van de range zelf, en is de standaardkeuze.</p>
+
+<p><strong>Met de uitbraakcandle erbij.</strong> Je laat het profiel beginnen op de uitbraakcandle zelf. De gedachte: de partijen die groot genoeg waren om de vorige range open te breken, hebben daar een positie opgebouwd, en het is aannemelijk dat ze die plek verdedigen als de prijs terugkomt. Bijkomend voordeel is dat je in dat profiel de gaten van de snelle beweging ziet zitten &mdash; dunne stukken waar nauwelijks is verhandeld (<em>single prints</em>), en juist dikke stukken (<em>high volume nodes</em>). Die komen in les 8 terug als confluence.</p>
+
+<div class="callout note"><span class="lbl">Praktisch</span><p>Voor het aanwijzen van start- en eindpunt van een HTF-range werkt de uurgrafiek prettig: fijn genoeg om de juiste candle te raken, grof genoeg om overzicht te houden. Voor een LTF-range pak je vijftien of vijf minuten.</p></div>
+
+<h3>Een range die nog niet af is</h3>
+
+<p>Zolang de range zich vormt, verschuiven VAH, VAL en POC. Dat is geen storing: er komt volume bij, dus het zwaartepunt beweegt. In het begin van een LTF-range kan dat behoorlijk hard gaan. Twee gevolgen daarvan:</p>
+
+<ul>
+<li><strong>Wacht op genoeg data.</strong> Bij een LTF-range wil je ongeveer een dag hebben voordat je de niveaus serieus neemt. Handel je toch eerder, doe dat dan op andere argumenten &mdash; vorige dag- of weekniveaus, HTF-horizontals, oude POC's die nooit zijn teruggetest.</li>
+<li><strong>Trek het profiel dagelijks bij</strong> naar de huidige prijsactie, maar houd de niveaus van gisteren in je hoofd. De eerste keer dat een verlaten VAH weer wordt geraakt, telt dat niveau nog steeds mee.</li>
+</ul>
+
+<p>Een laatste praktische tip die je veel gedoe bespaart: geef je oude en je nieuwe range verschillende kleuren. Dan zie je in één oogopslag of je naar de structuur van vandaag kijkt of naar die van vorige week, en of een LTF-range zich hoog of laag in de HTF-range bevindt.</p>
+
+  </div>
+</article>
+    <article class="section" id="s2">
+  <div class="section__head"><div class="section__num">02</div>
+    <div class="section__titles"><h2 class="t">Schema: de vijf niveaus</h2></div>
+    <label class="done-toggle" data-done="s2"><input type="checkbox">Afgerond</label></div>
+  <div class="prose">
+
+<div class="tablewrap"><table>
+<thead><tr><th>Niveau</th><th>Wat het is</th><th>Waar het vandaan komt</th><th>Rol in de handel</th></tr></thead>
+<tbody>
+<tr><td><strong>High</strong></td><td>Bovengrens van de range</td><td>Eerste duidelijke swing high</td><td>Zoekgebied voor shorts; invalidatie voor longs</td></tr>
+<tr><td><strong>VAH</strong></td><td>Bovengrens van de value area</td><td>Volumeprofiel, bovenrand van de 70%</td><td>Eerste weerstand binnen de range; doel van een long vanaf VAL</td></tr>
+<tr><td><strong>POC</strong></td><td>Prijs met het meeste volume</td><td>Volumeprofiel, hoogste rij</td><td>Magneet en eerste winstnemingsniveau vanaf beide randen</td></tr>
+<tr><td><strong>VAL</strong></td><td>Ondergrens van de value area</td><td>Volumeprofiel, onderrand van de 70%</td><td>Eerste steun binnen de range; doel van een short vanaf VAH</td></tr>
+<tr><td><strong>Low</strong></td><td>Ondergrens van de range</td><td>Eerste duidelijke swing low</td><td>Zoekgebied voor longs; invalidatie voor shorts</td></tr>
+</tbody>
+</table></div>
+
+<div class="callout tip"><span class="lbl">Instellingen om te onthouden</span><p>Fixed range volume profile: <code>500 rows</code>, <code>value area 70</code>. Start van de pull: eerste candle ná de vorige uitbraak (of op de uitbraakcandle zelf als je de single prints en high volume nodes wilt zien). Einde: laatste candle vóór de uitbraak uit deze range.</p></div>
+
+  </div>
+</article>
+    <article class="section" id="s3">
+  <div class="section__head"><div class="section__num">03</div>
+    <div class="section__titles"><h2 class="t">Op de chart</h2></div>
+    <label class="done-toggle" data-done="s3"><input type="checkbox">Afgerond</label></div>
+  <div class="prose">
+
+<div class="onchart"><span class="lbl">Toepassing</span>
+<p>Kies een instrument dat de afgelopen weken duidelijk zijwaarts heeft bewogen. Markeer de eerste duidelijke swing high en swing low van die consolidatie met horizontale lijnen. Zet daarna een fixed range volume profile over precies dat stuk, met 500 rows en value area 70, en noteer VAH, POC en VAL. Trek het profiel vervolgens nog een keer, nu inclusief de candle die de vorige range uit brak. Noteer hoeveel je drie niveaus verschuiven.</p>
+<div class="workfield">
+  <textarea data-field="l2_onchart" placeholder="Instrument, high/low, VAH/POC/VAL bij beide manieren van trekken, en het verschil&hellip;"></textarea>
+</div>
+<div class="savehint" id="saveHint">Je antwoord wordt lokaal in deze browser bewaard.</div>
+</div>
+
+<div class="callout note"><span class="lbl">Waarom deze opdracht</span><p>Het verschil dat je opschrijft is precies de reden dat je de ankerkeuze bewust maakt in plaats van de tool ergens overheen te slepen. Verschuiven je niveaus nauwelijks, dan is de keuze onbelangrijk voor dit instrument. Verschuiven ze duidelijk, dan weet je dat je elke keer dezelfde methode moet aanhouden om jezelf niet voor de gek te houden. Meer over volumeprofielen staat in <a href="tpo-prijsactie-volume-cvd.html">De veiling lezen</a>.</p></div>
+
+  </div>
+</article>
+    <article class="section" id="squiz">
+  <div class="section__head"><div class="section__num">04</div>
+    <div class="section__titles"><h2 class="t">Controlevragen</h2><span class="chip time">3 vragen</span></div>
+    <label class="done-toggle" data-done="squiz"><input type="checkbox">Afgerond</label></div>
+  <div class="exam" id="quizblok">
+    <div class="exam__intro"><h3>Check je begrip</h3><p>Toepassingsvragen over deze les. Geen cijfer, wel directe uitleg per antwoord.</p></div>
+<div class="mcq" data-answer="1">
+  <div class="mcq__q"><span class="n">1</span><span>Welke twee punten gebruik je volgens deze les om de range te markeren?</span></div>
+  <label class="opt"><input type="radio" name="l2q1"><span class="otxt">Het hoogste en laagste punt van de hele consolidatieperiode.</span><span class="mark"></span><span class="exp">Dat zijn vaak losse wicks van later. De les kiest bewust andere punten.</span></label>
+  <label class="opt"><input type="radio" name="l2q1"><span class="otxt">De eerste duidelijke swing high en de eerste duidelijke swing low van de consolidatie.</span><span class="mark"></span><span class="exp">Juist &mdash; die zag iedereen ontstaan, dus daar liggen de meeste orders.</span></label>
+  <label class="opt"><input type="radio" name="l2q1"><span class="otxt">De open en close van de eerste dag van de consolidatie.</span><span class="mark"></span><span class="exp">Openings- en slotkoersen zeggen niets over waar de markt daadwerkelijk stopte.</span></label>
+</div>
+<div class="mcq" data-answer="0">
+  <div class="mcq__q"><span class="n">2</span><span>Wat betekent het als de prijs zich binnen de value area bevindt?</span></div>
+  <label class="opt"><input type="radio" name="l2q2"><span class="otxt">Dat de prijs zich beweegt in het gebied waar het grootste deel van het volume is verhandeld &mdash; standaard 70%.</span><span class="mark"></span><span class="exp">Juist. De value area is het gebied waar de markt het relatief eens was over de prijs.</span></label>
+  <label class="opt"><input type="radio" name="l2q2"><span class="otxt">Dat de prijs onder zijn eerlijke waarde ligt en dus koopwaardig is.</span><span class="mark"></span><span class="exp">De value area zegt niets over goedkoop of duur; het is een volumeverdeling, geen waardering.</span></label>
+  <label class="opt"><input type="radio" name="l2q2"><span class="otxt">Dat er weinig volume is verhandeld en de beweging dus onbetrouwbaar is.</span><span class="mark"></span><span class="exp">Dat is juist andersom: buiten de value area is minder verhandeld.</span></label>
+</div>
+<div class="mcq" data-answer="2">
+  <div class="mcq__q"><span class="n">3</span><span>Je markeert een LTF-range die twee uur oud is en de VAH schuift elk kwartier op. Wat doe je?</span></div>
+  <label class="opt"><input type="radio" name="l2q3"><span class="otxt">De niveaus toch gebruiken, want ze zijn beter dan niets.</span><span class="mark"></span><span class="exp">Ze zijn instabiel omdat er nog te weinig volume in zit. Handelen op cijfers die nog bewegen is precies de valkuil.</span></label>
+  <label class="opt"><input type="radio" name="l2q3"><span class="otxt">Overstappen naar een lagere instelling van de rows zodat de niveaus stabieler ogen.</span><span class="mark"></span><span class="exp">Grover maken verbergt de instabiliteit, het lost hem niet op.</span></label>
+  <label class="opt"><input type="radio" name="l2q3"><span class="otxt">Wachten tot er ongeveer een dag aan data in zit, en intussen werken met andere niveaus zoals vorige dag/week of HTF-horizontals.</span><span class="mark"></span><span class="exp">Juist &mdash; precies wat de les voorschrijft.</span></label>
+</div>
+    <div class="exam__actions">
+      <button class="btn btn-primary" id="gradeBtn">Nakijken</button>
+      <button class="btn btn-ghost" id="retryBtn" style="display:none">Opnieuw</button>
+      <div class="scorebox" id="scorebox"><div class="ring" id="ring"><b id="ringPct">0%</b></div><div class="verdict" id="verdict"></div></div>
+    </div>
+  </div>
+  <div class="finish">
+    <h3>Les 2 afgerond &mdash; je grafiek is ingedeeld</h3>
+    <p>High, VAH, POC, VAL en low staan er. Vanaf hier gaat het over wat je met die vijf niveaus doet.</p>
+    <div class="navrow">
+      <a href="ranges-traden.html">← Overzicht</a>
+      <a class="primary" href="ranges-traden-les-3.html">Les 3 →</a>
+    </div>
+  </div>
+</article>
+  </main>
+</div>
+
+<button class="toTop" id="toTop" aria-label="Naar boven">↑</button>
+<footer class="sitefoot">Eductus · Ranges traden: van markering tot TR Pocket — Les 2 · v1.0 · Voortgang lokaal in je browser (localStorage). Dit is educatief materiaal over technische analyse, geen beleggingsadvies. Traderen brengt risico op verlies van kapitaal mee. Geen enkele setup of niveau is een garantie. Zie de <a href="ranges-traden.html#disclaimers">disclaimers</a>.</footer>
+<script>
+(function(){
+  var SECTIONS=["s1", "s2", "s3", "squiz"];
+  var KEY="eductus_ranges_l2_progress_v1";
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e){return {}}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var state=load(KEY);
+  function updateProgress(){
+    var done=SECTIONS.filter(function(s){return state[s]}).length;
+    var pct=Math.round(done/SECTIONS.length*100);
+    document.getElementById("pct").textContent=pct+"%";
+    document.getElementById("rail").style.width=pct+"%";
+    SECTIONS.forEach(function(s){
+      var link=document.querySelector('.toc a[data-target="'+s+'"]');if(link)link.classList.toggle("done",!!state[s]);
+      var tog=document.querySelector('.done-toggle[data-done="'+s+'"]');
+      if(tog){tog.classList.toggle("is-done",!!state[s]);var cb=tog.querySelector("input");if(cb)cb.checked=!!state[s];}
+    });
+  }
+  document.querySelectorAll(".done-toggle").forEach(function(tog){
+    var id=tog.getAttribute("data-done");
+    tog.querySelector("input").addEventListener("change",function(){state[id]=this.checked;save(KEY,state);updateProgress();});
+  });
+  document.getElementById("reset").addEventListener("click",function(){
+    if(!confirm("Voortgang van deze les wissen?"))return;
+    state={};save(KEY,state);
+    document.querySelectorAll("[data-field]").forEach(function(el){el.value="";});
+    save(KEY+"_answers",{});
+    updateProgress();
+  });
+  var spy=document.querySelectorAll(".section");
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){
+      document.querySelectorAll(".toc a").forEach(function(a){a.classList.remove("active")});
+      var link=document.querySelector('.toc a[data-target="'+en.target.id+'"]');if(link)link.classList.add("active");
+    }});
+  },{rootMargin:"-45% 0px -50% 0px"});
+  spy.forEach(function(s){obs.observe(s)});
+  var toTop=document.getElementById("toTop");
+  window.addEventListener("scroll",function(){toTop.classList.toggle("show",window.scrollY>700)});
+  toTop.addEventListener("click",function(){window.scrollTo({top:0,behavior:"smooth"})});
+  updateProgress();
+
+  var AKEY=KEY+"_answers";
+  var answers=load(AKEY);
+  document.querySelectorAll("[data-field]").forEach(function(el){
+    var f=el.getAttribute("data-field");
+    if(answers[f])el.value=answers[f];
+    el.addEventListener("input",function(){
+      answers[f]=el.value;save(AKEY,answers);
+      var hint=document.getElementById("saveHint");
+      if(hint){hint.classList.add("show");hint.textContent="Bewaard in deze browser.";}
+    });
+  });
+
+  var exam=document.getElementById("quizblok");
+  if(exam){
+    var mcqs=Array.prototype.slice.call(exam.querySelectorAll(".mcq"));
+    var gradeBtn=document.getElementById("gradeBtn"),retryBtn=document.getElementById("retryBtn"),scorebox=document.getElementById("scorebox");
+    var TOTAL=mcqs.length;
+    function grade(){
+      var correct=0,unanswered=0;
+      mcqs.forEach(function(mcq){
+        var ans=parseInt(mcq.getAttribute("data-answer"),10),opts=mcq.querySelectorAll(".opt"),chosen=-1;
+        opts.forEach(function(o,i){if(o.querySelector("input").checked)chosen=i});
+        if(chosen<0)unanswered++;
+        opts.forEach(function(o,i){o.classList.remove("correct","wrong");if(i===ans)o.classList.add("correct");else if(i===chosen)o.classList.add("wrong")});
+        if(chosen===ans)correct++;
+      });
+      if(unanswered>0 && !confirm(unanswered+" vraag(en) nog niet beantwoord. Toch nakijken?")){
+        mcqs.forEach(function(mcq){mcq.querySelectorAll(".opt").forEach(function(o){o.classList.remove("correct","wrong")})});return;
+      }
+      var pct=Math.round(correct/TOTAL*100);
+      exam.classList.add("graded");
+      document.getElementById("ring").style.setProperty("--v",pct);
+      document.getElementById("ringPct").textContent=pct+"%";
+      var verdict=document.getElementById("verdict");
+      verdict.innerHTML=correct+" / "+TOTAL+" goed";
+      scorebox.classList.add("show");gradeBtn.style.display="none";retryBtn.style.display="";
+    }
+    function retry(){
+      exam.classList.remove("graded");
+      mcqs.forEach(function(mcq){mcq.querySelectorAll("input").forEach(function(i){i.checked=false});mcq.querySelectorAll(".opt").forEach(function(o){o.classList.remove("correct","wrong")})});
+      scorebox.classList.remove("show");gradeBtn.style.display="";retryBtn.style.display="none";
+      exam.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+    gradeBtn.addEventListener("click",grade);retryBtn.addEventListener("click",retry);
+  }
+})();
+</script>
+</body>
+</html>
